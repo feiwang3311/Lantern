@@ -10,26 +10,34 @@ object TEST1 {
 
 	def main(args: Array[String]): Unit = {
 
-		val array1 = new DslDriverC[String, Array[Double]] {
+		val array1 = new DslDriverC[String, Unit] {
 
-			def randDouble() = unchecked("(double)rand()")
+			def randDouble() = unchecked[Double]("(double)rand()")
 
-			def snippet(a: Rep[String]): Rep[Array[Double]] = {
+			def snippet(a: Rep[String]): Rep[Unit] = {
 				
 				// randomly generate an array of Double of size 5 in C code
 				val res = NewArray[Double](5)
-				
+				val res2 = NewArray[Double](5)
 				for (i <- (0 until 5): Rep[Range]) {
 					res(i) = randDouble()
+					res2(i) = randDouble()
 				}
-				res
 
+				// val res3 = res map (t => 1.0) ERROR: map is not supported for C code generation
+				val res3 = var_new(0.0)
+				for (i <- (0 until 5): Rep[Range]) {
+					res3 += res(i) * res2(i)
+				}
+				val result = readVar(res3)
+				printf("the result is %f", result)
 
 			}
 
 		}
 
 		println(array1.code)
+		array1.eval("abc")
 
 	}
 }
