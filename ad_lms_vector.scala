@@ -8,30 +8,58 @@ import scala.virtualization.lms._
 
 object TEST1 {
 
+	trait VectorExp extends Dsl {
+
+		class Vector(val data: Rep[Array[Double]], val dim0: Rep[Int]) {
+
+			def foreach(f: Rep[Double] => Rep[Unit]): Rep[Unit] =
+		    	for (i <- 0 until data.length) f(data(i))
+
+		    @virtualize
+			def sumIf(f: Rep[Double] => Rep[Boolean]) = { 
+		    	val n = var_new(0.0); 
+		    	foreach(x => if (f(x)) n += x); 
+		    	readVar(n) 
+		    }
+		    def dot(that: Vector) = {
+		    	// assert that and this have the same dimension
+		    	val res = var_new(0.0)
+		    	for (i <- 0 until data.length) {
+		    		res += data(i) * that.data(i)
+		    	}
+		    	readVar(res)
+		    }
+		}
+
+		object Vector {
+
+			def randDouble() = unchecked[Double]("(double)rand()") // Fixme
+
+			def randinit(dim0: Int) = {
+				val res = NewArray[Double](dim0)
+				for (i <- (0 until dim0): Rep[Range]) {
+					res(i) = randDouble()
+				}
+				new Vector(res, dim0)
+			}
+		}
+
+	}
+
+
 	def main(args: Array[String]): Unit = {
 
-		val array1 = new DslDriverC[String, Unit] {
-
-			def randDouble() = unchecked[Double]("(double)rand()")
+		val array1 = new DslDriverC[String, Unit]  with VectorExp {
 
 			def snippet(a: Rep[String]): Rep[Unit] = {
 				
 				// randomly generate an array of Double of size 5 in C code
-				val res = NewArray[Double](5)
-				val res2 = NewArray[Double](5)
-				for (i <- (0 until 5): Rep[Range]) {
-					res(i) = randDouble()
-					res2(i) = randDouble()
-				}
+				val res = Vector.randinit(5)
+				val res2 = Vector.randinit(5)
 
 				// val res3 = res map (t => 1.0) ERROR: map is not supported for C code generation
-				val res3 = var_new(0.0)
-				for (i <- (0 until 5): Rep[Range]) {
-					res3 += res(i) * res2(i)
-				}
-				val result = readVar(res3)
+				val result = res dot res2
 				printf("the result is %f", result)
-
 			}
 
 		}
