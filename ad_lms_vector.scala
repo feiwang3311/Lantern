@@ -10,6 +10,18 @@ object TEST1 {
 
 	trait VectorExp extends Dsl {
 
+		/**
+			Note: Need to see how to manage memory because everytime the NewArray is used,
+				C code will use malloc without thinking about where to call free.
+				The memory will leak unless we explicitly use unchecked("free(",x,")")
+
+				This is a deep problem because statically determine the free sites is unsolvable
+				but stronger type systems or regulations is possible, like Rust
+				Either we manually maintain the memory, or build some sort of system to handle it in a stronger way.
+				Leo's escape paper maybe of interest too.
+	
+		**/
+
 		class Vector(val data: Rep[Array[Double]], val dim0: Int /*, val dim1: Int, val dim2: Int*/) {
 
 			def foreach(f: Rep[Double] => Rep[Unit]): Rep[Unit] =
