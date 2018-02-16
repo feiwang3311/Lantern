@@ -224,22 +224,20 @@ object TEST1 {
 		val array2 = new DslDriverC[String, Unit] with VectorExp {
 
 			def snippet(a: Rep[String]): Rep[Unit] = {
-				// read training data from file
-				println(a)
-				val input = string_split(a, ",")
-				println(input.getClass.getName)
-				///println(input(0)(0))
-				implicit val pos = implicitly[SourceContext]
-				//printf("%s\n", input(0)(pos)(0))
-				val length = 2
-				val vector = NewArray[Double](length)
+				// read training data from file (for now just use random)
 				
-				vector(0) = 2.0
-				vector(1) = 3.0
+				//val input = string_split(a, ",")
+				// println(input.getClass.getName)
+				///println(input(0)(0))
+				//implicit val pos = implicitly[SourceContext]
+				//printf("%s\n", input(0)(pos)(0))
 				// vector(0) = string_todouble(input(0))
 				// vector(1) = string_todouble(input(1))
-				// wrap as Vector type
-				val v = new Vector(vector, length)
+				
+				val length = 2
+				val v = Vector.randinit(length)
+				v.print()				
+
 				// calculate gradient
 				val grad = gradR(t => t dot t)(v)
 				// show gradient
@@ -249,7 +247,7 @@ object TEST1 {
 		}
 
 		println(array2.code)
-		array2.eval("2.0,3.0")
+		array2.eval("2.0")
 /*
 		val array3 = new DslDriverC[String, Unit] with VectorExp {
 
