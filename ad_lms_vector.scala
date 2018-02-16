@@ -51,6 +51,13 @@ object TEST1 {
 		    	new Vector(res, dim0)
 		    }
 
+		    def += (that: Vector) = {
+		    	if (dim0 == 1) throw new IllegalArgumentException("not implemented")
+		    	else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(0)
+		    	else if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(i)
+		    	else throw new IllegalArgumentException("dimensions of vector do not match!")
+		    }
+
 		    def - (that: Vector) = {
 		    	val res = NewArray[Double](dim0)
 		    	if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) - that.data(0)
@@ -68,6 +75,10 @@ object TEST1 {
 		    	else if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) * that.data(i)
 		    	else throw new IllegalArgumentException("dimensions of vector do not match!")
 		    	new Vector(res, dim0)
+		    }
+
+		    def setAsOne() = {
+		    	for (i <- (0 until dim0): Rep[Range]) data(i) = 1.0
 		    }
 
 
@@ -136,7 +147,8 @@ object TEST1 {
 			}
 			def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
 				val y = new TensorR(x * that.x, Vector.zeros(x.dim0)); k(y)
-				this.d += that.x * y.d; that.d += this.x * y.d
+				this.d += that.x * y.d 
+				that.d += this.x * y.d // FIXme: intermediate Tensors donot need to be substatiated
 				// delete y to prevent memory leak
 				y.free()
 			}
@@ -144,7 +156,7 @@ object TEST1 {
 				// assert both this and that are 1d vectors with the same size
 				val y = new TensorR(x dot that.x, Vector.zeros(1)); k(y)
 				this.d += that.x * y.d // broadcasting
-				that.d += this.x * y.d // broadcasting
+				that.d += this.x * y.d // broadcasting // Fixme: intermediate Tensors donot need to be substatiated
 				// delete y to prevent memory leak
 				y.free()
 			}
@@ -154,12 +166,34 @@ object TEST1 {
 				unchecked[Unit]("free(",d.data,")")
 			}
 		}
+/*
+		def FUN(f: TensorR => Unit): (TensorR => Unit) = {
+	    	val f1 = fun { (x:Vector) => 
+	    		val deltaVar = Vector.zeros(x.dim0)
+	    		f(new TensorR(x, deltaVar))
+	    		deltaVar
+	    		// Fixme: when to free the memories of x and deltaVar
+	    	};
+	    	{ (x:TensorR) => x.d += f1(x.x) }
+	    }
 
+	    def RST(a: => Unit @diff) = continuations.reset { a; () }
+
+    	@virtualize
+	    def IF(c: Rep[Boolean])(a: =>TensorR @diff)(b: =>TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+	      val k1 = FUN(k)
+
+	      if (c) RST(k1(a)) else RST(k1(b))
+	    }
+
+*/
 		def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
 	    	val x1 = new TensorR(x, Vector.zeros(x.dim0))
-	    	reset { f(x1).d = Vector.ones(1) } 
+	    	reset { f(x1).d.setAsOne(); () } 
 	    	x1.d
 	    }
+
+	    
 
 	}
 
@@ -169,7 +203,8 @@ object TEST1 {
 		val array1 = new DslDriverC[String, Unit]  with VectorExp {
 
 			def snippet(a: Rep[String]): Rep[Unit] = {
-				
+				println(a)
+				// val temp = string_split(a, " ")
 				// randomly generate an array of Double of size 5 in C code
 				val res = Vector.randinit(5)
 				val res2 = Vector.randinit(5)
@@ -190,9 +225,19 @@ object TEST1 {
 
 			def snippet(a: Rep[String]): Rep[Unit] = {
 				// read training data from file
+				println(a)
+				val input = string_split(a, ",")
+				println(input.getClass.getName)
+				///println(input(0)(0))
+				implicit val pos = implicitly[SourceContext]
+				//printf("%s\n", input(0)(pos)(0))
 				val length = 2
 				val vector = NewArray[Double](length)
-				vector(0) = 2.0; vector(1) = 3.0			
+				
+				vector(0) = 2.0
+				vector(1) = 3.0
+				// vector(0) = string_todouble(input(0))
+				// vector(1) = string_todouble(input(1))
 				// wrap as Vector type
 				val v = new Vector(vector, length)
 				// calculate gradient
@@ -204,37 +249,27 @@ object TEST1 {
 		}
 
 		println(array2.code)
-		array2.eval("abc")
+		array2.eval("2.0,3.0")
+/*
+		val array3 = new DslDriverC[String, Unit] with VectorExp {
 
+			def snippet(a: Rep[String]): Rep[Unit] = {
+
+				// read length
+			}
+		}
+*/
 	}
 }
 
-
 /*
-object LMS_Reverse {
+object TEST2 {
 
-  trait DiffApi extends Dsl {
-
-    type diff = cps[Unit]
-
-    class NumR(val x: Rep[Array[Double]], val d: Var[Array[Double]], val u: Int) extends Serializable {
-
-    	def dot(that: NumR): NumR @diff = shift { (k: NumR => Unit) => 
-    		val r = (x zip that.x) map (t => t._1 * t._2) foldLeft (_ + _)
-
-
-	        val y = new NumR(x + that.x, var_new(0.0)); k(y)
-	        this.d += y.d; that.d += y.d 
-	    }
-
-
-    }
+	trait VectorExp extends Dsl {
 
 
 
+	}
 
-
-
-  }
 }
 */
