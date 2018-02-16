@@ -19,6 +19,14 @@ object TEST1 {
 				but stronger type systems or regulations is possible, like Rust
 				Either we manually maintain the memory, or build some sort of system to handle it in a stronger way.
 				Leo's escape paper maybe of interest too.
+
+				However Greg just gave me a very good idea. Basically by using delimited continuations, our intermediate
+				values are only used within the lexical scope of that operation, and the continuation it calls.
+				Just like a withFile("filename") {} or withArray("array") {} construct,
+				where the file and array are only used in the scope of with, can can be implicitly closed or deleted at escape
+				Our intermediate Tensors are created by an overloaded operation, used in delimited continuations and updating
+				the gradients of @this@ and @that@, and then never used outside
+				So we can add unchecked("free") to reclaim their memory right at the end of each overloaded operator def.
 	
 		**/
 
@@ -32,19 +40,6 @@ object TEST1 {
 		    	val n = var_new(0.0); 
 		    	foreach(x => if (f(x)) n += x); 
 		    	readVar(n) 
-		    }
-
-		    def dot(that: Vector) = {
-		    	// assert that and this have the same dimension
-		    	// fixME: the result should also be a vector of size 1, to keep the type consistent
-		    	val value = var_new(0.0)
-		    	for (i <- 0 until data.length) {
-		    		value += data(i) * that.data(i)
-		    	}
-		    	// readVar(res)
-		    	val res = NewArray[Double](1)
-		    	res(0) = readVar(value)
-		    	new Vector(res, 1)
 		    }
 
 		    def + (that: Vector) = {
@@ -74,6 +69,24 @@ object TEST1 {
 		    	else throw new IllegalArgumentException("dimensions of vector do not match!")
 		    	new Vector(res, dim0)
 		    }
+
+
+		    def dot(that: Vector) = {
+		    	// assert that and this have the same dimension
+		    	// fixME: the result should also be a vector of size 1, to keep the type consistent
+		    	val value = var_new(0.0)
+		    	for (i <- 0 until data.length) {
+		    		value += data(i) * that.data(i)
+		    	}
+		    	// readVar(res)
+		    	val res = NewArray[Double](1)
+		    	res(0) = readVar(value)
+		    	new Vector(res, 1)
+		    }
+/*
+		    def squaredDistance()
+*/
+
 
 		    def print() = {
 		    	for (i <- (0 until dim0): Rep[Range]) println(data(i))
@@ -112,20 +125,33 @@ object TEST1 {
 			def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) => 
 				val y = new TensorR(x + that.x, Vector.zeros(x.dim0)); k(y)
 				this.d += y.d; that.d += y.d
+				// delete y to prevent memory leak
+				y.free()
 			}
 			def - (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
 				val y = new TensorR(x - that.x, Vector.zeros(x.dim0)); k(y)
 				this.d += y.d; that.d -= y.d
+				// delete y to prevent memory leak
+				y.free()
 			}
 			def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
 				val y = new TensorR(x * that.x, Vector.zeros(x.dim0)); k(y)
 				this.d += that.x * y.d; that.d += this.x * y.d
+				// delete y to prevent memory leak
+				y.free()
 			}
 			def dot(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
 				// assert both this and that are 1d vectors with the same size
 				val y = new TensorR(x dot that.x, Vector.zeros(1)); k(y)
 				this.d += that.x * y.d // broadcasting
 				that.d += this.x * y.d // broadcasting
+				// delete y to prevent memory leak
+				y.free()
+			}
+
+			def free() = {
+				unchecked[Unit]("free(",x.data,")")
+				unchecked[Unit]("free(",d.data,")")
 			}
 		}
 
