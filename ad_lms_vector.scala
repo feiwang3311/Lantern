@@ -52,9 +52,8 @@ object TEST1 {
 		    }
 
 		    def += (that: Vector) = {
-		    	if (dim0 == 1) throw new IllegalArgumentException("not implemented")
+		    	if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(i)
 		    	else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(0)
-		    	else if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(i)
 		    	else throw new IllegalArgumentException("dimensions of vector do not match!")
 		    }
 
@@ -94,6 +93,16 @@ object TEST1 {
 		    	res(0) = readVar(value)
 		    	new Vector(res, 1)
 		    }
+
+		    def sum() = {
+		    	val value = var_new(0.0)
+		    	for (i <- (0 until data.length)) {
+		    		value += data(i)
+		    	}
+		    	val res = NewArray[Double](1)
+		    	res(0) = readVar(value)
+		    	new Vector(res, 1)
+		    }
 /*
 		    def squaredDistance()
 */
@@ -111,7 +120,8 @@ object TEST1 {
 
 			def randinit(dim0: Int) = {
 				val res = NewArray[Double](dim0)
-				for (i <- (0 until dim0): Rep[Range]) res(i) = randDouble()
+				unchecked[Unit]("srand(time(NULL))")
+				for (i <- (0 until dim0): Rep[Range]) res(i) = unchecked[Double]("(double)rand()/RAND_MAX*2.0-1.0")
 				new Vector(res, dim0)
 			}
 
@@ -161,20 +171,50 @@ object TEST1 {
 				y.free()
 			}
 
+			def sum(): TensorR @diff = shift { (k: TensorR => Unit) =>
+				val y = new TensorR(x.sum(), Vector.zeros(1)); k(y)
+				this.d += y.d
+				y.free()
+			}
+
 			def free() = {
 				unchecked[Unit]("free(",x.data,")")
 				unchecked[Unit]("free(",d.data,")")
 			}
 		}
+
 /*
 		def FUN(f: TensorR => Unit): (TensorR => Unit) = {
-	    	val f1 = fun { (x:Vector) => 
-	    		val deltaVar = Vector.zeros(x.dim0)
-	    		f(new TensorR(x, deltaVar))
-	    		deltaVar
+			/*
+	    	val f1 = fun { (x:Rep[Array[Double]]) =>
+	    		val dim0 = x.length 
+	    		val deltaVar: Vector = Vector.zeros(dim0)
+	    		f(new TensorR(new Vector(x, dim0), deltaVar))
+	    		deltaVar.data
 	    		// Fixme: when to free the memories of x and deltaVar
+	    	};*/
+	    	{ 
+	    		(x:TensorR) => {
+	    			val dim0: Int = x.d.dim0
+	    			val f2 = fun { (x: Rep[Array[Double]]) =>
+	    				val delta: Vector = Vector.zeros(dim0)
+	    				f(new TensorR(new Vector(x, dim0), delta))
+	    				delta.data
+	    			}
+	    			x.d += new Vector(f2(x.x.data), dim0) 
+	    		}
+	    	}
+	    }
+*/
+
+	    def FUN(f: TensorR => Unit): (TensorR => Unit) = {
+	    	val dim0: Int = 1 // FIXME: what is the best way to carry this known dimensional information?
+	    	val f1 = fun { (x: Rep[Array[Double]]) => 
+	    		val deltaVar: Vector = Vector.zeros(dim0)
+	    		f(new TensorR(new Vector(x, dim0), deltaVar))
+	    		deltaVar.data
 	    	};
-	    	{ (x:TensorR) => x.d += f1(x.x) }
+	    	{ (x:TensorR) => x.d += new Vector(f1(x.x.data), dim0) }
 	    }
 
 	    def RST(a: => Unit @diff) = continuations.reset { a; () }
@@ -186,7 +226,6 @@ object TEST1 {
 	      if (c) RST(k1(a)) else RST(k1(b))
 	    }
 
-*/
 		def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
 	    	val x1 = new TensorR(x, Vector.zeros(x.dim0))
 	    	reset { f(x1).d.setAsOne(); () } 
@@ -218,8 +257,8 @@ object TEST1 {
 
 		}
 
-		println(array1.code)
-		array1.eval("abc")
+		//println(array1.code)
+		//array1.eval("abc")
 
 		val array2 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -246,17 +285,26 @@ object TEST1 {
 
 		}
 
-		println(array2.code)
-		array2.eval("2.0")
-/*
+		//println(array2.code)
+		//array2.eval("2.0")
+
 		val array3 = new DslDriverC[String, Unit] with VectorExp {
 
 			def snippet(a: Rep[String]): Rep[Unit] = {
+				// use random array as input
+				val length = 2
+				val v = Vector.randinit(length)
+				v.print()
 
-				// read length
+				// calcuate gradient
+				val grad = gradR(t => IF (t.x.data(0) > 0.0) {t dot t}{t.sum()})(v)
+				// show gradient
+				grad.print()
 			}
 		}
-*/
+		println(array3.code)
+		array3.eval("abc")
+
 	}
 }
 

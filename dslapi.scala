@@ -256,6 +256,9 @@ trait DslGenC extends CGenNumericOps
       #include <stdio.h>
       #include <stdint.h>
       #include <unistd.h>
+      #include <time.h>
+      #include <functional>
+      using namespace std;
       #ifndef MAP_FILE
       #define MAP_FILE MAP_SHARED
       #endif
@@ -337,13 +340,13 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] wit
 
   def eval(a: A): Unit = {
     // TBD: should read result of type B?
-    val out = new java.io.PrintWriter("/tmp/snippet.c")
+    val out = new java.io.PrintWriter("/tmp/snippet.cpp")
     out.println(code)
     out.close
     //TODO: use precompile
     (new java.io.File("/tmp/snippet")).delete
     import scala.sys.process._
-    (s"cc -std=c99 -O3 /tmp/snippet.c -o /tmp/snippet": ProcessBuilder).lines.foreach(Console.println _)
+    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(Console.println _) //-std=c99 
     (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
 }
