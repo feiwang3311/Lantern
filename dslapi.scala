@@ -173,6 +173,10 @@ trait DslGenC extends CGenNumericOps
   def getMemoryAllocString(count: String, memType: String): String = {
       "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "));"
   }
+
+  // In LMS code, it was "remap(m) + addRef(m)" which would put an extra "*"
+  override def remapWithRef[A](m: Typ[A]): String = remap(m) + " "
+
   override def remap[A](m: Typ[A]): String = m.toString match {
     case "java.lang.String" => "char*"
     case "Array[Char]" => "char*"
