@@ -30,7 +30,7 @@ object TEST1 {
 	
 		**/
 
-		class Vector(val data: Rep[Array[Double]], val dim0: Int /*, val dim1: Int, val dim2: Int*/) {
+		class Vector(val data: Rep[Array[Double]], val dim0: Int /*, val dim1: Int, val dim2: Int*/) extends Serializable {
 
 			def foreach(f: Rep[Double] => Rep[Unit]): Rep[Unit] =
 		    	for (i <- 0 until data.length) f(data(i))
@@ -47,14 +47,15 @@ object TEST1 {
 		    	if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) + that.data(0)
 		    	else if (dim0 == 1) for (i <- (0 until dim0): Rep[Range]) res(i) = data(0) + that.data(i)
 		    	else if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) + that.data(i)
-		    	else throw new IllegalArgumentException("dimensions of vector do not match!")
+		    	else throw new IllegalArgumentException("dimensions of vector do not match +!")
 		    	new Vector(res, dim0)
 		    }
 
 		    def += (that: Vector) = {
 		    	if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(i)
 		    	else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(0)
-		    	else throw new IllegalArgumentException("dimensions of vector do not match!")
+		    	else if (dim0 == 1) throw new IllegalArgumentException("dimensions!")
+		    	else throw new IllegalArgumentException("dimensions of vector do not match +=!")
 		    }
 
 		    def - (that: Vector) = {
@@ -62,7 +63,7 @@ object TEST1 {
 		    	if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) - that.data(0)
 		    	else if (dim0 == 1) for (i <- (0 until dim0): Rep[Range]) res(i) = data(0) - that.data(i)
 		    	else if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) - that.data(i)
-		    	else throw new IllegalArgumentException("dimensions of vector do not match!")
+		    	else throw new IllegalArgumentException("dimensions of vector do not match -!")
 		    	new Vector(res, dim0)
 		    }
 
@@ -72,7 +73,7 @@ object TEST1 {
 		    	if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) * that.data(0)
 		    	else if (dim0 == 1) for (i <- (0 until dim0): Rep[Range]) res(i) = data(0) * that.data(i)
 		    	else if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) * that.data(i)
-		    	else throw new IllegalArgumentException("dimensions of vector do not match!")
+		    	else throw new IllegalArgumentException("dimensions of vector do not match *!")
 		    	new Vector(res, dim0)
 		    }
 
@@ -96,7 +97,7 @@ object TEST1 {
 
 		    def sum() = {
 		    	val value = var_new(0.0)
-		    	for (i <- (0 until data.length)) {
+		    	for (i <- (0 until dim0): Rep[Range]) {
 		    		value += data(i)
 		    	}
 		    	val res = NewArray[Double](1)
@@ -136,13 +137,19 @@ object TEST1 {
 				for (i <- (0 until dim0): Rep[Range]) res(i) = 1.0
 				new Vector(res, dim0)
 			}
+
+			def halves(dim0: Int) = {
+				val res = NewArray[Double](dim0)
+				for (i <- (0 until dim0): Rep[Range]) res(i) = 0.5
+				new Vector(res, dim0)
+			}
 		}
 
 
 		// Tensor type is the same as NumR, just replace RDouble with Vector
 		type diff = cps[Unit]
 
-		class TensorR(val x: Vector, var d: Vector) {
+		class TensorR(val x: Vector, var d: Vector) extends Serializable {
 			def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) => 
 				val y = new TensorR(x + that.x, Vector.zeros(x.dim0)); k(y)
 				this.d += y.d; that.d += y.d
@@ -178,8 +185,8 @@ object TEST1 {
 			}
 
 			def free() = {
-				unchecked[Unit]("free(",x.data,")")
-				unchecked[Unit]("free(",d.data,")")
+				//unchecked[Unit]("free(",x.data,")")
+				//unchecked[Unit]("free(",d.data,")")
 			}
 		}
 
@@ -207,8 +214,8 @@ object TEST1 {
 	    }
 */
 
-	    def FUN(f: TensorR => Unit): (TensorR => Unit) = {
-	    	val dim0: Int = 1 // FIXME: what is the best way to carry this known dimensional information?
+	    def FUN(dim0: Int)(f: TensorR => Unit): (TensorR => Unit) = {
+	    	// val dim0: Int = 1 // FIXME: what is the best way to carry this known dimensional information?
 	    	val f1 = fun { (x: Rep[Array[Double]]) => 
 	    		val deltaVar: Vector = Vector.zeros(dim0)
 	    		f(new TensorR(new Vector(x, dim0), deltaVar))
@@ -220,10 +227,20 @@ object TEST1 {
 	    def RST(a: => Unit @diff) = continuations.reset { a; () }
 
     	@virtualize
-	    def IF(c: Rep[Boolean])(a: =>TensorR @diff)(b: =>TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
-	      val k1 = FUN(k)
+	    def IF(dim0: Int)(c: Rep[Boolean])(a: =>TensorR @diff)(b: =>TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+	      val k1 = FUN(dim0)(k)
 
 	      if (c) RST(k1(a)) else RST(k1(b))
+	    }
+
+	    @virtualize
+	    def LOOP(init: TensorR)(c: TensorR => Rep[Boolean])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+	      val k1 = FUN(init.x.dim0)(k)
+
+	      lazy val loop: TensorR => Unit = FUN (init.x.dim0) { (x: TensorR) =>
+	        if (c(x)) RST(loop(b(x))) else RST(k1(x))
+	      }
+	      loop(init)
 	    }
 
 		def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
@@ -297,13 +314,34 @@ object TEST1 {
 				v.print()
 
 				// calcuate gradient
-				val grad = gradR(t => IF (t.x.data(0) > 0.0) {t dot t}{t.sum()})(v)
+				val grad = gradR(t => {val y = IF (length)(t.x.data(0) > 0.0) {t + t}{t * t}
+									   y.sum() })(v)
 				// show gradient
 				grad.print()
 			}
 		}
-		println(array3.code)
-		array3.eval("abc")
+		//println(array3.code)
+		//array3.eval("abc")
+
+		val array4 = new DslDriverC[String, Unit] with VectorExp {
+
+	    	def snippet(a: Rep[String]): Rep[Unit] = {
+	    		// use random array as input
+	    		val length = 2
+	    		val v = Vector.randinit(length)
+	    		v.print()
+
+	    		val half = (new TensorR(Vector.halves(length), Vector.zeros(length)))
+	    		// calculate gradient
+	    		val grad = gradR(t => {val y = LOOP(t)(t => t.x.data(0) > 0.1)(t => t * half)
+	    							   y.sum() })(v)
+	    		// show gradient
+	    		grad.print()
+	    	}
+	    }
+
+	    println(array4.code)
+	    array4.eval("abc")
 
 	}
 }
