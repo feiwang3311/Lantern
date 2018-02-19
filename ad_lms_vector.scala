@@ -33,7 +33,7 @@ object TEST1 {
 		class Vector(val data: Rep[Array[Double]], val dim0: Int /*, val dim1: Int, val dim2: Int*/) extends Serializable {
 
 			def foreach(f: Rep[Double] => Rep[Unit]): Rep[Unit] =
-		    	for (i <- 0 until data.length) f(data(i))
+		    	for (i <- (0 until dim0):Rep[Range]) f(data(i))
 
 		    @virtualize
 			def sumIf(f: Rep[Double] => Rep[Boolean]) = { 
@@ -54,7 +54,7 @@ object TEST1 {
 		    def += (that: Vector) = {
 		    	if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(i)
 		    	else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(0)
-		    	else if (dim0 == 1) throw new IllegalArgumentException("dimensions!")
+		    	else if (dim0 == 1) throw new IllegalArgumentException("dimensions needs to be expanded!")
 		    	else throw new IllegalArgumentException("dimensions of vector do not match +=!")
 		    }
 
@@ -65,6 +65,13 @@ object TEST1 {
 		    	else if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) res(i) = data(i) - that.data(i)
 		    	else throw new IllegalArgumentException("dimensions of vector do not match -!")
 		    	new Vector(res, dim0)
+		    }
+
+		    def -= (that: Vector) = {
+		    	if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(i)
+		    	else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(0)
+		    	else if (dim0 == 1) throw new IllegalArgumentException("dimensions needs to be expanded!")
+		    	else throw new IllegalArgumentException("dimensions of vector do not match -=!")
 		    }
 
 		    def * (that: Vector) = {
@@ -84,12 +91,11 @@ object TEST1 {
 
 		    def dot(that: Vector) = {
 		    	// assert that and this have the same dimension
-		    	// fixME: the result should also be a vector of size 1, to keep the type consistent
+		    	if (dim0 != that.dim0) throw new IllegalArgumentException("dimensions of vector do not match dot!")
 		    	val value = var_new(0.0)
-		    	for (i <- 0 until data.length) {
+		    	for (i <- (0 until dim0): Rep[Range]) {
 		    		value += data(i) * that.data(i)
 		    	}
-		    	// readVar(res)
 		    	val res = NewArray[Double](1)
 		    	res(0) = readVar(value)
 		    	new Vector(res, 1)
@@ -117,8 +123,6 @@ object TEST1 {
 
 		object Vector {
 
-			def randDouble() = unchecked[Double]("(double)rand()") // Fixme, add srand(time)
-
 			def randinit(dim0: Int) = {
 				val res = NewArray[Double](dim0)
 				unchecked[Unit]("srand(time(NULL))")
@@ -143,37 +147,49 @@ object TEST1 {
 				for (i <- (0 until dim0): Rep[Range]) res(i) = 0.5
 				new Vector(res, dim0)
 			}
+
+			def consts(dim0: Int, value: Double) = {
+				val res = NewArray[Double](dim0)
+				for (i <- (0 until dim0): Rep[Range]) res(i) = value
+				new Vector(res, dim0)
+			}
 		}
 
 
-		// Tensor type is the same as NumR, just replace RDouble with Vector
+		// Tensor type is the similar to NumR, just replace RDouble with Vector
+		// also Vector internally use array, which is mutable by default
 		type diff = cps[Unit]
 
 		class TensorR(val x: Vector, var d: Vector) extends Serializable {
+
 			def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) => 
 				val y = new TensorR(x + that.x, Vector.zeros(x.dim0)); k(y)
 				this.d += y.d; that.d += y.d
 				// delete y to prevent memory leak
 				y.free()
 			}
+
 			def - (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
 				val y = new TensorR(x - that.x, Vector.zeros(x.dim0)); k(y)
 				this.d += y.d; that.d -= y.d
 				// delete y to prevent memory leak
 				y.free()
 			}
+
+			// this is element wise multiplication
 			def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
 				val y = new TensorR(x * that.x, Vector.zeros(x.dim0)); k(y)
-				this.d += that.x * y.d 
-				that.d += this.x * y.d // FIXme: intermediate Tensors donot need to be substatiated
+				// FIXME: intermediate Tensors donot need to be substatiated, and need to be deleted
+				this.d += that.x * y.d; println("update1")
+				that.d += this.x * y.d;	println("update2")
 				// delete y to prevent memory leak
-				y.free()
+				y.free(); println("clear")
 			}
+
 			def dot(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-				// assert both this and that are 1d vectors with the same size
 				val y = new TensorR(x dot that.x, Vector.zeros(1)); k(y)
 				this.d += that.x * y.d // broadcasting
-				that.d += this.x * y.d // broadcasting // Fixme: intermediate Tensors donot need to be substatiated
+				that.d += this.x * y.d // broadcasting // Fixme: intermediate Tensors donot need to be substatiated (need deleted)
 				// delete y to prevent memory leak
 				y.free()
 			}
@@ -181,12 +197,13 @@ object TEST1 {
 			def sum(): TensorR @diff = shift { (k: TensorR => Unit) =>
 				val y = new TensorR(x.sum(), Vector.zeros(1)); k(y)
 				this.d += y.d
+				// delete y to prevent memory leak
 				y.free()
 			}
 
 			def free() = {
-				//unchecked[Unit]("free(",x.data,")")
-				//unchecked[Unit]("free(",d.data,")")
+				unchecked[Unit]("free(",x.data,")")
+				unchecked[Unit]("free(",d.data,")")
 			}
 		}
 
@@ -235,22 +252,22 @@ object TEST1 {
 
 	    @virtualize
 	    def LOOP(init: TensorR)(c: TensorR => Rep[Boolean])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
-	      val k1 = FUN(init.x.dim0)(k)
+	      // val k1 = FUN(init.x.dim0)(k)
 
 	      lazy val loop: TensorR => Unit = FUN (init.x.dim0) { (x: TensorR) =>
-	        if (c(x)) RST(loop(b(x))) else RST(k1(x))
+	        if (c(x)) RST(loop(b(x))) else RST(k(x))
 	      }
 	      loop(init)
 	    }
 
 		def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
 	    	val x1 = new TensorR(x, Vector.zeros(x.dim0))
-	    	reset { f(x1).d.setAsOne(); () } 
+	    	reset { val y = f(x1)
+	    			y.d.setAsOne()
+	    			y.x.print()
+	    			() } 
 	    	x1.d
 	    }
-
-	    
-
 	}
 
 
