@@ -30,7 +30,7 @@ object LMS {
       override def toString = (x,d).toString
     }
 
-    class NumR(val x: RDouble, val d: Var[Double]) extends Serializable {
+    class NumR(val x: RDouble, val d: Var[Double], val loopindex: Var[Int] = var_new(0)) extends Serializable {
       def +(that: NumR): NumR @diff = shift { (k: NumR => Unit) => 
         val y = new NumR(x + that.x, var_new(0.0)); k(y)
         this.d += y.d; that.d += y.d }
@@ -86,6 +86,102 @@ object LMS {
       loop(init)
     }
 
+    @virtualize
+    def LOOPC(init: NumR)(c: Rep[Int])(b: NumR => NumR @diff): NumR @diff = shift { k:(NumR => Unit) =>
+
+      var gc = 0
+
+      lazy val loop: NumR => Unit = FUN { (x: NumR) =>
+        if (gc < c) { gc += 1; RST(loop(b(x))) } else RST(k(x))
+      }
+      loop(init)
+
+    }
+
+    @virtualize
+    def LOOPCC(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k:(NumR => Unit) =>
+      var gc = 0
+      lazy val loop: NumR => Unit = FUN { (x: NumR) =>
+        if (gc < c) { gc += 1; RST(loop(b(gc-1)(x))) } else RST(k(x))
+      }
+      loop(init)
+    }
+
+/*
+    // How to support more entities in LOOP???
+    import scala.collection.mutable.ArrayBuffer
+    def FUNM(f: Array[NumR] => Unit): (Array[NumR] => Unit) = {
+      val f1 = fun { (x:Rep[Array[Double]]) => 
+        
+        val length = 2
+        val deltas = NewArray[Double](length)
+        val nums = new NewArray[NumR](length)
+        for (i <- (0 until length)) nums(i) = new NumR(x(i), deltas(i))
+        
+        //val nums = (x zip deltas) map (t => new NumR(t._1, t._2))
+        // val nums = x map (t => new NumR(t, var_new(0.0)))
+        f(nums)
+        //nums map (t => readVar(t.d))
+        deltas
+        //deltas map (t => readVar(t))
+
+        //val deltaVar = var_new(0.0)
+        //f(new NumR(x, deltaVar))
+        //readVar(deltaVar)
+      };
+      { (x:Array[NumR]) => {
+        val in = x map (t => t.x)
+        val out = f1(in)
+        (x zip out) foreach (t => t._1.d += t._2)
+
+        //x.d += f1(x.x)
+        } 
+      }
+    }
+
+
+    @virtualize
+    def LOOPCCM(init: Array[NumR])(c: Rep[Int])(b: Rep[Int] => Array[NumR] => Array[NumR] @diff): Array[NumR] @diff = shift { k:(Array[NumR] => Unit) =>
+      var gc = 0
+      lazy val loop: Array[NumR] => Unit = FUNM { (x: Array[NumR]) =>
+        if (gc < c) { gc += 1; RST(loop(b(gc-1)(x))) } else RST(k(x))
+      }
+      loop(init)
+    }
+*/
+
+/*
+    def FUN2(f: (NumR, NumR) => Unit): ((NumR, NumR) => Unit) = {
+      val f1 = fun { (x:Rep[(Double, Double)]) => 
+        val deltas = (var_new(0.0), var_new(0.0))
+        f(new NumR(x._1, deltas._1), new NumR(x._2, deltas._2))
+        (readVar(deltas._1), readVar(deltas._2))
+
+        //val deltaVar = var_new(0.0)
+        //f(new NumR(x, deltaVar))
+        //readVar(deltaVar)
+      };
+      { (x: (NumR, NumR)) => {
+        val in = (x._1.x, x._2.x)
+        val out = f1(in)
+        x._1.d += out._1
+        x._2.d += out._2
+
+        //x.d += f1(x.x)
+        } 
+      }
+    }
+
+    @virtualize
+    def LOOPCC2(init: NumR, init1: NumR)(c: Rep[Int])(b: Rep[Int] => (NumR, NumR) => (NumR, NumR) @diff): (NumR, NumR) @diff = shift { k:((NumR, NumR) => Unit) =>
+      var gc = 0
+      lazy val loop: ((NumR, NumR)) => Unit = FUN2 { (x: (NumR, NumR)) =>
+        if (gc < c) { gc += 1; RST(loop(b(gc-1)(x))) } else RST(k(x))
+      }
+      loop(init)
+    }
+*/
+
     def gradRV(f: NumRV => NumRV @diff)(x: Rep[Double]): Rep[Double] = {
       val x1 = new NumRV(x, 0.0)
       reset { f(x1).d = 1.0 }
@@ -133,7 +229,7 @@ object LMS {
         gradFF(x => x + x*x*x)(x)
       }
     }
-
+/*
     println("---- reverse mode with dynamic vars ---- \n")
     println(gr1.code)
     println("---- reverse mode with static vars ---- \n")
@@ -163,7 +259,7 @@ object LMS {
     for (x <- 0 until 10) {
       assert(gff1.eval(x) == 6*x)
     }
-
+*/
     // test 2 -- conditional
     val gr2 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
@@ -171,7 +267,7 @@ object LMS {
         gradR(x => IF (x.x > 0.0) { minus_1*x*x } { x*x })(x)
       }
     }
-
+/*
     println("---- reverse mode with dynamic vars ---- \n")
     println(gr2.code)
     // NOTE: in the generated code, code motion has pushed
@@ -182,7 +278,7 @@ object LMS {
     for (x <- -10 until 10) {
       assert(gr2.eval(x) == (if (x > 0.0) -2*x else 2*x))
     }
-
+*/
     // test 3 -- loop using fold
     def fr(x: Double): Double = {
       // Divide by 2.0 until less than 1.0
@@ -197,12 +293,17 @@ object LMS {
     val gr3 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val half = (new NumR(0.5,var_new(0.0)))
-        gradR(x => LOOP(x)(x1 => x1.x > 1.0)(x1 => half * x1))(x)
+        val res = gradR(x => LOOP(x)(x1 => x1.x > 1.0)(x1 => half * x1))(x)
+        println(readVar(half.d))
+        res
       }
     }
-
+/*
     println("---- reverse mode with dynamic vars ---- \n")
     println(gr3.code)
+    println(gr3.eval(10))
+
+
     // NOTE: in the generated code, code motion has pushed
     // x3 = {x4: (Double) => ... } into both if branches.
     // (suboptimal in terms of code size)
@@ -213,5 +314,62 @@ object LMS {
     }
 
     println("done")
+*/    
+    val gr4 = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val half = new NumR(0.5, var_new(0.0))
+        val res = gradR(x => LOOPC(x)(3)(x1 =>{half * x1}))(x)
+        println(readVar(half.d))
+        res
+      }
+    }
+
+    //println(gr4.code)
+    //println(gr4.eval(10))
+/*
+    val gr5 = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val half = new NumR(0.5, var_new(0.0))
+        val res = gradR(x => LOOP(x)(x1 => (x1.loopindex) < 3)(x1 => {val y = half * x1; y.loopindex += 1; y}))(x)
+        println(readVar(half.d))
+        res
+      }
+    }
+*/
+    //println(gr5.code)
+    //println(gr5.eval(10))
+
+    val gr6 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val half = new NumR(0.5, var_new(0.0))
+        val res = gradR(x => LOOPC(x)(3)(x1 => {
+          println(readVar(x1.loopindex))
+          val y = half * x1
+          y.loopindex += (readVar(x1.loopindex) + 1)
+          y
+          }))(x)
+        println(readVar(half.d))
+        res
+      }
+    }
+
+    //println(gr6.code)
+    //println(gr6.eval(10))
+
+    val gr7 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val half = new NumR(0.5, var_new(0.0))
+        val res = gradR(x => LOOPCC(x)(3)(i => x1 => {
+          println(i)
+          half * x1 }))(x)
+        println(readVar(half.d))
+        res
+      }
+    }
+
+    println(gr7.code)
+    println(gr7.eval(10))
   }
 }

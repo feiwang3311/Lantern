@@ -73,7 +73,8 @@ object TEST1 {
 		    def += (that: Vector) = {
 		    	if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(i)
 		    	else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(0)
-		    	else if (dim0 == 1) throw new IllegalArgumentException("dimensions needs to be expanded!")
+		    	else if (dim0 == 1) for (i <- (0 until that.dim0): Rep[Range]) data(0) += that.data(i)
+		    	//throw new IllegalArgumentException("dimensions needs to be expanded!")
 		    	else throw new IllegalArgumentException("dimensions of vector do not match +=!")
 		    }
 
@@ -91,7 +92,8 @@ object TEST1 {
 		    def -= (that: Vector) = {
 		    	if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) -= that.data(i)
 		    	else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) -= that.data(0)
-		    	else if (dim0 == 1) throw new IllegalArgumentException("dimensions needs to be expanded!")
+		    	else if (dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(0) -= that.data(i)
+		    	//throw new IllegalArgumentException("dimensions needs to be expanded!")
 		    	else throw new IllegalArgumentException("dimensions of vector do not match -=!")
 		    }
 
@@ -134,7 +136,16 @@ object TEST1 {
 		    }
 
 		    def setAsOne() = {
-		    	for (i <- (0 until dim0): Rep[Range]) data(i) = 1.0
+		    	for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) = 1.0
+		    }
+
+		    def clear() = {
+		    	for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) = 0.0
+		    }
+
+		    def copy_data(that: Vector) = {
+		    	if (dim0 * dim1 != that.dim0 * that.dim1) throw new IllegalArgumentException("dimensions of vector do not match copy_data!")
+		    	for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) = that.data(i)
 		    }
 
 		    def dot(that: Vector) = {
@@ -203,6 +214,10 @@ object TEST1 {
 					}
 				}
 		    } 
+		    // FIXME: Maybe try to support slicing??
+		    // FIXME: Maybe add support for reshaping??
+		    // FIXME: Maybe support transposing??
+
 			
 			// setting: this is dim0-sized vector, that is matrix (dim0 * dim1), y is dim1-sized vector
 			// the result is to update this so that this accumulate every matrix col * y
@@ -218,10 +233,10 @@ object TEST1 {
 
 		object Vector {
 
-			def randinit(dim0: Int, dim1: Int = 1) = {
+			def randinit(dim0: Int, dim1: Int = 1, scale: Double = 1.0) = {
 				unchecked[Unit]("srand(time(NULL))")
 				val res = NewArray[Double](dim0 * dim1)
-				for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Double]("(double)rand()/RAND_MAX*2.0-1.0")
+				for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Double]("(double)rand()/RAND_MAX*2.0-1.0") * scale
 				new Vector(res, dim0, dim1)
 			}
 
@@ -329,6 +344,14 @@ object TEST1 {
 				unchecked[Unit]("free(",x.data,")")
 				unchecked[Unit]("free(",d.data,")")
 			} */
+
+		}
+
+		object TensorR {
+
+			def Tensor(a: Vector) = {
+				new TensorR(a, Vector.zeros(a.dim0, a.dim1))
+			}
 		}
 
 /*
@@ -384,6 +407,42 @@ object TEST1 {
 	      loop(init)
 	    }
 
+	    @virtualize
+	    def LOOPC(init: TensorR)(c: Rep[Int])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+	      
+	      var gc = 0
+
+	      lazy val loop: TensorR => Unit = FUN (init.x.dim0){ (x: TensorR) =>
+	        if (gc < c) { gc += 1; RST(loop(b(x))) } else RST(k(x))
+	      }
+	      loop(init)
+	    }
+
+	    @virtualize
+	    def LOOPCC(init: TensorR)(c: Rep[Int])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+
+	      var gc = 0
+
+	      lazy val loop: TensorR => Unit = FUN (init.x.dim0){ (x: TensorR) =>
+	        if (gc < c) { gc += 1; RST(loop(b(gc - 1)(x))) } else RST(k(x))
+	      }
+	      loop(init)
+	    }
+
+/*
+	    @virtualize
+	    def LOOPCCM(init: TensorR, init1: TensorR)(c: Rep[Int])(b: Rep[Int] => (TensorR, TensorR) => (TensorR, TensorR) @diff): 
+	    (TensorR, TensorR) @diff = shift { k:((TensorR, TensorR) => Unit) =>
+
+	      var gc = 0
+
+	      lazy val loop: (TensorR, TensorR) => Unit = FUN (init.x.dim0){ (x: TensorR) =>
+	        if (gc < c) { gc += 1; RST(loop(b(gc - 1)(x))) } else RST(k(x))
+	      }
+	      loop(init)
+	    }
+*/
+
 		def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
 	    	val x1 = new TensorR(x, Vector.zeros(x.dim0))
 	    	reset { val y = f(x1)
@@ -405,6 +464,8 @@ object TEST1 {
 
 
 	def main(args: Array[String]): Unit = {
+		import java.io.PrintWriter;
+		import java.io.File;	
 
 		val array1 = new DslDriverC[String, Unit]  with VectorExp {
 
@@ -484,6 +545,34 @@ object TEST1 {
 		//println(array2_1.code)
 		//array2_1.eval("2.0")
 
+		val array2_1_1 = new DslDriverC[String, Unit] with VectorExp {
+			// update gradient as side effect
+			
+			def snippet(a: Rep[String]): Rep[Unit] = {
+				val length = 3
+				val v = Vector.randinit(length)
+				v.print()
+
+				// initialize tensor for closure
+				var t = new TensorR(v, Vector.zeros(length))			
+				val half = new TensorR(Vector.halves(length), Vector.zeros(length))
+				// call grad_side_effect_using_closure
+				val dummy = gradR(dummy => {
+					t = (t dot t)
+					t = (half * t).sum()
+					t
+					})(Vector.zeros(1))
+				// print the gradient of t
+				t.d.print()
+				half.d.print()
+			}
+		}
+
+		//println("test dot gradient as side effect with var update") 
+		//println("proving that I can use var update without creating cycles in static computation graph")
+		//println(array2_1.code)
+		//array2_1_1.eval("2.0")
+
 		val array2_2 = new DslDriverC[String, Unit] with VectorExp {
 
 			def snippet(a: Rep[String]): Rep[Unit] = {
@@ -510,8 +599,218 @@ object TEST1 {
 		}
 
 		// println("test matrix vector dot gradient as side effect")
-		println(array2_2.code)
-		array2_2.eval("abc")
+		//println(array2_2.code)
+		//array2_2.eval("abc")
+
+		val array2_2_1 = new DslDriverC[String, Unit] with VectorExp {
+
+			def snippet(a: Rep[String]): Rep[Unit] = {
+				val vocab_size = 3
+				val hidden_size = 2
+				val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
+				val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
+				val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
+				val hprev = Vector.zeros(hidden_size) 
+
+				// wrap as tensors
+				val Wxh1 = TensorR.Tensor(Wxh)
+				val Whh1 = TensorR.Tensor(Whh)
+				val Why1 = TensorR.Tensor(Why)
+				val hprev1 = TensorR.Tensor(hprev)
+
+				def lossFun = { (dummy: TensorR) =>
+					var loss = TensorR.Tensor(Vector.zeros(1))
+					LOOPCC(loss)(3){i => t => 
+						
+						// printf("at iteration %d ", i)
+						// get input as one-hot tensor
+						val x = Vector.zeros(vocab_size)
+						x.data(i) = 1
+						val x1 = TensorR.Tensor(x)
+						// get output as one-hot tensor
+						val y = Vector.zeros(vocab_size)
+						y.data((i+1)%vocab_size) = 1
+						val y1 = TensorR.Tensor(y)
+
+						val h1 = ((Wxh1 dot x1) + (Whh1 dot hprev1)).tanh() // hidden state
+						// carefully update hprev1 with h1 in the last cycle
+						/*
+							I have evidence that in this case, the hprev1.x.data has been updated, and Whh1 carried some gradient
+							However, this seems wrong, because in this case, the gradient is not flowing through the hidden vector
+						*/
+						hprev1.x.copy_data(h1.x)
+						
+						val e1 = (Why1 dot h1).exp()
+						val p1 = e1 / e1.sum()
+						t - (p1 dot y1).log() // loss is updated by this value (t is loss from last cycle)
+					}
+				}
+				val dummy = gradR(lossFun)(Vector.zeros(1))	
+				
+				Wxh1.d.print()	
+				Whh1.d.print()
+				Why1.d.print()	
+				hprev1.x.print()	
+
+			}
+		}
+
+		/*
+		println("try array2_2_1")
+		val p = new PrintWriter(new File("array2_2_1.cpp"))
+		p.println(array2_2_1.code)
+		p.flush()
+		array2_2_1.eval("abc")
+		*/
+
+		val array2_2_2 = new DslDriverC[String, Unit] with VectorExp {
+
+			def snippet(a: Rep[String]): Rep[Unit] = {
+				val vocab_size = 3
+				val hidden_size = 2
+				val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
+				val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
+				val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
+				val hprev = Vector.zeros(hidden_size) 
+
+				// wrap as tensors
+				val Wxh1 = TensorR.Tensor(Wxh)
+				val Whh1 = TensorR.Tensor(Whh)
+				val Why1 = TensorR.Tensor(Why)
+				val hprev1 = TensorR.Tensor(hprev)
+
+				def lossFun = { (dummy: TensorR) =>
+					// what about the idea of accumulating loss as a var closure
+					// NO: Stack overflow!!
+					// what about saving the loss of each step, then add up at the end
+					import scala.collection.mutable.MutableList
+					val losses = new MutableList[TensorR]()
+
+
+					var loss = TensorR.Tensor(Vector.zeros(1))
+					val h_new = LOOPCC(hprev1)(3){i => t => 
+						
+						// printf("at iteration %d ", i)
+						// get input as one-hot tensor
+						val x = Vector.zeros(vocab_size)
+						x.data(i) = 1
+						val x1 = TensorR.Tensor(x)
+						// get output as one-hot tensor
+						val y = Vector.zeros(vocab_size)
+						y.data((i+1)%vocab_size) = 1
+						val y1 = TensorR.Tensor(y)
+
+						val h1 = ((Wxh1 dot x1) + (Whh1 dot t)).tanh() // hidden state
+						// carefully update hprev1 with h1 in the last cycle
+						/*
+							I have evidence that in this case, the hprev1.x.data has been updated, and Whh1 carried some gradient
+							However, this seems wrong, because in this case, the gradient is not flowing through the hidden vector
+						*/
+						// hprev1.x.copy_data(h1.x)
+						
+						val e1 = (Why1 dot h1).exp()
+						val p1 = e1 / e1.sum()
+						// t - (p1 dot y1).log() // loss is updated by this value (t is loss from last cycle)
+						// loss -= (p1 dot y1).log()
+						losses += (p1 dot y1).log() // FIXME, need -
+						h1
+					}
+					hprev1.x.copy_data(h_new.x)
+					
+					// another loop to collect losses
+					LOOPCC(loss)(3){i => t =>
+						// t + losses(i) // Problem!! :: the losses(i) became Rep[TensorR]
+						t + t // changed this just to compile
+					}
+				}
+				val dummy = gradR(lossFun)(Vector.zeros(1))	
+				
+				Wxh1.d.print()	
+				Whh1.d.print()
+				Why1.d.print()	
+				hprev1.x.print()	
+
+			}
+		}
+
+		// println("try array2_2_2")
+		//val p = new PrintWriter(new File("array2_2_2.cpp"))
+		//p.println(array2_2_2.code)
+		//p.flush()
+		// array2_2_2.eval("abc")
+
+
+		val array2_3 = new DslDriverC[String, Unit] with VectorExp {
+
+			def snippet(a: Rep[String]): Rep[Unit] = {
+
+				val data = "abcdefghijklmn"
+				val data_size = data.length
+				val chars = data.distinct
+				val vocab_size = chars.length
+				println(s"data has $data_size chars and $vocab_size unique chars")
+
+				import scala.collection.immutable.Map
+				val char_to_ix = (chars zip (0 until vocab_size)).foldLeft(Map.empty[Char, Int]) {
+					(m, c_i) => m.updated(c_i._1, c_i._2) 
+				}
+				val ix_to_char = (chars zip (0 until vocab_size)).foldLeft(Map.empty[Int, Char]) {
+					(m, c_i) => m.updated(c_i._2, c_i._1)
+				}
+
+				val hidden_size = 10 // size of hidden layer of neurons
+				val seq_length = 25   // number of steps to unroll the RNN for
+				val learning_rate = 1e-1
+
+				// model parameters
+				val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
+				val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
+				val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidder to output
+				val bh  = Vector.zeros(hidden_size) 					  // hidden bias
+				val by  = Vector.zeros(vocab_size)						  // output bias
+				val hprev = Vector.zeros(hidden_size)					  // initial hidden state
+
+				// wrap the parameters as Tensors, use them in model
+				val Wxh1 = TensorR.Tensor(Wxh)
+				val Whh1 = TensorR.Tensor(Whh)
+				val Why1 = TensorR.Tensor(Why)
+				val bh1  = TensorR.Tensor(bh)
+				val by1  = TensorR.Tensor(by)
+				var hprev1 = TensorR.Tensor(hprev) // this is not paramters but need to be carried on in iterations
+
+				// define model (loss function)
+				def lossFun(inputs: Rep[Int], targets: Rep[Int]) = { (dummy: TensorR) => 
+					var loss = TensorR.Tensor(Vector.zeros(1))
+					//for (i <- (0 until inputs.length)) {
+						val i = 0
+						// get input as one-hot tensor
+						val x = Vector.zeros(vocab_size)
+						x.data(inputs) = 1
+						val x1 = TensorR.Tensor(x) 
+						// get output as one-hot tensor
+						val y = Vector.zeros(vocab_size)
+						y.data(targets) = 1
+						val y1 = TensorR.Tensor(y)
+
+						val h1 = ((Wxh1 dot x1) + (Whh1 dot hprev1) + bh1).tanh() // hidden state
+						val e1 = ((Why1 dot h1) + by1).exp()   					  // unnormalized prob
+						val p1 = e1 / e1.sum()									  // normalized prob
+						loss = loss - (p1 dot y1).log() 					 	  // softmax (cross-entropy loss)
+
+						// update hprev1
+						hprev1 = h1
+					//}
+					loss
+				}
+
+				val dummy = gradR(lossFun(1, 2))(Vector.zeros(1))	
+				Wxh1.d.print()			
+
+			}
+		}
+
+		//println(array2_3.code)
+		// array2_3.eval("abc")
 
 		val array3 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -547,17 +846,63 @@ object TEST1 {
 	    							   y.sum() })(v)
 	    		// show gradient
 	    		grad.print()
+	    		println("Tensor in closure can also accumulate gradient, which is important")
+	    		half.d.print()
 	    	}
 	    }
 
 		// println("test LOOP gradient")
-		//import java.io.PrintWriter;
-		//import java.io.File;	
+		import java.io.PrintWriter;
+		import java.io.File;	
 	    //println(array4.code)
 	    //val p = new PrintWriter(new File("fei_needs_help_for_basic_java_thing.cpp"))
 		//p.println(array4.code)
 		//p.flush()
-	    // array4.eval("abc" )
+	    //array4.eval("abc" )
+
+	    val array4_1 = new DslDriverC[String, Unit] with VectorExp {
+
+	    	def snippet(a: Rep[String]): Rep[Unit] = {
+	    		val length = 2
+	    		val v = Vector.randinit(length)
+	    		v.print()
+
+	    		val half = new TensorR(Vector.halves(length), Vector.zeros(length))
+	    		val grad = gradR(t => {
+	    				val y = LOOPC(t)(3)(t => t * half )
+	    				y.sum()
+	    			})(v)
+	    		// show gradient
+	    		grad.print()
+	    		println("Tensor in closure can also accumulate gradient, which is important")
+	    		half.d.print()
+	    	}
+	    }
+
+	    // println("test LOOP gradient")
+	    //array4_1.eval("abc")
+
+	    val array4_2 = new DslDriverC[String, Unit] with VectorExp {
+
+	    	def snippet(a: Rep[String]): Rep[Unit] = {
+	    		val length = 2
+	    		val v = Vector.randinit(length)
+	    		v.print()
+
+	    		val half = new TensorR(Vector.halves(length), Vector.zeros(length))
+	    		val grad = gradR(t => {
+	    			val y = LOOPCC(t)(3)(i => t => {
+	    				println(i)
+	    				t * half})
+	    			y.sum()})(v)
+	    		// show gradient
+	    		grad.print()
+	    		println("Tensor in closure can also accumulate gradient, which is important")
+	    		half.d.print()
+	    	}
+	    }
+
+	    //array4_2.eval("abc")
 
 	    val array5 = new DslDriverC[String, Unit] with VectorExp {
 
