@@ -6,6 +6,8 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
 
+import scala.collection.mutable.ArrayBuffer
+
 object TEST1 {
 
 	trait VectorExp extends Dsl {
@@ -233,8 +235,8 @@ object TEST1 {
 
 		object Vector {
 
-			def randinit(dim0: Int, dim1: Int = 1, scale: Double = 1.0) = {
-				unchecked[Unit]("srand(time(NULL))")
+			def randinit(dim0: Int, dim1: Int = 1, scale: Double = 1.0, offset: Int = 0) = {
+				unchecked[Unit]("srand(time(NULL)" + "+" + offset.toString + ")")
 				val res = NewArray[Double](dim0 * dim1)
 				for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Double]("(double)rand()/RAND_MAX*2.0-1.0") * scale
 				new Vector(res, dim0, dim1)
@@ -428,20 +430,43 @@ object TEST1 {
 	      }
 	      loop(init)
 	    }
+	   
+		
+		def FUN2(dim0: Int)(f: ArrayBuffer[TensorR] => Unit): (ArrayBuffer[TensorR] => Unit) = {
+	    	// val dim0: Int = 1 // FIXME: what is the best way to carry this known dimensional information?
+	    	val f1 = fun { (x: Rep[Array[Array[Double]]]) =>
+	    		val length = 2
+	    		val deltas = ArrayBuffer[Vector]() 
+	    		for (i <- (0 until length): Range) deltas.append(Vector.zeros(dim0))
+	    		val input = ArrayBuffer[TensorR]()
+	    		for (i <- (0 until length): Range) input.append(new TensorR(new Vector(x(i), dim0), deltas(i)))
+	    		f(input)
+	    		val ret = NewArray[Array[Double]](length)
+	    		for (i <- (0 until length): Range) ret(i) = deltas(i).data
+	    		ret
+	    	};
+	    	{ (x:ArrayBuffer[TensorR]) => {
+	    		val length = 2
+	    		val in = NewArray[Array[Double]](length)
+	    		for (i <- (0 until length): Range) in(i) = x(i).x.data
+	    		val out = f1(in)
+	    		for (i <- (0 until length): Range) x(i).d += new Vector(out(i), dim0)
+	    		} 
+	    	}
+	    }
 
-/*
-	    @virtualize
-	    def LOOPCCM(init: TensorR, init1: TensorR)(c: Rep[Int])(b: Rep[Int] => (TensorR, TensorR) => (TensorR, TensorR) @diff): 
-	    (TensorR, TensorR) @diff = shift { k:((TensorR, TensorR) => Unit) =>
+		@virtualize
+	    def LOOPCC2(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff): 
+	    ArrayBuffer[TensorR] @diff = shift { k:(ArrayBuffer[TensorR] => Unit) =>
 
 	      var gc = 0
 
-	      lazy val loop: (TensorR, TensorR) => Unit = FUN (init.x.dim0){ (x: TensorR) =>
+	      lazy val loop: ArrayBuffer[TensorR] => Unit = FUN2 (init(0).x.dim0){ (x: ArrayBuffer[TensorR]) =>
 	        if (gc < c) { gc += 1; RST(loop(b(gc - 1)(x))) } else RST(k(x))
 	      }
 	      loop(init)
-	    }
-*/
+	    }	    
+
 
 		def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
 	    	val x1 = new TensorR(x, Vector.zeros(x.dim0))
@@ -451,15 +476,6 @@ object TEST1 {
 	    			() } 
 	    	x1.d
 	    }
-/*
-	    def grad_side_effect_using_closure(f: () => TensorR @diff): Rep[Unit] = {
-	    	reset {
-	    		val y = f()
-	    		y.d.setAsOne()
-	    		y.x.print()
-	    		()
-	    	}
-	    } */
 	}
 
 
@@ -482,6 +498,9 @@ object TEST1 {
 		}
 
 		//println("test dot")
+		//val array1_file = new PrintWriter(new File("array1(2).cpp"))
+		//array1_file.println(array1.code)
+		//array1_file.flush()
 		//println(array1.code)
 		//array1.eval("abc")
 
@@ -852,9 +871,7 @@ object TEST1 {
 	    }
 
 		// println("test LOOP gradient")
-		import java.io.PrintWriter;
-		import java.io.File;	
-	    //println(array4.code)
+		//println(array4.code)
 	    //val p = new PrintWriter(new File("fei_needs_help_for_basic_java_thing.cpp"))
 		//p.println(array4.code)
 		//p.flush()
@@ -903,6 +920,38 @@ object TEST1 {
 	    }
 
 	    //array4_2.eval("abc")
+
+	    val array4_3 = new DslDriverC[String, Unit] with VectorExp {
+
+	    	def snippet(a: Rep[String]): Rep[Unit] = {
+	    		val length = 2
+	    		val v = Vector.randinit(length)
+	    		v.print()
+	    		val u = Vector.randinit(length, offset = 5)
+	    		u.print()
+
+	    		val half = new TensorR(Vector.halves(length), Vector.zeros(length))
+	    		val vv = TensorR.Tensor(v)
+	    		val uu = TensorR.Tensor(u)
+	    		
+	    		val dummy = gradR(dum => {
+	    			val in = ArrayBuffer[TensorR](vv, uu)
+	    			val y = LOOPCC2(in)(3)(i => ins => {
+	    				val vvv = ins(0) * half
+	    				val uuu = ins(1) * half
+	    				ArrayBuffer[TensorR](vvv, uuu)})
+	    			y(1).sum() + y(0).sum()})(Vector.zeros(1))
+	    		// show gradient
+	    		println("Tensor in closure can also accumulate gradient, which is important")
+	    		half.d.print()
+	    		vv.d.print()
+	    		uu.d.print()
+	    	}
+	    }
+
+	    // println("support 2 tensors in loop")
+	    println(array4_3.code)
+	    array4_3.eval("abc")
 
 	    val array5 = new DslDriverC[String, Unit] with VectorExp {
 

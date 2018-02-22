@@ -174,6 +174,10 @@ trait DslGenC extends CGenNumericOps
       "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "));"
   }
 
+  def getMemoryAllocStringNoS(count: String, memType: String): String = {
+      "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "))"
+  }
+
   // In LMS code, it was "remap(m) + addRef(m)" which would put an extra "*"
   override def remapWithRef[A](m: Typ[A]): String = remap(m) + " "
 
@@ -181,7 +185,9 @@ trait DslGenC extends CGenNumericOps
     case "java.lang.String" => "char*"
     case "Array[Char]" => "char*"
     case "Char" => "char"
+    // case "Array[Double]" => "unique_ptr<double[]>"
     case "Array[Double]" => "double*"
+    case "Array[Array[Double]]" => "double**"
     case _ => super.remap(m)
   }
   override def format(s: Exp[Any]): String = {
@@ -233,6 +239,7 @@ trait DslGenC extends CGenNumericOps
     case a@ArrayNew(n) =>
       val arrType = remap(a.m)
       stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
+      //stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
     case ArrayApply(x,n) => emitValDef(sym, quote(x) + "[" + quote(n) + "]")
     case ArrayUpdate(x,n,y) => stream.println(quote(x) + "[" + quote(n) + "] = " + quote(y) + ";")
     case PrintLn(s) => stream.println("printf(\"" + format(s) + "\\n\"," + quoteRawString(s) + ");")
@@ -263,6 +270,7 @@ trait DslGenC extends CGenNumericOps
       #include <unistd.h>
       #include <time.h>
       #include <functional>
+      #include <memory>
       #include <math.h>
       using namespace std;
       #ifndef MAP_FILE
