@@ -267,10 +267,10 @@ object TEST1 {
 				new Vector(res, dim0)
 			}
 
-			def consts(dim0: Int, value: Double) = {
-				val res = NewArray[Double](dim0)
-				for (i <- (0 until dim0): Rep[Range]) res(i) = value
-				new Vector(res, dim0)
+			def consts(dim0: Int, dim1: Int = 1, value: Double = 0.001) = {
+				val res = NewArray[Double](dim0 * dim1)
+				for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = value
+				new Vector(res, dim0, dim1)
 			}
 		}
 
@@ -438,9 +438,9 @@ object TEST1 {
 	    		val length = 2
 	    		val deltas = ArrayBuffer[Vector]() 
 	    		for (i <- (0 until length): Range) deltas.append(Vector.zeros(dim0))
-	    		val input = ArrayBuffer[TensorR]()
-	    		for (i <- (0 until length): Range) input.append(new TensorR(new Vector(x(i), dim0), deltas(i)))
-	    		f(input)
+	    		val inputs = ArrayBuffer[TensorR]()
+	    		for (i <- (0 until length): Range) inputs.append(new TensorR(new Vector(x(i), dim0), deltas(i)))
+	    		f(inputs)
 	    		val ret = NewArray[Array[Double]](length)
 	    		for (i <- (0 until length): Range) ret(i) = deltas(i).data
 	    		ret
@@ -465,7 +465,42 @@ object TEST1 {
 	        if (gc < c) { gc += 1; RST(loop(b(gc - 1)(x))) } else RST(k(x))
 	      }
 	      loop(init)
-	    }	    
+	    }	   
+
+	    def FUNM(dim0s: ArrayBuffer[Int])(f: ArrayBuffer[TensorR] => Unit): (ArrayBuffer[TensorR] => Unit) = {
+	    	val f1 = fun { (x: Rep[Array[Array[Double]]]) =>
+	    		val length = dim0s.length
+	    		val deltas = ArrayBuffer[Vector]()
+	    		for (i <- (0 until length): Range) deltas.append(Vector.zeros(dim0s(i)))
+	    		val inputs = ArrayBuffer[TensorR]()
+	    		for (i <- (0 until length): Range) inputs.append(new TensorR(new Vector(x(i), dim0s(i)), deltas(i)))
+	    		f(inputs)
+	    		val rets = NewArray[Array[Double]](length)
+	    		for (i <- (0 until length): Range) rets(i) = deltas(i).data
+	    		rets
+	    	};
+	    	{
+	    		(x: ArrayBuffer[TensorR]) => {
+	    			val length = dim0s.length
+	    			val in = NewArray[Array[Double]](length)
+	    			for (i <- (0 until length): Range) in(i) = x(i).x.data
+	    			val out = f1(in)
+	    			for (i <- (0 until length): Range) x(i).d += new Vector(out(i), dim0s(i))
+	    		}
+	    	}
+	    }
+
+	    @virtualize
+	    def LOOPCCM(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
+	    ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
+
+	    	var gc = 0
+	    	lazy val loop: ArrayBuffer[TensorR] => Unit = FUNM (init map (_.x.dim0)) { (x: ArrayBuffer[TensorR]) =>
+	    		if (gc < c){gc += 1; RST(loop(b(gc-1)(x)))} else RST(k(x))
+	    	}
+	    	loop(init)
+
+	    } 
 
 
 		def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
@@ -758,6 +793,76 @@ object TEST1 {
 		//p.flush()
 		// array2_2_2.eval("abc")
 
+		val array2_2_3 = new DslDriverC[String, Unit] with VectorExp {
+
+			def snippet(a: Rep[String]): Rep[Unit] = {
+				val vocab_size = 3
+				val hidden_size = 2
+				//val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
+				val Wxh = Vector.consts(vocab_size, hidden_size, 0.01)  // input to hidden
+				val Whh = Vector.consts(hidden_size, hidden_size, 0.01) // hidden to hidden
+				val Why = Vector.consts(hidden_size, vocab_size, 0.01)  // hidden to output
+				val bh  = Vector.zeros(hidden_size)
+				val by  = Vector.zeros(vocab_size)
+				val hprev = Vector.zeros(hidden_size) 
+
+				// wrap as tensors
+				val Wxh1 = TensorR.Tensor(Wxh)
+				val Whh1 = TensorR.Tensor(Whh)
+				val Why1 = TensorR.Tensor(Why)
+				val bh1  = TensorR.Tensor(bh)
+				val by1  = TensorR.Tensor(by)
+				val hprev1 = TensorR.Tensor(hprev)
+
+				def lossFun = { (dummy: TensorR) =>
+					val loss = TensorR.Tensor(Vector.zeros(1))
+					val in = ArrayBuffer[TensorR]()
+					in.append(loss)
+					in.append(hprev1)
+					val outputs = LOOPCCM(in)(3){i => t => 
+						
+						// printf("at iteration %d ", i)
+						// get input as one-hot tensor
+						val x = Vector.zeros(vocab_size)
+						x.data(i) = 1
+						val x1 = TensorR.Tensor(x)
+						// get output as one-hot tensor
+						val y = Vector.zeros(vocab_size)
+						y.data((i+1)%vocab_size) = 1
+						val y1 = TensorR.Tensor(y)
+
+						val h1 = ((Wxh1 dot x1) + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
+						val e1 = (Why1.dot(h1) + by1).exp()  					  // use new hidden state to compute unnormalized prob
+						val p1 = e1 / e1.sum() 							  // use unnormalized prob to compute normalize prob
+						val newloss = t(0) - (p1 dot y1).log()            // loss is updated by original loss t(0) and additional loss
+						val out = ArrayBuffer[TensorR]()
+						out.append(newloss)
+						out.append(h1)
+						out
+					}
+					hprev1.x.copy_data(outputs(1).x)  // update the hidden state with the result from LOOP
+					outputs(0) 						  // return the final loss
+				}
+				val dummy = gradR(lossFun)(Vector.zeros(1))	
+				
+				Wxh1.d.print()	
+				Whh1.d.print()
+				Why1.d.print()	
+				bh1.d.print()
+				by1.d.print()
+				hprev1.x.print()	
+
+			}
+		}
+
+		
+		println("try array2_2_3")
+		//val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
+		//array2_2_3_file.println(array2_2_3.code)
+		//array2_2_3_file.flush()
+		array2_2_3.eval("abc")
+		
+
 
 		val array2_3 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -950,8 +1055,44 @@ object TEST1 {
 	    }
 
 	    // println("support 2 tensors in loop")
-	    println(array4_3.code)
-	    array4_3.eval("abc")
+	    //println(array4_3.code)
+	    //array4_3.eval("abc")
+
+	    val array4_4 = new DslDriverC[String, Unit] with VectorExp {
+
+	    	def snippet(a: Rep[String]): Rep[Unit] = {
+	    		val length = 2
+	    		val v = Vector.randinit(length)
+	    		v.print()
+	    		val u = Vector.randinit(length, offset = 5)
+	    		u.print()
+
+	    		val half = new TensorR(Vector.halves(length), Vector.zeros(length))
+	    		val vv = TensorR.Tensor(v)
+	    		val uu = TensorR.Tensor(u)
+	    		
+	    		val dummy = gradR(dum => {
+	    			val in = ArrayBuffer[TensorR](vv, uu)
+	    			val y = LOOPCCM(in)(3)(i => ins => {
+	    				val vvv = ins(0) * half
+	    				val uuu = ins(1) * half
+	    				ArrayBuffer[TensorR](vvv, uuu)})
+	    			y(1).sum() + y(0).sum()})(Vector.zeros(1))
+	    		// show gradient
+	    		println("Tensor in closure can also accumulate gradient, which is important")
+	    		half.d.print()
+	    		vv.d.print()
+	    		uu.d.print()
+	    	}
+	    }
+
+	    //println("support 2 tensors in loop using LOOPCCM")
+	    //println(array4_4.code)
+		//val array4_4_file = new PrintWriter(new File("array4_4.cpp"))
+		//array4_4_file.println(array4_4.code)
+		//array4_4_file.flush()
+	    //array4_4.eval("abc")
+
 
 	    val array5 = new DslDriverC[String, Unit] with VectorExp {
 
