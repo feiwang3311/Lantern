@@ -8,11 +8,11 @@ vocab_size = 3
 hidden_size = 2
 
 # model parameters
-Wxh = np.zeros((hidden_size, vocab_size)) + 0.01 # input to hidden
-Whh = np.zeros((hidden_size, hidden_size)) + 0.01 # hidden to hidden
-Why = np.zeros((vocab_size, hidden_size)) + 0.01 # hidden to output
-bh = np.zeros((hidden_size, 1)) # hidden bias
-by = np.zeros((vocab_size, 1)) # output bias
+Wxh = np.ones((hidden_size, vocab_size))  # input to hidden
+Whh = np.ones((hidden_size, hidden_size)) # hidden to hidden
+Why = np.ones((vocab_size, hidden_size))  # hidden to output
+bh = np.ones((hidden_size, 1)) # hidden bias
+by = np.ones((vocab_size, 1)) # output bias
 
 def lossFun(inputs, targets, hprev):
   """

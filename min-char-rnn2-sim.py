@@ -17,11 +17,11 @@ by = np.zeros((vocab_size, 1)) # output bias
 import torch
 from torch.autograd import Variable
 # have model parameters as globle variables, so the value is persistent
-Wxh = torch.zeros((hidden_size, vocab_size)) + 0.01
-Whh = torch.zeros((hidden_size, hidden_size)) + 0.01
-Why = torch.zeros((vocab_size, hidden_size)) + 0.01
-bh  = torch.zeros((hidden_size, 1))
-by  = torch.zeros((vocab_size, 1))
+Wxh = torch.ones((hidden_size, vocab_size))
+Whh = torch.ones((hidden_size, hidden_size))
+Why = torch.ones((vocab_size, hidden_size)) 
+bh  = torch.ones((hidden_size, 1))
+by  = torch.ones((vocab_size, 1))
 """
 dWxh = torch.zeros((hidden_size, vocab_size))
 dWhh = torch.zeros((hidden_size, hidden_size))
@@ -65,7 +65,7 @@ def lossFunT(inputs, targets, hprev):
   # update hprev
   return loss.data, Wxh1.grad, Whh1.grad, Why1.grad, bh1.grad, by1.grad, hs[len(inputs) - 1].data
 
-result = lossFunT([0,1,2], [1,2,0], Variable(torch.zeros((hidden_size,1)), requires_grad=True))
+result = lossFunT([0, 1, 2], [1, 2, 0], Variable(torch.zeros((hidden_size,1)), requires_grad=True))
 loss, dWxh, dWhh, dWhy, dbh, dby, hid = result
 print(loss)
 print(dWxh)
@@ -74,6 +74,24 @@ print(dWhy)
 print(dbh)
 print(dby)
 print(hid)
+"""
+aaa = Variable(torch.zeros(vocab_size), requires_grad=True)
+#bbb = Variable(torch.ones(vocab_size), requires_grad=True)
+yy  = torch.zeros(vocab_size)
+yy[1] = 1.0
+yyy = Variable(yy, requires_grad=True)
+print(aaa)
+#print(bbb)
+print(yyy)
+ddd = torch.exp(aaa)
+ppp = ddd / torch.sum(ddd)
+#ppp = aaa / torch.sum(bbb)
+ddd = torch.log(torch.dot(ppp, yyy))
+ddd.backward()
+print(ppp.grad)
+print(aaa.grad)
+#print(bbb.grad)
+"""
 exit(0)
 
 
