@@ -255,6 +255,12 @@ object TEST1 {
         new Vector(res, dim0, dim1)
       }
 
+      def zeros_like(that: Vector) = {
+        val res = NewArray[Double](that.dim0 * that.dim1)
+        for (i <- (0 until that.dim0 * that.dim1): Rep[Range]) res(i) = 0.0
+        new Vector(res, that.dim0, that.dim1)
+      }
+
       def ones(dim0: Int) = {
         val res = NewArray[Double](dim0)
         for (i <- (0 until dim0): Rep[Range]) res(i) = 1.0
@@ -346,6 +352,15 @@ object TEST1 {
         unchecked[Unit]("free(",x.data,")")
         unchecked[Unit]("free(",d.data,")")
       } */
+
+      def clear_all() = {
+        x.clear()
+        d.clear()
+      }
+
+      def clear_grad() = {
+        d.clear()
+      }
 
     }
 
@@ -856,11 +871,12 @@ object TEST1 {
     }
 
     
-    println("try array2_2_3")
+    //println("try array2_2_3")
     //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
     //array2_2_3_file.println(array2_2_3.code)
     //array2_2_3_file.flush()
-    array2_2_3.eval("abc")
+    //array2_2_3.eval("abc")
+    //println("verified that in this small example the values of gradients are about right (up to precision)")
 
     val array2_2_4Debug = new DslDriverC[String, Unit] with VectorExp {
       def snippet (a: Rep[String]): Rep[Unit] = {
@@ -927,7 +943,7 @@ object TEST1 {
           (m, c_i) => m.updated(c_i._2, c_i._1)
         }
 
-        val hidden_size = 10 // size of hidden layer of neurons
+        val hidden_size = 100 // size of hidden layer of neurons
         val seq_length = 25   // number of steps to unroll the RNN for
         val learning_rate = 1e-1
 
@@ -948,32 +964,84 @@ object TEST1 {
         var hprev1 = TensorR.Tensor(hprev) // this is not paramters but need to be carried on in iterations
 
         // define model (loss function)
-        def lossFun(inputs: Rep[Int], targets: Rep[Int]) = { (dummy: TensorR) => 
+        def lossFun(inputs: Array[Int], targets: Array[Int]) = { (dummy: TensorR) => 
+          
           var loss = TensorR.Tensor(Vector.zeros(1))
-          //for (i <- (0 until inputs.length)) {
-            val i = 0
+          val in = ArrayBuffer[TensorR]()
+          in.append(loss)
+          in.append(hprev1)
+          val outputs = LOOPCCM(in)(inputs.length){i => t => 
+          
             // get input as one-hot tensor
             val x = Vector.zeros(vocab_size)
-            x.data(inputs) = 1
+            x.data(inputs(i)) = 1
             val x1 = TensorR.Tensor(x) 
             // get output as one-hot tensor
             val y = Vector.zeros(vocab_size)
-            y.data(targets) = 1
+            y.data(targets(i)) = 1
             val y1 = TensorR.Tensor(y)
 
             val h1 = ((Wxh1 dot x1) + (Whh1 dot hprev1) + bh1).tanh() // hidden state
             val e1 = ((Why1 dot h1) + by1).exp()                      // unnormalized prob
             val p1 = e1 / e1.sum()                                    // normalized prob
-            loss = loss - (p1 dot y1).log()                           // softmax (cross-entropy loss)
+            
+            val newloss = t(0) - (p1 dot y1).log()                    // loss is updated by original loss t(0) and additional loss
+            val out = ArrayBuffer[TensorR]()
+            out.append(newloss)
+            out.append(h1)
+            out
+          }
 
-            // update hprev1
-            hprev1 = h1
-          //}
-          loss
+          hprev1.x.copy_data(outputs(1).x)  // update the hidden state with the result from LOOP
+          outputs(0)                        // return the final loss
         }
 
-        val dummy = gradR(lossFun(1, 2))(Vector.zeros(1))   
-        Wxh1.d.print()          
+        // the learning cycle starts here
+        var n = 0
+        var p = 0
+        val mWxh = Vector.zeros_like(Wxh)
+        val mWhh = Vector.zeros_like(Whh)
+        val mWhy = Vector.zeros_like(Why)
+        val mbh  = Vector.zeros_like(bh)
+        val mby  = Vector.zeros_like(by)
+        var smooth_loss = -Math.log(1.0 / vocab_size) * seq_length
+
+        while (true) {
+          if (p + seq_length + 1 >= data_size) {
+            hprev1.clear_all() // clear the value and the gradient to reset RNN memory
+            p = 0              // go to the start of training data
+          }
+
+          val inputs = NewArray[Int](seq_length)
+          val targets = NewArray[Int](seq_length)
+          for (i <- (0 until seq_length): Rep[Range]) {
+            inputs(i) = char_to_ix(data(p+i))
+            targets(i) = ix_to_char(data(p+i+1))
+          }
+
+          // no sample so far
+
+          val dummy = gradR(lossFun(inputs, targets))(Vector.zeros(1)) 
+          // need to track loss but the current gradR function discard loss. Need helper function to save it
+          // update and show smooth_loss
+
+          if (n % 100 == 0) {
+            println(s"iter $n, loss 0.99") // FIXME loss need to be fixed
+          }
+
+          // update parameters based on gradient
+          val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
+          val mems = ArrayBuffer(mWxh, mWhh, mWhy, mbh, mby)
+          for ((par, mem) <- pars.zip(mems)) {
+            mem += par.d * par.d
+            par.x -= learning_rate * par.d / Math.sqrt(mem + 1e-8)
+            par.clear_grad()
+          }
+          hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
+          
+          p += seq_length
+          n += 1
+        }
 
       }
     }
