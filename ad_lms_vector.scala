@@ -186,6 +186,12 @@ object TEST1 {
         new Vector(res, dim0)
       }
 
+      def sqrt() = {
+        val res = NewArray[Double](dim0 * dim1)
+        for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = Math.sqrt(data(i))
+        new Vector(res, dim0, dim1)
+      }
+
       def sum() = {
         val value = var_new(0.0)
         for (i <- (0 until dim0): Rep[Range]) {
@@ -277,6 +283,13 @@ object TEST1 {
         val res = NewArray[Double](dim0 * dim1)
         for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = value
         new Vector(res, dim0, dim1)
+      }
+
+      def fromData(x: Double*) = {
+        val y = x.toArray
+        val res = NewArray[Double](y.length)
+        for (i <- (0 until y.length): Rep[Range]) res(i) = y(i)
+        new Vector(res, y.length)
       }
     }
 
@@ -371,29 +384,6 @@ object TEST1 {
       }
     }
 
-/*
-    def FUN(f: TensorR => Unit): (TensorR => Unit) = {
-      /*
-      val f1 = fun { (x:Rep[Array[Double]]) =>
-        val dim0 = x.length 
-        val deltaVar: Vector = Vector.zeros(dim0)
-        f(new TensorR(new Vector(x, dim0), deltaVar))
-        deltaVar.data
-        // Fixme: when to free the memories of x and deltaVar
-      };*/
-      { 
-        (x:TensorR) => {
-          val dim0: Int = x.d.dim0
-          val f2 = fun { (x: Rep[Array[Double]]) =>
-            val delta: Vector = Vector.zeros(dim0)
-            f(new TensorR(new Vector(x, dim0), delta))
-            delta.data
-          }
-          x.d += new Vector(f2(x.x.data), dim0) 
-        }
-      }
-    }
-*/
 
     def FUN(dim0: Int)(f: TensorR => Unit): (TensorR => Unit) = {
       // val dim0: Int = 1 // FIXME: what is the best way to carry this known dimensional information?
@@ -403,6 +393,22 @@ object TEST1 {
         deltaVar.data
       };
       { (x:TensorR) => x.d += new Vector(f1(x.x.data), dim0) }
+    }
+
+    // "clever" way of changing fun signature for memory leak issue, not working
+    def FUNc(dim0: Int)(f: TensorR => Unit): (TensorR => Unit) = {
+      val f1 = fun { (x: Rep[Array[Array[Double]]]) =>
+        val length = 2
+        val tensor = new TensorR(new Vector(x(0), dim0), new Vector(x(1), dim0))
+        f(tensor)
+      };
+      { 
+        (x:TensorR) => {
+          val in = NewArray[Array[Double]](2)
+          in(0) = x.x.data; in(1) = x.d.data
+          f1(in) // f1 should take Array[Array[Double]] and update the gradient of x
+        } 
+      }
     }
 
     def RST(a: => Unit @diff) = continuations.reset { a; () }
@@ -526,6 +532,14 @@ object TEST1 {
           () } 
       x1.d
     }
+
+    def getMallocAddr() = {
+      unchecked[Unit]("waterMark = mallocAddr")
+    }
+
+    def resetMallocAddr() = {
+      unchecked[Unit]("mallocAddr = waterMark")
+    }
   }
 
 
@@ -538,12 +552,14 @@ object TEST1 {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val res = Vector.randinit(length)
+        getMallocAddr()
         val res2 = Vector.randPositive(length)
         res.print()
         res2.print()
         
         val result = res dot res2
         result.print()
+        resetMallocAddr()
       }
     }
 
@@ -813,12 +829,14 @@ object TEST1 {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val vocab_size = 3
         val hidden_size = 2
+        val learning_rate = 1e-1
+        val seq_length = 4
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
-        val Wxh = Vector.consts(vocab_size, hidden_size, 1)  // input to hidden
-        val Whh = Vector.consts(hidden_size, hidden_size, 1) // hidden to hidden
-        val Why = Vector.consts(hidden_size, vocab_size, 1)  // hidden to output
-        val bh  = Vector.ones(hidden_size)
-        val by  = Vector.ones(vocab_size)
+        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
+        val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
+        val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
+        val bh  = Vector.zeros(hidden_size)
+        val by  = Vector.zeros(vocab_size)
         val hprev = Vector.zeros(hidden_size) 
 
         // wrap as tensors
@@ -829,21 +847,21 @@ object TEST1 {
         val by1  = TensorR.Tensor(by)
         val hprev1 = TensorR.Tensor(hprev)
 
-        def lossFun = { (dummy: TensorR) =>
+        def lossFun(inputs: Rep[Array[Int]], targets: Rep[Array[Int]]) = { (dummy: TensorR) =>
           val loss = TensorR.Tensor(Vector.zeros(1))
           val in = ArrayBuffer[TensorR]()
           in.append(loss)
           in.append(hprev1)
-          val outputs = LOOPCCM(in)(3){i => t => 
+          val outputs = LOOPCCM(in)(inputs.length){i => t => 
             
             // printf("at iteration %d ", i)
             // get input as one-hot tensor
             val x = Vector.zeros(vocab_size)
-            x.data(i) = 1
+            x.data(inputs(i)) = 1
             val x1 = TensorR.Tensor(x)
             // get output as one-hot tensor
             val y = Vector.zeros(vocab_size)
-            y.data((i+1)%vocab_size) = 1
+            y.data(targets(i)) = 1
             val y1 = TensorR.Tensor(y)
 
             val h1 = ((Wxh1 dot x1) + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
@@ -858,14 +876,48 @@ object TEST1 {
           hprev1.x.copy_data(outputs(1).x)  // update the hidden state with the result from LOOP
           outputs(0)                        // return the final loss
         }
-        val dummy = gradR(lossFun)(Vector.zeros(1)) 
-        
-        Wxh1.d.print()  
-        Whh1.d.print()
-        Why1.d.print()  
-        bh1.d.print()
-        by1.d.print()
-        hprev1.x.print()    
+
+
+        val lr = Vector.consts(1, value = learning_rate)
+        val hp = Vector.consts(1, value = 1e-8)
+
+        val mWxh = Vector.zeros_like(Wxh)
+        val mWhh = Vector.zeros_like(Whh)
+        val mWhy = Vector.zeros_like(Why)
+        val mbh  = Vector.zeros_like(bh)
+        val mby  = Vector.zeros_like(by)
+
+        getMallocAddr() // remember current allocation pointer here
+
+        for (n <- (0 until 190): Rep[Range]) {
+
+          val inputs = NewArray[Int](seq_length)
+          val targets = NewArray[Int](seq_length)
+          for (i <- (0 until seq_length): Rep[Range]) {
+            inputs(i) = i
+            targets(i) = (i+1) % vocab_size
+          }
+
+          val dummy = gradR(lossFun(inputs, targets))(Vector.zeros(1)) 
+          /*
+          Wxh1.d.print()  
+          Whh1.d.print()
+          Why1.d.print()  
+          bh1.d.print()
+          by1.d.print()
+          hprev1.x.print()    
+          */
+          val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
+          val mems = ArrayBuffer(mWxh, mWhh, mWhy, mbh, mby)
+          for ((par, mem) <- pars.zip(mems)) {
+            mem += par.d * par.d
+            par.x -= par.d * lr / (mem + hp).sqrt()
+            par.clear_grad()
+          }
+          hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
+          
+          resetMallocAddr()  // reset malloc_addr to the value when we remember allocation pointer
+        }
 
       }
     }
@@ -929,9 +981,9 @@ object TEST1 {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
 
-        val data = "abcdefghijklmn"
-        val data_size = data.length
-        val chars = data.distinct
+        val training_data = "abcdefghijklmn"
+        val data_size = training_data.length
+        val chars = training_data.distinct
         val vocab_size = chars.length
         println(s"data has $data_size chars and $vocab_size unique chars")
 
@@ -942,6 +994,10 @@ object TEST1 {
         val ix_to_char = (chars zip (0 until vocab_size)).foldLeft(Map.empty[Int, Char]) {
           (m, c_i) => m.updated(c_i._2, c_i._1)
         }
+
+        //val translated_data = NewArray[Int](data_size)
+        //for (i <- (0 until data_size)) translated_data(i) = char_to_ix(unit(training_data).charAt(i))
+        val translated_data = training_data.map(char_to_ix).toArray 
 
         val hidden_size = 100 // size of hidden layer of neurons
         val seq_length = 25   // number of steps to unroll the RNN for
@@ -964,7 +1020,7 @@ object TEST1 {
         var hprev1 = TensorR.Tensor(hprev) // this is not paramters but need to be carried on in iterations
 
         // define model (loss function)
-        def lossFun(inputs: Array[Int], targets: Array[Int]) = { (dummy: TensorR) => 
+        def lossFun(inputs: Rep[Array[Int]], targets: Rep[Array[Int]]) = { (dummy: TensorR) => 
           
           var loss = TensorR.Tensor(Vector.zeros(1))
           val in = ArrayBuffer[TensorR]()
@@ -997,16 +1053,19 @@ object TEST1 {
         }
 
         // the learning cycle starts here
-        var n = 0
+        // var n = 0
         var p = 0
         val mWxh = Vector.zeros_like(Wxh)
         val mWhh = Vector.zeros_like(Whh)
         val mWhy = Vector.zeros_like(Why)
         val mbh  = Vector.zeros_like(bh)
         val mby  = Vector.zeros_like(by)
-        var smooth_loss = -Math.log(1.0 / vocab_size) * seq_length
+        var smooth_loss = - scala.math.log(1.0 / vocab_size) * seq_length
 
-        while (true) {
+        val lr = Vector.consts(1, value = learning_rate)
+        val hp = Vector.consts(1, value = 1e-8)
+
+        for (n <- (0 until 3): Rep[Range]) {
           if (p + seq_length + 1 >= data_size) {
             hprev1.clear_all() // clear the value and the gradient to reset RNN memory
             p = 0              // go to the start of training data
@@ -1015,8 +1074,8 @@ object TEST1 {
           val inputs = NewArray[Int](seq_length)
           val targets = NewArray[Int](seq_length)
           for (i <- (0 until seq_length): Rep[Range]) {
-            inputs(i) = char_to_ix(data(p+i))
-            targets(i) = ix_to_char(data(p+i+1))
+            inputs(i) = i
+            targets(i) = (i+1) % seq_length
           }
 
           // no sample so far
@@ -1025,7 +1084,7 @@ object TEST1 {
           // need to track loss but the current gradR function discard loss. Need helper function to save it
           // update and show smooth_loss
 
-          if (n % 100 == 0) {
+          if (n % 100 == unit(0)) {
             println(s"iter $n, loss 0.99") // FIXME loss need to be fixed
           }
 
@@ -1034,20 +1093,20 @@ object TEST1 {
           val mems = ArrayBuffer(mWxh, mWhh, mWhy, mbh, mby)
           for ((par, mem) <- pars.zip(mems)) {
             mem += par.d * par.d
-            par.x -= learning_rate * par.d / Math.sqrt(mem + 1e-8)
+            par.x -= par.d * lr / (mem + hp).sqrt()
             par.clear_grad()
           }
           hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
           
           p += seq_length
-          n += 1
+          //n += 1
         }
 
       }
     }
 
     //println(array2_3.code)
-    // array2_3.eval("abc")
+    //array2_3.eval("abc")
 
     val array3 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -1066,7 +1125,9 @@ object TEST1 {
     }
 
     //println("test IF gradient")
-    //println(array3.code)
+    //val array3_file = new PrintWriter(new File("array3.cpp"))
+    //array3_file.println(array3.code)
+    //array3_file.flush()
     //array3.eval("abc")
 
     val array4 = new DslDriverC[String, Unit] with VectorExp {

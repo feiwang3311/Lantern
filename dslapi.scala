@@ -174,6 +174,10 @@ trait DslGenC extends CGenNumericOps
       "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "));"
   }
 
+  def getMemoryAllocStringArena(count: String, memType: String): String = {
+      "(" + memType + "*)myMalloc(" + count + " * sizeof(" + memType + "));"
+  }
+
   def getMemoryAllocStringNoS(count: String, memType: String): String = {
       "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "))"
   }
@@ -238,7 +242,8 @@ trait DslGenC extends CGenNumericOps
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case a@ArrayNew(n) =>
       val arrType = remap(a.m)
-      stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
+      //stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
+      stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocStringArena(quote(n), arrType))
       //stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
     case ArrayApply(x,n) => emitValDef(sym, quote(x) + "[" + quote(n) + "]")
     case ArrayUpdate(x,n,y) => stream.println(quote(x) + "[" + quote(n) + "] = " + quote(y) + ";")
@@ -298,6 +303,17 @@ trait DslGenC extends CGenNumericOps
 
         return hash;
       }
+      int HEAP_SIZE = 262144;
+      void *mallocBase = malloc(HEAP_SIZE);
+      void *mallocAddr = mallocBase;
+      void *waterMark  = mallocBase;
+      void* myMalloc(size_t bytes) {
+        void* res = mallocAddr;
+        mallocAddr += bytes;
+        return res;
+      }
+
+
       void Snippet(char*);
       int main(int argc, char *argv[])
       {
