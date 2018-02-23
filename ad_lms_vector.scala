@@ -528,9 +528,23 @@ object TEST1 {
       val x1 = new TensorR(x, Vector.zeros(x.dim0))
       reset { val y = f(x1)
           y.d.setAsOne()
-          y.x.print()
+          y.x.print() // this is the result of forward propagation (likely the loss)
           () } 
       x1.d
+    }
+
+    // same as gradR function, except that we return the final result of f, not the gradient of input
+    // gradient of input is supposed to be dummy value here
+    // gradient of useful tensors are in closure, and can be accessed directly from outside of this function
+    def gradR_loss(f: TensorR => TensorR @diff)(x: Vector): Vector = {
+      val x1 = new TensorR(x, Vector.zeros(x.dim0)) // this should be a dummy tensor
+      val result = Vector.zeros(1)                  // this should be the loss
+      reset { val y = f(x1)
+        y.d.setAsOne()
+        result.copy_data(y.x)
+        //y.x.print()
+        () }
+      result 
     }
 
     def getMallocAddr() = {
@@ -539,6 +553,11 @@ object TEST1 {
 
     def resetMallocAddr() = {
       unchecked[Unit]("mallocAddr = waterMark")
+    }
+
+    @virtualize
+    def doIf(b: Rep[Boolean])(a: => Rep[Unit]) = {
+      if(b) a
     }
   }
 
@@ -560,6 +579,12 @@ object TEST1 {
         val result = res dot res2
         result.print()
         resetMallocAddr()
+
+        // still not working
+        for (i <- (0 until 10): Rep[Range]) {
+          doIf(i == unit(2)){println("found")}
+          //if (equals(i, unit(2))) println("found")
+        }
       }
     }
 
@@ -600,7 +625,16 @@ object TEST1 {
         // calculate gradient
         val grad = gradR(t => t dot t)(v)
         // show gradient
+        println("show gradient in the traditional way")
         grad.print()
+
+        // construct TensorR for closure
+        val tv = TensorR.Tensor(v)
+        val loss = gradR_loss(dummy => tv dot tv)(Vector.zeros(1))
+        println("gradient:")
+        tv.d.print()
+        println("loss")
+        loss.print()
       }
     }
 
@@ -827,10 +861,10 @@ object TEST1 {
     val array2_2_3 = new DslDriverC[String, Unit] with VectorExp {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
-        val vocab_size = 3
-        val hidden_size = 2
+        val vocab_size = 30
+        val hidden_size = 100
         val learning_rate = 1e-1
-        val seq_length = 4
+        val seq_length = 20
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
@@ -889,16 +923,22 @@ object TEST1 {
 
         getMallocAddr() // remember current allocation pointer here
 
-        for (n <- (0 until 190): Rep[Range]) {
+        for (n <- (0 until 100): Rep[Range]) {
 
           val inputs = NewArray[Int](seq_length)
           val targets = NewArray[Int](seq_length)
           for (i <- (0 until seq_length): Rep[Range]) {
-            inputs(i) = i
-            targets(i) = (i+1) % vocab_size
+            inputs(i) = (i + n) % vocab_size 
+            targets(i) = (i + 1 + n) % vocab_size
           }
 
-          val dummy = gradR(lossFun(inputs, targets))(Vector.zeros(1)) 
+          val loss = gradR_loss(lossFun(inputs, targets))(Vector.zeros(1)) 
+          val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
+          //if (n % 100 == unit(0)) {
+            loss.print()
+          //  println(s"iter $n, loss $loss_value") // FIXME loss need to be fixed
+          //}
+
           /*
           Wxh1.d.print()  
           Whh1.d.print()
@@ -924,10 +964,10 @@ object TEST1 {
 
     
     //println("try array2_2_3")
-    //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
-    //array2_2_3_file.println(array2_2_3.code)
-    //array2_2_3_file.flush()
-    //array2_2_3.eval("abc")
+    val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
+    array2_2_3_file.println(array2_2_3.code)
+    array2_2_3_file.flush()
+    array2_2_3.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
     val array2_2_4Debug = new DslDriverC[String, Unit] with VectorExp {
