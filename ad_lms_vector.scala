@@ -447,11 +447,10 @@ object TEST1 {
       var gc = 0
 
       lazy val loop: TensorR => Unit = FUN (init.x.dim0){ (x: TensorR) =>
-      if (gc < c) { gc += 1; RST(loop(b(gc - 1)(x))) } else RST(k(x))
+        if (gc < c) { gc += 1; RST(loop(b(gc - 1)(x))) } else RST(k(x))
       }
       loop(init)
     }
-     
     
     def FUN2(dim0: Int)(f: ArrayBuffer[TensorR] => Unit): (ArrayBuffer[TensorR] => Unit) = {
       // val dim0: Int = 1 // FIXME: what is the best way to carry this known dimensional information?
@@ -520,9 +519,19 @@ object TEST1 {
         if (gc < c){gc += 1; RST(loop(b(gc-1)(x)))} else RST(k(x))
       }
       loop(init)
-
     } 
 
+/*
+    @virtualize
+    def LOOPA(init: TensorR)(a: Rep[Array[Array[Double]]])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
+      var gc = 0
+      val bound = a.length
+      lazy val loop: TensorR => Unit = FUN (init.x.dim0){ (x : TensorR) =>
+        if (gc < bound) {gc += 1; RST(loop(b(gc-1)(x)))} else RST(k(x))
+      }
+      loop(init)
+    }
+*/
 
     def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
       val x1 = new TensorR(x, Vector.zeros(x.dim0))
@@ -964,10 +973,10 @@ object TEST1 {
 
     
     //println("try array2_2_3")
-    val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
-    array2_2_3_file.println(array2_2_3.code)
-    array2_2_3_file.flush()
-    array2_2_3.eval("abc")
+    //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
+    //array2_2_3_file.println(array2_2_3.code)
+    //array2_2_3_file.flush()
+    //array2_2_3.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
     val array2_2_4Debug = new DslDriverC[String, Unit] with VectorExp {
@@ -1239,6 +1248,52 @@ object TEST1 {
     }
 
     //array4_2.eval("abc")
+
+    val array4_2_1 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        
+        // random initialization
+        val length = 3
+        val v = Vector.randinit(length)
+        v.print()
+
+        // get data from "file" (more like generate static data and lift it to Rep type)
+        val A = scala.Array
+        val dat = A(A(0.9, 0.8, 0.7),
+                    A(0.1, 0.2, 0.3))
+        val ddim0 = dat.length
+        val ddim1 = dat(0).length 
+        // lift it to RepArray (not working for c code generation)
+        //val data = staticData(dat)
+        val data1 = NewArray[Double](ddim1)
+        val data2 = NewArray[Double](ddim1)
+        for (i <- (0 until ddim1): Rep[Range]) {
+          data1(i) = dat(0)(i)
+          data2(i) = dat(1)(i)
+        }
+        val data = NewArray[Array[Double]](ddim0)
+        data(0) = data1; data(1) = data2
+
+        val model: TensorR => TensorR @diff = { (x: TensorR) =>
+          val y = LOOPCC(x)(ddim0)(i => x1 => {
+            val data_point = TensorR.Tensor(new Vector(data(i), ddim1))
+            x1 * data_point
+            })
+          y.sum()
+        }
+
+        val grad = gradR(model)(v)
+        // show gradient
+        grad.print() 
+      }
+    }
+
+    //println(array4_2_1.code)
+    val array4_2_1_file = new PrintWriter(new File("array4_2_1.cpp"))
+    array4_2_1_file.println(array4_2_1.code)
+    array4_2_1_file.flush()
+    array4_2_1.eval("abc")
 
     val array4_3 = new DslDriverC[String, Unit] with VectorExp {
 

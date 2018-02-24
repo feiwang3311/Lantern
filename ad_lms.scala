@@ -30,7 +30,7 @@ object LMS {
       override def toString = (x,d).toString
     }
 
-    class NumR(val x: RDouble, val d: Var[Double], val loopindex: Var[Int] = var_new(0)) extends Serializable {
+    class NumR(val x: RDouble, val d: Var[Double]) extends Serializable {
       def +(that: NumR): NumR @diff = shift { (k: NumR => Unit) => 
         val y = new NumR(x + that.x, var_new(0.0)); k(y)
         this.d += y.d; that.d += y.d }
@@ -106,6 +106,18 @@ object LMS {
       }
       loop(init)
     }
+
+    @virtualize
+    def LOOPA(init: NumR)(a: Rep[Array[Double]])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
+      var gc = 0
+      val bound = a.length
+      lazy val loop: NumR => Unit = FUN { (x : NumR) =>
+        if (gc < bound) {gc += 1; RST(loop(b(gc-1)(x)))} else RST(k(x))
+      }
+      loop(init)
+    }
+
+
 
 /*
     // How to support more entities in LOOP???
@@ -326,36 +338,6 @@ object LMS {
 
     //println(gr4.code)
     //println(gr4.eval(10))
-/*
-    val gr5 = new DslDriver[Double, Double] with DiffApi {
-      def snippet(x: Rep[Double]): Rep[Double] = {
-        val half = new NumR(0.5, var_new(0.0))
-        val res = gradR(x => LOOP(x)(x1 => (x1.loopindex) < 3)(x1 => {val y = half * x1; y.loopindex += 1; y}))(x)
-        println(readVar(half.d))
-        res
-      }
-    }
-*/
-    //println(gr5.code)
-    //println(gr5.eval(10))
-
-    val gr6 = new DslDriver[Double, Double] with DiffApi {
-
-      def snippet(x: Rep[Double]): Rep[Double] = {
-        val half = new NumR(0.5, var_new(0.0))
-        val res = gradR(x => LOOPC(x)(3)(x1 => {
-          println(readVar(x1.loopindex))
-          val y = half * x1
-          y.loopindex += (readVar(x1.loopindex) + 1)
-          y
-          }))(x)
-        println(readVar(half.d))
-        res
-      }
-    }
-
-    //println(gr6.code)
-    //println(gr6.eval(10))
 
     val gr7 = new DslDriver[Double, Double] with DiffApi {
 
@@ -369,7 +351,77 @@ object LMS {
       }
     }
 
-    println(gr7.code)
-    println(gr7.eval(10))
+    //println(gr7.code)
+    //println(gr7.eval(10))
+
+    val gr8 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val array = NewArray[Double](3)
+        for (i <- (0 until 3): Rep[Range]) array(i) = i + 2
+        val model: NumR => NumR @diff = { (x: NumR) =>
+          LOOPA(x)(array)(i => x1 => {
+            val t = new NumR(array(i), var_new(0.0))
+            t * x1
+          })
+        }
+        val res = gradR(model)(x)
+        res
+      }
+    }
+
+    //println(gr8.code)
+    //println(gr8.eval(10))
+
+    val gr9 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        // preprocess data (wrap Array as RepArray)
+        val arr = scala.Array(1.5,3.0,4.0)
+        val arra = staticData(arr)
+        
+        val model: NumR => NumR @diff = { (x: NumR) =>
+          LOOPA(x)(arra)(i => x1 => {
+            val t = new NumR(arra(i), var_new(0.0))
+            t * x1
+            })
+        }
+        val res = gradR(model)(x)
+        res
+      }
+    }
+
+    //println(gr9.code)
+    //println(gr9.eval(10))
+
+    val gr10 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        // preprocess data
+        val arr = scala.Array(1.5, 2.0, 3.0)
+        val arra = staticData(arr)
+        val length = arr.length
+
+        // maybe we can use loopcc, just use arra by closure
+        val model: NumR => NumR @diff = { (x: NumR) =>
+          LOOPCC(x)(length)(i => x1 => {
+            val t = new NumR(arra(i), var_new(0.0))
+            t * x1
+            })
+        }
+        val res = gradR(model)(x)
+        res
+        /*
+          Note: It is interesting to note that the recursive function body can make use of closured array data
+                but recursive guard (the if condition of LOOP) cannot, because the def of LOOP is before the presence of data
+                So the length has to be passed in as a parameter explicitly
+          Is there a better way to do it??
+        */
+      }
+    }
+
+    println(gr10.code)
+    println(gr10.eval(10))
+
   }
 }
