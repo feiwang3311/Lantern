@@ -1366,6 +1366,7 @@ object TEST1 {
     array4_2_2.eval("abc")
 */
 
+/*
     val array4_2_3 = new DslDriverC[String, Unit] with VectorExp {
 
       @virtualize
@@ -1400,7 +1401,7 @@ object TEST1 {
     }
 
     array4_2_3.eval("abc")
-
+*/
 
     val array4_3 = new DslDriverC[String, Unit] with VectorExp {
 

@@ -116,7 +116,34 @@ object LMS {
       }
       loop(init)
     }
+/*
+    @virtualize
+    def LOOPL(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k:(NumR => Unit) =>
+      var gc = 0
+      lazy val loop: NumR => Unit = FUN { (x: NumR) =>
+        if (gc < c) { gc += 1; RST(b(gc-1)(loop(x))) } else RST(k(x))
+      }                                   // type error, loop(x) is unit type
+      loop(init)
+    }
 
+    @virtualize
+    def LOOPL1(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
+      var gc = 0
+      lazy val loop: NumR => NumR @diff = FUNL { (x: NumR) => // How to design the FUNL, when the type is NumR => NumR @diff?
+        if (gc < c) { gc += 1; b(gc-1)(loop(x)) } else x
+      }
+      RST(k(loop(init)))
+    }
+*/
+    @virtualize
+    def LOOPL2(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
+      var gc = 0
+      var k_g = k
+      lazy val loop: NumR => Unit = FUN { (x: NumR) =>
+        if (gc < c) { gc += 1; k_g = { (x: NumR) => k_g(b(gc-1)(x)) }; loop(x) } else RST(k_g(x))
+      }
+      loop(init)
+    }
 
 
 /*
@@ -425,6 +452,7 @@ object LMS {
 
     val gr11 = new DslDriver[Double, Double] with DiffApi {
 
+      @virtualize
       def snippet(x: Rep[Double]): Rep[Double] = {
         // represent list as array
         val arr = scala.Array(1.5, 2.0, 3.0)
@@ -432,11 +460,13 @@ object LMS {
         val length = arr.length
 
         // create a model that recursively use the data in arr (originated from list)
-        def model_r(n: Int)(x: NumR): NumR @diff = {
-          if (n == 0) x // list is empty
-          else new NumR(arra(n-1), var_new(0.0)) * model_r(n - 1)(x)
+        def model_r(n: Rep[Int])(x: NumR): NumR @diff = {
+          IF (n == 0) {x} // list is empty
+          {new NumR(arra(n-1), var_new(0.0)) * model_r(n-1)(x)}
         }
-        val model: NumR => NumR @diff = model_r(3)
+
+
+        val model: NumR => NumR @diff = model_r(arra.length)
         val res = gradR(model)(x)
         res
       }
@@ -447,3 +477,4 @@ object LMS {
 
   }
 }
+
