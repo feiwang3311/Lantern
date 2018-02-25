@@ -521,6 +521,21 @@ object TEST1 {
       loop(init)
     } 
 
+/*  FIXME: flexible using if dimension information didn't work
+    @virtualize
+    def LOOPT(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
+    ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
+
+      var gc = 0
+      lazy val loop: ArrayBuffer[TensorR] => Unit = { (xx: ArrayBuffer[TensorR]) =>
+        FUNM(xx map (_.x.dim0)) { (x: ArrayBuffer[TensorR]) =>
+          if (gc < c) {gc += 1; RST(loop(b(gc-1)(x)))} else RST(k(x))
+        }
+      }
+      loop(init)
+    }
+    */
+
 /*
     @virtualize
     def LOOPA(init: TensorR)(a: Rep[Array[Array[Double]]])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
@@ -590,9 +605,9 @@ object TEST1 {
         resetMallocAddr()
 
         // still not working
-        for (i <- (0 until 10): Rep[Range]) {
-          doIf(i == unit(2)){println("found")}
-          //if (equals(i, unit(2))) println("found")
+        for (i <- 0 until 10: Rep[Range]) {
+          //doIf(i == unit(2)){println("found")}
+          if (equals(i, unit(2))) println("found")
         }
       }
     }
@@ -1249,6 +1264,7 @@ object TEST1 {
 
     //array4_2.eval("abc")
 
+    // test using array data by closure
     val array4_2_1 = new DslDriverC[String, Unit] with VectorExp {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1260,17 +1276,17 @@ object TEST1 {
 
         // get data from "file" (more like generate static data and lift it to Rep type)
         val A = scala.Array
-        val dat = A(A(0.9, 0.8, 0.7),
-                    A(0.1, 0.2, 0.3))
-        val ddim0 = dat.length
-        val ddim1 = dat(0).length 
-        // lift it to RepArray (not working for c code generation)
-        //val data = staticData(dat)
+        val dat1 = A(0.9, 0.8, 0.7)
+        val dat2 = A(0.1, 0.2, 0.3)
+        val ddim0 = 2
+        val ddim1 = dat1.length 
+        // lift it to RepArray (staticData not working for c code generation in 2d array)
+        // val dat = staticData(da)
         val data1 = NewArray[Double](ddim1)
         val data2 = NewArray[Double](ddim1)
         for (i <- (0 until ddim1): Rep[Range]) {
-          data1(i) = dat(0)(i)
-          data2(i) = dat(1)(i)
+          data1(i) = (i + 1)
+          data2(i) = (i + 1) * 2
         }
         val data = NewArray[Array[Double]](ddim0)
         data(0) = data1; data(1) = data2
@@ -1290,10 +1306,62 @@ object TEST1 {
     }
 
     //println(array4_2_1.code)
-    val array4_2_1_file = new PrintWriter(new File("array4_2_1.cpp"))
-    array4_2_1_file.println(array4_2_1.code)
-    array4_2_1_file.flush()
-    array4_2_1.eval("abc")
+    //val array4_2_1_file = new PrintWriter(new File("array4_2_1.cpp"))
+    //array4_2_1_file.println(array4_2_1.code)
+    //array4_2_1_file.flush()
+    //array4_2_1.eval("abc")
+
+    val array4_2_2 = new DslDriverC[String, Unit] with VectorExp {
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        
+        val hidden_size = 3
+
+        // tree that is flatted to array (should be rep type in practise)
+        /*   node4
+             /   \
+            node3 \
+            / \    \
+           0  1    2 
+        */
+        val inputs  = staticData(scala.Array(0, 1, 2))          // this is the leaves (data) in tree
+        val leftch  = staticData(scala.Array(-1, -1, -1, 0, 3)) // this is mapping from node to left child
+        val rightch = staticData(scala.Array(-1, -1, -1, 1, 2)) // this is mapping from node to right child
+
+        val Whhl = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden of left child to hidden of node
+        val Whhr = Vector.randinit(hidden_size, hidden_size, 0.01)  // hidden of right child to hidden of node
+        
+        // wrap as tensors
+        val Whhl1 = TensorR.Tensor(Whhl)
+        val Whhr1 = TensorR.Tensor(Whhr)
+        
+        def model: TensorR => TensorR @diff = (dum => {
+          // initialize the ArrayBuffer of tensors for iterating the tree data
+          val in = ArrayBuffer[TensorR]()
+          for (i <- (0 until inputs.length): Rep[Range]) { 
+            val v_temp = Vector.zeros(hidden_size)
+            v_temp.data(inputs(i)) = 1 // one-hot
+            in.append(TensorR.Tensor(v_temp))
+          }
+          for (i <- (0 until (leftch.length - inputs.length)): Rep[Range]) {
+            in.append(TensorR.Tensor(Vector.zeros(hidden_size))) 
+          }
+          // put the "in" in the loop
+          val y = LOOPCCM(in)(leftch.length - inputs.length)(i => ins => {
+            ins(i) = (Whhl1 dot ins(leftch(i))) + (Whhr1 dot ins(rightch(i)))
+            ins
+          })
+          y(leftch.length - 1).sum()
+        })
+
+        val dummy = gradR(model)(Vector.zeros(1))
+
+        // show gradient
+        Whhl1.d.print()
+        Whhr1.d.print() 
+      }
+    }
+
+    array4_2_2.eval("abc")
 
     val array4_3 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -1345,7 +1413,8 @@ object TEST1 {
           val y = LOOPCCM(in)(3)(i => ins => {
             val vvv = ins(0) * half
             val uuu = ins(1) * half
-            ArrayBuffer[TensorR](vvv, uuu)})
+            ArrayBuffer[TensorR](vvv, uuu)
+            })
           y(1).sum() + y(0).sum()})(Vector.zeros(1))
         // show gradient
         println("Tensor in closure can also accumulate gradient, which is important")
@@ -1361,7 +1430,6 @@ object TEST1 {
     //array4_4_file.println(array4_4.code)
     //array4_4_file.flush()
     //array4_4.eval("abc")
-
 
     val array5 = new DslDriverC[String, Unit] with VectorExp {
 
