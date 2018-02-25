@@ -420,8 +420,30 @@ object LMS {
       }
     }
 
-    println(gr10.code)
-    println(gr10.eval(10))
+    //println(gr10.code)
+    //println(gr10.eval(10))
+
+    val gr11 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        // represent list as array
+        val arr = scala.Array(1.5, 2.0, 3.0)
+        val arra = staticData(arr)
+        val length = arr.length
+
+        // create a model that recursively use the data in arr (originated from list)
+        def model_r(n: Int)(x: NumR): NumR @diff = {
+          if (n == 0) x // list is empty
+          else new NumR(arra(n-1), var_new(0.0)) * model_r(n - 1)(x)
+        }
+        val model: NumR => NumR @diff = model_r(3)
+        val res = gradR(model)(x)
+        res
+      }
+    }
+
+    println(gr11.code)
+    println(gr11.eval(2))
 
   }
 }

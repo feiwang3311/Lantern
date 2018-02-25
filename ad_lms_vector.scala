@@ -592,6 +592,7 @@ object TEST1 {
 
     val array1 = new DslDriverC[String, Unit]  with VectorExp {
 
+      @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val res = Vector.randinit(length)
@@ -1311,6 +1312,7 @@ object TEST1 {
     //array4_2_1_file.flush()
     //array4_2_1.eval("abc")
 
+/*
     val array4_2_2 = new DslDriverC[String, Unit] with VectorExp {
       def snippet(a: Rep[String]): Rep[Unit] = {
         
@@ -1362,6 +1364,43 @@ object TEST1 {
     }
 
     array4_2_2.eval("abc")
+*/
+
+    val array4_2_3 = new DslDriverC[String, Unit] with VectorExp {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+
+        val hidden_size = 3
+        val inputs  = staticData(scala.Array(0, 1, 2))
+        val leftch  = staticData(scala.Array(-1, -1, -1, 0, 3))
+        val rightch = staticData(scala.Array(-1, -1, -1, 1, 2))
+
+        val Whhl = TensorR.Tensor(Vector.randinit(hidden_size, hidden_size))
+        val Whhr = TensorR.Tensor(Vector.randinit(hidden_size, hidden_size))
+
+        def model_r(n: Rep[Int]): TensorR @diff = {
+          if (leftch(n) == -1) {
+            val v = Vector.zeros(hidden_size)
+            v.data(inputs(n)) = 1.0
+            TensorR.Tensor(v)
+          } else {
+            val l = model_r(leftch(n))
+            val r = model_r(rightch(n))
+            (Whhl dot l) + (Whhr dot r)
+          }
+        }
+        val model: TensorR => TensorR @diff = {(dum: TensorR) => model_r(0)}
+        val dummy = gradR(model)(Vector.zeros(1))
+
+        // show gradient
+        Whhl.d.print()
+        Whhr.d.print() 
+      }
+    }
+
+    array4_2_3.eval("abc")
+
 
     val array4_3 = new DslDriverC[String, Unit] with VectorExp {
 

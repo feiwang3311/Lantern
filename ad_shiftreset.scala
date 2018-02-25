@@ -308,5 +308,22 @@ object ShiftReset {
     val gradient_sum2 = grad_array(sum2)(Array(12, 6, 15))
     print_array(gradient_sum2)
     assert (gradient_sum2.sameElements(Array(1.0, 1.0, 1.0)))
+
+    println("Step 8, fib")
+    def fib(n: Int)(seed: Num): Num @diff = {
+      if (n == 1) seed
+      else if (n == 2) seed + seed + 1
+      else {
+        val x1 = fib(n-2)(seed)
+        val x2 = fib(n-1)(seed)
+        x1 + x2
+      } 
+    }
+
+    val ggg = grad_with_value(fib(6))(2.0)
+    println(s"grad is $ggg")
+    println("done")
+
+
   }
 }
