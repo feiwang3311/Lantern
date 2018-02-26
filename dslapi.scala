@@ -58,7 +58,7 @@ trait CGenUtilOps extends CGenBase {
 }
 
 @virtualize
-trait Dsl extends PrimitiveOps with NumericOps with BooleanOps with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables with ObjectOps with UtilOps with UncheckedOps with MathOps with TupleOps {
+trait Dsl extends PrimitiveOps with NumericOps with BooleanOps with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables with ObjectOps with UtilOps with UncheckedOps with MathOps with TupleOps  {
   implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
   implicit class BooleanOps2(lhs: Rep[Boolean]) {
     def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) = 
@@ -146,6 +146,9 @@ trait DslGen extends ScalaGenNumericOps
       stream.println(quote(getBlockResult(b)))
       stream.println("//#" + s)
       stream.println("}")
+    //case FieldApply() => super.emitNode(sym, rhs)
+    //case FieldApply(a, "_1") => emitValDef(sym, quote(a) + "._1")
+    //case FieldApply(a, "_2") => emitValDef(sym, quote(a) + "._2")
     case _ => super.emitNode(sym, rhs)
   }
 }

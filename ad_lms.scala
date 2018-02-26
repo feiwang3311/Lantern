@@ -147,6 +147,10 @@ object LMS {
     }
 */
     def FUNL(f: ((NumR => Unit) => (NumR => Unit))): ((NumR => Unit) => (NumR => Unit)) = {
+      /* we have to have the continuation to be dynamic here:
+         meaning that we almost have to have Rep[NumR => Unit] type as the fun parameter
+         but we do extra trick to equvilently transfrom between Rep[NumR => Unit] and Rep[Double => Double]
+      */
       val f1 = fun { (t1: Rep[Double => Double]) =>
         val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
         val t3: (NumR => Unit) = f(t2)
@@ -170,7 +174,7 @@ object LMS {
         } 
       }
     }
-
+/*
     @virtualize
     def LOOPL3(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR): NumR @diff = shift { k: (NumR => Unit) =>
       var gc = 0
@@ -180,21 +184,20 @@ object LMS {
       }
       loop(k)(init)
     } 
-
+*/
 
     @virtualize
     def LOOPL4(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
       var gc = 0
       lazy val loop: (NumR => Unit) => NumR => Unit = FUNL { (k: NumR => Unit) => (x: NumR) =>
-        if (gc < c) { gc += 1; loop((x: NumR) => RST(k(b(gc-1)(x))))(x)  } else { RST(k(x)) }
-        //{ z => if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x)))(z) } else k(z) }
-      }
-      loop(k)(init)
-    } 
+        if (gc < c) { gc += 1; loop((x: NumR) => RST(k(b(gc-1)(x))))(x)  } else { RST(k(x)) } 
+      }                                               // Problem! gc is a var, so it changes all the time
+      loop(k)(init)                                   // so all recursive call will use the same value of gc in the last recursion
+    }                                                 // Trying to multiply all elements in a list will endup multiplying the last element many times
 
     def FUNL1(f: (Rep[Int] => (NumR => Unit) => (NumR => Unit))): (Rep[Int] => (NumR => Unit) => (NumR => Unit)) = {      
 
-      val f1 = fun { (yy: Rep[(Int, Double => Double)]) =>
+      val f1 = fun { (yy: Rep[(Int, Double => Double)]) => // Problem! no support for tuple type code generation in LMS!
         val i: Rep[Int] = tuple2_get1(yy)
         val t1: Rep[Double => Double] = tuple2_get2(yy)
         //case (i: Rep[Int], t1: Rep[Double => Double]) =>
