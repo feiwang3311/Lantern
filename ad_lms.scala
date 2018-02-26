@@ -174,17 +174,6 @@ object LMS {
         } 
       }
     }
-/*
-    @virtualize
-    def LOOPL3(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR): NumR @diff = shift { k: (NumR => Unit) =>
-      var gc = 0
-      lazy val loop: (NumR => Unit) => (NumR => Unit) = FUNL { (k: NumR => Unit) =>
-        //if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x))) } else { k }
-        { z => if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x)))(z) } else k(z) }
-      }
-      loop(k)(init)
-    } 
-*/
 
     @virtualize
     def LOOPL4(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
@@ -228,96 +217,9 @@ object LMS {
     def LOOPL5(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
       lazy val loop: (Rep[Int]) => (NumR => Unit) => NumR => Unit = FUNL1 { (gc: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
         if (gc < 0) { loop(gc+1)((x: NumR) => RST(k(b(gc)(x))))(x)  } else { RST(k(x)) }
-        //{ z => if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x)))(z) } else k(z) }
       }
       loop(0)(k)(init)
     }    
-
-/*
-    @virtualize
-    def LOOPL4(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
-      var gc = 0
-      lazy val loop: NumR => Unit = FUN { (x: NumR) =>
-        if (gc < c) { gc += 1; RST(k(b(gc-1)(shift{kk: (NumR => Unit) => kk(x)}))) } else RST(k(x))
-      }                                     
-      loop(init)
-    } 
-*/
-
-/*
-    // How to support more entities in LOOP???
-    import scala.collection.mutable.ArrayBuffer
-    def FUNM(f: Array[NumR] => Unit): (Array[NumR] => Unit) = {
-      val f1 = fun { (x:Rep[Array[Double]]) => 
-        
-        val length = 2
-        val deltas = NewArray[Double](length)
-        val nums = new NewArray[NumR](length)
-        for (i <- (0 until length)) nums(i) = new NumR(x(i), deltas(i))
-        
-        //val nums = (x zip deltas) map (t => new NumR(t._1, t._2))
-        // val nums = x map (t => new NumR(t, var_new(0.0)))
-        f(nums)
-        //nums map (t => readVar(t.d))
-        deltas
-        //deltas map (t => readVar(t))
-
-        //val deltaVar = var_new(0.0)
-        //f(new NumR(x, deltaVar))
-        //readVar(deltaVar)
-      };
-      { (x:Array[NumR]) => {
-        val in = x map (t => t.x)
-        val out = f1(in)
-        (x zip out) foreach (t => t._1.d += t._2)
-
-        //x.d += f1(x.x)
-        } 
-      }
-    }
-
-
-    @virtualize
-    def LOOPCCM(init: Array[NumR])(c: Rep[Int])(b: Rep[Int] => Array[NumR] => Array[NumR] @diff): Array[NumR] @diff = shift { k:(Array[NumR] => Unit) =>
-      var gc = 0
-      lazy val loop: Array[NumR] => Unit = FUNM { (x: Array[NumR]) =>
-        if (gc < c) { gc += 1; RST(loop(b(gc-1)(x))) } else RST(k(x))
-      }
-      loop(init)
-    }
-*/
-
-/*
-    def FUN2(f: (NumR, NumR) => Unit): ((NumR, NumR) => Unit) = {
-      val f1 = fun { (x:Rep[(Double, Double)]) => 
-        val deltas = (var_new(0.0), var_new(0.0))
-        f(new NumR(x._1, deltas._1), new NumR(x._2, deltas._2))
-        (readVar(deltas._1), readVar(deltas._2))
-
-        //val deltaVar = var_new(0.0)
-        //f(new NumR(x, deltaVar))
-        //readVar(deltaVar)
-      };
-      { (x: (NumR, NumR)) => {
-        val in = (x._1.x, x._2.x)
-        val out = f1(in)
-        x._1.d += out._1
-        x._2.d += out._2
-
-        //x.d += f1(x.x)
-        } 
-      }
-    }
-
-    @virtualize
-    def LOOPCC2(init: NumR, init1: NumR)(c: Rep[Int])(b: Rep[Int] => (NumR, NumR) => (NumR, NumR) @diff): (NumR, NumR) @diff = shift { k:((NumR, NumR) => Unit) =>
-      var gc = 0
-      lazy val loop: ((NumR, NumR)) => Unit = FUN2 { (x: (NumR, NumR)) =>
-        if (gc < c) { gc += 1; RST(loop(b(gc-1)(x))) } else RST(k(x))
-      }
-      loop(init)
-    }
-*/
 
     def gradRV(f: NumRV => NumRV @diff)(x: Rep[Double]): Rep[Double] = {
       val x1 = new NumRV(x, 0.0)
@@ -572,9 +474,9 @@ object LMS {
     import java.io.PrintWriter;
     import java.io.File;    
     println(gr11.code)
-    val p = new PrintWriter(new File("gr11.scala"))
+    /*val p = new PrintWriter(new File("gr11.scala"))
     p.println(gr11.code)
-    p.flush()
+    p.flush()*/
     println(gr11.eval(2))
 
   }
