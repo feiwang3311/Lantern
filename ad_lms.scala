@@ -186,11 +186,49 @@ object LMS {
     def LOOPL4(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
       var gc = 0
       lazy val loop: (NumR => Unit) => NumR => Unit = FUNL { (k: NumR => Unit) => (x: NumR) =>
-        if (gc < c) { gc += 1; RST(loop((x: NumR) => k(b(gc-1)(x)))(x))  } else { RST(k(x)) }
+        if (gc < c) { gc += 1; loop((x: NumR) => RST(k(b(gc-1)(x))))(x)  } else { RST(k(x)) }
         //{ z => if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x)))(z) } else k(z) }
       }
       loop(k)(init)
     } 
+
+    def FUNL1(f: (Rep[Int] => (NumR => Unit) => (NumR => Unit))): (Rep[Int] => (NumR => Unit) => (NumR => Unit)) = {      
+
+      val f1 = fun { (yy: Rep[(Int, Double => Double)]) =>
+        val i: Rep[Int] = tuple2_get1(yy)
+        val t1: Rep[Double => Double] = tuple2_get2(yy)
+        //case (i: Rep[Int], t1: Rep[Double => Double]) =>
+        val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
+        val t3: (NumR => Unit) = f(i)(t2)
+        fun {(x: Rep[Double]) => 
+          val deltaVar = var_new(0.0)
+          t3(new NumR(x, deltaVar))
+          readVar(deltaVar)
+        }
+      };
+
+      {i: Rep[Int] => k1: (NumR => Unit) => 
+        {
+          val k2: Rep[Double => Double] = fun { (x: Rep[Double]) =>
+            val deltaVar = var_new(0.0)
+            k1(new NumR(x, deltaVar))
+            readVar(deltaVar)
+          }
+          val k3: Rep[Double => Double] = f1((i, k2))
+          val k4: (NumR => Unit) = {(x: NumR) => x.d += k3(x.x)}
+          k4
+        } 
+      }
+    }
+
+    @virtualize
+    def LOOPL5(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
+      lazy val loop: (Rep[Int]) => (NumR => Unit) => NumR => Unit = FUNL1 { (gc: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
+        if (gc < 0) { loop(gc+1)((x: NumR) => RST(k(b(gc)(x))))(x)  } else { RST(k(x)) }
+        //{ z => if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x)))(z) } else k(z) }
+      }
+      loop(0)(k)(init)
+    }    
 
 /*
     @virtualize
@@ -512,13 +550,13 @@ object LMS {
       @virtualize
       def snippet(x: Rep[Double]): Rep[Double] = {
         // represent list as array
-        val arr = scala.Array(1.5, 2.0, 3.0)
+        val arr = scala.Array(4.0, 3.0, 2.5, 2.0)
         val arra = staticData(arr)
         val length = arr.length
 
         // create a model that recursively use the data in arr (originated from list)
         def model: NumR => NumR @diff = { (x: NumR) =>
-          LOOPL4(x)(arra.length)(i => x1 => {
+          LOOPL5(x)(arra.length)(i => x1 => {
             val t = new NumR(arra(i), var_new(0.0))
             t * x1
             })
@@ -527,8 +565,13 @@ object LMS {
         res
       }
     }
-
+    
+    import java.io.PrintWriter;
+    import java.io.File;    
     println(gr11.code)
+    val p = new PrintWriter(new File("gr11.scala"))
+    p.println(gr11.code)
+    p.flush()
     println(gr11.eval(2))
 
   }
