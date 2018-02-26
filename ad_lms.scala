@@ -135,6 +135,7 @@ object LMS {
       RST(k(loop(init)))
     }
 */
+/*
     @virtualize
     def LOOPL2(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
       var gc = 0
@@ -144,7 +145,40 @@ object LMS {
       }
       loop(init)
     }
+*/
+    def FUNL(f: ((NumR => Unit) => (NumR => Unit))) = {
+      
+      {k: (NumR => Unit) =>
+        {x: NumR => 
+          val f1 = fun { (x:Rep[Double]) => 
+            val deltaVar = var_new(0.0)
+            f(k)(new NumR(x, deltaVar))
+            readVar(deltaVar)
+          };
+          x.d += f1(x.x)
+        }
+      }
+    }
 
+    @virtualize
+    def LOOPL3(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR): NumR @diff = shift { k: (NumR => Unit) =>
+      var gc = 0
+      lazy val loop: (NumR => Unit) => (NumR => Unit) = FUNL { (k: NumR => Unit) =>
+        if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x))) } else { k }
+      }
+      loop(k)(init)
+    } 
+
+/*
+    @virtualize
+    def LOOPL4(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
+      var gc = 0
+      lazy val loop: NumR => Unit = FUN { (x: NumR) =>
+        if (gc < c) { gc += 1; RST(k(b(gc-1)(shift{kk: (NumR => Unit) => kk(x)}))) } else RST(k(x))
+      }                                     
+      loop(init)
+    } 
+*/
 
 /*
     // How to support more entities in LOOP???
