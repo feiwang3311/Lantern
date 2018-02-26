@@ -146,17 +146,28 @@ object LMS {
       loop(init)
     }
 */
-    def FUNL(f: ((NumR => Unit) => (NumR => Unit))) = {
-      
-      {k: (NumR => Unit) =>
-        {x: NumR => 
-          val f1 = fun { (x:Rep[Double]) => 
-            val deltaVar = var_new(0.0)
-            f(k)(new NumR(x, deltaVar))
-            readVar(deltaVar)
-          };
-          x.d += f1(x.x)
+    def FUNL(f: ((NumR => Unit) => (NumR => Unit))): ((NumR => Unit) => (NumR => Unit)) = {
+      val f1 = fun { (t1: Rep[Double => Double]) =>
+        val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
+        val t3: (NumR => Unit) = f(t2)
+        fun {(x: Rep[Double]) => 
+          val deltaVar = var_new(0.0)
+          t3(new NumR(x, deltaVar))
+          readVar(deltaVar)
         }
+      };
+
+      {k1: (NumR => Unit) => 
+        {
+          val k2: Rep[Double => Double] = fun { (x: Rep[Double]) =>
+            val deltaVar = var_new(0.0)
+            k1(new NumR(x, deltaVar))
+            readVar(deltaVar)
+          }
+          val k3: Rep[Double => Double] = f1(k2)
+          val k4: (NumR => Unit) = {(x: NumR) => x.d += k3(x.x)}
+          k4
+        } 
       }
     }
 
