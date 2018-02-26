@@ -175,7 +175,19 @@ object LMS {
     def LOOPL3(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR): NumR @diff = shift { k: (NumR => Unit) =>
       var gc = 0
       lazy val loop: (NumR => Unit) => (NumR => Unit) = FUNL { (k: NumR => Unit) =>
-        if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x))) } else { k }
+        //if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x))) } else { k }
+        { z => if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x)))(z) } else k(z) }
+      }
+      loop(k)(init)
+    } 
+
+
+    @virtualize
+    def LOOPL4(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
+      var gc = 0
+      lazy val loop: (NumR => Unit) => NumR => Unit = FUNL { (k: NumR => Unit) => (x: NumR) =>
+        if (gc < c) { gc += 1; RST(loop((x: NumR) => k(b(gc-1)(x)))(x))  } else { RST(k(x)) }
+        //{ z => if (gc < c) { gc += 1; loop ((x: NumR) => k(b(gc-1)(x)))(z) } else k(z) }
       }
       loop(k)(init)
     } 
@@ -505,13 +517,12 @@ object LMS {
         val length = arr.length
 
         // create a model that recursively use the data in arr (originated from list)
-        def model_r(n: Rep[Int])(x: NumR): NumR @diff = {
-          IF (n == 0) {x} // list is empty
-          {new NumR(arra(n-1), var_new(0.0)) * model_r(n-1)(x)}
+        def model: NumR => NumR @diff = { (x: NumR) =>
+          LOOPL4(x)(arra.length)(i => x1 => {
+            val t = new NumR(arra(i), var_new(0.0))
+            t * x1
+            })
         }
-
-
-        val model: NumR => NumR @diff = model_r(arra.length)
         val res = gradR(model)(x)
         res
       }
@@ -522,4 +533,3 @@ object LMS {
 
   }
 }
-
