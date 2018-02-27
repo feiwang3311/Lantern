@@ -1031,9 +1031,9 @@ object TEST1 {
 
     
     //println("try array2_2_3")
-    //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
-    //array2_2_3_file.println(array2_2_3.code)
-    //array2_2_3_file.flush()
+    val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
+    array2_2_3_file.println(array2_2_3.code)
+    array2_2_3_file.flush()
     array2_2_3.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
