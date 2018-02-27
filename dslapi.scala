@@ -68,6 +68,9 @@ with UncheckedOps with MathOps with TupleOps with TupledFunctions  {
 //  override def boolean_and(lhs: Rep[Boolean], rhs: Rep[Boolean])(implicit pos: SourceContext): Rep[Boolean] = __ifThenElse(lhs, rhs, unit(false))
   def generate_comment(l: String): Rep[Unit]
   def comment[A:Typ](l: String, verbose: Boolean = true)(b: => Rep[A]): Rep[A]
+
+  // added by Fei
+  def mutableStaticData[T:Manifest](x: T): Rep[T]
 }
 
 @virtualize
@@ -107,6 +110,9 @@ with UncheckedOpsExp with MathOpsExp with TupleOps with TupledFunctionsExp {
 
   // TODO: should this be in LMS?
   override def isPrimitiveType[T](m: Typ[T]) = (m == manifest[String]) || super.isPrimitiveType(m)
+
+  // should probably add to LMS
+  def mutableStaticData[T:Manifest](x: T): Exp[T] = reflectMutable(StaticData(x))
 }
 
 @virtualize
@@ -154,6 +160,11 @@ trait DslGen extends ScalaGenNumericOps
     //case FieldApply(a, "_1") => emitValDef(sym, quote(a) + "._1")
     //case FieldApply(a, "_2") => emitValDef(sym, quote(a) + "._2")
     case _ => super.emitNode(sym, rhs)
+  }
+
+  override def getFreeDataExp[A](sym: Sym[A], rhs: Def[A]): List[(Sym[Any],Any)] = rhs match {
+    case Reflect(StaticData(x), _, _) => List((sym,x))
+    case _ => super.getFreeDataExp(sym, rhs)
   }
 }
 

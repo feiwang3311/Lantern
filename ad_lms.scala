@@ -186,7 +186,7 @@ object LMS {
 
     def FUNL1(f: (Rep[Int] => (NumR => Unit) => (NumR => Unit))): (Rep[Int] => (NumR => Unit) => (NumR => Unit)) = {      
 
-      val f1 = fun { (yy: Rep[(Int, Double => Double)]) => // Problem! no support for tuple type code generation in LMS!
+      val f1 = fun { (yy: Rep[(Int, (Double => Double))]) => // Problem! no support for tuple type code generation in LMS!
         val i: Rep[Int] = tuple2_get1(yy)
         val t1: Rep[Double => Double] = tuple2_get2(yy)
         //case (i: Rep[Int], t1: Rep[Double => Double]) =>
@@ -216,7 +216,7 @@ object LMS {
     @virtualize
     def LOOPL5(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
       lazy val loop: (Rep[Int]) => (NumR => Unit) => NumR => Unit = FUNL1 { (gc: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
-        if (gc < 0) { loop(gc+1)((x: NumR) => RST(k(b(gc)(x))))(x)  } else { RST(k(x)) }
+        if (gc < c) { loop(gc+1)((x: NumR) => RST(k(b(gc)(x))))(x)  } else { RST(k(x)) }
       }
       loop(0)(k)(init)
     }    
@@ -455,16 +455,12 @@ object LMS {
       @virtualize
       def snippet(x: Rep[Double]): Rep[Double] = {
         // represent list as array
-        val arr = scala.Array(4.0, 3.0, 2.5, 2.0)
-        val arra = staticData(arr)
-        val length = arr.length
+        val arr = scala.Array(4.0, 3.0, 1.5, 2.0)
+        val arra = mutableStaticData(arr)
 
         // create a model that recursively use the data in arr (originated from list)
         def model: NumR => NumR @diff = { (x: NumR) =>
-          LOOPL5(x)(arra.length)(i => x1 => {
-            val t = new NumR(arra(i), var_new(0.0))
-            t * x1
-            })
+          LOOPL5(x)(arra.length)(i => x1 => new NumR(arra(i), var_new(0.0)) * x1)
         }
         val res = gradR(model)(x)
         res
