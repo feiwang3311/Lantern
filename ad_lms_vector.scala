@@ -49,6 +49,17 @@ object TEST1 {
   
     **/
 
+    /**
+      Add: Scanner class for Input
+      Copied from lms-query-tutorial
+      **/
+    
+    object Encoding {
+      val ix_a = 97
+      def char_to_ix(ch: Rep[Char]): Rep[Int] = ch.AsInstanceOf[Int] - ix_a
+      def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix +ix_a).AsInstanceOf[Char]
+    }
+
     class Vector(val data: Rep[Array[Double]], val dim0: Int, val dim1:Int = 1 /*, val dim2: Int*/) extends Serializable {
 
       def foreach(f: Rep[Double] => Rep[Unit]): Rep[Unit] =
@@ -883,10 +894,41 @@ object TEST1 {
     //p.flush()
     // array2_2_2.eval("abc")
 
-    val array2_2_3 = new DslDriverC[String, Unit] with VectorExp {
+    val array2_2_3 = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
+      
+      class Scanner(name: Rep[String]) {
+        val fd = open(name)
+        val fl = filelen(fd)
+        val data = mmap[Char](fd,fl)
+        var pos = 0
+        
+        def nextChar: Rep[Char] = {
+          val ch = data(pos)
+          pos += 1
+          ch
+        }
+
+        def hasNextChar = pos < fl
+        def done = close(fd)
+      }  
 
       def snippet(a: Rep[String]): Rep[Unit] = {
-        val vocab_size = 30
+        /** 
+          add scanner 
+        **/
+        val scanner = new Scanner("./test_data")        
+        val training_data = scanner.data
+        val data_size = scanner.fl
+        // val chars = training_data.distinct  /** this can be done in second stage **/
+        // val vocab_size = chars.length
+        println(s"data has $data_size chars")
+
+        //val translated_data = NewArray[Int](data_size)
+        //for (i <- (0 until data_size)) translated_data(i) = char_to_ix(unit(training_data).charAt(i))
+        val translated_data = NewArray[Int](data_size)
+        for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
+
+        val vocab_size = 26                 // Do we have to get this size?
         val hidden_size = 100
         val learning_rate = 1e-1
         val seq_length = 20
@@ -992,7 +1034,7 @@ object TEST1 {
     //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
     //array2_2_3_file.println(array2_2_3.code)
     //array2_2_3_file.flush()
-    //array2_2_3.eval("abc")
+    array2_2_3.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
     val array2_2_4Debug = new DslDriverC[String, Unit] with VectorExp {
