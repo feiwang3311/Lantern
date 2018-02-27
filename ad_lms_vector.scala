@@ -910,7 +910,28 @@ object TEST1 {
 
         def hasNextChar = pos < fl
         def done = close(fd)
-      }  
+      }
+
+      class Timer (val index: Int){
+        uncheckedPure[Unit](s"clock_t begin_$index, end_$index; double time_spent_$index")
+        def startTimer = { uncheckedPure[Unit](s"begin_$index = clock()") }
+        def stopTimer = { uncheckedPure[Unit](s"end_$index = clock()") }
+        def printElapsedTime = { 
+          uncheckedPure[Unit](
+            s"end_$index = clock(); printf(",
+            "\"Time eplased: %f\\n\", ",
+            s"(double)(end_$index - begin_$index) / CLOCKS_PER_SEC)") 
+        }
+      }
+
+      object Timer {
+        var index: Int = 0
+        def apply(): Timer = { 
+          val timer = new Timer(index)
+          index += 1
+          timer
+        }        
+       }  
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         /** 
@@ -990,8 +1011,9 @@ object TEST1 {
 
         getMallocAddr() // remember current allocation pointer here
 
-        for (n <- (0 until 100): Rep[Range]) {
-
+        val timer = Timer()
+        timer.startTimer
+        for (n <- (0 until 2000): Rep[Range]) {
           val inputs = NewArray[Int](seq_length)
           val targets = NewArray[Int](seq_length)
           for (i <- (0 until seq_length): Rep[Range]) {
@@ -1001,8 +1023,14 @@ object TEST1 {
 
           val loss = gradR_loss(lossFun(inputs, targets))(Vector.zeros(1)) 
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
+          val it_n = n+1
+          if (it_n % 100 == 0) {
+            println(s"iteration $it_n")
+            loss.print
+            timer.printElapsedTime
+          }
           //if (n % 100 == unit(0)) {
-            loss.print()
+          //loss.print()
           //  println(s"iter $n, loss $loss_value") // FIXME loss need to be fixed
           //}
 
