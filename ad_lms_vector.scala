@@ -913,13 +913,13 @@ object TEST1 {
       }
 
       class Timer (val index: Int){
-        uncheckedPure[Unit](s"clock_t begin_$index, end_$index; double time_spent_$index")
-        def startTimer = { uncheckedPure[Unit](s"begin_$index = clock()") }
-        def stopTimer = { uncheckedPure[Unit](s"end_$index = clock()") }
+        unchecked[Unit](s"clock_t begin_$index, end_$index; double time_spent_$index")
+        def startTimer = { unchecked[Unit](s"begin_$index = clock()") }
+        def stopTimer = { unchecked[Unit](s"end_$index = clock()") }
         def printElapsedTime = { 
-          uncheckedPure[Unit](
+          unchecked[Unit](
             s"end_$index = clock(); printf(",
-            "\"Time eplased: %f\\n\", ",
+            "\"Time elapsed: %f\\n\", ",
             s"(double)(end_$index - begin_$index) / CLOCKS_PER_SEC)") 
         }
       }
@@ -933,6 +933,7 @@ object TEST1 {
         }        
        }  
 
+      @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         /** 
           add scanner 
@@ -949,11 +950,15 @@ object TEST1 {
         val translated_data = NewArray[Int](data_size)
         for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
 
-        val vocab_size = 26                 // Do we have to get this size?
+        val vocab_size = 26  // Do we have to get this size?
+
         val hidden_size = 100
+        val seq_length = 25  // number of steps to unroll the RNN for
         val learning_rate = 1e-1
-        val seq_length = 20
+
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
+        
+        // Why this is different from min-char-rnn.py?
         val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
         val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
