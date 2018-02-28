@@ -55,7 +55,7 @@ object TEST1 {
       **/
     
     object Encoding {
-      val ix_a = 97
+      val ix_a = 96
       def char_to_ix(ch: Rep[Char]): Rep[Int] = ch.AsInstanceOf[Int] - ix_a
       def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix +ix_a).AsInstanceOf[Char]
     }
@@ -212,7 +212,7 @@ object TEST1 {
         res(0) = readVar(value)
         new Vector(res, 1)
       }
-      
+
       def print() = {
 
         for (j <- (0 until dim1): Rep[Range]) {
@@ -996,6 +996,7 @@ object TEST1 {
             val h1 = ((Wxh1 dot x1) + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
             val e1 = (Why1.dot(h1) + by1).exp()                       // use new hidden state to compute unnormalized prob
             val p1 = e1 / e1.sum()                            // use unnormalized prob to compute normalize prob
+            // TODO: log(0) here?
             val newloss = t(0) - (p1 dot y1).log()            // loss is updated by original loss t(0) and additional loss
             val out = ArrayBuffer[TensorR]()
             out.append(newloss)
@@ -1035,6 +1036,8 @@ object TEST1 {
             // TODO: min-char-rnn.py samples every 100 iterations
             print("iteration "); println(it_n)
             // TODO: min-char-rnn.py prints out "smooth loss"
+            // TODO: loss becomes "-nan" (log(0)). Has something to do with 
+            // clip? 
             loss.print
             timer.printElapsedTime
           }
