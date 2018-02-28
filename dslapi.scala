@@ -331,8 +331,8 @@ trait DslGenC extends CGenNumericOps
 
       std::random_device rd{};
       std::mt19937 gen{rd()};
-      std::normal_distribution<> d{0,1}
-      
+      std::normal_distribution<> d{0,1};
+
       int main(int argc, char *argv[])
       {
 
