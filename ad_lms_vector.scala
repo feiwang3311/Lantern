@@ -1001,14 +1001,17 @@ object TEST1 {
 
         def lossFun(data: Rep[Array[Int]], in_start: Rep[Int], 
           target_start: Rep[Int], len: Rep[Int]) = { (dummy: TensorR) =>
+          unchecked[Unit]("// lossFun starts here: ")
           val loss = TensorR.Tensor(Vector.zeros(1))
           val in = ArrayBuffer[TensorR]()
           in.append(loss)
           in.append(hprev1)
-          val outputs = LOOPCCM(in)(len){i => t => 
-            
-            // printf("at iteration %d ", i)
+          // pair (loss, prev)
+          // forward pass
+          unchecked[Unit]("// LOOPCCM: forward pass")
+          val outputs = LOOPCCM(in)(len){i => t =>             
             // get input as one-hot tensor
+            unchecked[Unit]("// LOOPCCM: in loop")
             val x = Vector.zeros(vocab_size)
             x.data( data( in_start + i )) = 1
             val x1 = TensorR.Tensor(x)
@@ -1027,6 +1030,7 @@ object TEST1 {
             out.append(h1)
             out
           }
+          unchecked[Unit]("// copy hprev back and update hidden state")
           hprev1.x.copy_data(outputs(1).x)  // update the hidden state with the result from LOOP
           outputs(0)                        // return the final loss
         }
@@ -1047,8 +1051,8 @@ object TEST1 {
         timer.startTimer
 
         var in_start = 0
-
-        for (n <- (0 until 2000): Rep[Range]) {
+        unchecked[Unit]("// NN iterations start here: ")
+        for (n <- (0 until 100): Rep[Range]) {
           // do a slicing
           in_start = if ( in_start + seq_length + 1 > data_size ) 0 else readVar(in_start)
           val target_start = in_start + 1
@@ -1056,16 +1060,16 @@ object TEST1 {
           val loss = gradR_loss(lossFun(translated_data, readVar(in_start), target_start, seq_length))(Vector.zeros(1)) 
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
           val it_n = n+1
-          if (it_n % 100 == 0) {
+          // if (it_n % 100 == 0) {
             // TODO: min-char-rnn.py samples every 100 iterations
             print("iteration "); println(it_n)
             // TODO: min-char-rnn.py prints out "smooth loss"
             // TODO: loss becomes "-nan" (log(0)). Has something to do with 
             // clip? 
-            loss.print
+            // loss.print
             print("loss: "); println(loss_value)
             timer.printElapsedTime
-          }
+          // }
           //if (n % 100 == unit(0)) {
           //loss.print()
           //  println(s"iter $n, loss $loss_value") // FIXME loss need to be fixed
