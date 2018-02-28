@@ -960,9 +960,10 @@ object TEST1 {
 
         // Why this is different from min-char-rnn.py?
         // We use a different design of matrix. It is the transpose of theirs.
-        val Wxh = Vector.consts(vocab_size, hidden_size, 0.01)  // input to hidden
-        val Whh = Vector.consts(hidden_size, hidden_size, 0.01) // hidden to hidden
-        val Why = Vector.consts(hidden_size, vocab_size, 0.01)  // hidden to output
+        // TODO: Need np.random.randn to generate normal distribution.
+        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.1)  // input to hidden
+        val Whh = Vector.randinit(hidden_size, hidden_size, 0.1) // hidden to hidden
+        val Why = Vector.randinit(hidden_size, vocab_size, 0.1)  // hidden to output
         val bh  = Vector.zeros(hidden_size)
         val by  = Vector.zeros(vocab_size)
         val hprev = Vector.zeros(hidden_size) 

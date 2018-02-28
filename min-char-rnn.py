@@ -18,9 +18,9 @@ seq_length = 25 # number of steps to unroll the RNN for
 learning_rate = 1e-1
 
 # model parameters
-Wxh = np.random.ones(hidden_size, vocab_size)*0.01 # input to hidden
-Whh = np.random.ones(hidden_size, hidden_size)*0.01 # hidden to hidden
-Why = np.random.ones(vocab_size, hidden_size)*0.01 # hidden to output
+Wxh = np.random.randn(hidden_size, vocab_size)*0.01 # input to hidden
+Whh = np.random.randn(hidden_size, hidden_size)*0.01 # hidden to hidden
+Why = np.random.randn(vocab_size, hidden_size)*0.01 # hidden to output
 bh = np.zeros((hidden_size, 1)) # hidden bias
 by = np.zeros((vocab_size, 1)) # output bias
 
