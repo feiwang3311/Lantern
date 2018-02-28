@@ -1052,9 +1052,13 @@ object TEST1 {
 
         var in_start = 0
         unchecked[Unit]("// NN iterations start here: ")
-        for (n <- (0 until 100): Rep[Range]) {
+        for (n <- (0 until 500): Rep[Range]) {
           // do a slicing
-          in_start = if ( in_start + seq_length + 1 > data_size ) 0 else readVar(in_start)
+          // if necessary, resert RNN memory
+          if ( in_start + seq_length + 1 > data_size ) {
+            in_start = 0
+            hprev.clear()
+          }
           val target_start = in_start + 1
 
           val loss = gradR_loss(lossFun(translated_data, readVar(in_start), target_start, seq_length))(Vector.zeros(1)) 
