@@ -950,7 +950,7 @@ object TEST1 {
         val translated_data = NewArray[Int](data_size)
         for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
 
-        val vocab_size = 16  // Do we have to get this size?
+        val vocab_size = 26  // Do we have to get this size?
 
         val hidden_size = 100
         val seq_length = 25  // number of steps to unroll the RNN for
