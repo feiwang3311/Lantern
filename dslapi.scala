@@ -330,6 +330,10 @@ trait DslGenC extends CGenNumericOps
       void Snippet(char*);
       int main(int argc, char *argv[])
       {
+        std::random_device rd{};
+        std::mt19937 gen{rd()};
+        std::normal_distribution<> d{0,1}
+        
         if (argc != 2) {
           printf("usage: query <filename>\n");
           return 0;

@@ -261,11 +261,9 @@ object TEST1 {
 
       def randn(dim0: Int, dim1: Int = 1, scale: Double = 1.0, offset: Int = 0) = {
         val res = NewArray[Double](dim0 * dim1)
-        unchecked[Unit]("{ std::random_device rd{}")
-        unchecked[Unit]("std::mt19937 gen{rd()}")
-        unchecked[Unit]("std::normal_distribution<> d{0,1}")
+//        unchecked[Unit]("{ ")
         for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Double]("d(gen)") * scale
-        unchecked[Unit]("}")
+//        unchecked[Unit]("}")
         new Vector(res, dim0, dim1)
       }
 
