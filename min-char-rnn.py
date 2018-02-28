@@ -18,9 +18,9 @@ seq_length = 25 # number of steps to unroll the RNN for
 learning_rate = 1e-1
 
 # model parameters
-Wxh = np.random.randn(hidden_size, vocab_size)*0.01 # input to hidden
-Whh = np.random.randn(hidden_size, hidden_size)*0.01 # hidden to hidden
-Why = np.random.randn(vocab_size, hidden_size)*0.01 # hidden to output
+Wxh = np.random.ones(hidden_size, vocab_size)*0.01 # input to hidden
+Whh = np.random.ones(hidden_size, hidden_size)*0.01 # hidden to hidden
+Why = np.random.ones(vocab_size, hidden_size)*0.01 # hidden to output
 bh = np.zeros((hidden_size, 1)) # hidden bias
 by = np.zeros((vocab_size, 1)) # output bias
 
@@ -81,7 +81,7 @@ def sample(h, seed_ix, n):
 n, p = 0, 0
 mWxh, mWhh, mWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
 mbh, mby = np.zeros_like(bh), np.zeros_like(by) # memory variables for Adagrad
-smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
+#smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
 while True:
   # prepare inputs (we're sweeping from left to right in steps seq_length long)
   if p+seq_length+1 >= len(data) or n == 0: 
@@ -98,8 +98,8 @@ while True:
 
   # forward seq_length characters through the net and fetch gradient
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
-  smooth_loss = smooth_loss * 0.999 + loss * 0.001
-  if n % 100 == 0: print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
+  #smooth_loss = smooth_loss * 0.999 + loss * 0.001
+  if n % 100 == 0: print 'iter %d, loss: %f' % (n, loss) # print progress
   
   # perform parameter update with Adagrad
   for param, dparam, mem in zip([Wxh, Whh, Why, bh, by], 
