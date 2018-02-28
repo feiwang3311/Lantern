@@ -943,7 +943,7 @@ object TEST1 {
         val data_size = scanner.fl
         // val chars = training_data.distinct  /** this can be done in second stage **/
         // val vocab_size = chars.length
-        println(s"data has $data_size chars")
+        print("data has "); print(data_size); println(" chars")
 
         //val translated_data = NewArray[Int](data_size)
         //for (i <- (0 until data_size)) translated_data(i) = char_to_ix(unit(training_data).charAt(i))
@@ -958,7 +958,8 @@ object TEST1 {
 
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
 
-        // TODO: Why this is different from min-char-rnn.py?
+        // Why this is different from min-char-rnn.py?
+        // We use a different design of matrix. It is the transpose of theirs.
         val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
         val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
@@ -1023,7 +1024,7 @@ object TEST1 {
         var in_start = 0
 
         for (n <- (0 until 2000): Rep[Range]) {
-          // TODO: do a slicing? 
+          // do a slicing
           in_start = if ( in_start + seq_length + 1 > data_size ) 0 else readVar(in_start)
           val target_start = in_start + 1
 
@@ -1032,7 +1033,7 @@ object TEST1 {
           val it_n = n+1
           if (it_n % 100 == 0) {
             // TODO: min-char-rnn.py samples every 100 iterations
-            println(s"iteration $it_n")
+            print("iteration "); println(it_n)
             // TODO: min-char-rnn.py prints out "smooth loss"
             loss.print
             timer.printElapsedTime
