@@ -950,7 +950,7 @@ object TEST1 {
         val translated_data = NewArray[Int](data_size)
         for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
 
-        val vocab_size = 26  // Do we have to get this size?
+        val vocab_size = 16  // Do we have to get this size?
 
         val hidden_size = 100
         val seq_length = 25  // number of steps to unroll the RNN for
@@ -1031,7 +1031,9 @@ object TEST1 {
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
           val it_n = n+1
           if (it_n % 100 == 0) {
+            // TODO: min-char-rnn.py samples every 100 iterations
             println(s"iteration $it_n")
+            // TODO: min-char-rnn.py prints out "smooth loss"
             loss.print
             timer.printElapsedTime
           }
