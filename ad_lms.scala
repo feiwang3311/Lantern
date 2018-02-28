@@ -576,7 +576,7 @@ object LMS {
 
         def model1: NumR => NumR @diff = { (x: NumR) => x + x + new NumR(data1(0), var_new(0.0))}
 
-        val res = gradR(model1)(x)
+        val res = gradR(model)(x)
         res
       }
     }
