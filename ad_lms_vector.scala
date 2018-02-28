@@ -916,7 +916,7 @@ object TEST1 {
         /** 
           add scanner 
         **/
-        val scanner = new Scanner("./test_data")        
+        val scanner = new Scanner("input.txt")        
         val training_data = scanner.data
         val data_size = scanner.fl
         // val chars = training_data.distinct  /** this can be done in second stage **/

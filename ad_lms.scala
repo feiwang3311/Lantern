@@ -215,11 +215,82 @@ object LMS {
 
     @virtualize
     def LOOPL5(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
-      lazy val loop: (Rep[Int]) => (NumR => Unit) => NumR => Unit = FUNL1 { (gc: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
+      lazy val loop: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (gc: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
         if (gc < c) { loop(gc+1)((x: NumR) => RST(k(b(gc)(x))))(x)  } else { RST(k(x)) }
       }
       loop(0)(k)(init)
     }    
+
+    /*
+      Note: summerize for list recursive continuation:
+
+      Senario A: for an array, the desired operation is like:
+      def loop(x) = if (done) kf(x) else kf(loop(b(x))) // note "b" happens within loop, "kf" is the final continuation
+      cps version:
+      def loop(x, k) = if (done) k(x) else loop(b(x), k); loop(x, kf)
+      can be simplifed as:
+      def loop(x) = if (done) x else loop(b(x)); kf(loop(x))
+
+      Senario B: for a list, the desired operation is like:
+      def loop(x) = if (done) kf(x) else kf(b(loop(x))) // note "b" happens outside of loop, because the head of list should be the last element to process
+      cps version:
+      def loop(x, k) = if (done) k(x) else loop(x, r => k(b(r))); loop(x, kf)
+      can be simplified as:
+      def loop(k) = if (done) k else loop(r => k(b(r))); loop(kf)(x)
+
+      Now you see the key difference is that in Senario A, the recursion is changing "x", but in Senario B, the recursion is changing "k"
+      so the type of loop should be different: "Double => Double" in Senario A, "(Double => Double) => (Double => Double)" in Senario B.
+      In our type setting, "Double => Double" is equivalent with "NumR => Unit", because updating NumR.d with NumR.x is like "Double => Double"
+      and correspondingly, "(Double => Double) => (Double => Double)" is like "(NumR => Unit) => (NumR => Unit)".
+      In this way, the LOOP* constructs work with NumR type, while the recursive closure "fun" in "FUN" works with simple Double types.
+
+      To further expand this to tree recursion:  we want:
+      def T(node, x) = if (isEmpty(node)) kf(x) else kf(b(T(node.left, x), T(node.right, x)))
+        here we have node as extra parameter because tree shaped data structure uses node. In contract, list recursion did use node parameter 
+        because list structure is simply linear, so that keeping a index (int) is enough
+      cps version:
+      def T(node, k, x) = if (isEmpty(node)) k(x) else T(node.left, l => T(node.right, r => k(b(l, r, node.t)) ,x) ,x); T(root, kf, x)
+      where node.t is the encoding of the current node value.
+      the operation b takes three parameters, the result of left tree, the result of right tree, and t.
+      some of the parameter can be null, and b can be different based on whether the node is leaf or non-leaf
+
+      The cps version is very similar to List recursion, with the key operation to modify continuations. 
+      In fact, the list recursion can (should) also explicitly add an index, which is like this:
+      def loop(i, k, x) = if (i == length) k(x) else loop(i+1, r => k(b(r)), x); loop(0, kf, x)
+
+    */
+
+    @virtualize
+    def TREE(init: NumR)(data: Rep[Array[Double]], lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (NumR, NumR, NumR) => NumR @diff): NumR @diff = shift {
+      k: (NumR => Unit) => 
+
+      // NOTE here the encode function is just wrapping Double as NumR, so it is not explicitly given. 
+      // However, for general case, encode should be given, as a function (Rep[Int] => NumR)
+      // NOTE b can take three NumRs as parameters, all take two NumRs and a Rep[Int], 
+      // if it take a Rep[Int], then b internally call encode() function to transform Rep[Int] to NumR
+      // NOTE data is not really needed in this function, if encode is given and b takes a Rep[Int] parameter
+      // I add data here only because encode uses data.
+      // If data is not given, a size-of-data needs to be provided, for the bound check
+      
+      val bound1 = lch.length  // bound of non-leaf node
+      val bound  = data.length // bound of leaf node
+      val encode: (Rep[Int] => NumR) = {x: Rep[Int] => new NumR(data(x), var_new(0.0))}
+
+      lazy val tree: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
+        if (i < bound) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, encode(i)))))(x))(x) } else { RST(k(x)) }
+      }                                            
+      tree(0)(k)(init)
+    }
+
+    @virtualize
+    def TREE1(init: NumR)(bound: Rep[Int], lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (NumR, NumR, Rep[Int]) => NumR @diff): NumR @diff = shift {
+      k: (NumR => Unit) =>
+
+      lazy val tree: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
+        if (i < bound) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
+      }
+      tree(0)(k)(init)
+    }
 
     def gradRV(f: NumRV => NumRV @diff)(x: Rep[Double]): Rep[Double] = {
       val x1 = new NumRV(x, 0.0)
@@ -228,7 +299,12 @@ object LMS {
     }
     def gradR(f: NumR => NumR @diff)(x: RDouble): Rep[Double] = {
       val x1 = new NumR(x, var_new(0.0))
-      reset { var_assign(f(x1).d, 1.0); () }
+      reset { 
+        val r = f(x1)
+        println("result of model")
+        println(r.x)
+        var_assign(r.d, 1.0); () 
+      }
       x1.d
     }
 
@@ -245,6 +321,9 @@ object LMS {
 
   def main(args: Array[String]): Unit = {
 
+    import java.io.PrintWriter;
+    import java.io.File;    
+    
     val gr1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradR(x => x + x*x*x)(x)
@@ -452,10 +531,10 @@ object LMS {
 
     val gr11 = new DslDriver[Double, Double] with DiffApi {
 
-      @virtualize
       def snippet(x: Rep[Double]): Rep[Double] = {
         // represent list as array
         val arr = scala.Array(4.0, 3.0, 1.5, 2.0)
+        //val arr = scala.Array[Double]()
         val arra = mutableStaticData(arr)
 
         // create a model that recursively use the data in arr (originated from list)
@@ -467,13 +546,42 @@ object LMS {
       }
     }
     
-    import java.io.PrintWriter;
-    import java.io.File;    
-    println(gr11.code)
+    //println(gr11.code)
     /*val p = new PrintWriter(new File("gr11.scala"))
     p.println(gr11.code)
     p.flush()*/
-    println(gr11.eval(2))
+    //println(gr11.eval(2))
 
+    val gr12 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        // represent tree as arrays
+        /*    5
+             / \
+            3   4
+        */
+        val data = scala.Array[Double](3.0)
+        val lch  = scala.Array[Int](100) // use very large number to mean non nodes
+        val rch  = scala.Array[Int](100)
+        val data1 = mutableStaticData(data)
+        val lch1  = mutableStaticData(lch)
+        val rch1  = mutableStaticData(rch)
+
+        // create a model that recursively use the data (originated from tree)
+        def model: NumR => NumR @diff = { (x: NumR) =>
+          TREE1(x)(data1.length, lch1, rch1){ (l: NumR, r: NumR, i: Rep[Int]) =>
+            l + r + new NumR(data1(i), var_new(0.0))
+          }
+        }
+
+        def model1: NumR => NumR @diff = { (x: NumR) => x + x + new NumR(data1(0), var_new(0.0))}
+
+        val res = gradR(model1)(x)
+        res
+      }
+    }
+
+    println(gr12.code)
+    println(gr12.eval(4))
   }
 }
