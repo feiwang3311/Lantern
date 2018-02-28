@@ -56,14 +56,25 @@ object TEST1 {
     
     object Encoding {
       val ix_a = 96  // index starts from 1
+
       def char_to_ix(ch: Rep[Char]): Rep[Int] = ch.AsInstanceOf[Int] - ix_a
-      def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix +ix_a).AsInstanceOf[Char]
+      def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix + ix_a).AsInstanceOf[Char]
     }
 
     class Vector(val data: Rep[Array[Double]], val dim0: Int, val dim1:Int = 1 /*, val dim2: Int*/) extends Serializable {
 
       def foreach(f: Rep[Double] => Rep[Unit]): Rep[Unit] =
         for (i <- (0 until dim0):Rep[Range]) f(data(i))
+
+      @virtualize
+      def clipAt(bound: Double) = {
+        for (i <- (0 until dim1): Rep[Range]) {
+          for (j <- (0 until dim0): Rep[Range]) {
+            if (data(i * dim0 + j) > bound) data(i * dim0 + j) = bound
+            if (data(i * dim0 + j) < -1.0 * bound) data(i * dim0 + j) = -1.0 * bound
+          }
+        }
+      }
 
       @virtualize
       def sumIf(f: Rep[Double] => Rep[Boolean]) = { 
@@ -320,6 +331,10 @@ object TEST1 {
     type diff = cps[Unit]
 
     class TensorR(val x: Vector, val d: Vector) extends Serializable {
+
+      def clip_grad(bound: Double) = {
+        d.clipAt(bound)
+      }
 
       def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) => 
         val y = new TensorR(x + that.x, Vector.zeros(x.dim0)); k(y)
@@ -1067,6 +1082,7 @@ object TEST1 {
           val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
           val mems = ArrayBuffer(mWxh, mWhh, mWhy, mbh, mby)
           for ((par, mem) <- pars.zip(mems)) {
+            par.clip_grad(5.0)
             mem += par.d * par.d
             par.x -= par.d * lr / (mem + hp).sqrt()
             par.clear_grad()
