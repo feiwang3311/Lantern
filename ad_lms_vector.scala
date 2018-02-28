@@ -957,8 +957,8 @@ object TEST1 {
         val learning_rate = 1e-1
 
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
-        
-        // Why this is different from min-char-rnn.py?
+
+        // TODO: Why this is different from min-char-rnn.py?
         val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
         val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
@@ -974,21 +974,22 @@ object TEST1 {
         val by1  = TensorR.Tensor(by)
         val hprev1 = TensorR.Tensor(hprev)
 
-        def lossFun(inputs: Rep[Array[Int]], targets: Rep[Array[Int]]) = { (dummy: TensorR) =>
+        def lossFun(data: Rep[Array[Int]], in_start: Rep[Int], 
+          target_start: Rep[Int], len: Rep[Int]) = { (dummy: TensorR) =>
           val loss = TensorR.Tensor(Vector.zeros(1))
           val in = ArrayBuffer[TensorR]()
           in.append(loss)
           in.append(hprev1)
-          val outputs = LOOPCCM(in)(inputs.length){i => t => 
+          val outputs = LOOPCCM(in)(len){i => t => 
             
             // printf("at iteration %d ", i)
             // get input as one-hot tensor
             val x = Vector.zeros(vocab_size)
-            x.data(inputs(i)) = 1
+            x.data( data( in_start + i )) = 1
             val x1 = TensorR.Tensor(x)
             // get output as one-hot tensor
             val y = Vector.zeros(vocab_size)
-            y.data(targets(i)) = 1
+            y.data( data( target_start + i)) = 1
             val y1 = TensorR.Tensor(y)
 
             val h1 = ((Wxh1 dot x1) + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
@@ -1018,15 +1019,15 @@ object TEST1 {
 
         val timer = Timer()
         timer.startTimer
-        for (n <- (0 until 2000): Rep[Range]) {
-          val inputs = NewArray[Int](seq_length)
-          val targets = NewArray[Int](seq_length)
-          for (i <- (0 until seq_length): Rep[Range]) {
-            inputs(i) = (i + n) % vocab_size 
-            targets(i) = (i + 1 + n) % vocab_size
-          }
 
-          val loss = gradR_loss(lossFun(inputs, targets))(Vector.zeros(1)) 
+        var in_start = 0
+
+        for (n <- (0 until 2000): Rep[Range]) {
+          // TODO: do a slicing? 
+          in_start = if ( in_start + seq_length + 1 > data_size ) 0 else readVar(in_start)
+          val target_start = in_start + 1
+
+          val loss = gradR_loss(lossFun(translated_data, readVar(in_start), target_start, seq_length))(Vector.zeros(1)) 
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
           val it_n = n+1
           if (it_n % 100 == 0) {
@@ -1057,6 +1058,8 @@ object TEST1 {
           hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
           
           resetMallocAddr()  // reset malloc_addr to the value when we remember allocation pointer
+
+          in_start += seq_length
         }
 
       }
