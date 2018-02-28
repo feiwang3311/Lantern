@@ -977,6 +977,14 @@ object TEST1 {
 
         def lossFun(data: Rep[Array[Int]], in_start: Rep[Int], 
           target_start: Rep[Int], len: Rep[Int]) = { (dummy: TensorR) =>
+          for (i <- (0 until len)) {
+            print(Encoding.ix_to_char(data(in_start + i)))
+          }; println("")
+
+          for (i <- (0 until len)) {
+            print(Encoding.ix_to_char(data(target_start + i)))
+          }; println("")
+          
           val loss = TensorR.Tensor(Vector.zeros(1))
           val in = ArrayBuffer[TensorR]()
           in.append(loss)
@@ -1024,7 +1032,7 @@ object TEST1 {
 
         var in_start = 0
 
-        for (n <- (0 until 2000): Rep[Range]) {
+        for (n <- (0 until 3): Rep[Range]) {
           // do a slicing
           in_start = if ( in_start + seq_length + 1 > data_size ) 0 else readVar(in_start)
           val target_start = in_start + 1
