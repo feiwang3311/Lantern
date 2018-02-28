@@ -288,6 +288,8 @@ trait DslGenC extends CGenNumericOps
       #include <functional>
       #include <memory>
       #include <math.h>
+      #include <random>
+
       using namespace std;
       #ifndef MAP_FILE
       #define MAP_FILE MAP_SHARED

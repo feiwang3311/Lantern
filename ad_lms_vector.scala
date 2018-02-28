@@ -259,6 +259,16 @@ object TEST1 {
         new Vector(res, dim0, dim1)
       }
 
+      def randn(dim0: Int, dim1: Int = 1, scale: Double = 1.0, offset: Int = 0) = {
+        val res = NewArray[Double](dim0 * dim1)
+        unchecked[Unit]("{ std::random_device rd{}")
+        unchecked[Unit]("std::mt19937 gen{rd()}")
+        unchecked[Unit]("std::normal_distribution<> d{0,1}")
+        for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Double]("d(gen)") * scale
+        unchecked[Unit]("}")
+        new Vector(res, dim0, dim1)
+      }
+
       def randPositive(dim0: Int) = {
         val res = NewArray[Double](dim0)
         unchecked[Unit]("srand(time(NULL))")
@@ -961,9 +971,9 @@ object TEST1 {
         // Why this is different from min-char-rnn.py?
         // We use a different design of matrix. It is the transpose of theirs.
         // TODO: Need np.random.randn to generate normal distribution.
-        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.1)  // input to hidden
-        val Whh = Vector.randinit(hidden_size, hidden_size, 0.1) // hidden to hidden
-        val Why = Vector.randinit(hidden_size, vocab_size, 0.1)  // hidden to output
+        val Wxh = Vector.randn(vocab_size, hidden_size, 0.01)  // input to hidden
+        val Whh = Vector.randn(hidden_size, hidden_size, 0.01) // hidden to hidden
+        val Why = Vector.randn(hidden_size, vocab_size, 0.01)  // hidden to output
         val bh  = Vector.zeros(hidden_size)
         val by  = Vector.zeros(vocab_size)
         val hprev = Vector.zeros(hidden_size) 
