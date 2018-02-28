@@ -212,7 +212,7 @@ object TEST1 {
         res(0) = readVar(value)
         new Vector(res, 1)
       }
-
+      
       def print() = {
 
         for (j <- (0 until dim1): Rep[Range]) {
