@@ -55,7 +55,7 @@ object TEST1 {
       **/
     
     object Encoding {
-      val ix_a = 96
+      val ix_a = 96  // index starts from 1
       def char_to_ix(ch: Rep[Char]): Rep[Int] = ch.AsInstanceOf[Int] - ix_a
       def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix +ix_a).AsInstanceOf[Char]
     }
@@ -1039,6 +1039,7 @@ object TEST1 {
             // TODO: loss becomes "-nan" (log(0)). Has something to do with 
             // clip? 
             loss.print
+            print("loss: "); println(loss_value)
             timer.printElapsedTime
           }
           //if (n % 100 == unit(0)) {
