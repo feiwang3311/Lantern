@@ -186,17 +186,23 @@ object LMS {
 
     def FUNL1(f: (Rep[Int] => (NumR => Unit) => (NumR => Unit))): (Rep[Int] => (NumR => Unit) => (NumR => Unit)) = {      
 
-      val f1 = fun { (yy: Rep[(Int, (Double => Double))]) => // Problem! no support for tuple type code generation in LMS!
-        val i: Rep[Int] = tuple2_get1(yy)
-        val t1: Rep[Double => Double] = tuple2_get2(yy)
+      val f1 = fun { (yy: Rep[(Int, (Double => Double), Double)]) => // Problem! no support for tuple type code generation in LMS!
+        val i: Rep[Int] = tuple3_get1(yy)
+        val t1: Rep[Double => Double] = tuple3_get2(yy)
+        val xx: Rep[Double] = tuple3_get3(yy)
         //case (i: Rep[Int], t1: Rep[Double => Double]) =>
         val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
         val t3: (NumR => Unit) = f(i)(t2)
+
+        val deltaVar = var_new(0.0)
+        t3(new NumR(xx, deltaVar))
+        readVar(deltaVar)
+/*
         fun {(x: Rep[Double]) => 
           val deltaVar = var_new(0.0)
           t3(new NumR(x, deltaVar))
           readVar(deltaVar)
-        }
+        }*/
       };
 
       {i: Rep[Int] => k1: (NumR => Unit) => 
@@ -206,8 +212,12 @@ object LMS {
             k1(new NumR(x, deltaVar))
             readVar(deltaVar)
           }
+          val k4: (NumR => Unit) = {(x: NumR) => 
+            x.d += f1((i, k2, x.x))
+          }
+/*
           val k3: Rep[Double => Double] = f1((i, k2))
-          val k4: (NumR => Unit) = {(x: NumR) => x.d += k3(x.x)}
+          val k4: (NumR => Unit) = {(x: NumR) => x.d += k3(x.x)}*/
           k4
         } 
       }
@@ -546,11 +556,11 @@ object LMS {
       }
     }
     
-    //println(gr11.code)
+    println(gr11.code)
     /*val p = new PrintWriter(new File("gr11.scala"))
     p.println(gr11.code)
     p.flush()*/
-    //println(gr11.eval(2))
+    println(gr11.eval(2))
 
     val gr12 = new DslDriver[Double, Double] with DiffApi {
 
@@ -560,9 +570,9 @@ object LMS {
              / \
             3   4
         */
-        val data = scala.Array[Double](3.0)
-        val lch  = scala.Array[Int](100) // use very large number to mean non nodes
-        val rch  = scala.Array[Int](100)
+        val data = scala.Array[Double](5.0, 3.0, 4.0)
+        val lch  = scala.Array[Int](1, 100, 100) // use very large number to mean non nodes
+        val rch  = scala.Array[Int](2, 100, 100)
         val data1 = mutableStaticData(data)
         val lch1  = mutableStaticData(lch)
         val rch1  = mutableStaticData(rch)
@@ -570,18 +580,16 @@ object LMS {
         // create a model that recursively use the data (originated from tree)
         def model: NumR => NumR @diff = { (x: NumR) =>
           TREE1(x)(data1.length, lch1, rch1){ (l: NumR, r: NumR, i: Rep[Int]) =>
-            l + r + new NumR(data1(i), var_new(0.0))
+            l * r * new NumR(data1(i), var_new(0.0))
           }
         }
-
-        def model1: NumR => NumR @diff = { (x: NumR) => x + x + new NumR(data1(0), var_new(0.0))}
 
         val res = gradR(model)(x)
         res
       }
     }
 
-    println(gr12.code)
-    println(gr12.eval(4))
+    //println(gr12.code)
+    //println(gr12.eval(2))
   }
 }

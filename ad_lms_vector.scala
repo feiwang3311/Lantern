@@ -38,6 +38,16 @@ object TEST1 {
         Tiark suggested to use smart pointer in c++, which is a good idea because it takes away the burden of manually managing them.
         All we should have changed is the c code generation for NewArray[Double], so that the malloc is in the hand of smart pointers
 
+        However, using smart pointers has problems too. we cannot define a function that takes a smartpointer as argument and return a smartpointer
+        the returned smartpointer out-lives the data, which is not OK for smart pointer.
+
+      Note:
+
+        finally we used a temperate solution called "memory arena". The base code will claim a large piece of code for the whole program.
+        internally, every malloc will borrow memory from this arena. 
+
+        By using getAllocMem and setAllocMem, we can selectively return a big trunk of memory after one iteration of training.
+
       Note:
 
         We are currently only very narrowly supporting matrix (2d vectors)
@@ -532,30 +542,45 @@ object TEST1 {
       loop(init)
     } 
 
-/*  FIXME: flexible using if dimension information didn't work
-    @virtualize
-    def LOOPT(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
-    ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
-
-      var gc = 0
-      lazy val loop: ArrayBuffer[TensorR] => Unit = { (xx: ArrayBuffer[TensorR]) =>
-        FUNM(xx map (_.x.dim0)) { (x: ArrayBuffer[TensorR]) =>
-          if (gc < c) {gc += 1; RST(loop(b(gc-1)(x)))} else RST(k(x))
-        }
-      }
-      loop(init)
-    }
-    */
-
 /*
-    @virtualize
-    def LOOPA(init: TensorR)(a: Rep[Array[Array[Double]]])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
-      var gc = 0
-      val bound = a.length
-      lazy val loop: TensorR => Unit = FUN (init.x.dim0){ (x : TensorR) =>
-        if (gc < bound) {gc += 1; RST(loop(b(gc-1)(x)))} else RST(k(x))
+    def FUNL(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {      
+
+      val f1 = fun { (yy: Rep[(Int, (Double => Double), Double)]) => // Problem! no support for tuple type code generation in LMS!
+        val i: Rep[Int] = tuple3_get1(yy)
+        val t1: Rep[Double => Double] = tuple3_get2(yy)
+        val xx: Rep[Double] = tuple3_get3(yy)
+        //case (i: Rep[Int], t1: Rep[Double => Double]) =>
+        val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
+        val t3: (NumR => Unit) = f(i)(t2)
+
+        val deltaVar = var_new(0.0)
+        t3(new NumR(xx, deltaVar))
+        readVar(deltaVar)
+      };
+
+      {i: Rep[Int] => k1: (TensorR => Unit) => 
+        {
+          val k2: Rep[Array[Double] => Array[Double]] = fun { (x: Rep[Array[Double]]) =>
+            val deltaVar = var_new(0.0) // TO HERE
+            k1(new NumR(x, deltaVar))
+            readVar(deltaVar)
+          }
+          val k4: (NumR => Unit) = {(x: NumR) => 
+            x.d += f1((i, k2, x.x))
+          }
+          k4
+        } 
       }
-      loop(init)
+    }
+
+
+
+    @virtualize
+    def LOOPL(init: TensorR)(c: Rep[Int])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
+      lazy val loop: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNL { (gc: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
+        if (gc < c) { loop(gc+1)((x: TensorR) => RST(k(b(gc)(x))))(x) } else { RST(k(x)) }
+      }
+      loop(0)(k)(init)
     }
 */
 
@@ -582,24 +607,38 @@ object TEST1 {
       result 
     }
 
-    def getMallocAddr() = {
-      unchecked[Unit]("waterMark = mallocAddr")
+    def getMallocAddr(): Rep[Long] = {
+      unchecked[Long]("(long)mallocAddr")
     }
 
-    def resetMallocAddr() = {
-      unchecked[Unit]("mallocAddr = waterMark")
+    def resetMallocAddr(addr: Rep[Long]) = {
+      unchecked[Unit]("mallocAddr = (void*)", addr)
     }
 
-    @virtualize
-    def doIf(b: Rep[Boolean])(a: => Rep[Unit]) = {
-      if(b) a
-    }
   }
 
 
   def main(args: Array[String]): Unit = {
     import java.io.PrintWriter;
-    import java.io.File;    
+    import java.io.File;   
+
+    val array0 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val addr = getMallocAddr()
+        printf("address is at %ld \\n", addr)
+        resetMallocAddr(addr)
+        printf("now lets use some memory\\n")
+        val mem = Vector.zeros(100)
+        val addr1 = getMallocAddr()
+        printf("Now address is at %ld \\n", addr1)
+        resetMallocAddr(addr)
+        printf("after reset, the address is back to %ld\\n", getMallocAddr())
+      }
+    } 
+
+    //println(array0.code)
+    //array0.eval("abc")
 
     val array1 = new DslDriverC[String, Unit]  with VectorExp {
 
@@ -607,14 +646,12 @@ object TEST1 {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val res = Vector.randinit(length)
-        getMallocAddr()
         val res2 = Vector.randPositive(length)
         res.print()
         res2.print()
         
         val result = res dot res2
         result.print()
-        resetMallocAddr()
 
         // still not working
         for (i <- 0 until 10: Rep[Range]) {
@@ -988,7 +1025,7 @@ object TEST1 {
         val mbh  = Vector.zeros_like(bh)
         val mby  = Vector.zeros_like(by)
 
-        getMallocAddr() // remember current allocation pointer here
+        val addr = getMallocAddr() // remember current allocation pointer here
 
         for (n <- (0 until 100): Rep[Range]) {
 
@@ -1023,7 +1060,7 @@ object TEST1 {
           }
           hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
           
-          resetMallocAddr()  // reset malloc_addr to the value when we remember allocation pointer
+          resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
         }
 
       }
@@ -1034,7 +1071,7 @@ object TEST1 {
     //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
     //array2_2_3_file.println(array2_2_3.code)
     //array2_2_3_file.flush()
-    array2_2_3.eval("abc")
+    //array2_2_3.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
     val array2_2_4Debug = new DslDriverC[String, Unit] with VectorExp {

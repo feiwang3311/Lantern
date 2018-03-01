@@ -118,30 +118,16 @@ with CastingOpsExp {
 
   override def doApply[A:Typ,B:Typ](f: Exp[A => B], x: Exp[A])(implicit pos: SourceContext): Exp[B] = {
     val x1 = unbox(x)
+    val x1_effects = x1 match {
+      case UnboxedTuple(l) => l.foldLeft(Pure())((b,a)=>a match {
+        case Def(Lambda(_, _, yy)) => b orElse summarizeEffects(yy)
+        case _ => b
+        })
+      case _ => Pure()
+    }
     f match {
-      case Def(Lambda(_,_,y)) =>
-        // if function result is known to be pure, so is application
-        // TODO: what about
-        /* Fei addition starts here: 
-             need to iterate over the arguments, 
-                see if any is a lambda, 
-                get the effects summary, 
-                and merge them together using ||, 
-                then && with the summary of the callee 
-        */
-        val args_effects = x1 match {
-          case UnboxedTuple(l) => {
-            l.foldLeft(Pure())((b, a) => a match {
-              case Def(Lambda(_, _, yy)) => b orElse summarizeEffects(yy)
-              case _ => b
-              })
-          }
-          case _ => Pure()
-        }
-        val ye = summarizeEffects(y) andAlso args_effects
-        reflectEffect(Apply(f, x1), ye)
-      case _ => // unknown function, assume it is effectful TODO: global vs simple?
-        super.doApply(f, x)
+      case Def(Lambda(_, _, y)) => reflectEffect(Apply(f, x1), summarizeEffects(y) andAlso x1_effects)
+      case _ => reflectEffect(Apply(f, x1), Simple() andAlso x1_effects)
     }
   }
 }
