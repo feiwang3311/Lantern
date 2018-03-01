@@ -222,13 +222,28 @@ trait DslGenC extends CGenNumericOps
   // In LMS code, it was "remap(m) + addRef(m)" which would put an extra "*"
   override def remapWithRef[A](m: Typ[A]): String = remap(m) + " "
 
+  def unwrapTupleStr(s: String): Array[String] = {
+    if (s.startsWith("scala.Tuple")) s.slice(s.indexOf("[")+1,s.length-1).filter(c => c != ' ').split(",")
+    else scala.Array(s)
+  }
+
   override def remap[A](m: Typ[A]): String = m.toString match {
     case "java.lang.String" => "char*"
     case "Array[Char]" => "char*"
     case "Char" => "char"
     // case "Array[Double]" => "unique_ptr<double[]>"
     case "Array[Double]" => "double*"
+    case "Array[Int]"    => "int*"
     case "Array[Array[Double]]" => "double**"
+    
+    case f if f.startsWith("scala.Function") =>
+      val targs = m.typeArguments.dropRight(1)
+      val res = remap(m.typeArguments.last)
+      val targsUnboxed = targs.flatMap(t => unwrapTupleStr(remap(t)))
+      val sep = if (targsUnboxed.length > 0) "," else ""
+      "function<" + res + "(" + targsUnboxed.mkString(",") + ")>"
+      
+    //scala.Function1[Array[Double], Array[Double]] --> function<double*(double*)>
     case _ => super.remap(m)
   }
   override def format(s: Exp[Any]): String = {

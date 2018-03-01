@@ -542,31 +542,31 @@ object TEST1 {
       loop(init)
     } 
 
-/*
-    def FUNL(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {      
 
-      val f1 = fun { (yy: Rep[(Int, (Double => Double), Double)]) => // Problem! no support for tuple type code generation in LMS!
+    def FUNL(dim0: Int)(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {      
+
+      val f1 = fun { (yy: Rep[(Int, (Array[Double] => Array[Double]), Array[Double])]) => // Problem! no support for tuple type code generation in LMS!
         val i: Rep[Int] = tuple3_get1(yy)
-        val t1: Rep[Double => Double] = tuple3_get2(yy)
-        val xx: Rep[Double] = tuple3_get3(yy)
+        val t1: Rep[Array[Double] => Array[Double]] = tuple3_get2(yy)
+        val xx: Rep[Array[Double]] = tuple3_get3(yy)
         //case (i: Rep[Int], t1: Rep[Double => Double]) =>
-        val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
-        val t3: (NumR => Unit) = f(i)(t2)
+        val t2: (TensorR => Unit) = { (x: TensorR) => x.d += new Vector(t1(x.x.data), dim0) }
+        val t3: (TensorR => Unit) = f(i)(t2)
 
-        val deltaVar = var_new(0.0)
-        t3(new NumR(xx, deltaVar))
-        readVar(deltaVar)
+        val deltas = Vector.zeros(dim0)
+        t3(new TensorR(new Vector(xx, dim0), deltas))
+        deltas.data
       };
 
       {i: Rep[Int] => k1: (TensorR => Unit) => 
         {
           val k2: Rep[Array[Double] => Array[Double]] = fun { (x: Rep[Array[Double]]) =>
-            val deltaVar = var_new(0.0) // TO HERE
-            k1(new NumR(x, deltaVar))
-            readVar(deltaVar)
+            val deltas = Vector.zeros(dim0)
+            k1(new TensorR(new Vector(x, dim0), deltas))
+            deltas.data
           }
-          val k4: (NumR => Unit) = {(x: NumR) => 
-            x.d += f1((i, k2, x.x))
+          val k4: (TensorR => Unit) = {(x: TensorR) => 
+            x.d += new Vector(f1((i, k2, x.x.data)), dim0)
           }
           k4
         } 
@@ -577,12 +577,21 @@ object TEST1 {
 
     @virtualize
     def LOOPL(init: TensorR)(c: Rep[Int])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
-      lazy val loop: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNL { (gc: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
+      lazy val loop: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNL(init.x.dim0){ (gc: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
         if (gc < c) { loop(gc+1)((x: TensorR) => RST(k(b(gc)(x))))(x) } else { RST(k(x)) }
       }
       loop(0)(k)(init)
     }
-*/
+
+    @virtualize
+    def LOOPT(init: TensorR)(bound: Rep[Int], lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (TensorR, TensorR, Rep[Int]) => TensorR @diff): TensorR @diff = shift {
+      k: (TensorR => Unit) =>
+
+      lazy val tree: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNL(init.x.dim0){ (i: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
+        if (i < bound) { tree(lch(i))((l: TensorR) => tree(rch(i))((r: TensorR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
+      }
+      tree(0)(k)(init)
+    }
 
     def gradR(f: TensorR => TensorR @diff)(x: Vector): Vector = {
       val x1 = new TensorR(x, Vector.zeros(x.dim0))
@@ -1629,6 +1638,77 @@ object TEST1 {
     //println("test log")
     // println(array9.code)
     //array9.eval("abc")
+
+    val array10 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        v.print()
+
+        val A = scala.Array
+        //val arr1 = A(4.0, 3.0)
+        //val arr2 = A(1.5, 2.0)
+        // /val arra = mutableStaticData(A(mutableStaticData(arr1), mutableStaticData(arr2)))
+        //val arr = A(A(4.0, 3.0), A(1.5, 2.0))
+        //val arra = mutableStaticData(arr)
+
+        val arra = NewArray[Array[Double]](2)
+        //arra(0) = mutableStaticData(A(4.0, 3.0))
+        //arra(1) = mutableStaticData(A(1.5, 2.0))
+        arra(0) = NewArray[Double](2)
+        arra(0)(0) = 4.0
+        arra(0)(1) = 2.0
+        arra(1) = NewArray[Double](2)
+        arra(1)(0) = 1.5
+        arra(1)(1) = 2.0
+        // create a model that recursively use the data in arr (originated from list)
+        def model: TensorR => TensorR @diff = { (x: TensorR) =>
+          LOOPL(x)(arra.length)(i => x1 => new TensorR(new Vector(arra(i), length), Vector.zeros(length)) * x1)
+        }
+        val grad = gradR(t => (model(t)).sum())(v)
+        grad.print()
+      }
+    }
+
+    //println(array10.code)
+    //array10.eval("abc")
+
+    val array11 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        v.print()
+
+        val A = scala.Array
+        val arra = NewArray[Array[Double]](3)
+        arra(0) = NewArray[Double](2)
+        arra(0)(0) = 5.0; arra(0)(1) = 4.0
+        arra(1) = NewArray[Double](2)
+        arra(1)(0) = 3.0; arra(1)(1) = 2.0
+        arra(2) = NewArray[Double](2)
+        arra(2)(0) = 1.5; arra(2)(1) = 1.4
+        val lch1 = NewArray[Int](3)
+        lch1(0) = 1; lch1(1) = 100; lch1(2) = 100
+        val rch1 = NewArray[Int](3)
+        rch1(0) = 2; rch1(1) = 100; rch1(2) = 100
+        
+        // create a model that recursively use the data (originated from tree)
+        def model: TensorR => TensorR @diff = { (x: TensorR) =>
+          LOOPT(x)(arra.length, lch1, rch1){ (l: TensorR, r: TensorR, i: Rep[Int]) =>
+            l * r * new TensorR(new Vector(arra(i), length), Vector.zeros(length))
+          }
+        }
+
+        val grad = gradR(t => model(t).sum())(v)
+        grad.print()
+      }
+    }
+
+    //println(array11.code)
+    //array11.eval("abc")
+
 
   }
 }

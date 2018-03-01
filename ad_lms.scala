@@ -190,19 +190,12 @@ object LMS {
         val i: Rep[Int] = tuple3_get1(yy)
         val t1: Rep[Double => Double] = tuple3_get2(yy)
         val xx: Rep[Double] = tuple3_get3(yy)
-        //case (i: Rep[Int], t1: Rep[Double => Double]) =>
         val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
         val t3: (NumR => Unit) = f(i)(t2)
 
         val deltaVar = var_new(0.0)
         t3(new NumR(xx, deltaVar))
         readVar(deltaVar)
-/*
-        fun {(x: Rep[Double]) => 
-          val deltaVar = var_new(0.0)
-          t3(new NumR(x, deltaVar))
-          readVar(deltaVar)
-        }*/
       };
 
       {i: Rep[Int] => k1: (NumR => Unit) => 
@@ -215,9 +208,6 @@ object LMS {
           val k4: (NumR => Unit) = {(x: NumR) => 
             x.d += f1((i, k2, x.x))
           }
-/*
-          val k3: Rep[Double => Double] = f1((i, k2))
-          val k4: (NumR => Unit) = {(x: NumR) => x.d += k3(x.x)}*/
           k4
         } 
       }
@@ -311,8 +301,7 @@ object LMS {
       val x1 = new NumR(x, var_new(0.0))
       reset { 
         val r = f(x1)
-        println("result of model")
-        println(r.x)
+        printf("result of model is %f\n", r.x)
         var_assign(r.d, 1.0); () 
       }
       x1.d
@@ -556,11 +545,11 @@ object LMS {
       }
     }
     
-    println(gr11.code)
+    //println(gr11.code)
     /*val p = new PrintWriter(new File("gr11.scala"))
     p.println(gr11.code)
     p.flush()*/
-    println(gr11.eval(2))
+    //println(gr11.eval(2))
 
     val gr12 = new DslDriver[Double, Double] with DiffApi {
 
@@ -591,5 +580,32 @@ object LMS {
 
     //println(gr12.code)
     //println(gr12.eval(2))
+
+    val gr12_2 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val A = scala.Array
+        val data = A[Double](5.0, 3.0, 4.0)
+        val lch  = A[Int](1, 100, 100)
+        val rch  = A[Int](2, 100, 100)
+        val data1 = mutableStaticData(data)
+        val lch1  = mutableStaticData(lch)
+        val rch1  = mutableStaticData(rch)
+
+        val para = new NumR(2.0, var_new(0.0))
+        def model: NumR => NumR @diff = { (x: NumR) =>
+          TREE1(x)(data1.length, lch1, rch1){ (l: NumR, r: NumR, i: Rep[Int]) =>
+            l * r * new NumR(data1(i), var_new(0.0)) * para
+          }
+        }
+
+        val res = gradR(model)(x)
+        printf("the grad of para is %f\n", readVar(para.d))
+        res
+      }
+    }
+
+    println(gr12_2.code)
+    printf("grad of x is %f\n", gr12_2.eval(1))
   }
 }
