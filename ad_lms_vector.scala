@@ -72,6 +72,19 @@ object TEST1 {
 
     class Vector(val data: Rep[Array[Double]], val dim0: Int, val dim1:Int = 1 /*, val dim2: Int*/) extends Serializable {
 
+      def apply(i: Rep[Int]) = data(i)
+      def apply(i: Rep[Int], j: Rep[Int]) = data(i + j * dim0) // FIXME the index of matrix is not the normal way
+
+      @virtualize
+      def == (that: Vector): Rep[Boolean] = 
+        if (dim0 == that.dim0 && dim1 == that.dim1) {
+          val mismatch = var_new(0.0)
+          for (i <- (0 until dim0 * dim1): Rep[Range]) {
+            if (data(i) != that.data(i)) mismatch += 1.0
+          }  
+          (mismatch == 0.0)
+        } else false
+
       def foreach(f: Rep[Double] => Rep[Unit]): Rep[Unit] =
         for (i <- (0 until dim0):Rep[Range]) f(data(i))
 
@@ -94,10 +107,9 @@ object TEST1 {
 
       // this operator updates the values of this, unlike the + operator
       def += (that: Vector) = {
-        if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(i)
-        else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) += that.data(0)
-        else if (dim0 == 1) for (i <- (0 until that.dim0): Rep[Range]) data(0) += that.data(i)
-        //throw new IllegalArgumentException("dimensions needs to be expanded!")
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) += that.data(i)
+        else if (that.dim0 == 1 && that.dim1 == 1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) += that.data(0) // broadcast
+        else if (dim0 == 1 && dim1 == 1) for (i <- (0 until that.dim0 * that.dim1): Rep[Range]) data(0) += that.data(i) // shrink (not sure)
         else throw new IllegalArgumentException("dimensions of vector do not match +=!")
       }
 
@@ -113,10 +125,9 @@ object TEST1 {
 
       // this operator updates the values of this, unlike the - operator
       def -= (that: Vector) = {
-        if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) -= that.data(i)
-        else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) -= that.data(0)
-        else if (dim0 == 1) for (i <- (0 until that.dim0): Rep[Range]) data(0) -= that.data(i)
-        //throw new IllegalArgumentException("dimensions needs to be expanded!")
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) -= that.data(i)
+        else if (that.dim0 == 1 && that.dim1 == 1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) -= that.data(0) // broadcast
+        else if (dim0 == 1 && dim1 == 1) for (i <- (0 until that.dim0 * that.dim1): Rep[Range]) data(0) -= that.data(i) // shrink (not sure)
         else throw new IllegalArgumentException("dimensions of vector do not match -=!")
       }
 
@@ -133,10 +144,10 @@ object TEST1 {
 
       // this operator updates the values of this, unlike * operator
       def *= (that: Vector) = {
-        if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) *= that.data(i)
-        else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) *= that.data(0)
-        else if (dim0 == 1) throw new IllegalArgumentException("dimensions needs to be expanded *=!")
-        else throw new IllegalArgumentException("dimensions of vector do not match *=!")
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) *= that.data(i)
+        else if (that.dim0 == 1 && that.dim1 == 1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) *= that.data(0) // broadcast
+        else if (dim0 == 1 && dim1 == 1) for (i <- (0 until that.dim0 * that.dim1): Rep[Range]) data(0) *= that.data(i) // shrink (not sure)
+        else throw new IllegalArgumentException("dimensions of vector do not match -=!")
       }
 
       // element wise division
@@ -152,10 +163,10 @@ object TEST1 {
 
       // this operator updates the values of this, unlike / operator
       def /= (that: Vector) = {
-        if (dim0 == that.dim0) for (i <- (0 until dim0): Rep[Range]) data(i) /= that.data(i)
-        else if (that.dim0 == 1) for (i <- (0 until dim0): Rep[Range]) data(i) /= that.data(0)
-        else if (dim0 == 1) throw new IllegalArgumentException("dimensions needs to be expanded /=!")
-        else throw new IllegalArgumentException("dimensions of vector do not match /=!")
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) /= that.data(i)
+        else if (that.dim0 == 1 && that.dim1 == 1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) /= that.data(0) // broadcast
+        else if (dim0 == 1 && dim1 == 1) for (i <- (0 until that.dim0 * that.dim1): Rep[Range]) data(0) /= that.data(i) // shrink (not sure)
+        else throw new IllegalArgumentException("dimensions of vector do not match -=!")
       }
 
       def setAsOne() = {
@@ -181,6 +192,28 @@ object TEST1 {
           res(j) = readVar(value)
         }
         new Vector(res, dim1)
+      }
+
+      def cart(that: Vector) = {
+        if (dim1 != 1 || that.dim1 != 1) throw new IllegalArgumentException("cartesian product is only for 1d vectors")
+        val res = NewArray[Double](dim0 * that.dim0)
+        for (i <- (0 until dim0): Rep[Range]) {
+          for (j <- (0 until that.dim0): Rep[Range]) {
+            res(i * that.dim0 + j) = data(i) * that.data(j)
+          }
+        }
+        new Vector(res, that.dim0, dim0)
+      }
+
+      def trans() = {
+        if (dim1 == 1) throw new IllegalArgumentException("transpose is only for matrix. Vector transpose is not supported here")
+        val res = NewArray[Double](dim0 * dim1)
+        for (i <- (0 until dim0): Rep[Range]) {
+          for (j <- (0 until dim1): Rep[Range]) {
+            res(i * dim1 + j) = data(j * dim0 + i)
+          }
+        }
+        new Vector(res, dim1, dim0)
       }
 
       def tanh() = {
@@ -221,6 +254,21 @@ object TEST1 {
         val res = NewArray[Double](1)
         res(0) = readVar(value)
         new Vector(res, 1)
+      }
+
+      def sumOnDim1() = {
+        if (dim1 == 1) this
+        else {
+          val res = NewArray[Double](dim0)
+          for (i <- (0 until dim0): Rep[Range]) {
+            val temp = var_new(0.0)
+            for (j <- (0 until dim1): Rep[Range]) {
+              temp += data(i + j * dim0)
+            }
+            res(i) = readVar(temp)
+          }
+          new Vector(res, dim0)
+        }
       }
 
       def print() = {
@@ -306,11 +354,47 @@ object TEST1 {
         new Vector(res, dim0, dim1)
       }
 
+      def expand(value: Rep[Double], dim0: Int, dim1: Int = 1) = {
+        val res = NewArray[Double](dim0 * dim1)
+        for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = value
+        new Vector(res, dim0, dim1)
+      } 
+
+      def expand(vector: Vector, dim1: Int) = {
+        assert (vector.dim1 == 1)
+        val res = NewArray[Double](vector.dim0 * dim1)
+        for (j <- (0 until dim1): Rep[Range]){
+          for (i <- (0 until vector.dim0): Rep[Range]) {
+            res(i + j * vector.dim0) = vector.data(i)
+          }
+        }
+        new Vector(res, vector.dim0, dim1)
+      }
+
+      def copy(vector: Vector) = {
+        val res = NewArray[Double](vector.dim0 * vector.dim1)
+        for (i <- (0 until vector.dim0 * vector.dim1): Rep[Range]) res(i) = vector.data(i)
+        new Vector(res, vector.dim0, vector.dim1)
+      }
+
       def fromData(x: Double*) = {
         val y = x.toArray
         val res = NewArray[Double](y.length)
         for (i <- (0 until y.length): Rep[Range]) res(i) = y(i)
         new Vector(res, y.length)
+      }
+
+      @virtualize
+      def assertEqual(a: Vector, b: Vector, mark: String = "", tal: Double = 0.000001) = {
+        if (a.dim0 != b.dim0 || a.dim1 != b.dim1) printf("ERROR: %s not equal in dimensions\\n", mark)
+        else {
+          val mismatch = var_new(0.0)
+          for (i <- (0 until a.dim0 * a.dim1): Rep[Range]) {
+            val diff = a.data(i) - b.data(i)
+            if (diff < -1.0 * tal || diff > tal) mismatch += 1.0
+          }
+          if (readVar(mismatch) != 0.0) printf("ERROR: %s not equal in some data\\n", mark)
+        } 
       }
     }
 
@@ -416,6 +500,7 @@ object TEST1 {
       { (x:TensorR) => x.d += new Vector(f1(x.x.data), dim0) }
     }
 
+/*
     // "clever" way of changing fun signature for memory leak issue, not working
     def FUNc(dim0: Int)(f: TensorR => Unit): (TensorR => Unit) = {
       val f1 = fun { (x: Rep[Array[Array[Double]]]) =>
@@ -431,6 +516,7 @@ object TEST1 {
         } 
       }
     }
+*/
 
     def RST(a: => Unit @diff) = continuations.reset { a; () }
 
@@ -597,7 +683,7 @@ object TEST1 {
       val x1 = new TensorR(x, Vector.zeros(x.dim0))
       reset { val y = f(x1)
           y.d.setAsOne()
-          y.x.print() // this is the result of forward propagation (likely the loss)
+          // y.x.print() // this is the result of forward propagation (likely the loss)
           () } 
       x1.d
     }
@@ -633,21 +719,30 @@ object TEST1 {
 
     val array0 = new DslDriverC[String, Unit] with VectorExp {
 
+      @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val addr = getMallocAddr()
-        printf("address is at %ld \\n", addr)
+        //printf("address is at %ld \\n", addr)
         resetMallocAddr(addr)
-        printf("now lets use some memory\\n")
+        //printf("now lets use some memory\\n")
         val mem = Vector.zeros(100)
         val addr1 = getMallocAddr()
-        printf("Now address is at %ld \\n", addr1)
+        //printf("Now address is at %ld \\n", addr1)
         resetMallocAddr(addr)
-        printf("after reset, the address is back to %ld\\n", getMallocAddr())
+        val addr2 = getMallocAddr()
+        //printf("after reset, the address is back to %ld\\n", addr2)
+        
+        //assertions
+        if (addr + 800 != addr1) printf("ERROR: addr did not increase by 800")
+        if (addr != addr2) printf("ERROR: addr did not reset to the give value")
+        // unchecked[Unit](s"assert($addr1 == $addr + 800)")
+        //assert (addr1 == addr + 800l, "addr did not increase by 800")
+        //assert (addr == addr2, "addr did not reset to the given value")
       }
     } 
 
     //println(array0.code)
-    //array0.eval("abc")
+    array0.eval("abc")
 
     val array1 = new DslDriverC[String, Unit]  with VectorExp {
 
@@ -655,18 +750,17 @@ object TEST1 {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val res = Vector.randinit(length)
-        val res2 = Vector.randPositive(length)
-        res.print()
-        res2.print()
+        val res2 = Vector.randinit(length, offset = 5)
+        //res.print()
+        //res2.print()
         
         val result = res dot res2
-        result.print()
+        //result.print()
 
-        // still not working
-        for (i <- 0 until 10: Rep[Range]) {
-          //doIf(i == unit(2)){println("found")}
-          if (equals(i, unit(2))) println("found")
-        }
+        // assertions
+        if (res(0) * res2(0) + res(1) * res2(1) != result(0)) 
+          println("ERROR: the dot product of two vectors is not correct")
+        
       }
     }
 
@@ -675,54 +769,70 @@ object TEST1 {
     //array1_file.println(array1.code)
     //array1_file.flush()
     //println(array1.code)
-    //array1.eval("abc")
+    array1.eval("abc")
 
     val array1_1 = new DslDriverC[String, Unit] with VectorExp {
 
+      @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val dim0 = 2
         val dim1 = 3
         val matrix = Vector.randinit(dim0, dim1)
-        val vector = Vector.randPositive(dim0)
-        matrix.print()
-        vector.print()
+        val vector = Vector.randinit(dim0, offset = 4)
+        //matrix.print()
+        //vector.print()
 
-        println("the result is:")
+        //println("the result is:")
         val result = matrix dot vector
-        result.print()
+        //result.print()
+
+        if (matrix(0, 0) * vector(0) + matrix(1, 0) * vector(1) != result(0))
+          println("ERROR: the matrix vector dot product is wrong on the first element of result")
+        if (matrix(0, 1) * vector(0) + matrix(1, 1) * vector(1) != result(1))
+          println("ERROR: the matrix vector dot product is wrong on the second element of result")
+        if (matrix(0, 2) * vector(0) + matrix(1, 2) * vector(1) != result(2))
+          println("ERROR: the matrix vector dot product is wrong on the third element of result")
       }
     }
 
     //println(array1_1.code)
-    //array1_1.eval("abc")
+    array1_1.eval("abc")
 
     val array2 = new DslDriverC[String, Unit] with VectorExp {
 
+      @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         // read training data from file (for now just use random)
         val length = 2
         val v = Vector.randinit(length)
-        v.print()   
+        //v.print()   
 
         // calculate gradient
         val grad = gradR(t => t dot t)(v)
         // show gradient
-        println("show gradient in the traditional way")
-        grad.print()
+        //println("show gradient in the traditional way")
+        //grad.print()
+
+        // assertions
+        Vector.assertEqual(v * Vector.consts(1, value = 2.0), grad)
 
         // construct TensorR for closure
         val tv = TensorR.Tensor(v)
         val loss = gradR_loss(dummy => tv dot tv)(Vector.zeros(1))
-        println("gradient:")
-        tv.d.print()
-        println("loss")
-        loss.print()
+        //println("gradient:")
+        //tv.d.print()
+        //println("loss")
+        //loss.print()
+        // assertions
+        Vector.assertEqual((v dot v), loss)
+        Vector.assertEqual(tv.d, grad)
+        ()
       }
     }
 
     //println("test dot gradient")
     //println(array2.code)
-    //array2.eval("2.0")
+    array2.eval("2.0")
 
     val array2_1 = new DslDriverC[String, Unit] with VectorExp {
       // update gradient as side effect
@@ -730,49 +840,28 @@ object TEST1 {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Vector.randinit(length)
-        v.print()
-
-        // initialize tensor for closure
-        val t = new TensorR(v, Vector.zeros(length))            
-        // call grad_side_effect_using_closure
-        val dummy = gradR(dummy => t dot t)(Vector.zeros(1))
-        // print the gradient of t
-        t.x.print()
-        t.d.print()
-      }
-    }
-
-    //println("test dot gradient as side effect")
-    //println(array2_1.code)
-    //array2_1.eval("2.0")
-
-    val array2_1_1 = new DslDriverC[String, Unit] with VectorExp {
-      // update gradient as side effect
-      
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 3
-        val v = Vector.randinit(length)
-        v.print()
+        // v.print()
 
         // initialize tensor for closure
         var t = new TensorR(v, Vector.zeros(length))            
         val half = new TensorR(Vector.halves(length), Vector.zeros(length))
         // call grad_side_effect_using_closure
         val dummy = gradR(dummy => {
-          t = (t dot t)
-          t = (half * t).sum()
-          t
+          ((t dot t) * half).sum()
           })(Vector.zeros(1))
         // print the gradient of t
-        t.d.print()
-        half.d.print()
+        //t.d.print()
+        //half.d.print()
+        Vector.assertEqual(t.d, v * Vector.consts(1, value = 2.0))
+        Vector.assertEqual(half.d, Vector.expand((v dot v).data(0), 2))
+        ()
       }
     }
 
     //println("test dot gradient as side effect with var update") 
     //println("proving that I can use var update without creating cycles in static computation graph")
     //println(array2_1.code)
-    //array2_1_1.eval("2.0")
+    array2_1.eval("2.0")
 
     val array2_2 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -781,9 +870,9 @@ object TEST1 {
         val dim0 = 2
         val dim1 = 3
         val matrix = Vector.randinit(dim0, dim1)
-        val vector = Vector.randPositive(dim0)
-        matrix.print()
-        vector.print()
+        val vector = Vector.randinit(dim0, offset = 4)
+        //matrix.print()
+        //vector.print()
 
         // initialize tensors for closure
         val ma = new TensorR(matrix, Vector.zeros(dim0, dim1))
@@ -792,67 +881,228 @@ object TEST1 {
         def model(dummy: TensorR): TensorR @diff = {
           (ma dot ve).sum()
         }
-        val dummy = gradR(model)(Vector.zeros(1))
+        val loss = gradR_loss(model)(Vector.zeros(1))
         // print the gradient of ma and ve
-        ma.d.print()
-        ve.d.print()
+        //ma.d.print()
+        //ve.d.print()
+        Vector.assertEqual(loss, (matrix dot vector).sum())
+        Vector.assertEqual(ma.d, Vector.expand(vector, dim1))
+        Vector.assertEqual(ve.d, matrix.sumOnDim1())
+        ()
       }
     }
 
     // println("test matrix vector dot gradient as side effect")
     //println(array2_2.code)
-    //array2_2.eval("abc")
+    array2_2.eval("abc")
 
-    val array2_2_1 = new DslDriverC[String, Unit] with VectorExp {
+    val array2_2_1Debug = new DslDriverC[String, Unit] with VectorExp {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
+
         val vocab_size = 3
         val hidden_size = 2
-        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
-        val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
-        val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
-        val hprev = Vector.zeros(hidden_size) 
+
+        //basic set up
+        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.1)  // input to hidden
+        val Whh = Vector.randinit(hidden_size, hidden_size, 0.1) // hidden to hidden
+        val Why = Vector.randinit(hidden_size, vocab_size, 0.1)  // hidden to output
+        val bh  = Vector.randinit(hidden_size)
+        val by  = Vector.randinit(vocab_size)
+        val hprev = Vector.randinit(hidden_size) 
+        
+        val hsave = Vector.zeros_like(hprev)
+        //hsave.copy_data(hprev)
 
         // wrap as tensors
         val Wxh1 = TensorR.Tensor(Wxh)
         val Whh1 = TensorR.Tensor(Whh)
         val Why1 = TensorR.Tensor(Why)
+        val bh1  = TensorR.Tensor(bh)
+        val by1  = TensorR.Tensor(by)
         val hprev1 = TensorR.Tensor(hprev)
 
-        def lossFun = { (dummy: TensorR) =>
-          var loss = TensorR.Tensor(Vector.zeros(1))
-          LOOPCC(loss)(3){i => t => 
+        // encode input and output
+        val x_data = NewArray[Int](3); x_data(0) = 0; x_data(1) = 1; x_data(2) = 2
+        val y_data = NewArray[Int](3); y_data(0) = 2; y_data(1) = 0; y_data(2) = 1
+        
+        def lossFun: (TensorR => TensorR @diff) = { (dummy: TensorR) =>
+          
+          // build ArrayBuffer
+          val loss = TensorR.Tensor(Vector.zeros(1))
+          val in = ArrayBuffer[TensorR]()
+          in.append(loss)
+          in.append(hprev1)
+
+          val i = 0; val t = in
+          // get input as one-hot tensor
+          val x = Vector.zeros(vocab_size)
+          x.data(x_data(i)) = 1
+          val x1 = TensorR.Tensor(x)
+          // get output as one-hot tensor
+          val y = Vector.zeros(vocab_size)
+          y.data(y_data(i)) = 1
+          val y1 = TensorR.Tensor(y)
+
+          val h1 = ((Wxh1 dot x1) + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
+          h1
+        }
+
+        val hidden = gradR_loss(lossFun)(Vector.zeros(1)) 
+
+        // the other method
+        def lossOneCycle() = {
+          val i = 0
+
+          // get input as one-hot tensor
+          val x = Vector.zeros(vocab_size)
+          x.data(x_data(i)) = 1
+          // get output as one-hot tensor
+          val y = Vector.zeros(vocab_size)
+          y.data(y_data(i)) = 1
+
+          // forward pass
+          val hs = ((Wxh dot x) + (Whh dot hprev) + bh).tanh()
+
+          // assert hs and hidden be similar
+          Vector.assertEqual(hs, hidden)
+        }
+        lossOneCycle()
+
+      }
+    }
+
+    //array2_2_1Debug.eval("abc")
+
+
+    val array2_2_1 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+
+        val vocab_size = 3
+        val hidden_size = 2
+        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.1)  // input to hidden
+        val Whh = Vector.randinit(hidden_size, hidden_size, 0.1) // hidden to hidden
+        val Why = Vector.randinit(hidden_size, vocab_size, 0.1)  // hidden to output
+        val bh  = Vector.randinit(hidden_size)
+        val by  = Vector.randinit(vocab_size)
+        val hprev = Vector.randinit(hidden_size) 
+        
+        val hprev_next = Vector.zeros_like(hprev) // this vector catches the new hidden value, see the NOTE below
+        /*
+          NOTE: initially I simply updated hprev with new hidden value. That turned out to be a bug.
+          Syntactically I updated hprev after the LOOPCCM cycle, but because we are constructing a static computation graph with continuations,
+          symantically the update happens before the end of the forward propagation. 
+
+          So instead of updating hprev after autodifferentiation, I updated it before autodifferentiation. 
+          That is a easily fallen pitfall. 
+
+          NEED to think about how to avoid it or send WARNING for code like this!!
+
+          The solution is to copy it to an independent vector. MAYBE need better solutions?
+        */
+
+        // wrap as tensors
+        val Wxh1 = TensorR.Tensor(Wxh)
+        val Whh1 = TensorR.Tensor(Whh)
+        val Why1 = TensorR.Tensor(Why)
+        val bh1  = TensorR.Tensor(bh)
+        val by1  = TensorR.Tensor(by)
+        val hprev1 = TensorR.Tensor(hprev)
+
+        // encode input and output
+        val x_data = NewArray[Int](3); x_data(0) = 0; x_data(1) = 1; x_data(2) = 2
+        val y_data = NewArray[Int](3); y_data(0) = 2; y_data(1) = 0; y_data(2) = 1
+        //val x_data = mutableStaticData(scala.Array(0, 1, 2))
+        //val y_data = mutableStaticData(scala.Array(2, 0, 1))
+        
+        // our method of loss and gradient calculation
+        def lossFun: (TensorR => TensorR @diff) = { (dummy: TensorR) =>
+          val loss = TensorR.Tensor(Vector.zeros(1))
+          val in = ArrayBuffer[TensorR]()
+          in.append(loss)
+          in.append(hprev1)
+          val outputs = LOOPCCM(in)(3){i => t => 
             
-            // printf("at iteration %d ", i)
             // get input as one-hot tensor
             val x = Vector.zeros(vocab_size)
-            x.data(i) = 1
+            x.data(x_data(i)) = 1
             val x1 = TensorR.Tensor(x)
             // get output as one-hot tensor
             val y = Vector.zeros(vocab_size)
-            y.data((i+1)%vocab_size) = 1
+            y.data(y_data(i)) = 1
             val y1 = TensorR.Tensor(y)
 
-            val h1 = ((Wxh1 dot x1) + (Whh1 dot hprev1)).tanh() // hidden state
-            // carefully update hprev1 with h1 in the last cycle
-            /*
-              I have evidence that in this case, the hprev1.x.data has been updated, and Whh1 carried some gradient
-              However, this seems wrong, because in this case, the gradient is not flowing through the hidden vector
-            */
-            hprev1.x.copy_data(h1.x)
-            
-            val e1 = (Why1 dot h1).exp()
-            val p1 = e1 / e1.sum()
-            t - (p1 dot y1).log() // loss is updated by this value (t is loss from last cycle)
+            val h1 = ((Wxh1 dot x1) + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
+            val e1 = (Why1.dot(h1) + by1).exp()                       // use new hidden state to compute unnormalized prob
+            val p1 = e1 / e1.sum()                            // use unnormalized prob to compute normalize prob
+            val newloss = t(0) - (p1 dot y1).log()            // loss is updated by original loss t(0) and additional loss
+            val out = ArrayBuffer[TensorR]()
+            out.append(newloss)
+            out.append(h1)
+            out
           }
+          hprev_next.copy_data(outputs(1).x)  // update the hidden state with the result from LOOP
+          outputs(0)                          // return the final loss
         }
-        val dummy = gradR(lossFun)(Vector.zeros(1)) 
-        
-        Wxh1.d.print()  
-        Whh1.d.print()
-        Why1.d.print()  
-        hprev1.x.print()    
+        val loss1 = gradR_loss(lossFun)(Vector.zeros(1)) 
 
+
+        // correct method of loss and gradient calculation, copying from Numpy
+        // preset space for gradients
+        val dWxh = Vector.zeros_like(Wxh)
+        val dWhh = Vector.zeros_like(Whh)
+        val dWhy = Vector.zeros_like(Why)
+        val dbh  = Vector.zeros_like(bh)
+        val dby  = Vector.zeros_like(by)
+        val dhnext = Vector.zeros_like(hprev)
+        val sum_loss = Vector.zeros(1)
+        val hprev_new = Vector.zeros_like(hprev)
+        
+        def lossOneCycle(i: Int, hprev: Vector): Unit = {
+
+          // get input as one-hot tensor
+          val x = Vector.zeros(vocab_size)
+          x.data(x_data(i)) = 1
+          // get output as one-hot tensor
+          val y = Vector.zeros(vocab_size)
+          y.data(y_data(i)) = 1
+
+          // forward pass
+          val hs = ((Wxh dot x) + (Whh dot hprev) + bh).tanh()
+          val ys = (Why dot hs) + by
+          val ye = ys.exp()
+          val ps = ye / ye.sum()
+          sum_loss -= (ps dot y).log()
+
+          if (i < 2) lossOneCycle(i + 1, hs)
+          else hprev_new.copy_data(hs)
+          
+          // backward pass
+          val dy = Vector.copy(ps)
+          dy.data(y_data(i)) -= 1
+          dWhy += (dy cart hs) 
+          dby += dy
+          val dh = (Why.trans() dot dy) + dhnext
+          val dhraw = (Vector.ones(1) - hs * hs) * dh
+          dbh += dhraw
+          dWxh += (dhraw cart x)
+          dWhh += (dhraw cart hprev)
+          dhnext.copy_data(Whh.trans() dot dhraw)
+          ()
+        }
+
+        lossOneCycle(0, hprev)
+
+        // assertions
+        Vector.assertEqual(loss1, sum_loss, "loss")
+        Vector.assertEqual(hprev_next, hprev_new, "hidden")
+        Vector.assertEqual(Wxh1.d, dWxh, "dWxh")
+        Vector.assertEqual(Whh1.d, dWhh, "dWhh")
+        Vector.assertEqual(Why1.d, dWhy, "dWhy")
+        Vector.assertEqual(bh1.d, dbh, "dbh")
+        Vector.assertEqual(by1.d, dby, "dby")
+        
       }
     }
 
@@ -861,8 +1111,9 @@ object TEST1 {
     val p = new PrintWriter(new File("array2_2_1.cpp"))
     p.println(array2_2_1.code)
     p.flush()
-    array2_2_1.eval("abc")
+    
     */
+    array2_2_1.eval("abc")
 
     val array2_2_2 = new DslDriverC[String, Unit] with VectorExp {
 
