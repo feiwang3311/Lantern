@@ -1041,7 +1041,7 @@ object TEST1 {
         val data_size = scanner.fl
         // val chars = training_data.distinct  /** this can be done in second stage **/
         // val vocab_size = chars.length
-        println(s"data has $data_size chars")
+        printf("data has %d chars\\n", data_size)
 
         //val translated_data = NewArray[Int](data_size)
         //for (i <- (0 until data_size)) translated_data(i) = char_to_ix(unit(training_data).charAt(i))
@@ -1060,7 +1060,7 @@ object TEST1 {
         val by  = Vector.zeros(vocab_size)
         val hprev = Vector.zeros(hidden_size) 
 
-        //val hnext = Vector.zeros_like(hprev)
+        val hnext = Vector.zeros_like(hprev)
 
         // wrap as tensors
         val Wxh1 = TensorR.Tensor(Wxh)
@@ -1096,7 +1096,7 @@ object TEST1 {
             out.append(h1)
             out
           }
-          hprev1.x.copy_data(outputs(1).x)     // update the hidden state with the result from LOOP
+          hnext.copy_data(outputs(1).x)     // update the hidden state with the result from LOOP
           outputs(0)                        // return the final loss
         }
 
@@ -1112,14 +1112,16 @@ object TEST1 {
 
         val addr = getMallocAddr() // remember current allocation pointer here
 
-        var startAt = -seq_length
+        val startAt = var_new[Int](0)
+        startAt -= seq_length
 
         for (n <- (0 until 2001): Rep[Range]) {
 
+          startAt += seq_length
           if (startAt + seq_length + 1 >= data_size) {
             startAt = 0
             hprev.clear()
-          } else startAt += seq_length
+          }
 
           val inputs = NewArray[Int](seq_length)
           val targets = NewArray[Int](seq_length)
@@ -1132,17 +1134,9 @@ object TEST1 {
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
           if (n % 100 == 0) {
           //  loss.print()
-            println(s"iter $n, loss $loss_value") // FIXME loss need to be fixed
+            printf("iter %d, loss %f\\n", n, loss_value) // FIXME loss need to be fixed
           }
 
-          /*
-          Wxh1.d.print()  
-          Whh1.d.print()
-          Why1.d.print()  
-          bh1.d.print()
-          by1.d.print()
-          hprev1.x.print()    
-          */
           val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
           val mems = ArrayBuffer(mWxh, mWhh, mWhy, mbh, mby)
           for ((par, mem) <- pars.zip(mems)) {
@@ -1151,7 +1145,7 @@ object TEST1 {
             par.clear_grad()
           }
           hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
-          //hprev1.x.copy_data(hnext)
+          hprev1.x.copy_data(hnext)
           
           resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
         }
