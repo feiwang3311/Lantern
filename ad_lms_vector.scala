@@ -75,34 +75,16 @@ object TEST1 {
       def apply(i: Rep[Int]) = data(i)
       def apply(i: Rep[Int], j: Rep[Int]) = data(i + j * dim0) // FIXME the index of matrix is not the normal way
 
-      @virtualize
-      def == (that: Vector): Rep[Boolean] = 
-        if (dim0 == that.dim0 && dim1 == that.dim1) {
-          val mismatch = var_new(0.0)
-          for (i <- (0 until dim0 * dim1): Rep[Range]) {
-            if (data(i) != that.data(i)) mismatch += 1.0
-          }  
-          (mismatch == 0.0)
-        } else false
-
-      def foreach(f: Rep[Double] => Rep[Unit]): Rep[Unit] =
-        for (i <- (0 until dim0):Rep[Range]) f(data(i))
-
-      @virtualize
-      def sumIf(f: Rep[Double] => Rep[Boolean]) = { 
-        val n = var_new(0.0); 
-        foreach(x => if (f(x)) n += x); 
-        readVar(n) 
-      }
+      def max(a: Int, b: Int) = if (a >= b) a else b
 
       def + (that: Vector) = {
-        val dimM = if (dim0 > that.dim0) dim0 else that.dim0
-        val res = NewArray[Double](dimM)
-        if (that.dim0 == 1) for (i <- (0 until dimM): Rep[Range]) res(i) = data(i) + that.data(0)
-        else if (dim0 == 1) for (i <- (0 until dimM): Rep[Range]) res(i) = data(0) + that.data(i)
-        else if (dim0 == that.dim0) for (i <- (0 until dimM): Rep[Range]) res(i) = data(i) + that.data(i)
+        val dim0M = max(dim0, that.dim0); val dim1M = max(dim1, that.dim1)
+        val res = NewArray[Double](dim0M * dim1M)
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(i) + that.data(i)
+        else if (dim0 == 1 && dim1 == 1)            for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(0) + that.data(i)
+        else if (that.dim0 == 1 && that.dim1 == 1)  for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(i) + that.data(0)
         else throw new IllegalArgumentException("dimensions of vector do not match +!")
-        new Vector(res, dimM)
+        new Vector(res, dim0M, dim1M)
       }
 
       // this operator updates the values of this, unlike the + operator
@@ -114,13 +96,13 @@ object TEST1 {
       }
 
       def - (that: Vector) = {
-        val dimM = if (dim0 > that.dim0) dim0 else that.dim0
-        val res = NewArray[Double](dimM)
-        if (that.dim0 == 1) for (i <- (0 until dimM): Rep[Range]) res(i) = data(i) - that.data(0)
-        else if (dim0 == 1) for (i <- (0 until dimM): Rep[Range]) res(i) = data(0) - that.data(i)
-        else if (dim0 == that.dim0) for (i <- (0 until dimM): Rep[Range]) res(i) = data(i) - that.data(i)
-        else throw new IllegalArgumentException("dimensions of vector do not match -!")
-        new Vector(res, dimM)
+        val dim0M = max(dim0, that.dim0); val dim1M = max(dim1, that.dim1)
+        val res = NewArray[Double](dim0M * dim1M)
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(i) - that.data(i)
+        else if (dim0 == 1 && dim1 == 1)            for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(0) - that.data(i)
+        else if (that.dim0 == 1 && that.dim1 == 1)  for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(i) - that.data(0)
+        else throw new IllegalArgumentException("dimensions of vector do not match +!")
+        new Vector(res, dim0M, dim1M)
       }
 
       // this operator updates the values of this, unlike the - operator
@@ -133,13 +115,13 @@ object TEST1 {
 
       // element wise multiplication
       def * (that: Vector) = {
-        val dimM = if (dim0 > that.dim0) dim0 else that.dim0
-        val res = NewArray[Double](dimM)
-        if (that.dim0 == 1) for (i <- (0 until dimM): Rep[Range]) res(i) = data(i) * that.data(0)
-        else if (dim0 == 1) for (i <- (0 until dimM): Rep[Range]) res(i) = data(0) * that.data(i)
-        else if (dim0 == that.dim0) for (i <- (0 until dimM): Rep[Range]) res(i) = data(i) * that.data(i)
-        else throw new IllegalArgumentException("dimensions of vector do not match *!")
-        new Vector(res, dimM)
+        val dim0M = max(dim0, that.dim0); val dim1M = max(dim1, that.dim1)
+        val res = NewArray[Double](dim0M * dim1M)
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(i) * that.data(i)
+        else if (dim0 == 1 && dim1 == 1)            for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(0) * that.data(i)
+        else if (that.dim0 == 1 && that.dim1 == 1)  for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(i) * that.data(0)
+        else throw new IllegalArgumentException("dimensions of vector do not match +!")
+        new Vector(res, dim0M, dim1M)
       }
 
       // this operator updates the values of this, unlike * operator
@@ -152,13 +134,13 @@ object TEST1 {
 
       // element wise division
       def / (that: Vector) = {
-        val dimM = if (dim0 > that.dim0) dim0 else that.dim0
-        val res = NewArray[Double](dimM)
-        if (that.dim0 == 1) for (i <- (0 until dimM): Rep[Range]) res(i) = data(i) / that.data(0)
-        else if (dim0 == 1) for (i <- (0 until dimM): Rep[Range]) res(i) = data(0) / that.data(i)
-        else if (dim0 == that.dim0) for (i <- (0 until dimM): Rep[Range]) res(i) = data(i) / that.data(i)
-        else throw new IllegalArgumentException("dimensions of vector do not match /!")
-        new Vector(res, dimM)
+        val dim0M = max(dim0, that.dim0); val dim1M = max(dim1, that.dim1)
+        val res = NewArray[Double](dim0M * dim1M)
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(i) / that.data(i)
+        else if (dim0 == 1 && dim1 == 1)            for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(0) / that.data(i)
+        else if (that.dim0 == 1 && that.dim1 == 1)  for (i <- (0 until dim0M * dim1M): Rep[Range]) res(i) = data(i) / that.data(0)
+        else throw new IllegalArgumentException("dimensions of vector do not match +!")
+        new Vector(res, dim0M, dim1M)
       }
 
       // this operator updates the values of this, unlike / operator
@@ -178,10 +160,11 @@ object TEST1 {
       }
 
       def copy_data(that: Vector) = {
-        if (dim0 * dim1 != that.dim0 * that.dim1) throw new IllegalArgumentException("dimensions of vector do not match copy_data!")
-        for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) = that.data(i)
+        if (dim0 == that.dim0 && dim1 == that.dim1) for (i <- (0 until dim0 * dim1): Rep[Range]) data(i) = that.data(i)
+        else throw new IllegalArgumentException("dimensions of vector do not match copy_data!")
       }
 
+      // NOTE: only handles (Matrix dot Vector) and (Vector dot Vector)
       def dot(that: Vector) = {
         // assert that and this have the same dimension
         if (dim0 != that.dim0) throw new IllegalArgumentException("dimensions of vector do not match dot!")
@@ -194,6 +177,7 @@ object TEST1 {
         new Vector(res, dim1)
       }
 
+      // NOTE: only handles (Vector cart Vector)
       def cart(that: Vector) = {
         if (dim1 != 1 || that.dim1 != 1) throw new IllegalArgumentException("cartesian product is only for 1d vectors")
         val res = NewArray[Double](dim0 * that.dim0)
@@ -217,27 +201,21 @@ object TEST1 {
       }
 
       def tanh() = {
-        val res = NewArray[Double](dim0)
-        for (i <- (0 until dim0): Rep[Range]) {
-          res(i) = Math.tanh(data(i)) // need fix, MathOps C code gene is not supporting tanh
-        }
-        new Vector(res, dim0)
+        val res = NewArray[Double](dim0 * dim1)
+        for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = Math.tanh(data(i)) 
+        new Vector(res, dim0, dim1)
       }
 
       def exp() = {
-        val res = NewArray[Double](dim0)
-        for (i <- (0 until dim0): Rep[Range]) {
-          res(i) = Math.exp(data(i))
-        }
-        new Vector(res, dim0)
+        val res = NewArray[Double](dim0 * dim1)
+        for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = Math.exp(data(i))
+        new Vector(res, dim0, dim1)
       }
 
       def log() = {
-        val res = NewArray[Double](dim0)
-        for (i <- (0 until dim0): Rep[Range]) {
-          res(i) = Math.log(data(i))
-        }
-        new Vector(res, dim0)
+        val res = NewArray[Double](dim0 * dim1)
+        for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = Math.log(data(i))
+        new Vector(res, dim0, dim1)
       }
 
       def sqrt() = {
@@ -246,16 +224,16 @@ object TEST1 {
         new Vector(res, dim0, dim1)
       }
 
+      // NOTE: sum all elements
       def sum() = {
         val value = var_new(0.0)
-        for (i <- (0 until dim0): Rep[Range]) {
-          value += data(i)
-        }
+        for (i <- (0 until dim0 * dim1): Rep[Range]) value += data(i)
         val res = NewArray[Double](1)
         res(0) = readVar(value)
         new Vector(res, 1)
       }
 
+      // NOTE: sum matrix to vector, condense on the dim1 dimension
       def sumOnDim1() = {
         if (dim1 == 1) this
         else {
@@ -272,7 +250,6 @@ object TEST1 {
       }
 
       def print() = {
-
         for (j <- (0 until dim1): Rep[Range]) {
           for (i <- (0 until dim0): Rep[Range]) {
             println(data(i + j * dim0))
@@ -896,91 +873,13 @@ object TEST1 {
     //println(array2_2.code)
     array2_2.eval("abc")
 
-    val array2_2_1Debug = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-
-        val vocab_size = 3
-        val hidden_size = 2
-
-        //basic set up
-        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.1)  // input to hidden
-        val Whh = Vector.randinit(hidden_size, hidden_size, 0.1) // hidden to hidden
-        val Why = Vector.randinit(hidden_size, vocab_size, 0.1)  // hidden to output
-        val bh  = Vector.randinit(hidden_size)
-        val by  = Vector.randinit(vocab_size)
-        val hprev = Vector.randinit(hidden_size) 
-        
-        val hsave = Vector.zeros_like(hprev)
-        //hsave.copy_data(hprev)
-
-        // wrap as tensors
-        val Wxh1 = TensorR.Tensor(Wxh)
-        val Whh1 = TensorR.Tensor(Whh)
-        val Why1 = TensorR.Tensor(Why)
-        val bh1  = TensorR.Tensor(bh)
-        val by1  = TensorR.Tensor(by)
-        val hprev1 = TensorR.Tensor(hprev)
-
-        // encode input and output
-        val x_data = NewArray[Int](3); x_data(0) = 0; x_data(1) = 1; x_data(2) = 2
-        val y_data = NewArray[Int](3); y_data(0) = 2; y_data(1) = 0; y_data(2) = 1
-        
-        def lossFun: (TensorR => TensorR @diff) = { (dummy: TensorR) =>
-          
-          // build ArrayBuffer
-          val loss = TensorR.Tensor(Vector.zeros(1))
-          val in = ArrayBuffer[TensorR]()
-          in.append(loss)
-          in.append(hprev1)
-
-          val i = 0; val t = in
-          // get input as one-hot tensor
-          val x = Vector.zeros(vocab_size)
-          x.data(x_data(i)) = 1
-          val x1 = TensorR.Tensor(x)
-          // get output as one-hot tensor
-          val y = Vector.zeros(vocab_size)
-          y.data(y_data(i)) = 1
-          val y1 = TensorR.Tensor(y)
-
-          val h1 = ((Wxh1 dot x1) + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
-          h1
-        }
-
-        val hidden = gradR_loss(lossFun)(Vector.zeros(1)) 
-
-        // the other method
-        def lossOneCycle() = {
-          val i = 0
-
-          // get input as one-hot tensor
-          val x = Vector.zeros(vocab_size)
-          x.data(x_data(i)) = 1
-          // get output as one-hot tensor
-          val y = Vector.zeros(vocab_size)
-          y.data(y_data(i)) = 1
-
-          // forward pass
-          val hs = ((Wxh dot x) + (Whh dot hprev) + bh).tanh()
-
-          // assert hs and hidden be similar
-          Vector.assertEqual(hs, hidden)
-        }
-        lossOneCycle()
-
-      }
-    }
-
-    //array2_2_1Debug.eval("abc")
-
 
     val array2_2_1 = new DslDriverC[String, Unit] with VectorExp {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
 
         val vocab_size = 3
-        val hidden_size = 2
+        val hidden_size = 10
         val Wxh = Vector.randinit(vocab_size, hidden_size, 0.1)  // input to hidden
         val Whh = Vector.randinit(hidden_size, hidden_size, 0.1) // hidden to hidden
         val Why = Vector.randinit(hidden_size, vocab_size, 0.1)  // hidden to output
@@ -1048,7 +947,7 @@ object TEST1 {
         val loss1 = gradR_loss(lossFun)(Vector.zeros(1)) 
 
 
-        // correct method of loss and gradient calculation, copying from Numpy
+        // correct method of loss and gradient calculation, adapting from Numpy
         // preset space for gradients
         val dWxh = Vector.zeros_like(Wxh)
         val dWhh = Vector.zeros_like(Whh)
@@ -1111,85 +1010,8 @@ object TEST1 {
     val p = new PrintWriter(new File("array2_2_1.cpp"))
     p.println(array2_2_1.code)
     p.flush()
-    
     */
     array2_2_1.eval("abc")
-
-    val array2_2_2 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val vocab_size = 3
-        val hidden_size = 2
-        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
-        val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
-        val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
-        val hprev = Vector.zeros(hidden_size) 
-
-        // wrap as tensors
-        val Wxh1 = TensorR.Tensor(Wxh)
-        val Whh1 = TensorR.Tensor(Whh)
-        val Why1 = TensorR.Tensor(Why)
-        val hprev1 = TensorR.Tensor(hprev)
-
-        def lossFun = { (dummy: TensorR) =>
-          // what about the idea of accumulating loss as a var closure
-          // NO: Stack overflow!!
-          // what about saving the loss of each step, then add up at the end
-          import scala.collection.mutable.MutableList
-          val losses = new MutableList[TensorR]()
-
-
-          var loss = TensorR.Tensor(Vector.zeros(1))
-          val h_new = LOOPCC(hprev1)(3){i => t => 
-            
-            // printf("at iteration %d ", i)
-            // get input as one-hot tensor
-            val x = Vector.zeros(vocab_size)
-            x.data(i) = 1
-            val x1 = TensorR.Tensor(x)
-            // get output as one-hot tensor
-            val y = Vector.zeros(vocab_size)
-            y.data((i+1)%vocab_size) = 1
-            val y1 = TensorR.Tensor(y)
-
-            val h1 = ((Wxh1 dot x1) + (Whh1 dot t)).tanh() // hidden state
-            // carefully update hprev1 with h1 in the last cycle
-            /*
-              I have evidence that in this case, the hprev1.x.data has been updated, and Whh1 carried some gradient
-              However, this seems wrong, because in this case, the gradient is not flowing through the hidden vector
-            */
-            // hprev1.x.copy_data(h1.x)
-            
-            val e1 = (Why1 dot h1).exp()
-            val p1 = e1 / e1.sum()
-            // t - (p1 dot y1).log() // loss is updated by this value (t is loss from last cycle)
-            // loss -= (p1 dot y1).log()
-            losses += (p1 dot y1).log() // FIXME, need -
-            h1
-          }
-          hprev1.x.copy_data(h_new.x)
-          
-          // another loop to collect losses
-          LOOPCC(loss)(3){i => t =>
-            // t + losses(i) // Problem!! :: the losses(i) became Rep[TensorR]
-            t + t // changed this just to compile
-          }
-        }
-        val dummy = gradR(lossFun)(Vector.zeros(1)) 
-        
-        Wxh1.d.print()  
-        Whh1.d.print()
-        Why1.d.print()  
-        hprev1.x.print()    
-
-      }
-    }
-
-    // println("try array2_2_2")
-    //val p = new PrintWriter(new File("array2_2_2.cpp"))
-    //p.println(array2_2_2.code)
-    //p.flush()
-    // array2_2_2.eval("abc")
 
     val array2_2_3 = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
       
@@ -1209,6 +1031,7 @@ object TEST1 {
         def done = close(fd)
       }  
 
+      @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         /** 
           add scanner 
@@ -1226,9 +1049,9 @@ object TEST1 {
         for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
 
         val vocab_size = 26                 // Do we have to get this size?
-        val hidden_size = 100
+        val hidden_size = 10
         val learning_rate = 1e-1
-        val seq_length = 20
+        val seq_length = 10
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
@@ -1236,6 +1059,8 @@ object TEST1 {
         val bh  = Vector.zeros(hidden_size)
         val by  = Vector.zeros(vocab_size)
         val hprev = Vector.zeros(hidden_size) 
+
+        //val hnext = Vector.zeros_like(hprev)
 
         // wrap as tensors
         val Wxh1 = TensorR.Tensor(Wxh)
@@ -1271,7 +1096,7 @@ object TEST1 {
             out.append(h1)
             out
           }
-          hprev1.x.copy_data(outputs(1).x)  // update the hidden state with the result from LOOP
+          hprev1.x.copy_data(outputs(1).x)     // update the hidden state with the result from LOOP
           outputs(0)                        // return the final loss
         }
 
@@ -1287,21 +1112,28 @@ object TEST1 {
 
         val addr = getMallocAddr() // remember current allocation pointer here
 
-        for (n <- (0 until 100): Rep[Range]) {
+        var startAt = -seq_length
+
+        for (n <- (0 until 2001): Rep[Range]) {
+
+          if (startAt + seq_length + 1 >= data_size) {
+            startAt = 0
+            hprev.clear()
+          } else startAt += seq_length
 
           val inputs = NewArray[Int](seq_length)
           val targets = NewArray[Int](seq_length)
           for (i <- (0 until seq_length): Rep[Range]) {
-            inputs(i) = (i + n) % vocab_size 
-            targets(i) = (i + 1 + n) % vocab_size
+            inputs(i) = translated_data(startAt+i)
+            targets(i) = translated_data(startAt+i+1)
           }
 
           val loss = gradR_loss(lossFun(inputs, targets))(Vector.zeros(1)) 
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
-          //if (n % 100 == unit(0)) {
-            loss.print()
-          //  println(s"iter $n, loss $loss_value") // FIXME loss need to be fixed
-          //}
+          if (n % 100 == 0) {
+          //  loss.print()
+            println(s"iter $n, loss $loss_value") // FIXME loss need to be fixed
+          }
 
           /*
           Wxh1.d.print()  
@@ -1319,6 +1151,7 @@ object TEST1 {
             par.clear_grad()
           }
           hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
+          //hprev1.x.copy_data(hnext)
           
           resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
         }
@@ -1328,10 +1161,10 @@ object TEST1 {
 
     
     //println("try array2_2_3")
-    //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
-    //array2_2_3_file.println(array2_2_3.code)
-    //array2_2_3_file.flush()
-    //array2_2_3.eval("abc")
+    val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
+    array2_2_3_file.println(array2_2_3.code)
+    array2_2_3_file.flush()
+    array2_2_3.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
     val array2_2_4Debug = new DslDriverC[String, Unit] with VectorExp {
