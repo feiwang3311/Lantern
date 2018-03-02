@@ -355,7 +355,7 @@ trait DslGenC extends CGenNumericOps
 
         return hash;
       }
-      int HEAP_SIZE = 1048576;
+      int HEAP_SIZE = 2097152; //1048576;
       void *mallocBase = malloc(HEAP_SIZE);
       void *mallocAddr = mallocBase;
       void *waterMark  = mallocBase;

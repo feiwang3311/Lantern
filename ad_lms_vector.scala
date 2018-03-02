@@ -719,6 +719,7 @@ object TEST1 {
     } 
 
     //println(array0.code)
+    println("run test case array0")
     array0.eval("abc")
 
     val array1 = new DslDriverC[String, Unit]  with VectorExp {
@@ -746,6 +747,7 @@ object TEST1 {
     //array1_file.println(array1.code)
     //array1_file.flush()
     //println(array1.code)
+    println("run test case array1")
     array1.eval("abc")
 
     val array1_1 = new DslDriverC[String, Unit] with VectorExp {
@@ -773,6 +775,7 @@ object TEST1 {
     }
 
     //println(array1_1.code)
+    println("run test case array1_1")
     array1_1.eval("abc")
 
     val array2 = new DslDriverC[String, Unit] with VectorExp {
@@ -809,73 +812,72 @@ object TEST1 {
 
     //println("test dot gradient")
     //println(array2.code)
+    println("run test case array2")
     array2.eval("2.0")
 
     val array2_1 = new DslDriverC[String, Unit] with VectorExp {
-      // update gradient as side effect
-      
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        // v.print()
 
-        // initialize tensor for closure
-        var t = new TensorR(v, Vector.zeros(length))            
-        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
-        // call grad_side_effect_using_closure
-        val dummy = gradR(dummy => {
-          ((t dot t) * half).sum()
-          })(Vector.zeros(1))
-        // print the gradient of t
-        //t.d.print()
-        //half.d.print()
-        Vector.assertEqual(t.d, v * Vector.consts(1, value = 2.0))
-        Vector.assertEqual(half.d, Vector.expand((v dot v).data(0), 2))
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+
+        val dim0 = 2
+        val vector = Vector.randinit(dim0, offset = 4)
+
+        // initialize tensors for closure
+        val ve = new TensorR(vector, Vector.zeros(dim0))
+        val half = new TensorR(Vector.halves(dim0), Vector.zeros(dim0))
+        
+        // define function of model
+        def model(dummy: TensorR): TensorR @diff = {
+          ((ve dot ve) * half).sum()
+        }
+        val loss = gradR_loss(model)(Vector.zeros(1))
+        Vector.assertEqual(loss, ((vector dot vector) * Vector.halves(dim0)).sum(), "1")
+        Vector.assertEqual(ve.d, vector * Vector.consts(1, value = 2.0),"2")
+        Vector.assertEqual(half.d, Vector.expand((vector dot vector).data(0), 2), "3")
         ()
       }
     }
 
-    //println("test dot gradient as side effect with var update") 
-    //println("proving that I can use var update without creating cycles in static computation graph")
-    //println(array2_1.code)
-    array2_1.eval("2.0")
+    println("run test case array2_1")
+    array2_1.eval("abc")
+
 
     val array2_2 = new DslDriverC[String, Unit] with VectorExp {
 
+      @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
         val dim0 = 2
         val dim1 = 3
         val matrix = Vector.randinit(dim0, dim1)
         val vector = Vector.randinit(dim0, offset = 4)
-        //matrix.print()
-        //vector.print()
 
         // initialize tensors for closure
         val ma = new TensorR(matrix, Vector.zeros(dim0, dim1))
         val ve = new TensorR(vector, Vector.zeros(dim0))
+        
         // define function of model
         def model(dummy: TensorR): TensorR @diff = {
           (ma dot ve).sum()
         }
         val loss = gradR_loss(model)(Vector.zeros(1))
-        // print the gradient of ma and ve
-        //ma.d.print()
-        //ve.d.print()
-        Vector.assertEqual(loss, (matrix dot vector).sum())
-        Vector.assertEqual(ma.d, Vector.expand(vector, dim1))
-        Vector.assertEqual(ve.d, matrix.sumOnDim1())
+        Vector.assertEqual(loss, (matrix dot vector).sum(), "11")
+        Vector.assertEqual(ma.d, Vector.expand(vector, dim1), "12")
+        Vector.assertEqual(ve.d, matrix.sumOnDim1(), "13")
         ()
       }
     }
 
     // println("test matrix vector dot gradient as side effect")
     //println(array2_2.code)
+    println("run test case array2_2")
     array2_2.eval("abc")
 
 
-    val array2_2_1 = new DslDriverC[String, Unit] with VectorExp {
+    val array2_3 = new DslDriverC[String, Unit] with VectorExp {
 
+      @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
         val vocab_size = 3
@@ -1011,9 +1013,593 @@ object TEST1 {
     p.println(array2_2_1.code)
     p.flush()
     */
-    array2_2_1.eval("abc")
+    println("run test case array2_3")
+    array2_3.eval("abc")
 
-    val array2_2_3 = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
+    val array2_4 = new DslDriverC[String, Unit] with VectorExp {
+
+      @virtualize
+      def snippet (a: Rep[String]): Rep[Unit] = {
+        val vocab_size = 3
+        val by   = Vector.zeros(vocab_size)
+        val by1  = TensorR.Tensor(by)
+        val y = Vector.zeros(vocab_size)
+        y.data(1) = 1
+        val y1 = TensorR.Tensor(y)
+          
+        def lossFun = { (dummy: TensorR) => 
+          
+          val e1 = (by1).exp()
+          val p1 = e1 / e1.sum()
+          (p1 dot y1).log()
+        }
+        val dummy = gradR(lossFun)(Vector.zeros(1))
+        // by1.d.print()
+
+
+        // FIXME: need a correct implementation of gradient to check with
+      }
+    }
+
+    //println("try array2_2_4")
+    println("run test case array2_4")
+    array2_4.eval("abc")
+
+    val array2_5 = new DslDriverC[String, Unit] with VectorExp {
+
+      @virtualize
+      def snippet (a: Rep[String]): Rep[Unit] = {
+        val vocab_size = 3
+        val e   = Vector.ones(vocab_size)
+        val e1  = TensorR.Tensor(e)
+        val a   = Vector.ones(vocab_size)
+        val a1  = TensorR.Tensor(a)
+        val y = Vector.zeros(vocab_size)
+        y.data(1) = 1
+        val y1 = TensorR.Tensor(y)
+        
+        def lossFun = { (dummy: TensorR) => 
+          //e1.sum()
+          val p1 = a1 / e1.sum()
+          (p1 dot y1).log()
+        }
+        val dummy = gradR(lossFun)(Vector.zeros(1))
+        //e1.d.print()
+        //a1.d.print()
+
+        // FIXME: need a correct implementation of gradient to check with
+      }
+    }
+    //println("try array2_2_5")
+    println("run test case array2_5")
+    array2_5.eval("abc")
+
+
+    val array3 = new DslDriverC[String, Unit] with VectorExp {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // use random array as input
+        val length = 2
+        val v = Vector.randinit(length)
+        //v.print()
+
+        // calcuate gradient
+        val grad = gradR(t => {val y = IF (length)(t.x.data(0) > 0.0) {t + t}{t * t}
+                     y.sum() })(v)
+        // show gradient
+        //grad.print()
+
+        // another way of implementing it
+        val grad1 = gradR(t => (t + t).sum())(v)
+        val grad2 = gradR(t => (t * t).sum())(v)
+        if (v(0) > 0) Vector.assertEqual(grad, grad1)
+        else Vector.assertEqual(grad, grad2)
+      }
+    }
+
+    //println("test IF gradient")
+    //val array3_file = new PrintWriter(new File("array3.cpp"))
+    //array3_file.println(array3.code)
+    //array3_file.flush()
+    println("run test case array3")
+    array3.eval("abc")
+
+    val array4 = new DslDriverC[String, Unit] with VectorExp {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // use random array as input
+        val length = 2
+        val v = Vector.randinit(length)
+        // v.print()
+
+        val halfv = Vector.halves(length)
+        val half = (new TensorR(halfv, Vector.zeros(length)))
+        // calculate gradient
+        val grad = gradR(t => {val y = LOOP(t)(t => t.x.data(0) > 0.1)(t => t * half)
+                     y.sum() })(v)
+        // show gradient
+        //grad.print()
+        //println("Tensor in closure can also accumulate gradient, which is important")
+        //half.d.print()
+
+        // FIXME: Implement the correct gradient and assertEqual
+      }
+    }
+
+    // println("test LOOP gradient")
+    //println(array4.code)
+    //val p = new PrintWriter(new File("fei_needs_help_for_basic_java_thing.cpp"))
+    //p.println(array4.code)
+    //p.flush()
+    println("run test case array4")
+    array4.eval("abc" )
+
+    val array4_1 = new DslDriverC[String, Unit] with VectorExp {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        // v.print()
+
+        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
+        val grad = gradR(t => {
+            val y = LOOPCC(t)(3)(i => t => t * half )
+            y.sum()
+          })(v)
+        // show gradient
+        //grad.print()
+        //println("Tensor in closure can also accumulate gradient, which is important")
+        //half.d.print()
+
+        val save_half_grad = Vector.zeros(length)
+        save_half_grad.copy_data(half.d)
+
+        // alternative implementation
+        half.d.clear()
+        val grad2 = gradR( t => {
+          (t * half * half * half).sum()
+          })(v)
+
+        // assertion
+        Vector.assertEqual(grad, grad2)
+        Vector.assertEqual(save_half_grad, half.d)
+      }
+    }
+
+    // println("test LOOP gradient")
+    println("run test case array4_1")
+    array4_1.eval("abc")
+
+    // test using array data by closure
+    val array4_2 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        
+        // random initialization
+        val length = 3
+        val v = Vector.randinit(length)
+        // v.print()
+
+        // get data from "file" (more like generate static data and lift it to Rep type)
+        val ddim0 = 2
+        val ddim1 = 3 
+        val data1 = NewArray[Double](ddim1)
+        val data2 = NewArray[Double](ddim1)
+        for (i <- (0 until ddim1): Rep[Range]) {
+          data1(i) = (i + 1)
+          data2(i) = (i + 1) * 2
+        }
+        val data = NewArray[Array[Double]](ddim0)
+        data(0) = data1; data(1) = data2
+
+        val model: TensorR => TensorR @diff = { (x: TensorR) =>
+          val y = LOOPCC(x)(ddim0)(i => x1 => {
+            val data_point = TensorR.Tensor(new Vector(data(i), ddim1))
+            x1 * data_point
+            })
+          y.sum()
+        }
+
+        val grad = gradR(model)(v)
+        // show gradient
+        //grad.print() 
+
+        // alternative implememetation
+        val grad1 = gradR(t => 
+          (t * TensorR.Tensor(new Vector(data(0), ddim1)) * TensorR.Tensor(new Vector(data(1), ddim1))).sum()
+          )(v)
+        // assertion
+        Vector.assertEqual(grad, grad1)
+      }
+    }
+
+    //println(array4_2_1.code)
+    //val array4_2_1_file = new PrintWriter(new File("array4_2_1.cpp"))
+    //array4_2_1_file.println(array4_2_1.code)
+    //array4_2_1_file.flush()
+    println("run test case of array4_2")
+    array4_2.eval("abc")
+
+/*
+    val array4_2_2 = new DslDriverC[String, Unit] with VectorExp {
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        
+        val hidden_size = 3
+
+        // tree that is flatted to array (should be rep type in practise)
+        /*   node4
+             /   \
+            node3 \
+            / \    \
+           0  1    2 
+        */
+        val inputs  = staticData(scala.Array(0, 1, 2))          // this is the leaves (data) in tree
+        val leftch  = staticData(scala.Array(-1, -1, -1, 0, 3)) // this is mapping from node to left child
+        val rightch = staticData(scala.Array(-1, -1, -1, 1, 2)) // this is mapping from node to right child
+
+        val Whhl = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden of left child to hidden of node
+        val Whhr = Vector.randinit(hidden_size, hidden_size, 0.01)  // hidden of right child to hidden of node
+        
+        // wrap as tensors
+        val Whhl1 = TensorR.Tensor(Whhl)
+        val Whhr1 = TensorR.Tensor(Whhr)
+        
+        def model: TensorR => TensorR @diff = (dum => {
+          // initialize the ArrayBuffer of tensors for iterating the tree data
+          val in = ArrayBuffer[TensorR]()
+          for (i <- (0 until inputs.length): Rep[Range]) { 
+            val v_temp = Vector.zeros(hidden_size)
+            v_temp.data(inputs(i)) = 1 // one-hot
+            in.append(TensorR.Tensor(v_temp))
+          }
+          for (i <- (0 until (leftch.length - inputs.length)): Rep[Range]) {
+            in.append(TensorR.Tensor(Vector.zeros(hidden_size))) 
+          }
+          // put the "in" in the loop
+          val y = LOOPCCM(in)(leftch.length - inputs.length)(i => ins => {
+            ins(i) = (Whhl1 dot ins(leftch(i))) + (Whhr1 dot ins(rightch(i)))
+            ins
+          })
+          y(leftch.length - 1).sum()
+        })
+
+        val dummy = gradR(model)(Vector.zeros(1))
+
+        // show gradient
+        Whhl1.d.print()
+        Whhr1.d.print() 
+      }
+    }
+
+    array4_2_2.eval("abc")
+*/
+
+/*
+    val array4_2_3 = new DslDriverC[String, Unit] with VectorExp {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+
+        val hidden_size = 3
+        val inputs  = staticData(scala.Array(0, 1, 2))
+        val leftch  = staticData(scala.Array(-1, -1, -1, 0, 3))
+        val rightch = staticData(scala.Array(-1, -1, -1, 1, 2))
+
+        val Whhl = TensorR.Tensor(Vector.randinit(hidden_size, hidden_size))
+        val Whhr = TensorR.Tensor(Vector.randinit(hidden_size, hidden_size))
+
+        def model_r(n: Rep[Int]): TensorR @diff = {
+          if (leftch(n) == -1) {
+            val v = Vector.zeros(hidden_size)
+            v.data(inputs(n)) = 1.0
+            TensorR.Tensor(v)
+          } else {
+            val l = model_r(leftch(n))
+            val r = model_r(rightch(n))
+            (Whhl dot l) + (Whhr dot r)
+          }
+        }
+        val model: TensorR => TensorR @diff = {(dum: TensorR) => model_r(0)}
+        val dummy = gradR(model)(Vector.zeros(1))
+
+        // show gradient
+        Whhl.d.print()
+        Whhr.d.print() 
+      }
+    }
+
+    array4_2_3.eval("abc")
+*/
+
+    val array4_3 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        //v.print()
+        val u = Vector.randinit(length, offset = 5)
+        //u.print()
+
+        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
+        val vv = TensorR.Tensor(v)
+        val uu = TensorR.Tensor(u)
+        
+        val dummy = gradR(dum => {
+          val in = ArrayBuffer[TensorR](vv, uu)
+          val y = LOOPCC2(in)(3)(i => ins => {
+            val vvv = ins(0) * half
+            val uuu = ins(1) * half
+            ArrayBuffer[TensorR](vvv, uuu)})
+          y(1).sum() + y(0).sum()})(Vector.zeros(1))
+        // show gradient
+        //println("Tensor in closure can also accumulate gradient, which is important")
+        //half.d.print()
+        //vv.d.print()
+        //uu.d.print()
+
+        // save gradients
+        val save_vv_grad = Vector.zeros(length); save_vv_grad.copy_data(vv.d);   vv.clear_grad()
+        val save_uu_grad = Vector.zeros(length); save_uu_grad.copy_data(uu.d);   uu.clear_grad()
+        val save_ha_grad = Vector.zeros(length); save_ha_grad.copy_data(half.d); half.clear_grad()
+        
+        // alternative implementation
+        val dummy1 = gradR(dum => {
+          (vv * half * half * half + uu * half * half * half).sum()
+          })(Vector.zeros(1))
+
+        // assertions
+        Vector.assertEqual(save_ha_grad, half.d)
+        Vector.assertEqual(save_vv_grad, vv.d)
+        Vector.assertEqual(save_uu_grad, uu.d)
+      }
+    }
+
+    // println("support 2 tensors in loop")
+    //println(array4_3.code)
+    println("run test case in array4_3")
+    array4_3.eval("abc")
+
+
+    val array4_4 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        //v.print()
+        val u = Vector.randinit(length, offset = 5)
+        //u.print()
+
+        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
+        val vv = TensorR.Tensor(v)
+        val uu = TensorR.Tensor(u)
+        
+        val dummy = gradR(dum => {
+          val in = ArrayBuffer[TensorR](vv, uu)
+          val y = LOOPCCM(in)(3)(i => ins => {
+            val vvv = ins(0) * half
+            val uuu = ins(1) * half
+            ArrayBuffer[TensorR](vvv, uuu)
+            })
+          y(1).sum() + y(0).sum()})(Vector.zeros(1))
+        // show gradient
+        //println("Tensor in closure can also accumulate gradient, which is important")
+        //half.d.print()
+        //vv.d.print()
+        //uu.d.print()
+
+        // save gradients
+        val save_vv_grad = Vector.zeros(length); save_vv_grad.copy_data(vv.d);   vv.clear_grad()
+        val save_uu_grad = Vector.zeros(length); save_uu_grad.copy_data(uu.d);   uu.clear_grad()
+        val save_ha_grad = Vector.zeros(length); save_ha_grad.copy_data(half.d); half.clear_grad()
+        
+        // alternative implementation
+        val dummy1 = gradR(dum => {
+          (vv * half * half * half + uu * half * half * half).sum()
+          })(Vector.zeros(1))
+
+        // assertions
+        Vector.assertEqual(save_ha_grad, half.d)
+        Vector.assertEqual(save_vv_grad, vv.d)
+        Vector.assertEqual(save_uu_grad, uu.d)
+      }
+    }
+
+    //println("support 2 tensors in loop using LOOPCCM")
+    //println(array4_4.code)
+    //val array4_4_file = new PrintWriter(new File("array4_4.cpp"))
+    //array4_4_file.println(array4_4.code)
+    //array4_4_file.flush()
+    println("run test case in array4_4")
+    array4_4.eval("abc")
+
+    val array5 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        //v.print()
+
+        val grad = gradR(t => (t * t).sum())(v)
+        //grad.print()
+
+        Vector.assertEqual(grad, v * Vector.consts(1, value = 2.0))
+      }
+    }
+
+    //println("test elementwise multiplication")
+    //println(array5.code)
+    println("run test case in array5")
+    array5.eval("abc")
+
+    val array6 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        //v.print()
+
+        val grad = gradR(t => (t / t).sum())(v)
+        //grad.print()
+
+        Vector.assertEqual(grad, Vector.zeros(length))
+      }
+    }
+
+    // println("test elementwise division")
+    //println(array6.code)
+    println("run test case in array6")
+    array6.eval("abc")
+
+    val array7 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        //v.print()
+
+        val grad = gradR(t => (t.tanh()).sum())(v)
+        //grad.print()
+
+        val e1 = v.tanh();
+        val ee = Vector.ones(length) - e1 * e1
+        Vector.assertEqual(grad, ee)
+      }
+    }
+
+    // println("test tanh")
+    //println(array7.code)
+    println("run test case array7")
+    array7.eval("abc")
+
+    val array8 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        // v.print()
+
+        val grad = gradR(t => (t.exp()).sum())(v)
+        //grad.print()
+
+        Vector.assertEqual(grad, v.exp())
+      }
+    }
+
+    // println("test exp")
+    //println(array8.code)
+    println("run test case in array8")
+    array8.eval("abc")
+
+    val array9 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randPositive(length)
+        //v.print()
+
+        val grad = gradR(t => (t.log()).sum())(v)
+        //grad.print()
+
+        Vector.assertEqual(grad, Vector.ones(length) / v)
+      }
+    }
+
+    //println("test log")
+    // println(array9.code)
+    println("run test case array9")
+    array9.eval("abc")
+
+    val array10 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        //v.print()
+
+        val arra = NewArray[Array[Double]](2)
+        arra(0) = NewArray[Double](2)
+        arra(0)(0) = 4.0
+        arra(0)(1) = 2.0
+        arra(1) = NewArray[Double](2)
+        arra(1)(0) = 1.5
+        arra(1)(1) = 2.0
+
+        // create a model that recursively use the data in arr (originated from list)
+        def model: TensorR => TensorR @diff = { (x: TensorR) =>
+          LOOPL(x)(arra.length)(i => x1 => new TensorR(new Vector(arra(i), length), Vector.zeros(length)) * x1)
+        }
+        val grad = gradR(t => (model(t)).sum())(v)
+        //grad.print()
+
+        val grad1 = gradR(t => 
+          (t * TensorR.Tensor(new Vector(arra(0), length)) * TensorR.Tensor(new Vector(arra(1), length))).sum()
+          )(v)
+
+        Vector.assertEqual(grad, grad1)
+      }
+    }
+
+    //println(array10.code)
+    println("run test case in array10")
+    array10.eval("abc")
+
+    val array11 = new DslDriverC[String, Unit] with VectorExp {
+
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val length = 2
+        val v = Vector.randinit(length)
+        //v.print()
+
+        /*
+            5.0, 4.0
+            /       \
+           /         \
+          3.0, 2.0   1.5, 1.4
+        */
+
+        val arra = NewArray[Array[Double]](3)
+        arra(0) = NewArray[Double](2)
+        arra(0)(0) = 5.0; arra(0)(1) = 4.0
+        arra(1) = NewArray[Double](2)
+        arra(1)(0) = 3.0; arra(1)(1) = 2.0
+        arra(2) = NewArray[Double](2)
+        arra(2)(0) = 1.5; arra(2)(1) = 1.4
+        val lch1 = NewArray[Int](3)
+        lch1(0) = 1; lch1(1) = 100; lch1(2) = 100
+        val rch1 = NewArray[Int](3)
+        rch1(0) = 2; rch1(1) = 100; rch1(2) = 100
+        
+        // create a model that recursively use the data (originated from tree)
+        def model: TensorR => TensorR @diff = { (x: TensorR) =>
+          LOOPT(x)(arra.length, lch1, rch1){ (l: TensorR, r: TensorR, i: Rep[Int]) =>
+            l * r * new TensorR(new Vector(arra(i), length), Vector.zeros(length))
+          }
+        }
+
+        val grad = gradR(t => model(t).sum())(v)
+        //grad.print()
+
+        def model1: TensorR => TensorR @diff = { (x: TensorR) =>
+          val leftchild  = x * TensorR.Tensor(new Vector(arra(1), length)) * x 
+          val rightchild = x * TensorR.Tensor(new Vector(arra(2), length)) * x 
+          val root = leftchild * TensorR.Tensor(new Vector(arra(0), length)) * rightchild
+          root.sum()
+        }
+
+        val grad1 = gradR(model1)(v)
+        // assertion
+        Vector.assertEqual(grad, grad1)
+      }
+    }
+
+    //println(array11.code)
+    println("run test case array11")
+    array11.eval("abc")
+
+    val min_char_rnn = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
       
       class Scanner(name: Rep[String]) {
         val fd = open(name)
@@ -1049,7 +1635,7 @@ object TEST1 {
         for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
 
         val vocab_size = 26                 // Do we have to get this size?
-        val hidden_size = 10
+        val hidden_size = 50
         val learning_rate = 1e-1
         val seq_length = 10
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
@@ -1155,638 +1741,11 @@ object TEST1 {
 
     
     //println("try array2_2_3")
-    val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
-    array2_2_3_file.println(array2_2_3.code)
-    array2_2_3_file.flush()
-    array2_2_3.eval("abc")
+    //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
+    //array2_2_3_file.println(array2_2_3.code)
+    //array2_2_3_file.flush()
+    //min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
-
-    val array2_2_4Debug = new DslDriverC[String, Unit] with VectorExp {
-      def snippet (a: Rep[String]): Rep[Unit] = {
-        val vocab_size = 3
-        val by  = Vector.zeros(vocab_size)
-        val by1  = TensorR.Tensor(by)
-        val y = Vector.zeros(vocab_size)
-        y.data(1) = 1
-        val y1 = TensorR.Tensor(y)
-          
-        def lossFun = { (dummy: TensorR) => 
-          
-          val e1 = (by1).exp()
-          val p1 = e1 / e1.sum()
-          (p1 dot y1).log()
-        }
-        val dummy = gradR(lossFun)(Vector.zeros(1))
-        by1.d.print()
-      }
-    }
-    //println("try array2_2_4")
-    //array2_2_4Debug.eval("abc")
-
-    val array2_2_5Debug = new DslDriverC[String, Unit] with VectorExp {
-      def snippet (a: Rep[String]): Rep[Unit] = {
-        val vocab_size = 3
-        val e   = Vector.ones(vocab_size)
-        val e1  = TensorR.Tensor(e)
-        val a   = Vector.ones(vocab_size)
-        val a1  = TensorR.Tensor(a)
-        val y = Vector.zeros(vocab_size)
-        y.data(1) = 1
-        val y1 = TensorR.Tensor(y)
-        
-        def lossFun = { (dummy: TensorR) => 
-          //e1.sum()
-          val p1 = a1 / e1.sum()
-          (p1 dot y1).log()
-        }
-        val dummy = gradR(lossFun)(Vector.zeros(1))
-        e1.d.print()
-        a1.d.print()
-      }
-    }
-    //println("try array2_2_5")
-    //array2_2_5Debug.eval("abc")
-
-
-    val array2_3 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-
-        val training_data = "abcdefghijklmn"
-        val data_size = training_data.length
-        val chars = training_data.distinct
-        val vocab_size = chars.length
-        println(s"data has $data_size chars and $vocab_size unique chars")
-
-        import scala.collection.immutable.Map
-        val char_to_ix = (chars zip (0 until vocab_size)).foldLeft(Map.empty[Char, Int]) {
-          (m, c_i) => m.updated(c_i._1, c_i._2) 
-        }
-        val ix_to_char = (chars zip (0 until vocab_size)).foldLeft(Map.empty[Int, Char]) {
-          (m, c_i) => m.updated(c_i._2, c_i._1)
-        }
-
-        //val translated_data = NewArray[Int](data_size)
-        //for (i <- (0 until data_size)) translated_data(i) = char_to_ix(unit(training_data).charAt(i))
-        val translated_data = training_data.map(char_to_ix).toArray 
-
-        val hidden_size = 100 // size of hidden layer of neurons
-        val seq_length = 25   // number of steps to unroll the RNN for
-        val learning_rate = 1e-1
-
-        // model parameters
-        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
-        val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
-        val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidder to output
-        val bh  = Vector.zeros(hidden_size)                       // hidden bias
-        val by  = Vector.zeros(vocab_size)                        // output bias
-        val hprev = Vector.zeros(hidden_size)                     // initial hidden state
-
-        // wrap the parameters as Tensors, use them in model
-        val Wxh1 = TensorR.Tensor(Wxh)
-        val Whh1 = TensorR.Tensor(Whh)
-        val Why1 = TensorR.Tensor(Why)
-        val bh1  = TensorR.Tensor(bh)
-        val by1  = TensorR.Tensor(by)
-        var hprev1 = TensorR.Tensor(hprev) // this is not paramters but need to be carried on in iterations
-
-        // define model (loss function)
-        def lossFun(inputs: Rep[Array[Int]], targets: Rep[Array[Int]]) = { (dummy: TensorR) => 
-          
-          var loss = TensorR.Tensor(Vector.zeros(1))
-          val in = ArrayBuffer[TensorR]()
-          in.append(loss)
-          in.append(hprev1)
-          val outputs = LOOPCCM(in)(inputs.length){i => t => 
-          
-            // get input as one-hot tensor
-            val x = Vector.zeros(vocab_size)
-            x.data(inputs(i)) = 1
-            val x1 = TensorR.Tensor(x) 
-            // get output as one-hot tensor
-            val y = Vector.zeros(vocab_size)
-            y.data(targets(i)) = 1
-            val y1 = TensorR.Tensor(y)
-
-            val h1 = ((Wxh1 dot x1) + (Whh1 dot hprev1) + bh1).tanh() // hidden state
-            val e1 = ((Why1 dot h1) + by1).exp()                      // unnormalized prob
-            val p1 = e1 / e1.sum()                                    // normalized prob
-            
-            val newloss = t(0) - (p1 dot y1).log()                    // loss is updated by original loss t(0) and additional loss
-            val out = ArrayBuffer[TensorR]()
-            out.append(newloss)
-            out.append(h1)
-            out
-          }
-
-          hprev1.x.copy_data(outputs(1).x)  // update the hidden state with the result from LOOP
-          outputs(0)                        // return the final loss
-        }
-
-        // the learning cycle starts here
-        // var n = 0
-        var p = 0
-        val mWxh = Vector.zeros_like(Wxh)
-        val mWhh = Vector.zeros_like(Whh)
-        val mWhy = Vector.zeros_like(Why)
-        val mbh  = Vector.zeros_like(bh)
-        val mby  = Vector.zeros_like(by)
-        var smooth_loss = - scala.math.log(1.0 / vocab_size) * seq_length
-
-        val lr = Vector.consts(1, value = learning_rate)
-        val hp = Vector.consts(1, value = 1e-8)
-
-        for (n <- (0 until 3): Rep[Range]) {
-          if (p + seq_length + 1 >= data_size) {
-            hprev1.clear_all() // clear the value and the gradient to reset RNN memory
-            p = 0              // go to the start of training data
-          }
-
-          val inputs = NewArray[Int](seq_length)
-          val targets = NewArray[Int](seq_length)
-          for (i <- (0 until seq_length): Rep[Range]) {
-            inputs(i) = i
-            targets(i) = (i+1) % seq_length
-          }
-
-          // no sample so far
-
-          val dummy = gradR(lossFun(inputs, targets))(Vector.zeros(1)) 
-          // need to track loss but the current gradR function discard loss. Need helper function to save it
-          // update and show smooth_loss
-
-          if (n % 100 == unit(0)) {
-            println(s"iter $n, loss 0.99") // FIXME loss need to be fixed
-          }
-
-          // update parameters based on gradient
-          val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
-          val mems = ArrayBuffer(mWxh, mWhh, mWhy, mbh, mby)
-          for ((par, mem) <- pars.zip(mems)) {
-            mem += par.d * par.d
-            par.x -= par.d * lr / (mem + hp).sqrt()
-            par.clear_grad()
-          }
-          hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
-          
-          p += seq_length
-          //n += 1
-        }
-
-      }
-    }
-
-    //println(array2_3.code)
-    //array2_3.eval("abc")
-
-    val array3 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        // use random array as input
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        // calcuate gradient
-        val grad = gradR(t => {val y = IF (length)(t.x.data(0) > 0.0) {t + t}{t * t}
-                     y.sum() })(v)
-        // show gradient
-        grad.print()
-      }
-    }
-
-    //println("test IF gradient")
-    //val array3_file = new PrintWriter(new File("array3.cpp"))
-    //array3_file.println(array3.code)
-    //array3_file.flush()
-    //array3.eval("abc")
-
-    val array4 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        // use random array as input
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val half = (new TensorR(Vector.halves(length), Vector.zeros(length)))
-        // calculate gradient
-        val grad = gradR(t => {val y = LOOP(t)(t => t.x.data(0) > 0.1)(t => t * half)
-                     y.sum() })(v)
-        // show gradient
-        grad.print()
-        println("Tensor in closure can also accumulate gradient, which is important")
-        half.d.print()
-      }
-    }
-
-    // println("test LOOP gradient")
-    //println(array4.code)
-    //val p = new PrintWriter(new File("fei_needs_help_for_basic_java_thing.cpp"))
-    //p.println(array4.code)
-    //p.flush()
-    //array4.eval("abc" )
-
-    val array4_1 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
-        val grad = gradR(t => {
-            val y = LOOPC(t)(3)(t => t * half )
-            y.sum()
-          })(v)
-        // show gradient
-        grad.print()
-        println("Tensor in closure can also accumulate gradient, which is important")
-        half.d.print()
-      }
-    }
-
-    // println("test LOOP gradient")
-    //array4_1.eval("abc")
-
-    val array4_2 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
-        val grad = gradR(t => {
-          val y = LOOPCC(t)(3)(i => t => {
-            println(i)
-            t * half})
-          y.sum()})(v)
-        // show gradient
-        grad.print()
-        println("Tensor in closure can also accumulate gradient, which is important")
-        half.d.print()
-      }
-    }
-
-    //array4_2.eval("abc")
-
-    // test using array data by closure
-    val array4_2_1 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        
-        // random initialization
-        val length = 3
-        val v = Vector.randinit(length)
-        v.print()
-
-        // get data from "file" (more like generate static data and lift it to Rep type)
-        val A = scala.Array
-        val dat1 = A(0.9, 0.8, 0.7)
-        val dat2 = A(0.1, 0.2, 0.3)
-        val ddim0 = 2
-        val ddim1 = dat1.length 
-        // lift it to RepArray (staticData not working for c code generation in 2d array)
-        // val dat = staticData(da)
-        val data1 = NewArray[Double](ddim1)
-        val data2 = NewArray[Double](ddim1)
-        for (i <- (0 until ddim1): Rep[Range]) {
-          data1(i) = (i + 1)
-          data2(i) = (i + 1) * 2
-        }
-        val data = NewArray[Array[Double]](ddim0)
-        data(0) = data1; data(1) = data2
-
-        val model: TensorR => TensorR @diff = { (x: TensorR) =>
-          val y = LOOPCC(x)(ddim0)(i => x1 => {
-            val data_point = TensorR.Tensor(new Vector(data(i), ddim1))
-            x1 * data_point
-            })
-          y.sum()
-        }
-
-        val grad = gradR(model)(v)
-        // show gradient
-        grad.print() 
-      }
-    }
-
-    //println(array4_2_1.code)
-    //val array4_2_1_file = new PrintWriter(new File("array4_2_1.cpp"))
-    //array4_2_1_file.println(array4_2_1.code)
-    //array4_2_1_file.flush()
-    //array4_2_1.eval("abc")
-
-/*
-    val array4_2_2 = new DslDriverC[String, Unit] with VectorExp {
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        
-        val hidden_size = 3
-
-        // tree that is flatted to array (should be rep type in practise)
-        /*   node4
-             /   \
-            node3 \
-            / \    \
-           0  1    2 
-        */
-        val inputs  = staticData(scala.Array(0, 1, 2))          // this is the leaves (data) in tree
-        val leftch  = staticData(scala.Array(-1, -1, -1, 0, 3)) // this is mapping from node to left child
-        val rightch = staticData(scala.Array(-1, -1, -1, 1, 2)) // this is mapping from node to right child
-
-        val Whhl = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden of left child to hidden of node
-        val Whhr = Vector.randinit(hidden_size, hidden_size, 0.01)  // hidden of right child to hidden of node
-        
-        // wrap as tensors
-        val Whhl1 = TensorR.Tensor(Whhl)
-        val Whhr1 = TensorR.Tensor(Whhr)
-        
-        def model: TensorR => TensorR @diff = (dum => {
-          // initialize the ArrayBuffer of tensors for iterating the tree data
-          val in = ArrayBuffer[TensorR]()
-          for (i <- (0 until inputs.length): Rep[Range]) { 
-            val v_temp = Vector.zeros(hidden_size)
-            v_temp.data(inputs(i)) = 1 // one-hot
-            in.append(TensorR.Tensor(v_temp))
-          }
-          for (i <- (0 until (leftch.length - inputs.length)): Rep[Range]) {
-            in.append(TensorR.Tensor(Vector.zeros(hidden_size))) 
-          }
-          // put the "in" in the loop
-          val y = LOOPCCM(in)(leftch.length - inputs.length)(i => ins => {
-            ins(i) = (Whhl1 dot ins(leftch(i))) + (Whhr1 dot ins(rightch(i)))
-            ins
-          })
-          y(leftch.length - 1).sum()
-        })
-
-        val dummy = gradR(model)(Vector.zeros(1))
-
-        // show gradient
-        Whhl1.d.print()
-        Whhr1.d.print() 
-      }
-    }
-
-    array4_2_2.eval("abc")
-*/
-
-/*
-    val array4_2_3 = new DslDriverC[String, Unit] with VectorExp {
-
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-
-        val hidden_size = 3
-        val inputs  = staticData(scala.Array(0, 1, 2))
-        val leftch  = staticData(scala.Array(-1, -1, -1, 0, 3))
-        val rightch = staticData(scala.Array(-1, -1, -1, 1, 2))
-
-        val Whhl = TensorR.Tensor(Vector.randinit(hidden_size, hidden_size))
-        val Whhr = TensorR.Tensor(Vector.randinit(hidden_size, hidden_size))
-
-        def model_r(n: Rep[Int]): TensorR @diff = {
-          if (leftch(n) == -1) {
-            val v = Vector.zeros(hidden_size)
-            v.data(inputs(n)) = 1.0
-            TensorR.Tensor(v)
-          } else {
-            val l = model_r(leftch(n))
-            val r = model_r(rightch(n))
-            (Whhl dot l) + (Whhr dot r)
-          }
-        }
-        val model: TensorR => TensorR @diff = {(dum: TensorR) => model_r(0)}
-        val dummy = gradR(model)(Vector.zeros(1))
-
-        // show gradient
-        Whhl.d.print()
-        Whhr.d.print() 
-      }
-    }
-
-    array4_2_3.eval("abc")
-*/
-
-    val array4_3 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-        val u = Vector.randinit(length, offset = 5)
-        u.print()
-
-        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
-        val vv = TensorR.Tensor(v)
-        val uu = TensorR.Tensor(u)
-        
-        val dummy = gradR(dum => {
-          val in = ArrayBuffer[TensorR](vv, uu)
-          val y = LOOPCC2(in)(3)(i => ins => {
-            val vvv = ins(0) * half
-            val uuu = ins(1) * half
-            ArrayBuffer[TensorR](vvv, uuu)})
-          y(1).sum() + y(0).sum()})(Vector.zeros(1))
-        // show gradient
-        println("Tensor in closure can also accumulate gradient, which is important")
-        half.d.print()
-        vv.d.print()
-        uu.d.print()
-      }
-    }
-
-    // println("support 2 tensors in loop")
-    //println(array4_3.code)
-    //array4_3.eval("abc")
-
-    val array4_4 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-        val u = Vector.randinit(length, offset = 5)
-        u.print()
-
-        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
-        val vv = TensorR.Tensor(v)
-        val uu = TensorR.Tensor(u)
-        
-        val dummy = gradR(dum => {
-          val in = ArrayBuffer[TensorR](vv, uu)
-          val y = LOOPCCM(in)(3)(i => ins => {
-            val vvv = ins(0) * half
-            val uuu = ins(1) * half
-            ArrayBuffer[TensorR](vvv, uuu)
-            })
-          y(1).sum() + y(0).sum()})(Vector.zeros(1))
-        // show gradient
-        println("Tensor in closure can also accumulate gradient, which is important")
-        half.d.print()
-        vv.d.print()
-        uu.d.print()
-      }
-    }
-
-    //println("support 2 tensors in loop using LOOPCCM")
-    //println(array4_4.code)
-    //val array4_4_file = new PrintWriter(new File("array4_4.cpp"))
-    //array4_4_file.println(array4_4.code)
-    //array4_4_file.flush()
-    //array4_4.eval("abc")
-
-    val array5 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val grad = gradR(t => (t * t).sum())(v)
-        grad.print()
-      }
-    }
-
-    //println("test elementwise multiplication")
-    //println(array5.code)
-    //array5.eval("abc")
-
-    val array6 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val grad = gradR(t => (t / t).sum())(v)
-        grad.print()
-      }
-    }
-
-    // println("test elementwise division")
-    //println(array6.code)
-    //array6.eval("abc")
-
-    val array7 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val grad = gradR(t => (t.tanh()).sum())(v)
-        grad.print()
-      }
-    }
-
-    // println("test tanh")
-    //println(array7.code)
-    //array7.eval("abc")
-
-    val array8 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val grad = gradR(t => (t.exp()).sum())(v)
-        grad.print()
-      }
-    }
-
-    // println("test exp")
-    //println(array8.code)
-    //array8.eval("abc")
-
-    val array9 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randPositive(length)
-        v.print()
-
-        val grad = gradR(t => (t.log()).sum())(v)
-        grad.print()
-      }
-    }
-
-    //println("test log")
-    // println(array9.code)
-    //array9.eval("abc")
-
-    val array10 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val A = scala.Array
-        //val arr1 = A(4.0, 3.0)
-        //val arr2 = A(1.5, 2.0)
-        // /val arra = mutableStaticData(A(mutableStaticData(arr1), mutableStaticData(arr2)))
-        //val arr = A(A(4.0, 3.0), A(1.5, 2.0))
-        //val arra = mutableStaticData(arr)
-
-        val arra = NewArray[Array[Double]](2)
-        //arra(0) = mutableStaticData(A(4.0, 3.0))
-        //arra(1) = mutableStaticData(A(1.5, 2.0))
-        arra(0) = NewArray[Double](2)
-        arra(0)(0) = 4.0
-        arra(0)(1) = 2.0
-        arra(1) = NewArray[Double](2)
-        arra(1)(0) = 1.5
-        arra(1)(1) = 2.0
-        // create a model that recursively use the data in arr (originated from list)
-        def model: TensorR => TensorR @diff = { (x: TensorR) =>
-          LOOPL(x)(arra.length)(i => x1 => new TensorR(new Vector(arra(i), length), Vector.zeros(length)) * x1)
-        }
-        val grad = gradR(t => (model(t)).sum())(v)
-        grad.print()
-      }
-    }
-
-    //println(array10.code)
-    //array10.eval("abc")
-
-    val array11 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        v.print()
-
-        val A = scala.Array
-        val arra = NewArray[Array[Double]](3)
-        arra(0) = NewArray[Double](2)
-        arra(0)(0) = 5.0; arra(0)(1) = 4.0
-        arra(1) = NewArray[Double](2)
-        arra(1)(0) = 3.0; arra(1)(1) = 2.0
-        arra(2) = NewArray[Double](2)
-        arra(2)(0) = 1.5; arra(2)(1) = 1.4
-        val lch1 = NewArray[Int](3)
-        lch1(0) = 1; lch1(1) = 100; lch1(2) = 100
-        val rch1 = NewArray[Int](3)
-        rch1(0) = 2; rch1(1) = 100; rch1(2) = 100
-        
-        // create a model that recursively use the data (originated from tree)
-        def model: TensorR => TensorR @diff = { (x: TensorR) =>
-          LOOPT(x)(arra.length, lch1, rch1){ (l: TensorR, r: TensorR, i: Rep[Int]) =>
-            l * r * new TensorR(new Vector(arra(i), length), Vector.zeros(length))
-          }
-        }
-
-        val grad = gradR(t => model(t).sum())(v)
-        grad.print()
-      }
-    }
-
-    //println(array11.code)
-    //array11.eval("abc")
-
 
   }
 }
