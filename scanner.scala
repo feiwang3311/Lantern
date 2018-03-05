@@ -11,6 +11,13 @@ trait ScannerLowerBase extends Base with UncheckedOps { this: Dsl =>
   def stringFromCharArray(buf: Rep[Array[Char]], pos: Rep[Int], len: Rep[Int]): Rep[String]
   def prints(s: Rep[String]): Rep[Int]
   def infix_toInt(c: Rep[Char]): Rep[Int] = c.asInstanceOf[Rep[Int]]
+
+  def openf(name: Rep[String], mode: Rep[String]): Rep[Long] // return a file pointer
+  def closef(fp: Rep[Long]): Rep[Unit]
+  def getFloat(fp: Rep[Long], data: Rep[Array[Double]], i: Rep[Int]): Rep[Unit]
+  //def getFloat(fp: Rep[Long], at: Rep[Float]): Rep[Unit]
+  def getInt(fp: Rep[Long], at: Rep[Int]): Rep[Unit]
+  def getInt(fp: Rep[Long], data: Rep[Array[Int]], i: Rep[Int]): Rep[Unit]
 }
 
 trait ScannerLowerExp extends ScannerLowerBase with UncheckedOpsExp { this: DslExp =>
@@ -20,6 +27,20 @@ trait ScannerLowerExp extends ScannerLowerBase with UncheckedOpsExp { this: DslE
   def mmap[T:Typ](fd: Rep[Int], len: Rep[Int]) = uncheckedPure[Array[T]]("(char *)mmap(0, ",len,", PROT_READ, MAP_FILE | MAP_SHARED, ",fd,", 0)")
   def stringFromCharArray(data: Rep[Array[Char]], pos: Rep[Int], len: Rep[Int]): Rep[String] = uncheckedPure[String](data,"+",pos)
   def prints(s: Rep[String]): Rep[Int] = unchecked[Int]("printll(",s,")")
+
+  def openf(name: Rep[String], mode: Rep[String]) = unchecked[Long]("(long)fopen(", name, ", ", mode, ")")
+  def closef(fp: Rep[Long]) = unchecked[Unit]("fclose((FILE*)", fp, ")")
+  def getFloat(fp: Rep[Long], data: Rep[Array[Double]], i: Rep[Int]) = 
+    unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%lf\", &", data, "[", i, "]", ")!=1) perror(\"Error reading file\")")
+  //def getFloat(fp: Rep[Long], at: Rep[Float]) = 
+  //  unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%f\", &", at, ")!=1) perror(\"Error reading file\")")
+  def getInt(fp: Rep[Long], at: Rep[Int]) =
+    unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%d\", &", at, ")!=1) perror(\"Error reading file\")")
+  def getInt(fp: Rep[Long], data: Rep[Array[Int]], i: Rep[Int]) = 
+    unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%d\", &", data, "[", i, "]", ")!=1) perror(\"Error reading file\")")
 }
 
 trait CGenScannerLower extends CGenUncheckedOps
+
+//fscanf(fp, "%f", &mgone[i]) != 1
+//FILE* fp = fdopen(fd, "w");

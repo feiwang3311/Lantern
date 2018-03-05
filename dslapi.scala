@@ -234,8 +234,10 @@ trait DslGenC extends CGenNumericOps
     // case "Array[Double]" => "unique_ptr<double[]>"
     case "Array[Double]" => "double*"
     case "Array[Int]"    => "int*"
+    case "Array[Float]"  => "float*"
     case "Array[Array[Double]]" => "double**"
-    
+    case "Array[Array[Float]]"  => "float**"
+     
     case f if f.startsWith("scala.Function") =>
       val targs = m.typeArguments.dropRight(1)
       val res = remap(m.typeArguments.last)
@@ -355,7 +357,7 @@ trait DslGenC extends CGenNumericOps
 
         return hash;
       }
-      int HEAP_SIZE = 2097152; //1048576;
+      int HEAP_SIZE = 1073741826; //2147483652; //536870912; 268435456; // //2097152; //1048576;
       void *mallocBase = malloc(HEAP_SIZE);
       void *mallocAddr = mallocBase;
       void *waterMark  = mallocBase;

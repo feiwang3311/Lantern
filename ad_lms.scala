@@ -186,7 +186,7 @@ object LMS {
 
     def FUNL1(f: (Rep[Int] => (NumR => Unit) => (NumR => Unit))): (Rep[Int] => (NumR => Unit) => (NumR => Unit)) = {      
 
-      val f1 = fun { (yy: Rep[(Int, (Double => Double), Double)]) => // Problem! no support for tuple type code generation in LMS!
+      val f1 = fun { (yy: Rep[(Int, (Double => Double), Double)]) => 
         val i: Rep[Int] = tuple3_get1(yy)
         val t1: Rep[Double => Double] = tuple3_get2(yy)
         val xx: Rep[Double] = tuple3_get3(yy)
@@ -282,12 +282,22 @@ object LMS {
       tree(0)(k)(init)
     }
 
-    @virtualize
+    @virtualize // NOTE: this version assume that children array use very large number for leaf nodes
     def TREE1(init: NumR)(bound: Rep[Int], lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (NumR, NumR, Rep[Int]) => NumR @diff): NumR @diff = shift {
       k: (NumR => Unit) =>
 
       lazy val tree: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
         if (i < bound) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
+      }
+      tree(0)(k)(init)
+    }
+
+    @virtualize // NOTE: this version cannot handle empty trees // assume that children array use -1 for leaf nodes
+    def TREE2(init: NumR)(lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (NumR, NumR, Rep[Int]) => NumR @diff): NumR @diff = shift {
+      k: (NumR => Unit) =>
+
+      lazy val tree: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
+        if (i >= 0) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
       }
       tree(0)(k)(init)
     }
@@ -605,7 +615,86 @@ object LMS {
       }
     }
 
-    println(gr12_2.code)
-    printf("grad of x is %f\n", gr12_2.eval(1))
+    //println(gr12_2.code)
+    //printf("grad of x is %f\n", gr12_2.eval(1))
+
+    val gr12_3 = new DslDriver[Double, Double] with DiffApi {
+
+      @virtualize
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val A = scala.Array
+        val data = A[Double](0.0, 3.0, 4.0)
+        val lch  = A[Int](1, 100, 100)
+        val rch  = A[Int](2, 100, 100)
+        val data1 = mutableStaticData(data)
+        val lch1  = mutableStaticData(lch)
+        val rch1  = mutableStaticData(rch)
+
+        val para  = new NumR(2.0, var_new(0.0))
+        val paral = new NumR(1.5, var_new(0.0))
+        val parar = new NumR(1.6, var_new(0.0))
+        val bias  = new NumR(2.5, var_new(0.0))
+        def model: NumR => NumR @diff = { (dummy: NumR) =>
+          TREE1(dummy)(data1.length, lch1, rch1){ (l: NumR, r: NumR, i: Rep[Int]) =>
+            IF (lch1(i) > data1.length) {para * new NumR(data1(i), var_new(0.0)) + bias}
+            {paral * l + parar * r + bias}
+          }
+        }
+
+        val res = gradR(model)(x)
+        printf("the grad of para is %f\n",  readVar(para.d))
+        printf("the grad of paral is %f\n", readVar(paral.d))
+        printf("the grad of parar is %f\n", readVar(parar.d))
+        printf("the grad of bias is %f\n",  readVar(bias.d))
+        0.0
+      }
+    }
+/*
+    val p1 = new PrintWriter(new File("temp/gr12_3.scala"))
+    p1.println(gr12_3.code)
+    p1.flush()*/
+    gr12_3.eval(0.0)
+    //printf("grad of x is %f\n", gr12_3.eval(1))
+
+    val gr12_4 = new DslDriver[Double, Double] with DiffApi {
+
+      @virtualize
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val A = scala.Array
+        val data = A[Double](0.0, 3.0, 4.0)
+        val lch  = A[Int](1, -1, -1)
+        val rch  = A[Int](2, -1, -1)
+        val data1 = mutableStaticData(data)
+        val lch1  = mutableStaticData(lch)
+        val rch1  = mutableStaticData(rch)
+
+        val para  = new NumR(2.0, var_new(0.0))
+        val paral = new NumR(1.5, var_new(0.0))
+        val parar = new NumR(1.6, var_new(0.0))
+        val bias  = new NumR(2.5, var_new(0.0))
+        def model: NumR => NumR @diff = { (dummy: NumR) =>
+          TREE2(dummy)(lch1, rch1){ (l: NumR, r: NumR, i: Rep[Int]) =>
+            IF (lch1(i) < 0) {para * new NumR(data1(i), var_new(0.0)) + bias}
+            {paral * l + parar * r + bias}
+          }
+        }
+
+        val res = gradR(model)(x)
+        printf("the grad of para is %f\n",  readVar(para.d))
+        printf("the grad of paral is %f\n", readVar(paral.d))
+        printf("the grad of parar is %f\n", readVar(parar.d))
+        printf("the grad of bias is %f\n",  readVar(bias.d))
+        0.0
+      }
+    }
+
+/*
+    val p2 = new PrintWriter(new File("temp/gr12_4.scala"))
+    p2.println(gr12_4.code)
+    p2.flush()
+    gr12_4.eval(0.0)()
+    //printf("grad of x is %f\n", gr12_4.eval(1))
+*/
+
   }
 }
