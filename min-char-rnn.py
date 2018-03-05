@@ -5,7 +5,7 @@ BSD License
 import numpy as np
 
 # data I/O
-data = open('input.txt', 'r').read() # should be simple plain text file
+data = open('test_data', 'r').read() # should be simple plain text file
 chars = list(set(data))
 data_size, vocab_size = len(data), len(chars)
 print 'data has %d characters, %d unique.' % (data_size, vocab_size)
@@ -81,7 +81,7 @@ def sample(h, seed_ix, n):
 n, p = 0, 0
 mWxh, mWhh, mWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
 mbh, mby = np.zeros_like(bh), np.zeros_like(by) # memory variables for Adagrad
-smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
+#smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
 while True:
   # prepare inputs (we're sweeping from left to right in steps seq_length long)
   if p+seq_length+1 >= len(data) or n == 0: 
@@ -91,15 +91,15 @@ while True:
   targets = [char_to_ix[ch] for ch in data[p+1:p+seq_length+1]]
 
   # sample from the model now and then
-  if n % 100 == 0:
+  if False:
     sample_ix = sample(hprev, inputs[0], 200)
     txt = ''.join(ix_to_char[ix] for ix in sample_ix)
     print '----\n %s \n----' % (txt, )
 
   # forward seq_length characters through the net and fetch gradient
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
-  smooth_loss = smooth_loss * 0.999 + loss * 0.001
-  if n % 100 == 0: print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
+  #smooth_loss = smooth_loss * 0.999 + loss * 0.001
+  if True: print 'iter %d, loss: %f' % (n, loss) # print progress
   
   # perform parameter update with Adagrad
   for param, dparam, mem in zip([Wxh, Whh, Why, bh, by], 

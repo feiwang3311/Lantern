@@ -65,9 +65,10 @@ object TEST1 {
       **/
     
     object Encoding {
-      val ix_a = 97
+      val ix_a = 96  // index starts from 1
+
       def char_to_ix(ch: Rep[Char]): Rep[Int] = ch.AsInstanceOf[Int] - ix_a
-      def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix +ix_a).AsInstanceOf[Char]
+      def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix + ix_a).AsInstanceOf[Char]
     }
 
     class Vector(val data: Rep[Array[Double]], val dim0: Int, val dim1:Int = 1 /*, val dim2: Int*/) extends Serializable {
@@ -307,6 +308,14 @@ object TEST1 {
         unchecked[Unit]("srand(time(NULL)" + "+" + offset.toString + ")")
         val res = NewArray[Double](dim0 * dim1)
         for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Double]("(double)rand()/RAND_MAX*2.0-1.0") * scale
+        new Vector(res, dim0, dim1)
+      }
+
+      def randn(dim0: Int, dim1: Int = 1, scale: Double = 1.0, offset: Int = 0) = {
+        val res = NewArray[Double](dim0 * dim1)
+//        unchecked[Unit]("{ ")
+        for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Double]("d(gen)") * scale
+//        unchecked[Unit]("}")
         new Vector(res, dim0, dim1)
       }
 
@@ -1160,8 +1169,7 @@ if (false) {
     //println("try array2_2_5")
     println("run test case array2_5")
     array2_5.eval("abc")
-
-
+          
     val array3 = new DslDriverC[String, Unit] with VectorExp {
 
       @virtualize
@@ -1753,6 +1761,8 @@ if (false) {
     array11_1.eval("abc")
 
 }
+
+
     val min_char_rnn = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
       
       class Scanner(name: Rep[String]) {
@@ -1769,6 +1779,27 @@ if (false) {
 
         def hasNextChar = pos < fl
         def done = close(fd)
+      }  
+
+      class Timer (val index: Int){
+        unchecked[Unit](s"clock_t begin_$index, end_$index; double time_spent_$index")
+        def startTimer = { unchecked[Unit](s"begin_$index = clock()") }
+        def stopTimer = { unchecked[Unit](s"end_$index = clock()") }
+        def printElapsedTime = { 
+          unchecked[Unit](
+            s"end_$index = clock(); printf(",
+            "\"Time elapsed: %f\\n\", ",
+            s"(double)(end_$index - begin_$index) / CLOCKS_PER_SEC)") 
+        }
+      }
+
+      object Timer {
+        var index: Int = 0
+        def apply(): Timer = { 
+          val timer = new Timer(index)
+          index += 1
+          timer
+        }        
       }  
 
       @virtualize
@@ -1793,9 +1824,9 @@ if (false) {
         val learning_rate = 1e-1
         val seq_length = 10
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
-        val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
-        val Whh = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden to hidden
-        val Why = Vector.randinit(hidden_size, vocab_size, 0.01)  // hidden to output
+        val Wxh = Vector.randn(vocab_size, hidden_size, 0.01)  // input to hidden
+        val Whh = Vector.randn(hidden_size, hidden_size, 0.01) // hidden to hidden
+        val Why = Vector.randn(hidden_size, vocab_size, 0.01)  // hidden to output
         val bh  = Vector.zeros(hidden_size)
         val by  = Vector.zeros(vocab_size)
         val hprev = Vector.zeros(hidden_size) 
@@ -1855,6 +1886,9 @@ if (false) {
         val startAt = var_new[Int](0)
         startAt -= seq_length
 
+        val timer = Timer()
+        timer.startTimer
+
         for (n <- (0 until 2001): Rep[Range]) {
 
           startAt += seq_length
@@ -1873,13 +1907,14 @@ if (false) {
           val loss = gradR_loss(lossFun(inputs, targets))(Vector.zeros(1)) 
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
           if (n % 100 == 0) {
-          //  loss.print()
-            printf("iter %d, loss %f\\n", n, loss_value) // FIXME loss need to be fixed
+            printf("iter %d, loss %f\\n", n, loss_value) 
+            timer.printElapsedTime
           }
 
           val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
           val mems = ArrayBuffer(mWxh, mWhh, mWhy, mbh, mby)
           for ((par, mem) <- pars.zip(mems)) {
+            par.clip_grad(5.0)
             mem += par.d * par.d
             par.x -= par.d * lr / (mem + hp).sqrt()
             par.clear_grad()
@@ -1898,9 +1933,8 @@ if (false) {
     //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
     //array2_2_3_file.println(array2_2_3.code)
     //array2_2_3_file.flush()
-    //min_char_rnn.eval("abc")
+    min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
-
     
 
     val sentimental_rnn = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
@@ -2047,6 +2081,6 @@ if (false) {
     senti_file.println(sentimental_rnn.code)
     senti_file.flush()
     
-    sentimental_rnn.eval("abc")
+    //sentimental_rnn.eval("abc")
   }
 }
