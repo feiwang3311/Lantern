@@ -313,9 +313,7 @@ object TEST1 {
 
       def randn(dim0: Int, dim1: Int = 1, scale: Double = 1.0, offset: Int = 0) = {
         val res = NewArray[Double](dim0 * dim1)
-//        unchecked[Unit]("{ ")
         for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Double]("d(gen)") * scale
-//        unchecked[Unit]("}")
         new Vector(res, dim0, dim1)
       }
 
@@ -506,7 +504,7 @@ object TEST1 {
       { (x:TensorR) => x.d += new Vector(f1(x.x.data), dim0) }
     }
 
-/*
+
     // "clever" way of changing fun signature for memory leak issue, not working
     def FUNc(dim0: Int)(f: TensorR => Unit): (TensorR => Unit) = {
       val f1 = fun { (x: Rep[Array[Array[Double]]]) =>
@@ -522,7 +520,7 @@ object TEST1 {
         } 
       }
     }
-*/
+
 
     def RST(a: => Unit @diff) = continuations.reset { a; () }
 
@@ -537,7 +535,7 @@ object TEST1 {
     def LOOP(init: TensorR)(c: TensorR => Rep[Boolean])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
       // val k1 = FUN(init.x.dim0)(k)
 
-      lazy val loop: TensorR => Unit = FUN (init.x.dim0) { (x: TensorR) =>
+      lazy val loop: TensorR => Unit = FUNc (init.x.dim0) { (x: TensorR) =>
       if (c(x)) RST(loop(b(x))) else RST(k(x))
       }
       loop(init)
@@ -789,7 +787,7 @@ object TEST1 {
   def main(args: Array[String]): Unit = {
     import java.io.PrintWriter;
     import java.io.File;   
-if (false) {
+// if (false) {
     val array0 = new DslDriverC[String, Unit] with VectorExp {
 
       @virtualize
@@ -1215,9 +1213,9 @@ if (false) {
         val grad = gradR(t => {val y = LOOP(t)(t => t.x.data(0) > 0.1)(t => t * half)
                      y.sum() })(v)
         // show gradient
-        //grad.print()
+        grad.print()
         //println("Tensor in closure can also accumulate gradient, which is important")
-        //half.d.print()
+        half.d.print()
 
         // FIXME: Implement the correct gradient and assertEqual
       }
@@ -1225,11 +1223,11 @@ if (false) {
 
     // println("test LOOP gradient")
     //println(array4.code)
-    //val p = new PrintWriter(new File("fei_needs_help_for_basic_java_thing.cpp"))
-    //p.println(array4.code)
-    //p.flush()
+    val parray4 = new PrintWriter(new File("array4.cpp"))
+    parray4.println(array4.code)
+    parray4.flush()
     println("run test case array4")
-    array4.eval("abc" )
+    array4.eval("abc")
 
     val array4_1 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -1760,7 +1758,7 @@ if (false) {
     println("run test case array11_1")
     array11_1.eval("abc")
 
-}
+//}
 
 
     val min_char_rnn = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
@@ -1822,7 +1820,7 @@ if (false) {
         val vocab_size = 26                 // Do we have to get this size?
         val hidden_size = 50
         val learning_rate = 1e-1
-        val seq_length = 10
+        val seq_length = 20
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Wxh = Vector.randn(vocab_size, hidden_size, 0.01)  // input to hidden
         val Whh = Vector.randn(hidden_size, hidden_size, 0.01) // hidden to hidden
@@ -1930,9 +1928,10 @@ if (false) {
 
     
     //println("try array2_2_3")
-    //val array2_2_3_file = new PrintWriter(new File("array2_2_3.cpp"))
-    //array2_2_3_file.println(array2_2_3.code)
-    //array2_2_3_file.flush()
+    
+    val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
+    min_char_rnn_file.println(min_char_rnn.code)
+    min_char_rnn_file.flush()
     min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
     
@@ -1987,7 +1986,7 @@ if (false) {
   */      
 
         // set up hyperparameters and parameters
-        val hidden_size = 10
+        val hidden_size = 50
         val output_size = 5
         val learning_rate = 0.05
         val Wxh = Vector.randinit(word_embedding_size, hidden_size, 0.01) // from word embedding to hidden vector
@@ -2049,7 +2048,7 @@ if (false) {
 
         val addr = getMallocAddr() // remember current allocation pointer here
 
-        for (n <- (0 until 200001): Rep[Range]) {
+        for (n <- (0 until 20001): Rep[Range]) {
           var smoothed_loss = 40.0
           val index = n % tree_number
           val scores   = tree_data(index * 4)
@@ -2077,10 +2076,10 @@ if (false) {
       }
     }
     
+    /*
     val senti_file = new PrintWriter(new File("senti.cpp"))
     senti_file.println(sentimental_rnn.code)
     senti_file.flush()
-    
-    //sentimental_rnn.eval("abc")
+    sentimental_rnn.eval("abc")*/
   }
 }

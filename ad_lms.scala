@@ -387,6 +387,18 @@ object LMS {
       assert(gff1.eval(x) == 6*x)
     }
 */
+
+    println("demonstrate the problem of purturbation confusion")
+    val grr = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        gradR{ (x: NumR) =>
+          val temp = new NumR(gradR(y => x + y)(1), var_new(0.0))
+          x * temp
+          } (x)
+      }
+    }
+    println(grr.eval(1))
+
     // test 2 -- conditional
     val gr2 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
