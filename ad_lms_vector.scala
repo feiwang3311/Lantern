@@ -80,11 +80,9 @@ object LMS_vector {
 
       @virtualize
       def clipAt(bound: Double) = {
-        for (i <- (0 until dim1): Rep[Range]) {
-          for (j <- (0 until dim0): Rep[Range]) {
-            if (data(i * dim0 + j) > bound) data(i * dim0 + j) = bound
-            if (data(i * dim0 + j) < -1.0 * bound) data(i * dim0 + j) = -1.0 * bound
-          }
+        for (i <- (0 until dim0 * dim1): Rep[Range]) {
+          if (data(i) > bound) data(i) = bound
+          if (data(i) < -1.0 * bound) data(i) = -1.0 * bound
         }
       }
 
@@ -497,18 +495,6 @@ object LMS_vector {
       }
     }
 
-    // basic FUN, return an array of gradient, which may have memory leak issue
-    @deprecated("This function returns an array, which may have memory issue")
-    def FUN(dim0: Int)(f: TensorR => Unit): (TensorR => Unit) = {
-      // val dim0: Int = 1 // FIXME: what is the best way to carry this known dimensional information?
-      val f1 = fun { (x: Rep[Array[Double]]) => 
-        val deltaVar: Vector = Vector.zeros(dim0)
-        f(new TensorR(new Vector(x, dim0), deltaVar))
-        deltaVar.data
-      };
-      { (x:TensorR) => x.d += new Vector(f1(x.x.data), dim0) }
-    }
-
     // change fun signature for memory leak issue (no more returning of array, just update the array provided by the caller)
     // this is in accordance of the destination-programming style
     // the fun take array[array[double]] of size 2, with the first array to be the x, and the second array to be the d
@@ -545,35 +531,6 @@ object LMS_vector {
       loop(init)
     }
 
-    @virtualize
-    @deprecated("not the best way to manage index, see LOOPs")
-    def LOOPC(init: TensorR)(c: Rep[Int])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
-      
-      var gc = 0
-
-      lazy val loop: TensorR => Unit = FUNc (init.x.dim0){ (x: TensorR) =>
-      if (gc < c) { gc += 1; RST(loop(b(x))) } else RST(k(x))
-      }
-      loop(init)
-    }
-
-    @virtualize
-    @deprecated("not the best way to manage index, see LOOPs")
-    def LOOPCC(init: TensorR)(c: Rep[Int])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
-
-      var gc = 0
-
-      lazy val loop: TensorR => Unit = FUNc (init.x.dim0){ (x: TensorR) =>
-        if (gc < c) { gc += 1; RST(loop(b(gc - 1)(x))) } else RST(k(x))
-      }
-      loop(init)
-    }
-
-    /*
-      so far LOOPC and LOOPCC works, but the way to handle index is not perfect.
-      a better way to handle it is to let loop function take one more parameterm, i.e. the index i, as shown in LOOPS
-      We will also have to change FUNc to FUNs, which deal with Rep[Int] => TensorR => Unit functions
-    */
     def FUNs(dim0: Int)(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = {
       val f1 = fun { (xx: Rep[(Int, Array[Array[Double]])]) =>
         val i: Rep[Int]                  = tuple2_get1(xx)
@@ -597,84 +554,6 @@ object LMS_vector {
       }
       loop(0)(init)
     }
-
-    /*
-      If we need to deal with multiple changing tensors, the loop recursive function needs to handle multiple tensors
-      The FUN function needs to be changed accordingly
-      FUN2 and LOOPCC2 is temporate solution, assuming there are two Tensors being processed, and both of the same size
-    */
-    @deprecated("this function returns an ArrayBuffer of Array, which may have memory issue")
-    def FUN2(dim0: Int)(f: ArrayBuffer[TensorR] => Unit): (ArrayBuffer[TensorR] => Unit) = {
-      // val dim0: Int = 1 // FIXME: what is the best way to carry this known dimensional information?
-      val f1 = fun { (x: Rep[Array[Array[Double]]]) =>
-        val length = 2
-        val deltas = ArrayBuffer[Vector]() 
-        for (i <- (0 until length): Range) deltas.append(Vector.zeros(dim0))
-        val inputs = ArrayBuffer[TensorR]()
-        for (i <- (0 until length): Range) inputs.append(new TensorR(new Vector(x(i), dim0), deltas(i)))
-        f(inputs)
-        val ret = NewArray[Array[Double]](length)
-        for (i <- (0 until length): Range) ret(i) = deltas(i).data
-        ret
-      };
-      { (x:ArrayBuffer[TensorR]) => {
-        val length = 2
-        val in = NewArray[Array[Double]](length)
-        for (i <- (0 until length): Range) in(i) = x(i).x.data
-        val out = f1(in)
-        for (i <- (0 until length): Range) x(i).d += new Vector(out(i), dim0)
-        } 
-      }
-    }
-
-    @virtualize
-    @deprecated("temperate solution. Should use LOOPSM instead")
-    def LOOPCC2(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff): 
-    ArrayBuffer[TensorR] @diff = shift { k:(ArrayBuffer[TensorR] => Unit) =>
-
-      var gc = 0
-
-      lazy val loop: ArrayBuffer[TensorR] => Unit = FUN2 (init(0).x.dim0){ (x: ArrayBuffer[TensorR]) =>
-      if (gc < c) { gc += 1; RST(loop(b(gc - 1)(x))) } else RST(k(x))
-      }
-      loop(init)
-    }      
-
-    @deprecated("this function returns ArrayBuffer of Array of Double, may have memory issue")
-    def FUNM(dim0s: ArrayBuffer[Int])(f: ArrayBuffer[TensorR] => Unit): (ArrayBuffer[TensorR] => Unit) = {
-      val f1 = fun { (x: Rep[Array[Array[Double]]]) =>
-        val length = dim0s.length
-        val deltas = ArrayBuffer[Vector]()
-        for (i <- (0 until length): Range) deltas.append(Vector.zeros(dim0s(i)))
-        val inputs = ArrayBuffer[TensorR]()
-        for (i <- (0 until length): Range) inputs.append(new TensorR(new Vector(x(i), dim0s(i)), deltas(i)))
-        f(inputs)
-        val rets = NewArray[Array[Double]](length)
-        for (i <- (0 until length): Range) rets(i) = deltas(i).data
-        rets
-      };
-      {
-        (x: ArrayBuffer[TensorR]) => {
-          val length = dim0s.length
-          val in = NewArray[Array[Double]](length)
-          for (i <- (0 until length): Range) in(i) = x(i).x.data
-          val out = f1(in)
-          for (i <- (0 until length): Range) x(i).d += new Vector(out(i), dim0s(i))
-        }
-      }
-    }
-
-    @virtualize
-    @deprecated("not the best way to keep index, use LOOPSM instead")
-    def LOOPCCM(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
-    ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
-
-      var gc = 0
-      lazy val loop: ArrayBuffer[TensorR] => Unit = FUNM (init map (_.x.dim0)) { (x: ArrayBuffer[TensorR]) =>
-        if (gc < c){gc += 1; RST(loop(b(gc-1)(x)))} else RST(k(x))
-      }
-      loop(init)
-    } 
 
     def FUNsm(dim0s: ArrayBuffer[Int])(f: Rep[Int] => ArrayBuffer[TensorR] => Unit): (Rep[Int] => ArrayBuffer[TensorR] => Unit) = {
       val f1 = fun { (xx: Rep[(Int, Array[Array[Double]])]) =>
@@ -704,36 +583,6 @@ object LMS_vector {
         if (i < c) { RST(loop(i+1)(b(i)(x))) } else RST(k(x))
       }
       loop(0)(init)
-    }
-
-    @deprecated("function returns array of double, which may be problematic for memory")
-    def FUNL(dim0: Int)(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {      
-
-      val f1 = fun { (yy: Rep[(Int, (Array[Double] => Array[Double]), Array[Double])]) => 
-        val i: Rep[Int] = tuple3_get1(yy)
-        val t1: Rep[Array[Double] => Array[Double]] = tuple3_get2(yy)
-        val xx: Rep[Array[Double]] = tuple3_get3(yy)
-        val t2: (TensorR => Unit) = { (x: TensorR) => x.d += new Vector(t1(x.x.data), dim0) }
-        val t3: (TensorR => Unit) = f(i)(t2)
-
-        val deltas = Vector.zeros(dim0)
-        t3(new TensorR(new Vector(xx, dim0), deltas))
-        deltas.data
-      };
-
-      {i: Rep[Int] => k1: (TensorR => Unit) => 
-        {
-          val k2: Rep[Array[Double] => Array[Double]] = fun { (x: Rep[Array[Double]]) =>
-            val deltas = Vector.zeros(dim0)
-            k1(new TensorR(new Vector(x, dim0), deltas))
-            deltas.data
-          }
-          val k4: (TensorR => Unit) = {(x: TensorR) => 
-            x.d += new Vector(f1((i, k2, x.x.data)), dim0)
-          }
-          k4
-        } 
-      }
     }
 
     def FUNl(dim0: Int)(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {
@@ -782,64 +631,6 @@ object LMS_vector {
         if (i >= 0) { tree(lch(i))((l: TensorR) => tree(rch(i))((r: TensorR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
       }
       tree(0)(k)(init)
-    }
-
-    @deprecated("return ArrayBuffer of Array of Double, may have memory issue")
-    def FUNLM(dims: ArrayBuffer[Int])(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit))): 
-      (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit)) = {
-      val length = dims.length
-      val f1 = fun { (yy: Rep[(Int, (Array[Array[Double]] => Array[Array[Double]]), Array[Array[Double]])]) => 
-        val i: Rep[Int] = tuple3_get1(yy)
-        val t1: Rep[Array[Array[Double]] => Array[Array[Double]]] = tuple3_get2(yy)
-        val xx: Rep[Array[Array[Double]]] = tuple3_get3(yy)
-      
-        val t2: (ArrayBuffer[TensorR] => Unit) = { (x: ArrayBuffer[TensorR]) => 
-          val aa = NewArray[Array[Double]](length)
-          for (i <- (0 until length): Range) aa(i) = x(i).x.data
-          val bb = t1(aa)
-          for (i <- (0 until length): Range) x(i).d += new Vector(bb(i), dims(i))
-          // x.d += new Vector(t1(x.x.data), dim0) 
-        }
-        val t3: (ArrayBuffer[TensorR] => Unit) = f(i)(t2)
-
-        val deltass = ArrayBuffer[Vector]()
-        for (i <- (0 until length): Range) deltass.append(Vector.zeros(dims(i)))
-        val tensors = ArrayBuffer[TensorR]()
-        for (i <- (0 until length): Range) tensors.append(new TensorR(new Vector(xx(i), dims(i)), deltass(i)))
-        t3(tensors)
-        val res = NewArray[Array[Double]](length)
-        for (i <- (0 until length): Range) res(i) = deltass(i).data
-        res
-        //val deltas = Vector.zeros(dim0)
-        //t3(new TensorR(new Vector(xx, dim0), deltas))
-        //deltas.data
-      };
-
-      {i: Rep[Int] => k1: (ArrayBuffer[TensorR] => Unit) => 
-        {
-          val k2: Rep[Array[Array[Double]] => Array[Array[Double]]] = fun { (x: Rep[Array[Array[Double]]]) =>
-            val deltass = ArrayBuffer[Vector]()
-            for (i <- (0 until length): Range) deltass.append(Vector.zeros(dims(i)))
-            val tensors = ArrayBuffer[TensorR]()
-            for (i <- (0 until length): Range) tensors.append(new TensorR(new Vector(x(i), dims(i)), deltass(i)))
-            k1(tensors)
-            val res = NewArray[Array[Double]](length)
-            for (i <- (0 until length): Range) res(i) = deltass(i).data
-            res
-            //val deltas = Vector.zeros(dim0)
-            //k1(new TensorR(new Vector(x, dim0), deltas))
-            //deltas.data
-          }
-          val k4: (ArrayBuffer[TensorR] => Unit) = {(x: ArrayBuffer[TensorR]) =>
-            val datas = NewArray[Array[Double]](length)
-            for (i <- (0 until length): Range) datas(i) = x(i).x.data
-            val deltass = f1((i, k2, datas))
-            for (i <- (0 until length): Range) x(i).d += new Vector(deltass(i), dims(i))
-            //x.d += new Vector(f1((i, k2, x.x.data)), dim0)
-          }
-          k4
-        } 
-      }
     }
 
     def FUNlm(dim0s: ArrayBuffer[Int])(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit))): 
@@ -946,7 +737,7 @@ object LMS_vector {
   def main(args: Array[String]): Unit = {
     import java.io.PrintWriter;
     import java.io.File;   
-//if (false) {
+if (false) {
     val array0 = new DslDriverC[String, Unit] with VectorExp {
 
       @virtualize
@@ -971,7 +762,9 @@ object LMS_vector {
       }
     } 
 
-    //println(array0.code)
+    val array0_file = new PrintWriter(new File("array0.cpp"))
+    array0_file.println(array0.code)
+    array0_file.flush()
     println("run test case array0")
     array0.eval("abc")
 
@@ -1176,7 +969,7 @@ object LMS_vector {
           val in = ArrayBuffer[TensorR]()
           in.append(loss)
           in.append(hprev1)
-          val outputs = LOOPCCM(in)(3){i => t => 
+          val outputs = LOOPSM(in)(3){i => t => 
             
             // get input as one-hot tensor
             val x = Vector.zeros(vocab_size)
@@ -1261,10 +1054,10 @@ object LMS_vector {
     }
 
     /*
-    println("try array2_2_1")
-    val p = new PrintWriter(new File("array2_2_1.cpp"))
-    p.println(array2_2_1.code)
-    p.flush()
+    println("try array2_3")
+    val array2_3file = new PrintWriter(new File("array2_3.cpp"))
+    array2_3file.println(array2_3.code)
+    array2_3file.flush()
     */
     println("run test case array2_3")
     array2_3.eval("abc")
@@ -1448,7 +1241,7 @@ object LMS_vector {
         data(0) = data1; data(1) = data2
 
         val model: TensorR => TensorR @diff = { (x: TensorR) =>
-          val y = LOOPCC(x)(ddim0)(i => x1 => {
+          val y = LOOPS(x)(ddim0)(i => x1 => {
             val data_point = TensorR.Tensor(new Vector(data(i), ddim1))
             x1 * data_point
             })
@@ -1474,147 +1267,6 @@ object LMS_vector {
     //array4_2_1_file.flush()
     println("run test case of array4_2")
     array4_2.eval("abc")
-
-/*
-    val array4_2_2 = new DslDriverC[String, Unit] with VectorExp {
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        
-        val hidden_size = 3
-
-        // tree that is flatted to array (should be rep type in practise)
-        /*   node4
-             /   \
-            node3 \
-            / \    \
-           0  1    2 
-        */
-        val inputs  = staticData(scala.Array(0, 1, 2))          // this is the leaves (data) in tree
-        val leftch  = staticData(scala.Array(-1, -1, -1, 0, 3)) // this is mapping from node to left child
-        val rightch = staticData(scala.Array(-1, -1, -1, 1, 2)) // this is mapping from node to right child
-
-        val Whhl = Vector.randinit(hidden_size, hidden_size, 0.01) // hidden of left child to hidden of node
-        val Whhr = Vector.randinit(hidden_size, hidden_size, 0.01)  // hidden of right child to hidden of node
-        
-        // wrap as tensors
-        val Whhl1 = TensorR.Tensor(Whhl)
-        val Whhr1 = TensorR.Tensor(Whhr)
-        
-        def model: TensorR => TensorR @diff = (dum => {
-          // initialize the ArrayBuffer of tensors for iterating the tree data
-          val in = ArrayBuffer[TensorR]()
-          for (i <- (0 until inputs.length): Rep[Range]) { 
-            val v_temp = Vector.zeros(hidden_size)
-            v_temp.data(inputs(i)) = 1 // one-hot
-            in.append(TensorR.Tensor(v_temp))
-          }
-          for (i <- (0 until (leftch.length - inputs.length)): Rep[Range]) {
-            in.append(TensorR.Tensor(Vector.zeros(hidden_size))) 
-          }
-          // put the "in" in the loop
-          val y = LOOPCCM(in)(leftch.length - inputs.length)(i => ins => {
-            ins(i) = (Whhl1 dot ins(leftch(i))) + (Whhr1 dot ins(rightch(i)))
-            ins
-          })
-          y(leftch.length - 1).sum()
-        })
-
-        val dummy = gradR(model)(Vector.zeros(1))
-
-        // show gradient
-        Whhl1.d.print()
-        Whhr1.d.print() 
-      }
-    }
-
-    array4_2_2.eval("abc")
-*/
-
-/*
-    val array4_2_3 = new DslDriverC[String, Unit] with VectorExp {
-
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-
-        val hidden_size = 3
-        val inputs  = staticData(scala.Array(0, 1, 2))
-        val leftch  = staticData(scala.Array(-1, -1, -1, 0, 3))
-        val rightch = staticData(scala.Array(-1, -1, -1, 1, 2))
-
-        val Whhl = TensorR.Tensor(Vector.randinit(hidden_size, hidden_size))
-        val Whhr = TensorR.Tensor(Vector.randinit(hidden_size, hidden_size))
-
-        def model_r(n: Rep[Int]): TensorR @diff = {
-          if (leftch(n) == -1) {
-            val v = Vector.zeros(hidden_size)
-            v.data(inputs(n)) = 1.0
-            TensorR.Tensor(v)
-          } else {
-            val l = model_r(leftch(n))
-            val r = model_r(rightch(n))
-            (Whhl dot l) + (Whhr dot r)
-          }
-        }
-        val model: TensorR => TensorR @diff = {(dum: TensorR) => model_r(0)}
-        val dummy = gradR(model)(Vector.zeros(1))
-
-        // show gradient
-        Whhl.d.print()
-        Whhr.d.print() 
-      }
-    }
-
-    array4_2_3.eval("abc")
-*/
-
-    val array4_3 = new DslDriverC[String, Unit] with VectorExp {
-
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val length = 2
-        val v = Vector.randinit(length)
-        //v.print()
-        val u = Vector.randinit(length, offset = 5)
-        //u.print()
-
-        val half = new TensorR(Vector.halves(length), Vector.zeros(length))
-        val vv = TensorR.Tensor(v)
-        val uu = TensorR.Tensor(u)
-        
-        val dummy = gradR(dum => {
-          val in = ArrayBuffer[TensorR](vv, uu)
-          val y = LOOPCC2(in)(3)(i => ins => {
-            val vvv = ins(0) * half
-            val uuu = ins(1) * half
-            ArrayBuffer[TensorR](vvv, uuu)})
-          y(1).sum() + y(0).sum()})(Vector.zeros(1))
-        // show gradient
-        //println("Tensor in closure can also accumulate gradient, which is important")
-        //half.d.print() 
-        //vv.d.print()
-        //uu.d.print()
- 
-        // save gradients
-        val save_vv_grad = Vector.zeros(length); save_vv_grad.copy_data(vv.d);   vv.clear_grad()
-        val save_uu_grad = Vector.zeros(length); save_uu_grad.copy_data(uu.d);   uu.clear_grad()
-        val save_ha_grad = Vector.zeros(length); save_ha_grad.copy_data(half.d); half.clear_grad()
-        
-        // alternative implementation
-        val dummy1 = gradR(dum => {
-          (vv * half * half * half + uu * half * half * half).sum()
-          })(Vector.zeros(1))
-
-        // assertions
-        Vector.assertEqual(save_ha_grad, half.d)
-        Vector.assertEqual(save_vv_grad, vv.d)
-        Vector.assertEqual(save_uu_grad, uu.d)
-      }
-    }
-
-    // println("support 2 tensors in loop")
-    //println(array4_3.code)
-    //println("run test case in array4_3")
-    println("array4_3 is commented out because LOOPCC2 is deprecated")
-    //array4_3.eval("abc")
-
 
     val array4_4 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -1935,7 +1587,7 @@ object LMS_vector {
     println("run test case array11_1")
     array11_1.eval("abc")
 
-//}
+}
 
 
     val min_char_rnn = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
@@ -2108,7 +1760,7 @@ object LMS_vector {
     //val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
     //min_char_rnn_file.println(min_char_rnn.code)
     //min_char_rnn_file.flush()
-    //min_char_rnn.eval("abc")
+    min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
     
 
@@ -2282,7 +1934,7 @@ object LMS_vector {
     //val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
     //min_char_rnn_file.println(min_char_rnn.code)
     //min_char_rnn_file.flush()
-    min_char_list.eval("abc")
+    //min_char_list.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
     
 

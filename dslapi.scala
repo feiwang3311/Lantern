@@ -250,15 +250,31 @@ trait DslGenC extends CGenNumericOps
 
   override def remap[A](m: Typ[A]): String = m.toString match {
     case "java.lang.String" => "char*"
-    case "Array[Char]" => "char*"
     case "Char" => "char"
-    // case "Array[Double]" => "unique_ptr<double[]>"
+    
+    case "Array[Char]" => "char*"
     case "Array[Double]" => "double*"
     case "Array[Int]"    => "int*"
     case "Array[Float]"  => "float*"
     case "Array[Array[Double]]" => "double**"
     case "Array[Array[Float]]"  => "float**"
-     
+    
+    /*
+    case "Array[Char]"   => "unique_ptr<char[]>"
+    case "Array[Double]" => "unique_ptr<double[]>"
+    case "Array[Int]"    => "unique_ptr<int[]>"
+    case "Array[Float]"  => "unique_ptr<float[]>"
+    case "Array[Array[Double]]" => "unique_ptr<double*[]>"
+    case "Array[Array[Fload]]"  => "unique_ptr<float*[]>"
+    */
+    /*
+    case "Array[Char]"   => "shared_ptr<char[]>"
+    case "Array[Double]" => "shared_ptr<double[]>"
+    case "Array[Int]"    => "shared_ptr<int[]>"
+    case "Array[Float]"  => "shared_ptr<float[]>"
+    case "Array[Array[Double]]" => "shared_ptr<double*[]>"
+    case "Array[Array[Fload]]"  => "shared_ptr<float*[]>"
+    */
     case f if f.startsWith("scala.Function") =>
       val targs = m.typeArguments.dropRight(1)
       val res = remap(m.typeArguments.last)
@@ -320,6 +336,7 @@ trait DslGenC extends CGenNumericOps
       //stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
       stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocStringArena(quote(n), arrType))
       //stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
+      //stream.println("shared_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
     case ArrayApply(x,n) => emitValDef(sym, quote(x) + "[" + quote(n) + "]")
     case ArrayUpdate(x,n,y) => stream.println(quote(x) + "[" + quote(n) + "] = " + quote(y) + ";")
     case PrintLn(s) => stream.println("printf(\"" + format(s) + "\\n\"," + quoteRawString(s) + ");")
@@ -380,7 +397,7 @@ trait DslGenC extends CGenNumericOps
 
         return hash;
       }
-      int HEAP_SIZE = 1073741826; //2147483652; //536870912; 268435456; // //2097152; //1048576;
+      int HEAP_SIZE = 1073741826; // 1048576;  //2147483652; //536870912; // 268435456; //2097152; 
       void *mallocBase = malloc(HEAP_SIZE);
       void *mallocAddr = mallocBase;
       void *waterMark  = mallocBase;

@@ -12,9 +12,9 @@ print 'data has %d characters, %d unique.' % (data_size, vocab_size)
 #char_to_ix = { ch:i for i,ch in enumerate(chars) }
 #ix_to_char = { i:ch for i,ch in enumerate(chars) }
 def char_to_ix(ch):
-  ord(ch) - ord('a')
+  return ord(ch) - ord('a')
 def ix_to_char(ix):
-  chr(ix + ord('a'))
+  return chr(ix + ord('a'))
 
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
