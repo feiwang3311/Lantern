@@ -19,7 +19,7 @@ def ix_to_char(ix):
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
-learning_rate = 1e-5
+learning_rate = 1e-2
 
 # import relevant supports
 import torch
@@ -61,7 +61,9 @@ class RNN(nn.Module):
   def initHidden(self):
     return Variable(torch.zeros(1, self.hidden_size))
 
-rnn = RNN(vocab_size, hidden_size, vocab_size)      
+rnn = RNN(vocab_size, hidden_size, vocab_size)    
+
+optimizer = torch.optim.Adagrad(rnn.parameters(), lr = learning_rate)  
 
 criterion = nn.NLLLoss()
 
@@ -73,17 +75,21 @@ def train(output_tensor, input_tensor):
   loss = 0
 
   for i in range(input_tensor.size()[0]):
-      output, hidden = rnn(input_tensor[i], hidden)
-      if (i == 0): 
-        loss = criterion(output, output_tensor[i])
-      else:
-        loss = loss + criterion(output, output_tensor[i]) 
+    output, hidden = rnn(input_tensor[i], hidden)
+    if (i == 0): 
+      loss = criterion(output, output_tensor[i])
+    else:
+      loss = loss + criterion(output, output_tensor[i]) 
 
   loss.backward()
 
   # Add parameters' gradients to their values, multiplied by learning rate
   for p in rnn.parameters():
-      p.data.add_(-learning_rate, p.grad.data)
+    # need to clip the gradient 
+    clip_grad = torch.clamp(p.grad.data, min=-1.0, max=1.0)
+    # also need to use adagrad optimization
+#   p.data.add_(-learning_rate, clip_grad)
+    optimizer.step()
 
   return output, loss.data[0]
 

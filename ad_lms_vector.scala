@@ -1648,7 +1648,7 @@ if (false) {
 
         val vocab_size = 26                 // Do we have to get this size?
         val hidden_size = 50
-        val learning_rate = 1e-1
+        val learning_rate = 1e-2
         val seq_length = 20
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Wxh = Vector.randn(vocab_size, hidden_size, 0.01)  // input to hidden
