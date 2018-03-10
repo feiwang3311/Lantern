@@ -19,7 +19,7 @@ def ix_to_char(ix):
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
-learning_rate = 1e-2
+learning_rate = 1e-1
 
 # import relevant supports
 import torch
@@ -70,7 +70,7 @@ criterion = nn.NLLLoss()
 def train(output_tensor, input_tensor):
   hidden = rnn.initHidden()
 
-  rnn.zero_grad()
+  optimizer.zero_grad()
 
   loss = 0
 
@@ -83,15 +83,16 @@ def train(output_tensor, input_tensor):
 
   loss.backward()
 
+  # grad clipping and stepping
+  torch.nn.utils.clip_grad_norm(rnn.parameters(), 1.0, norm_type=1)
+  optimizer.step()
+
   # Add parameters' gradients to their values, multiplied by learning rate
-  for p in rnn.parameters():
-    # need to clip the gradient 
-    clip_grad = torch.clamp(p.grad.data, min=-1.0, max=1.0)
-    # also need to use adagrad optimization
-#   p.data.add_(-learning_rate, clip_grad)
-    optimizer.step()
+  #for p in rnn.parameters():
+  # p.data.add_(-learning_rate, clip_grad)
 
   return output, loss.data[0]
+
 
 p = 0
 #mWxh, mWhh, mWhy = torch.zeros_like(Wxh), torch.zeros_like(Whh), torch.zeros_like(Why)
