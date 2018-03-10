@@ -51,6 +51,23 @@ object LMS {
         this.d += that.x * y.d; that.d += this.x * y.d }
     }
 
+/*
+    def FUNV(f: NumRV => Unit): (NumRV => Unit) = {
+      val f1 = fun { (x: Rep[Double]) =>
+        val aa = new NumRV(x, 0)
+        f(aa)
+        aa.d
+      }
+      { (x:NumRV) => x.d += f1(x.x) }
+    }
+
+    @virtualize
+    def IFV(c: Rep[Boolean])(a: => NumRV @diff)(b: => NumRV @diff): NumRV @diff = shift { k: (NumRV => Unit) =>
+      val k1 = FUNV(k)
+      if (c) RST(k1(a)) else RST(k1(b))
+    }
+*/
+
 
     // Note: we make the generated function return the accumulated deltaVar
     // and add it to the var after calling the continuation. Slightly different
@@ -344,7 +361,17 @@ object LMS {
         gradRV(x => x + x*x*x)(x)
       }
     }
+/*
+    val grv1if = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        gradRV(x => IFV(x.x > 0){x}{new NumRV(-1, 0) * x})(x)
+      }
+    }
 
+    println(grv1if.code)
+    assert(grv1if.eval(2) == 1)
+    assert(grv1if.eval(-2) == -1)
+*/
     val gf1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradF(x => x + x*x*x)(x)

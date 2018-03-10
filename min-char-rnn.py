@@ -9,8 +9,12 @@ data = open('input.txt', 'r').read() # should be simple plain text file
 chars = list(set(data))
 data_size, vocab_size = len(data), len(chars)
 print 'data has %d characters, %d unique.' % (data_size, vocab_size)
-char_to_ix = { ch:i for i,ch in enumerate(chars) }
-ix_to_char = { i:ch for i,ch in enumerate(chars) }
+#char_to_ix = { ch:i for i,ch in enumerate(chars) }
+#ix_to_char = { i:ch for i,ch in enumerate(chars) }
+def char_to_ix(ch):
+  ord(ch) - ord('a')
+def ix_to_char(ix):
+  chr(ix + ord('a'))
 
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
@@ -87,8 +91,8 @@ for n in range(2001):
   if p+seq_length+1 >= len(data) or n == 0: 
     hprev = np.zeros((hidden_size,1)) # reset RNN memory
     p = 0 # go from start of data
-  inputs = [char_to_ix[ch] for ch in data[p:p+seq_length]]
-  targets = [char_to_ix[ch] for ch in data[p+1:p+seq_length+1]]
+  inputs = [char_to_ix(ch) for ch in data[p:p+seq_length]]
+  targets = [char_to_ix(ch) for ch in data[p+1:p+seq_length+1]]
 
   # sample from the model now and then
   if False:

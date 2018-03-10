@@ -103,13 +103,34 @@ with CastingOpsExp {
     case _ => super.boundSyms(e)
   }
 
+
   override def array_apply[T:Typ](x: Exp[Array[T]], n: Exp[Int])(implicit pos: SourceContext): Exp[T] = (x,n) match {
     case (Def(StaticData(x:Array[T])), Const(n)) =>
       val y = x(n)
       if (y.isInstanceOf[Int]) unit(y) else staticData(y)
     case _ => super.array_apply(x,n)
   }
+  
+//  override def array_apply[T:Typ](x: Exp[Array[T]], n: Exp[Int])(implicit pos: SourceContext): Exp[T] = reflectEffect(ArrayApply(x, n))
+  override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = reflectEffect(ArrayUpdate(x,n,y))
+/*  override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = {
+    if (context ne null) {
+      // find the last modification of array x
+      // if it is an assigment at index n with the same value, just do nothing
+      val vs = x.asInstanceOf[Sym[Array[T]]]
+      //TODO: could use calculateDependencies?
 
+      val rhs = context.reverse.collectFirst {
+        //case w @ Def(Reflect(ArrayNew(sz: Exp[T]), _, _)) if w == x => Some(Const(())) // FIXME: bounds check!
+        case Def(Reflect(ArrayUpdate(`x`, `n`, `y`), _, _)) => Some(Const(()))
+        case Def(Reflect(_, u, _)) if mayWrite(u, List(vs)) => None // not a simple assignment
+      }
+      rhs.flatten.getOrElse(super.array_update(x,n,y))
+    } else {
+      reflectEffect(ArrayUpdate(x,n,y))
+    }
+  }
+*/
   // TODO: should this be in LMS?
   override def isPrimitiveType[T](m: Typ[T]) = (m == manifest[String]) || super.isPrimitiveType(m)
 
@@ -438,7 +459,7 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] wit
     //TODO: use precompile
     (new java.io.File("/tmp/snippet")).delete
     import scala.sys.process._
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(Console.println _) //-std=c99 
+    (s"g++ -std=c++11 -O1 -Wno-pointer-arith /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(Console.println _) //-std=c99 
     (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
 }
