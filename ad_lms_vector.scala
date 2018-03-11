@@ -233,7 +233,7 @@ object LMS_vector {
         new Vector(res, dim0, dim1)
       }
 
-      def logistic() = {
+      def sigmoid() = {
         val res = NewArray[Double](dim0 * dim1)
         for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = 1.0 / (Math.exp(-1.0 * data(i)) + 1.0)
         new Vector(res, dim0, dim1)
@@ -463,8 +463,8 @@ object LMS_vector {
         this.d += y.d / x
       }
 
-      def logistic(): TensorR @diff = shift { (k: TensorR => Unit) =>
-        val y = TensorR.Tensor(x.logistic()); k(y)
+      def sigmoid(): TensorR @diff = shift { (k: TensorR => Unit) =>
+        val y = TensorR.Tensor(x.sigmoid()); k(y)
         this.d += (Vector.ones(1) - y.x) * y.x * y.d
       }
 
@@ -737,7 +737,7 @@ object LMS_vector {
   def main(args: Array[String]): Unit = {
     import java.io.PrintWriter;
     import java.io.File;   
-if (false) {
+if (true) {
     val array0 = new DslDriverC[String, Unit] with VectorExp {
 
       @virtualize
@@ -1144,9 +1144,9 @@ if (false) {
     }
 
     //println("test IF gradient")
-    //val array3_file = new PrintWriter(new File("array3.cpp"))
-    //array3_file.println(array3.code)
-    //array3_file.flush()
+    val array3_file = new PrintWriter(new File("array3.cpp"))
+    array3_file.println(array3.code)
+    array3_file.flush()
     println("run test case array3")
     array3.eval("abc")
 
@@ -1385,9 +1385,9 @@ if (false) {
         val length = 2
         val v = Vector.randinit(length)
 
-        val grad = gradR(t => (t.logistic()).sum())(v)
+        val grad = gradR(t => (t.sigmoid()).sum())(v)
 
-        val e1 = v.logistic()
+        val e1 = v.sigmoid()
         val ee = (Vector.ones(1) - e1) * e1
         Vector.assertEqual(grad, ee)
       }
@@ -1589,7 +1589,6 @@ if (false) {
 
 }
 
-
     val min_char_rnn = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
       
       class Scanner(name: Rep[String]) {
@@ -1648,7 +1647,7 @@ if (false) {
 
         val vocab_size = 26                 // Do we have to get this size?
         val hidden_size = 50
-        val learning_rate = 1e-2
+        val learning_rate = 1e-1
         val seq_length = 20
         //val Wxh = Vector.randinit(vocab_size, hidden_size, 0.01)  // input to hidden
         val Wxh = Vector.randn(vocab_size, hidden_size, 0.01)  // input to hidden
@@ -1760,7 +1759,7 @@ if (false) {
     //val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
     //min_char_rnn_file.println(min_char_rnn.code)
     //min_char_rnn_file.flush()
-    min_char_rnn.eval("abc")
+    //min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
     
 
@@ -1936,6 +1935,391 @@ if (false) {
     //min_char_rnn_file.flush()
     //min_char_list.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
+
+    val min_char_lstm = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
+      
+      class Scanner(name: Rep[String]) {
+        val fd = open(name)
+        val fl = filelen(fd)
+        val data = mmap[Char](fd,fl)
+        var pos = 0
+        
+        def nextChar: Rep[Char] = {
+          val ch = data(pos)
+          pos += 1
+          ch
+        }
+
+        def hasNextChar = pos < fl
+        def done = close(fd)
+      }  
+
+      class Timer (val index: Int){
+        unchecked[Unit](s"clock_t begin_$index, end_$index; double time_spent_$index")
+        def startTimer = { unchecked[Unit](s"begin_$index = clock()") }
+        def stopTimer = { unchecked[Unit](s"end_$index = clock()") }
+        def printElapsedTime = { 
+          unchecked[Unit](
+            s"end_$index = clock(); printf(",
+            "\"Time elapsed: %f\\n\", ",
+            s"(double)(end_$index - begin_$index) / CLOCKS_PER_SEC)") 
+        }
+      }
+
+      object Timer {
+        var index: Int = 0
+        def apply(): Timer = { 
+          val timer = new Timer(index)
+          index += 1
+          timer
+        }        
+      }  
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        /** 
+          add scanner 
+        **/
+        val scanner = new Scanner("input.txt")        
+        val training_data = scanner.data
+        val data_size = scanner.fl
+        // val chars = training_data.distinct  /** this can be done in second stage **/
+        // val vocab_size = chars.length
+        printf("data has %d chars\\n", data_size)
+
+        //val translated_data = NewArray[Int](data_size)
+        //for (i <- (0 until data_size)) translated_data(i) = char_to_ix(unit(training_data).charAt(i))
+        val translated_data = NewArray[Int](data_size)
+        for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
+
+        val vocab_size = 26                 
+        val hidden_size = 50
+        val learning_rate = 1e-1
+        val seq_length = 20
+
+        // initialize all parameters:
+        val Wfh = Vector.randn(hidden_size, hidden_size, 0.01)
+        val Wfx = Vector.randn(vocab_size, hidden_size, 0.01)
+        val bf  = Vector.zeros(hidden_size)
+        val Wih = Vector.randn(hidden_size, hidden_size, 0.01)
+        val Wix = Vector.randn(vocab_size, hidden_size, 0.01)
+        val bi  = Vector.zeros(hidden_size)
+        val Wch = Vector.randn(hidden_size, hidden_size, 0.01)
+        val Wcx = Vector.randn(vocab_size, hidden_size, 0.01)
+        val bc  = Vector.zeros(hidden_size)
+        val Woh = Vector.randn(hidden_size, hidden_size, 0.01)
+        val Wox = Vector.randn(vocab_size, hidden_size, 0.01)
+        val bo  = Vector.zeros(hidden_size)
+        val Why = Vector.randn(hidden_size, vocab_size, 0.01)  // hidden to output
+        val by  = Vector.zeros(vocab_size)
+        
+        val hprev = Vector.zeros(hidden_size) 
+        val cprev = Vector.zeros(hidden_size)
+        val hsave = Vector.zeros_like(hprev)
+        val csave = Vector.zeros_like(cprev)
+
+        // wrap as Tensors
+        val tWfh = TensorR.Tensor(Wfh)
+        val tWfx = TensorR.Tensor(Wfx)
+        val tbf = TensorR.Tensor(bf)
+        val tWih = TensorR.Tensor(Wih)
+        val tWix = TensorR.Tensor(Wix)
+        val tbi = TensorR.Tensor(bi)
+        val tWch = TensorR.Tensor(Wch)
+        val tWcx = TensorR.Tensor(Wcx)
+        val tbc = TensorR.Tensor(bc)
+        val tWoh = TensorR.Tensor(Woh)
+        val tWox = TensorR.Tensor(Wox)
+        val tbo = TensorR.Tensor(bo)
+        val tWhy = TensorR.Tensor(Why)
+        val tby = TensorR.Tensor(by)
+        val thprev = TensorR.Tensor(hprev)
+        val tcprev = TensorR.Tensor(cprev)
+
+
+        // lossFun
+        def lossFun(inputs: Rep[Array[Int]], targets: Rep[Array[Int]]) = { (dummy: TensorR) =>
+          
+          val loss = TensorR.Tensor(Vector.zeros(1))
+          val in = ArrayBuffer[TensorR]()
+          
+          in.append(loss)
+          in.append(thprev)
+          in.append(tcprev)
+
+          val outputs = LOOPSM(in)(inputs.length){i => t => 
+            
+            // get input as one-hot tensor
+            val x = Vector.zeros(vocab_size)
+            x.data(inputs(i)) = 1
+            val x1 = TensorR.Tensor(x)
+            // get output as one-hot tensor
+            val y = Vector.zeros(vocab_size)
+            y.data(targets(i)) = 1
+            val y1 = TensorR.Tensor(y)
+
+            val ft = (tWfh.dot(t(1)) + tWfx.dot(x1) + tbf).sigmoid()
+            val it = (tWih.dot(t(1)) + tWix.dot(x1) + tbi).sigmoid()
+            val ot = (tWoh.dot(t(1)) + tWox.dot(x1) + tbo).sigmoid()
+            val Ct = (tWch.dot(t(1)) + tWcx.dot(x1) + tbc).tanh()
+            val ct = ft * t(2) + it * Ct
+            val ht = ot * ct.tanh()
+            val et = (tWhy.dot(ht) + tby).exp()
+            val pt = et / et.sum()
+            val loss = t(0) - (pt dot y1).log()
+
+            val out = ArrayBuffer[TensorR]()
+            out.append(loss)
+            out.append(ht)
+            out.append(ct)
+            out
+          }
+          hsave.copy_data(outputs(1).x)     // save the hidden state with the result from LOOP
+          csave.copy_data(outputs(2).x)     // save the cell state with the result from LOOP
+          outputs(0)                        // return the final loss
+        }
+
+
+        val lr = Vector.consts(1, value = learning_rate)
+        val hp = Vector.consts(1, value = 1e-8)
+
+        val mWfh = Vector.zeros_like(Wfh)
+        val mWfx = Vector.zeros_like(Wfx)
+        val mbf = Vector.zeros_like(bf)
+        val mWih = Vector.zeros_like(Wih)
+        val mWix = Vector.zeros_like(Wix)
+        val mbi = Vector.zeros_like(bi)
+        val mWch = Vector.zeros_like(Wch)
+        val mWcx = Vector.zeros_like(Wcx)
+        val mbc = Vector.zeros_like(bc)
+        val mWoh = Vector.zeros_like(Woh)
+        val mWox = Vector.zeros_like(Wox)
+        val mbo = Vector.zeros_like(bo)
+        val mWhy = Vector.zeros_like(Why)
+        val mby = Vector.zeros_like(by)
+        
+        val addr = getMallocAddr() // remember current allocation pointer here
+
+        val startAt = var_new[Int](0)
+        startAt -= seq_length
+
+        val timer = Timer()
+        timer.startTimer
+
+        for (n <- (0 until 2001): Rep[Range]) {
+
+          startAt += seq_length
+          if (startAt + seq_length + 1 >= data_size) {
+            startAt = 0
+            hprev.clear()
+          }
+
+          val inputs = NewArray[Int](seq_length)
+          val targets = NewArray[Int](seq_length)
+          for (i <- (0 until seq_length): Rep[Range]) {
+            inputs(i) = translated_data(startAt+i)
+            targets(i) = translated_data(startAt+i+1)
+          }
+
+          val loss = gradR_loss(lossFun(inputs, targets))(Vector.zeros(1)) 
+          val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
+          if (n % 100 == 0) {
+            printf("iter %d, loss %f\\n", n, loss_value) 
+            //timer.printElapsedTime
+          }
+
+          val pars = ArrayBuffer(tWfh, tWfx, tbf, tWih, tWix, tbi, tWch, tWcx, tbc, tWoh, tWox, tbo, tWhy, tby)
+          val mems = ArrayBuffer(mWfh, mWfx, mbf, mWih, mWix, mbi, mWch, mWcx, mbc, mWoh, mWox, mbo, mWhy, mby)
+          for ((par, mem) <- pars.zip(mems)) {
+            par.clip_grad(5.0)
+            mem += par.d * par.d
+            par.x -= par.d * lr / (mem + hp).sqrt()
+            par.clear_grad()
+          }
+          thprev.clear_grad()          // clear gradient of all Tensors for next cycle
+          tcprev.clear_grad()          // clear gradient of all Tensors for next cycle
+          thprev.x.copy_data(hsave)
+          tcprev.x.copy_data(csave)
+          
+          resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
+        }
+
+      }
+    }
+
+    
+    //println("try array2_2_3")
+    //val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
+    //min_char_rnn_file.println(min_char_rnn.code)
+    //min_char_rnn_file.flush()
+    //min_char_lstm.eval("abc")
+    //println("verified that in this small example the values of gradients are about right (up to precision)")
+    
+    val senti_seq_lstm = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        
+        // read in the data for word embedding
+        val word_embedding_size   = 300
+        val word_embedding_length = 5265 // need to know the size of file first, need fix
+        val fp = openf("senti/small_glove.txt", "r")        
+        val word_embedding_data = NewArray[Array[Double]](word_embedding_length)
+        
+        for (i <- (0 until word_embedding_length): Rep[Range]) {
+          word_embedding_data(i) = NewArray[Double](word_embedding_size)
+          for (j <- (0 until word_embedding_size): Rep[Range]) getFloat(fp, word_embedding_data(i), j)
+        }
+        closef(fp)
+            
+        // read in the data for sequences (assume size, label, newline, word_indexes)
+        val seq_number = 1101 // need to know the size of training data, need fix
+        val fp1 = openf("senti/array_seq.txt", "r")
+        val seq_data  = NewArray[Array[Int]](seq_number) 
+        val seq_label = NewArray[Int](seq_number)
+
+        val size = NewArray[Int](1)
+        for (i <- (0 until seq_number): Rep[Range]) {
+          getInt(fp1, size, 0)
+          seq_data(i) = NewArray[Int](size(0))
+          getInt(fp1, seq_label, i)
+          for (k <- (0 until size(0)): Rep[Range]) getInt(fp1, seq_data(i), k)
+        }
+
+        val hidden_size = 150
+        val output_size = 5
+        val learning_rate = 1e-1
+
+        // initialize all parameters:
+        val Wfh = Vector.randn(hidden_size, hidden_size, 0.01)
+        val Wfx = Vector.randn(word_embedding_size, hidden_size, 0.01)
+        val bf  = Vector.zeros(hidden_size)
+        val Wih = Vector.randn(hidden_size, hidden_size, 0.01)
+        val Wix = Vector.randn(word_embedding_size, hidden_size, 0.01)
+        val bi  = Vector.zeros(hidden_size)
+        val Wch = Vector.randn(hidden_size, hidden_size, 0.01)
+        val Wcx = Vector.randn(word_embedding_size, hidden_size, 0.01)
+        val bc  = Vector.zeros(hidden_size)
+        val Woh = Vector.randn(hidden_size, hidden_size, 0.01)
+        val Wox = Vector.randn(word_embedding_size, hidden_size, 0.01)
+        val bo  = Vector.zeros(hidden_size)
+        val Why = Vector.randn(hidden_size, output_size, 0.01)  // hidden to output
+        val by  = Vector.zeros(output_size)
+        
+        val hprev = Vector.zeros(hidden_size) 
+        val cprev = Vector.zeros(hidden_size)
+        
+        // wrap as Tensors
+        val tWfh = TensorR.Tensor(Wfh)
+        val tWfx = TensorR.Tensor(Wfx)
+        val tbf = TensorR.Tensor(bf)
+        val tWih = TensorR.Tensor(Wih)
+        val tWix = TensorR.Tensor(Wix)
+        val tbi = TensorR.Tensor(bi)
+        val tWch = TensorR.Tensor(Wch)
+        val tWcx = TensorR.Tensor(Wcx)
+        val tbc = TensorR.Tensor(bc)
+        val tWoh = TensorR.Tensor(Woh)
+        val tWox = TensorR.Tensor(Wox)
+        val tbo = TensorR.Tensor(bo)
+        val tWhy = TensorR.Tensor(Why)
+        val tby = TensorR.Tensor(by)
+        val thprev = TensorR.Tensor(hprev)
+        val tcprev = TensorR.Tensor(cprev)
+
+        // lossFun
+        def lossFun(inputs: Rep[Array[Int]], label: Rep[Int]) = { (dummy: TensorR) =>
+          
+          val in = ArrayBuffer[TensorR]()
+          in.append(thprev)
+          in.append(tcprev)
+
+          val outputs = LOOPSM(in)(inputs.length){i => t => 
+            
+            // get word embedding 
+            val x    = word_embedding_data(inputs(i))
+            val x1   = TensorR.Tensor(new Vector(x, word_embedding_size))
+            
+            val ft = (tWfh.dot(t(0)) + tWfx.dot(x1) + tbf).sigmoid()
+            val it = (tWih.dot(t(0)) + tWix.dot(x1) + tbi).sigmoid()
+            val ot = (tWoh.dot(t(0)) + tWox.dot(x1) + tbo).sigmoid()
+            val Ct = (tWch.dot(t(0)) + tWcx.dot(x1) + tbc).tanh()
+            val ct = ft * t(1) + it * Ct
+            val ht = ot * ct.tanh()
+            
+            val out = ArrayBuffer[TensorR]()
+            out.append(ht)
+            out.append(ct)
+            out
+          }
+          val et = (tWhy.dot(outputs(0)) + tby).exp()
+          val pt = et / et.sum()
+
+          val y = Vector.zeros(output_size)
+          y.data(label) = 1
+          val y1 = TensorR.Tensor(y)
+
+          val loss = TensorR.Tensor(Vector.zeros(1)) - (pt dot y1).log()
+          loss          
+        }
+
+
+        val lr = Vector.consts(1, value = learning_rate)
+        val hp = Vector.consts(1, value = 1e-8)
+
+        val mWfh = Vector.zeros_like(Wfh)
+        val mWfx = Vector.zeros_like(Wfx)
+        val mbf = Vector.zeros_like(bf)
+        val mWih = Vector.zeros_like(Wih)
+        val mWix = Vector.zeros_like(Wix)
+        val mbi = Vector.zeros_like(bi)
+        val mWch = Vector.zeros_like(Wch)
+        val mWcx = Vector.zeros_like(Wcx)
+        val mbc = Vector.zeros_like(bc)
+        val mWoh = Vector.zeros_like(Woh)
+        val mWox = Vector.zeros_like(Wox)
+        val mbo = Vector.zeros_like(bo)
+        val mWhy = Vector.zeros_like(Why)
+        val mby = Vector.zeros_like(by)
+        
+        val addr = getMallocAddr() // remember current allocation pointer here
+
+        for (n <- (0 until 2001): Rep[Range]) {
+
+          val index  = n % seq_number
+          val inputs = seq_data(index)
+          val label  = seq_label(index)
+
+          val loss = gradR_loss(lossFun(inputs, label))(Vector.zeros(1)) 
+          val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
+          if (n % 100 == 0) {
+            printf("iter %d, loss %f\\n", n, loss_value) 
+            //timer.printElapsedTime
+          }
+
+          val pars = ArrayBuffer(tWfh, tWfx, tbf, tWih, tWix, tbi, tWch, tWcx, tbc, tWoh, tWox, tbo, tWhy, tby)
+          val mems = ArrayBuffer(mWfh, mWfx, mbf, mWih, mWix, mbi, mWch, mWcx, mbc, mWoh, mWox, mbo, mWhy, mby)
+          for ((par, mem) <- pars.zip(mems)) {
+            par.clip_grad(5.0)
+            mem += par.d * par.d
+            par.x -= par.d * lr / (mem + hp).sqrt()
+            par.clear_grad()
+          }
+          thprev.clear_grad()          // clear gradient of all Tensors for next cycle
+          tcprev.clear_grad()          // clear gradient of all Tensors for next cycle
+          
+          resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
+        }
+      }
+    }
+
+    
+    //println("try senti_seq_lstm")
+    //val min_char_rnn_file = new PrintWriter(new File("senti_seq_lstm.cpp"))
+    //min_char_rnn_file.println(senti_seq_lstm.code)
+    //min_char_rnn_file.flush()
+    //senti_seq_lstm.eval("abc")
+    //println("verified that in this small example the values of gradients are about right (up to precision)")
     
 
     val sentimental_rnn = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
@@ -1954,14 +2338,7 @@ if (false) {
           for (j <- (0 until word_embedding_size): Rep[Range]) getFloat(fp, word_embedding_data(i), j)
         }
         closef(fp)
-        
-  /*
-        val array0 = word_embedding_data(0)
-        val array1 = word_embedding_data(5264)
-        printf("read float is %f\\n", array0(2))
-        printf("read float is %f\\n", array1(1))
-  */
-      
+            
         // read in the data for trees
         val tree_number = 1101 // need to know the size of training data, need fix
         val fp1 = openf("senti/array_tree.txt", "r")
@@ -1976,19 +2353,25 @@ if (false) {
           }
         }
 
-  /*      
-        val barray = tree_data(1)
-        printf("read int is %d\\n", barray(0))
-        printf("read int is %d\\n", barray(1))
-        printf("read int is %d\\n", barray(2))      
-        val barray1 = tree_data(4403)
-        printf("read int is %d\\n", barray1(0))
-        printf("read int is %d\\n", barray1(1))
-        printf("read int is %d\\n", barray1(2))      
-  */      
+        /* // this piece of code proves that the data reading is correct
+        for (j <- (0 until 4): Rep[Range]) {
+          val barray = tree_data(j)
+          for (k <- (0 until size(0)): Rep[Range]) printf("%d ", barray(k))
+          printf("\\n")
+        }
+
+        val carray = tree_data(1)
+        for (j <- (0 until size(0)):Rep[Range]) {
+          if (carray(j) > 0) {
+            val darray = word_embedding_data(carray(j))
+            for (t <- (0 until word_embedding_size): Rep[Range]) printf("%lf ", darray(t))
+            printf("\\n")
+          }
+        }*/
+        
 
         // set up hyperparameters and parameters
-        val hidden_size = 50
+        val hidden_size = 100
         val output_size = 5
         val learning_rate = 0.05
         val Wxh = Vector.randinit(word_embedding_size, hidden_size, 0.01) // from word embedding to hidden vector
@@ -2050,8 +2433,9 @@ if (false) {
 
         val addr = getMallocAddr() // remember current allocation pointer here
 
+        var smoothed_loss = 40.0
         for (n <- (0 until 20001): Rep[Range]) {
-          var smoothed_loss = 40.0
+          
           val index = n % tree_number
           val scores   = tree_data(index * 4)
           val words    = tree_data(index * 4 + 1)
@@ -2061,7 +2445,8 @@ if (false) {
           val loss_value = loss.data(0)  // we suppose the loss is scala (Vector of size 1)
           if (n % 1000 == 0) {
             smoothed_loss = smoothed_loss * 0.9 + loss_value * 0.1
-            printf("iter %d, loss %f\\n", n, smoothed_loss) 
+            printf("iter %d, raw_loss %f\\n", n, loss_value) 
+            //printf("iter %d, smoothed_loss %f\\n", n, smoothed_loss) 
           }
 
           val pars = ArrayBuffer(Wxh1, bx1, Wlh1, Wrh1, bh1, Why1, by1)
@@ -2078,11 +2463,11 @@ if (false) {
       }
     }
     
-    /*
-    val senti_file = new PrintWriter(new File("senti.cpp"))
-    senti_file.println(sentimental_rnn.code)
-    senti_file.flush()
-    sentimental_rnn.eval("abc")*/
+    
+    //val senti_file = new PrintWriter(new File("senti.cpp"))
+    //senti_file.println(sentimental_rnn.code)
+    //senti_file.flush()
+    //sentimental_rnn.eval("abc")
 
     val sentimental_lstm = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
 
@@ -2116,9 +2501,14 @@ if (false) {
         }
 
         // set up hyperparameters and parameters
-        val hidden_size = 30
+        val hidden_size = 100
         val output_size = 5
         val learning_rate = 0.05
+
+        // NOTE: should set the embeding matrix as Trainable as well!
+
+
+
         // parameters for leaf node
         val Wi = Vector.randinit(word_embedding_size, hidden_size, 0.01)  // from word embedding to hidden vector, input gate
         val bi = Vector.zeros(hidden_size)                                // bias word embedding to hidden vector, input gate
@@ -2194,27 +2584,27 @@ if (false) {
             } {dummy_word_embedding}
             
             val i_gate = IF (hidden_size) (lchs(i) < 0) {
-              (tWi.dot(embedding_tensor) + tbi).logistic()
+              (tWi.dot(embedding_tensor) + tbi).sigmoid()
             } {
-              (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).logistic()
+              (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
             }
 
             val fl_gate = IF (hidden_size) (lchs(i) < 0) {
               dummy_forget_gate
             } {
-              (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).logistic()
+              (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).sigmoid()
             }
 
             val fr_gate = IF (hidden_size) (lchs(i) < 0) {
               dummy_forget_gate
             } { 
-              (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).logistic()
+              (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).sigmoid()
             }
 
             val o_gate = IF (hidden_size) (lchs(i) < 0) {
-              (tWo.dot(embedding_tensor) + tbo).logistic()
+              (tWo.dot(embedding_tensor) + tbo).sigmoid()
             } {
-              (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).logistic()
+              (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).sigmoid()
             }
 
             val u_value = IF (hidden_size) (lchs(i) < 0) {
@@ -2275,9 +2665,9 @@ if (false) {
 
         val addr = getMallocAddr() // remember current allocation pointer here
 
-        for (n <- (0 until 200001): Rep[Range]) {
+        var smoothed_loss = 40.0
+        for (n <- (0 until 20001): Rep[Range]) {
           
-          var smoothed_loss = 40.0
           val index = n % tree_number
           val scores   = tree_data(index * 4)
           val words    = tree_data(index * 4 + 1)
@@ -2285,9 +2675,10 @@ if (false) {
           val rightchs = tree_data(index * 4 + 3)
           val loss = gradR_loss(lossFun(scores, words, leftchs, rightchs))(Vector.zeros(1))          
           val loss_value = loss.data(0)  // we suppose the loss is scala (Vector of size 1)
-          if (n % 10000 == 0) {
+          if (n % 1000 == 0) {
             smoothed_loss = smoothed_loss * 0.9 + loss_value * 0.1
-            printf("iter %d, loss %f\\n", n, smoothed_loss) 
+            printf("iter %d, raw_loss %f\\n", n, loss_value) 
+            //printf("iter %d, loss %f\\n", n, smoothed_loss) 
           }
 
           val pars = ArrayBuffer(tWi, tbi, tWo, tbo, tWu, tbu, tU0i, tU1i, tbbi, tU00f, tU01f, tU10f, tU11f, tbbf, tU0o, tU1o, tbbo, tU0u, tU1u, tbbu, tWhy, tby)
@@ -2304,12 +2695,12 @@ if (false) {
       }
     }
     
-    /*
-    val senti_file = new PrintWriter(new File("sentit.cpp"))
-    senti_file.println(sentimental_rnn.code)
-    senti_file.flush()
-    sentimental_rnn.eval("abc")
-    sentimental_lstm.eval("abc")
-    */
+    
+    //val sentit_file = new PrintWriter(new File("sentit.cpp"))
+    //sentit_file.println(sentimental_lstm.code)
+    //sentit_file.flush()
+    //sentimental_rnn.eval("abc")
+    //sentimental_lstm.eval("abc")
+    
   }
 }
