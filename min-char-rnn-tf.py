@@ -57,11 +57,7 @@ ix_to_char = { i:ch for i,ch in enumerate(chars) }
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
-<<<<<<< HEAD
-learning_rate = 1e-2
-=======
 learning_rate = 1e-1
->>>>>>> 8b3e101506936d705155ab5b122bd3be3a27755b
 num_epochs = 2001
 batch_size = 1
 
@@ -90,10 +86,6 @@ logits_series = [tf.matmul(state, W2) + b2 for state in states_series] #Broadcas
 predictions_series = [tf.nn.softmax(logits) for logits in logits_series]
 losses = [tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels) for logits, labels in zip(logits_series,labels_series)]
 total_loss = tf.reduce_sum(losses)
-<<<<<<< HEAD
-# total_loss = tf.reduce_mean(losses)
-=======
->>>>>>> 8b3e101506936d705155ab5b122bd3be3a27755b
 
 train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss)
 
