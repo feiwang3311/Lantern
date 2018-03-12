@@ -198,35 +198,35 @@ object LMS_vector {
         // assert that and this have the same dimension
         if (dim0 != that.dim0) throw new IllegalArgumentException("dimensions of vector do not match dot!")
         val res = NewArray[Double](dim1)
-      for (j <- (0 until dim1): Rep[Range]) {
-        val value = var_new(0.0)
-        for (i <- (0 until dim0): Rep[Range]) value += data(i + dim0 * j) * that.data(i)
-        res(j) = readVar(value)
-      }
-      new Vector(res, dim1)
+        for (j <- (0 until dim1): Rep[Range]) {
+          val value = var_new(0.0)
+          for (i <- (0 until dim0): Rep[Range]) value += data(i + dim0 * j) * that.data(i)
+          res(j) = readVar(value)
+        }
+        new Vector(res, dim1)
       }
 
       // NOTE: only handles (Vector cart Vector)
       def cart(that: Vector) = {
         if (dim1 != 1 || that.dim1 != 1) throw new IllegalArgumentException("cartesian product is only for 1d vectors")
         val res = NewArray[Double](dim0 * that.dim0)
-      for (i <- (0 until dim0): Rep[Range]) {
-        for (j <- (0 until that.dim0): Rep[Range]) {
-          res(i * that.dim0 + j) = data(i) * that.data(j)
+        for (i <- (0 until dim0): Rep[Range]) {
+          for (j <- (0 until that.dim0): Rep[Range]) {
+            res(i * that.dim0 + j) = data(i) * that.data(j)
+          }
         }
-      }
-      new Vector(res, that.dim0, dim0)
+        new Vector(res, that.dim0, dim0)
       }
 
       def trans() = {
         if (dim1 == 1) throw new IllegalArgumentException("transpose is only for matrix. Vector transpose is not supported here")
         val res = NewArray[Double](dim0 * dim1)
-      for (i <- (0 until dim0): Rep[Range]) {
-        for (j <- (0 until dim1): Rep[Range]) {
-          res(i * dim1 + j) = data(j * dim0 + i)
+        for (i <- (0 until dim0): Rep[Range]) {
+          for (j <- (0 until dim1): Rep[Range]) {
+            res(i * dim1 + j) = data(j * dim0 + i)
+          }
         }
-      }
-      new Vector(res, dim1, dim0)
+        new Vector(res, dim1, dim0)
       }
 
       def tanh() = {
@@ -384,10 +384,6 @@ object LMS_vector {
           }
         } else throw new IllegalArgumentException("dim not Competible in add_oneMinusThenMult_mult")
       }
-
-
-
-
     }
 
     object Vector {
@@ -2629,51 +2625,51 @@ object LMS_vector {
 
             val i_gate = IF (hidden_size) (lchs(i) < 0) {
               (tWi.dot(embedding_tensor) + tbi).sigmoid()
-              } {
-                (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
-              }
+            } {
+              (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
+            }
 
-              val fl_gate = IF (hidden_size) (lchs(i) < 0) {
-                dummy_forget_gate
-                } {
-                  (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).sigmoid()
-                }
+            val fl_gate = IF (hidden_size) (lchs(i) < 0) {
+              dummy_forget_gate
+            } {
+              (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).sigmoid()
+            }
 
-                val fr_gate = IF (hidden_size) (lchs(i) < 0) {
-                  dummy_forget_gate
-                  } {
-                    (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).sigmoid()
-                  }
+            val fr_gate = IF (hidden_size) (lchs(i) < 0) {
+              dummy_forget_gate
+            } {
+              (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).sigmoid()
+            }
 
-                  val o_gate = IF (hidden_size) (lchs(i) < 0) {
-                    (tWo.dot(embedding_tensor) + tbo).sigmoid()
-                    } {
-                      (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).sigmoid()
-                    }
+            val o_gate = IF (hidden_size) (lchs(i) < 0) {
+              (tWo.dot(embedding_tensor) + tbo).sigmoid()
+            } {
+              (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).sigmoid()
+            }
 
-                    val u_value = IF (hidden_size) (lchs(i) < 0) {
-                      (tWu.dot(embedding_tensor) + tbu).tanh()
-                      } {
-                        (tU0u.dot(hiddenl) + tU1u.dot(hiddenr) + tbbu).tanh()
-                      }
+            val u_value = IF (hidden_size) (lchs(i) < 0) {
+              (tWu.dot(embedding_tensor) + tbu).tanh()
+            } {
+              (tU0u.dot(hiddenl) + tU1u.dot(hiddenr) + tbbu).tanh()
+            }
 
-                      val cell = IF (hidden_size) (lchs(i) < 0) {
-                        i_gate * u_value
-                        } {
-                          i_gate * u_value + fl_gate * celll + fr_gate * cellr
-                        }
+            val cell = IF (hidden_size) (lchs(i) < 0) {
+              i_gate * u_value
+            } {
+              i_gate * u_value + fl_gate * celll + fr_gate * cellr
+            }
 
-                        val hidden = o_gate * cell.tanh()
+            val hidden = o_gate * cell.tanh()
 
-                        val pred1 = (tWhy.dot(hidden) + tby).exp()
-                        val pred2 = pred1 / pred1.sum()
-                        val loss = lossl + lossr - (pred2 dot targ1).log()
+            val pred1 = (tWhy.dot(hidden) + tby).exp()
+            val pred2 = pred1 / pred1.sum()
+            val loss = lossl + lossr - (pred2 dot targ1).log()
 
-                        val out = ArrayBuffer[TensorR]()
-                        out.append(loss)
-                        out.append(hidden)
-                        out.append(cell)
-                        out
+            val out = ArrayBuffer[TensorR]()
+            out.append(loss)
+            out.append(hidden)
+            out.append(cell)
+            out
           }
           outBuffer(0)
         }
@@ -2749,4 +2745,6 @@ object LMS_vector {
     //sentimental_lstm.eval("abc")
 
   }
+
+
 }
