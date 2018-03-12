@@ -1797,6 +1797,7 @@ if (false) {
         val timer = Timer()
         timer.startTimer
 
+        var smooth_loss = 60.0
         for (n <- (0 until 2001): Rep[Range]) {
 
           startAt += seq_length
@@ -1814,9 +1815,10 @@ if (false) {
 
           val loss = gradR_loss(lossFun(inputs, targets))(Vector.zeros(1)) 
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
+          smooth_loss = smooth_loss * 0.9 + loss_value * 0.1
           if (n % 100 == 0) {
-            printf("iter %d, loss %f\\n", n, loss_value) 
-            timer.printElapsedTime
+            printf("iter %d, loss %f\\n", n, smooth_loss) 
+            //timer.printElapsedTime
           }
 
           val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
@@ -1841,7 +1843,7 @@ if (false) {
     //val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
     //min_char_rnn_file.println(min_char_rnn.code)
     //min_char_rnn_file.flush()
-    //min_char_rnn.eval("abc")
+    min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
     
 

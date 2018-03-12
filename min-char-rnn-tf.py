@@ -58,8 +58,8 @@ ix_to_char = { i:ch for i,ch in enumerate(chars) }
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
-learning_rate = 1e-2
-num_epochs = 2000
+learning_rate = 1e-1
+num_epochs = 2001
 batch_size = 1
 
 # build model
@@ -81,9 +81,9 @@ states_series, current_state = tf.contrib.rnn.static_rnn(cell, inputs_series, in
 logits_series = [tf.matmul(state, W2) + b2 for state in states_series] #Broadcasted addition
 predictions_series = [tf.nn.softmax(logits) for logits in logits_series]
 losses = [tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels) for logits, labels in zip(logits_series,labels_series)]
-total_loss = tf.reduce_mean(losses)
+total_loss = tf.reduce_sum(losses)
 
-train_step = tf.train.AdagradOptimizer(0.3).minimize(total_loss)
+train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss)
 
 with tf.Session() as sess:
     sess.run(tf.initialize_all_variables())
