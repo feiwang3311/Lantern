@@ -298,9 +298,85 @@ object LMS_vector {
         }
       }
 
+      // private function to get data with default to the only element
+      def getAt(i: Rep[Int]) = {
+        if (dim0 == 1 && dim1 == 1) data(0)
+        else data(i)
+      }
+      def square(t: Rep[Double]) = t * t
+      def add_mult(a: Vector, b: Vector) = {
+        if (Vector.dimCompetible(a, b) && Vector.dimCompetible(a, this) && Vector.dimCompetible(this, b)) {
+          val dim0M = max(dim0, max(a.dim0, b.dim0))
+          val dim1M = max(dim1, max(a.dim1, b.dim1))
+          if (dim0 == 1 && dim1 == 1) {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(0) = data(0) + a.getAt(i) * b.getAt(i)
+          } else {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(i) = data(i) + a.getAt(i) * b.getAt(i)
+          }  
+        } else throw new IllegalArgumentException("dim not Competible in add_mult")
+      }
+
+      def add_div(a: Vector, b: Vector) = {
+        if (Vector.dimCompetible(a, b) && Vector.dimCompetible(a, this) && Vector.dimCompetible(this, b)) {
+          val dim0M = max(dim0, max(a.dim0, b.dim0))
+          val dim1M = max(dim1, max(a.dim1, b.dim1))
+          if (dim0 == 1 && dim1 == 1) {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(0) = data(0) + a.getAt(i) / b.getAt(i)
+          } else {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(i) = data(i) + a.getAt(i) / b.getAt(i)
+          }  
+        } else throw new IllegalArgumentException("dim not Competible in add_div")
+      }
+
+      def minus_mult_div_square(a: Vector, b: Vector, c: Vector) = {
+        if (Vector.dimCompetible(a, b)    && Vector.dimCompetible(a, c)    && Vector.dimCompetible(c, b)    &&
+            Vector.dimCompetible(this, b) && Vector.dimCompetible(a, this) && Vector.dimCompetible(this, c)) {
+          val dim0M = max(dim0, max(a.dim0, max(b.dim0, c.dim0)))
+          val dim1M = max(dim1, max(a.dim1, max(b.dim1, c.dim1)))
+          if (dim0 == 1 && dim1 == 1) {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(0) = data(0) - a.getAt(i) * b.getAt(i) / square(c.getAt(i))
+          } else {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(i) = data(i) - a.getAt(i) * b.getAt(i) / square(c.getAt(i))
+          }
+        } else throw new IllegalArgumentException("dim not competible in minus_mult_div_square")
+      }
+      
+      def add_oneMinusSquare_mult(a: Vector, b: Vector) = {
+        if (Vector.dimCompetible(a, b) && Vector.dimCompetible(a, this) && Vector.dimCompetible(this, b)) {
+          val dim0M = max(dim0, max(a.dim0, b.dim0))
+          val dim1M = max(dim1, max(a.dim1, b.dim1))
+          if (dim0 == 1 && dim1 == 1) {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(0) = data(0) + (1.0 - square(a.getAt(i))) * b.getAt(i)
+          } else {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(i) = data(i) + (1.0 - square(a.getAt(i))) * b.getAt(i)
+          }  
+        } else throw new IllegalArgumentException("dim not Competible in add_oneMinusSquare_mult")
+      }
+      def oneMinusThenMult(t: Rep[Double]) = (1.0 - t) * t
+      def add_oneMinusThenMult_mult(a: Vector, b: Vector) = {
+        if (Vector.dimCompetible(a, b) && Vector.dimCompetible(a, this) && Vector.dimCompetible(this, b)) {
+          val dim0M = max(dim0, max(a.dim0, b.dim0))
+          val dim1M = max(dim1, max(a.dim1, b.dim1))
+          if (dim0 == 1 && dim1 == 1) {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(0) = data(0) + oneMinusThenMult(a.getAt(i)) * b.getAt(i)
+          } else {
+            for (i <- (0 until dim0M * dim1M): Rep[Range]) data(i) = data(i) + oneMinusThenMult(a.getAt(i)) * b.getAt(i)
+          }  
+        } else throw new IllegalArgumentException("dim not Competible in add_oneMinusThenMult_mult")
+      }
+      
+
+
+
     }
 
     object Vector {
+
+      def dimCompetible(a: Vector, b: Vector) = {
+        (a.dim0 == b.dim0 && a.dim1 == b.dim1) ||
+        (a.dim0 == 1 && a.dim1 == 1) ||
+        (b.dim0 == 1 && b.dim1 == 1)
+      }
 
       def randinit(dim0: Int, dim1: Int = 1, scale: Double = 1.0, offset: Int = 0) = {
         unchecked[Unit]("srand(time(NULL)" + "+" + offset.toString + ")")
@@ -422,17 +498,19 @@ object LMS_vector {
       // this is element wise multiplication
       def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
         val y = TensorR.Tensor(x * that.x); k(y)
-        // FIXME: intermediate Tensors donot need to be substatiated, can optimize!
-        this.d += that.x * y.d; 
-        that.d += this.x * y.d; 
+        // intermediate Tensors donot need to be substatiated, can optimize!
+        //this.d += that.x * y.d; that.d += this.x * y.d; 
+        this.d.add_mult(that.x, y.d); that.d.add_mult(this.x, y.d)
       }
 
       // element wise division
       def / (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
         val y = TensorR.Tensor(x / that.x); k(y)
-        // FIXME: intermediate Tensors donot need to be substatiated, can optimize!
-        this.d += y.d / that.x
-        that.d -= this.x * y.d / (that.x * that.x) 
+        // intermediate Tensors donot need to be substatiated, can optimize!
+        //this.d += y.d / that.x
+        this.d.add_div(y.d, that.x)
+        //that.d -= this.x * y.d / (that.x * that.x) 
+        that.d.minus_mult_div_square(this.x, y.d, that.x)
       }
 
       // vector dot product or Matrix vector dot (viewed as multiple vector dot product) (not the common view)
@@ -448,24 +526,28 @@ object LMS_vector {
       def tanh(): TensorR @diff = shift { (k : TensorR => Unit) =>
         val y = TensorR.Tensor(x.tanh()); k(y)
         // FIXME: intermediate Tensors donot need to be substatiated, can optimize!
-        this.d += (Vector.ones(1) - y.x * y.x) * y.d // broadcasting
+        //this.d += (Vector.ones(1) - y.x * y.x) * y.d // broadcasting
+        this.d.add_oneMinusSquare_mult(y.x, y.d)
       }
 
       def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
         val y = TensorR.Tensor(x.exp()); k(y)
         // Fix
-        this.d += y.x * y.d
+        //this.d += y.x * y.d
+        this.d.add_mult(y.x, y.d)
       }
 
       def log(): TensorR @diff = shift { (k: TensorR => Unit) =>
         val y = TensorR.Tensor(x.log()); k(y)
         // Fix
-        this.d += y.d / x
+        //this.d += y.d / x
+        this.d.add_div(y.d, x)
       }
 
       def sigmoid(): TensorR @diff = shift { (k: TensorR => Unit) =>
         val y = TensorR.Tensor(x.sigmoid()); k(y)
-        this.d += (Vector.ones(1) - y.x) * y.x * y.d
+        //this.d += (Vector.ones(1) - y.x) * y.x * y.d
+        this.d.add_oneMinusThenMult_mult(y.x, y.d)
       }
 
       def sum(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -737,7 +819,7 @@ object LMS_vector {
   def main(args: Array[String]): Unit = {
     import java.io.PrintWriter;
     import java.io.File;   
-if (true) {
+if (false) {
     val array0 = new DslDriverC[String, Unit] with VectorExp {
 
       @virtualize
@@ -2433,33 +2515,35 @@ if (true) {
 
         val addr = getMallocAddr() // remember current allocation pointer here
 
-        var smoothed_loss = 40.0
-        for (n <- (0 until 20001): Rep[Range]) {
+        for (epoc <- (0 until 10): Rep[Range]) {
           
-          val index = n % tree_number
-          val scores   = tree_data(index * 4)
-          val words    = tree_data(index * 4 + 1)
-          val leftchs  = tree_data(index * 4 + 2)
-          val rightchs = tree_data(index * 4 + 3)
-          val loss = gradR_loss(lossFun(scores, words, leftchs, rightchs))(Vector.zeros(1))          
-          val loss_value = loss.data(0)  // we suppose the loss is scala (Vector of size 1)
-          if (n % 1000 == 0) {
-            smoothed_loss = smoothed_loss * 0.9 + loss_value * 0.1
-            printf("iter %d, raw_loss %f\\n", n, loss_value) 
-            //printf("iter %d, smoothed_loss %f\\n", n, smoothed_loss) 
+          var ave_loss = 0.0
+          for (n <- (0 until tree_number): Rep[Range]) {
+            
+            val index = n % tree_number
+            val scores   = tree_data(index * 4)
+            val words    = tree_data(index * 4 + 1)
+            val leftchs  = tree_data(index * 4 + 2)
+            val rightchs = tree_data(index * 4 + 3)
+            val loss = gradR_loss(lossFun(scores, words, leftchs, rightchs))(Vector.zeros(1))          
+            val loss_value = loss.data(0)  // we suppose the loss is scala (Vector of size 1)
+            ave_loss = ave_loss * n / (n + 1) + loss_value / (n + 1)  
+            
+            val pars = ArrayBuffer(Wxh1, bx1, Wlh1, Wrh1, bh1, Why1, by1)
+            val mems = ArrayBuffer(mWxh, mbx, mWlh, mWrh, mbh, mWhy, mby)
+            for ((par, mem) <- pars.zip(mems)) {
+              par.clip_grad(1.0)
+              mem += par.d * par.d
+              par.x -= par.d * lr / (mem + hp).sqrt()
+              par.clear_grad()
+            }
+            
+            resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer */
           }
 
-          val pars = ArrayBuffer(Wxh1, bx1, Wlh1, Wrh1, bh1, Why1, by1)
-          val mems = ArrayBuffer(mWxh, mbx, mWlh, mWrh, mbh, mWhy, mby)
-          for ((par, mem) <- pars.zip(mems)) {
-            par.clip_grad(1.0)
-            mem += par.d * par.d
-            par.x -= par.d * lr / (mem + hp).sqrt()
-            par.clear_grad()
-          }
-          
-          resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer */
+          printf("epoc %d, ave_loss %f\\n", epoc, ave_loss) 
         }
+          
       }
     }
     
@@ -2470,6 +2554,27 @@ if (true) {
     //sentimental_rnn.eval("abc")
 
     val sentimental_lstm = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
+
+      class Timer (val index: Int){
+        unchecked[Unit](s"clock_t begin_$index, end_$index; double time_spent_$index")
+        def startTimer = { unchecked[Unit](s"begin_$index = clock()") }
+        def stopTimer = { unchecked[Unit](s"end_$index = clock()") }
+        def printElapsedTime = { 
+          unchecked[Unit](
+            s"end_$index = clock(); printf(",
+            "\"Time elapsed: %f\\n\", ",
+            s"(double)(end_$index - begin_$index) / CLOCKS_PER_SEC)") 
+        }
+      }
+
+      object Timer {
+        var index: Int = 0
+        def apply(): Timer = { 
+          val timer = new Timer(index)
+          index += 1
+          timer
+        }        
+      }
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -2500,14 +2605,14 @@ if (true) {
           }
         }
 
+        val timer = Timer()
+        timer.startTimer
+
+
         // set up hyperparameters and parameters
-        val hidden_size = 100
+        val hidden_size = 150
         val output_size = 5
         val learning_rate = 0.05
-
-        // NOTE: should set the embeding matrix as Trainable as well!
-
-
 
         // parameters for leaf node
         val Wi = Vector.randinit(word_embedding_size, hidden_size, 0.01)  // from word embedding to hidden vector, input gate
@@ -2665,41 +2770,43 @@ if (true) {
 
         val addr = getMallocAddr() // remember current allocation pointer here
 
-        var smoothed_loss = 40.0
-        for (n <- (0 until 20001): Rep[Range]) {
-          
-          val index = n % tree_number
-          val scores   = tree_data(index * 4)
-          val words    = tree_data(index * 4 + 1)
-          val leftchs  = tree_data(index * 4 + 2)
-          val rightchs = tree_data(index * 4 + 3)
-          val loss = gradR_loss(lossFun(scores, words, leftchs, rightchs))(Vector.zeros(1))          
-          val loss_value = loss.data(0)  // we suppose the loss is scala (Vector of size 1)
-          if (n % 1000 == 0) {
-            smoothed_loss = smoothed_loss * 0.9 + loss_value * 0.1
-            printf("iter %d, raw_loss %f\\n", n, loss_value) 
-            //printf("iter %d, loss %f\\n", n, smoothed_loss) 
+        for (epoc <- (0 until 30): Rep[Range]) {
+        
+          var average_loss = 0.0
+          for (n <- (0 until tree_number): Rep[Range]) {
+            
+            val index = n % tree_number
+            val scores   = tree_data(index * 4)
+            val words    = tree_data(index * 4 + 1)
+            val leftchs  = tree_data(index * 4 + 2)
+            val rightchs = tree_data(index * 4 + 3)
+            val loss = gradR_loss(lossFun(scores, words, leftchs, rightchs))(Vector.zeros(1))          
+            val loss_value = loss.data(0)  // we suppose the loss is scala (Vector of size 1)
+            average_loss = average_loss * (n) / (n+1) + loss_value / (n+1)
+
+            val pars = ArrayBuffer(tWi, tbi, tWo, tbo, tWu, tbu, tU0i, tU1i, tbbi, tU00f, tU01f, tU10f, tU11f, tbbf, tU0o, tU1o, tbbo, tU0u, tU1u, tbbu, tWhy, tby)
+            val mems = ArrayBuffer(mWi, mbi, mWo, mbo, mWu, mbu, mU0i, mU1i, mbbi, mU00f, mU01f, mU10f, mU11f, mbbf, mU0o, mU1o, mbbo, mU0u, mU1u, mbbu, mWhy, mby)
+            for ((par, mem) <- pars.zip(mems)) {
+              par.clip_grad(5.0)
+              mem += par.d * par.d
+              par.x -= par.d * lr / (mem + hp).sqrt()
+              par.clear_grad()
+            }
+            
+            resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer */
           }
 
-          val pars = ArrayBuffer(tWi, tbi, tWo, tbo, tWu, tbu, tU0i, tU1i, tbbi, tU00f, tU01f, tU10f, tU11f, tbbf, tU0o, tU1o, tbbo, tU0u, tU1u, tbbu, tWhy, tby)
-          val mems = ArrayBuffer(mWi, mbi, mWo, mbo, mWu, mbu, mU0i, mU1i, mbbi, mU00f, mU01f, mU10f, mU11f, mbbf, mU0o, mU1o, mbbo, mU0u, mU1u, mbbu, mWhy, mby)
-          for ((par, mem) <- pars.zip(mems)) {
-            par.clip_grad(5.0)
-            mem += par.d * par.d
-            par.x -= par.d * lr / (mem + hp).sqrt()
-            par.clear_grad()
-          }
-          
-          resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer */
+          printf("epoc %d, average_loss %f\\n", epoc, average_loss) 
+          timer.printElapsedTime
+        
         }
       }
     }
     
     
-    //val sentit_file = new PrintWriter(new File("sentit.cpp"))
-    //sentit_file.println(sentimental_lstm.code)
-    //sentit_file.flush()
-    //sentimental_rnn.eval("abc")
+    val sentit_file = new PrintWriter(new File("sentit.cpp"))
+    sentit_file.println(sentimental_lstm.code)
+    sentit_file.flush()
     //sentimental_lstm.eval("abc")
     
   }
