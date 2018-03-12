@@ -84,12 +84,12 @@ def train(output_tensor, input_tensor):
   loss.backward()
 
   # grad clipping and stepping
-  torch.nn.utils.clip_grad_norm(rnn.parameters(), 1.0, norm_type=1)
+  torch.nn.utils.clip_grad_norm(rnn.parameters(), 5.0, norm_type=1)
   optimizer.step()
 
   # Add parameters' gradients to their values, multiplied by learning rate
   #for p in rnn.parameters():
-  # p.data.add_(-learning_rate, clip_grad)
+  #  p.data.add_(-learning_rate, p.grad.data)
 
   return output, loss.data[0]
 
@@ -97,7 +97,7 @@ def train(output_tensor, input_tensor):
 p = 0
 #mWxh, mWhh, mWhy = torch.zeros_like(Wxh), torch.zeros_like(Whh), torch.zeros_like(Why)
 #mbh, mby = torch.zeros_like(bh), torch.zeros_like(by)
-
+smooth_loss = 60
 for iter in range(1, 2000 + 1):
 
   if p+seq_length+1 >= len(data): p = 0
@@ -105,36 +105,9 @@ for iter in range(1, 2000 + 1):
   inputs  = Variable(lineToTensor(data[p:p+seq_length]))
   targets = Variable(lineToLongTensor(data[p+1:p+seq_length+1]))
   output, loss = train(targets, inputs)
-
+  smooth_loss = smooth_loss * 0.9 + loss * 0.1
+  # if smooth_loss > 60: smooth_loss = 60
   # Print iter number, loss, name and guess
-  if iter % 100 == 0: print('iter %d, loss: %f' % (iter, loss))
+  if iter % 100 == 0: print('iter %d, loss: %f' % (iter, smooth_loss))
 
   p += seq_length
-
-"""
-n, p = 0, 0
-mWxh, mWhh, mWhy = torch.zeros_like(Wxh), torch.zeros_like(Whh), torch.zeros_like(Why)
-mbh, mby = torch.zeros_like(bh), torch.zeros_like(by)
-smooth_loss = -np.log(1.0/vocab_size)* seq_length
-while True:
-  if p+seq_length+1 >= len(data) or n == 0:
-    hprev = Variable(torch.zeros((hidden_size,1)), requires_grad=False)
-    p = 0
-  inputs = [char_to_ix[ch] for ch in data[p:p+seq_length]]
-  targets = [char_to_ix[ch] for ch in data[p+1:p+seq_length+1]]
-
-  loss, hprev = lossFunT(inputs, targets, hprev)
-  smooth_loss = smooth_loss * 0.999 + loss * 0.001
-  if n % 100 == 0: print('iter %d, loss: %f' % (n, smooth_loss))
-
-  # perform parameter update with Adagrad
-  for param, dparam, mem in zip ([Wxh, Whh, Why, bh, by],
-                                 [dWxh, dWhh, dWhy, dbh, dby],
-                                 [mWxh, mWhh, mWhy, mbh, mby]):
-    mem.add_(dparam * dparam)
-    param.add_(-learning_rate * dparam / torch.sqrt(mem + 1e-8))
-    dparam.zero_() #
-
-  p += seq_length
-  n += 1
-"""
