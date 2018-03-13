@@ -58,13 +58,13 @@ trait CGenUtilOps extends CGenBase {
 }
 
 @virtualize
-trait Dsl extends PrimitiveOps with NumericOps with BooleanOps with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps 
-with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables with ObjectOps with UtilOps 
-with UncheckedOps with MathOps with TupleOps with TupledFunctions 
+trait Dsl extends PrimitiveOps with NumericOps with BooleanOps with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps
+with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables with ObjectOps with UtilOps
+with UncheckedOps with MathOps with TupleOps with TupledFunctions
 with CastingOps {
   implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
   implicit class BooleanOps2(lhs: Rep[Boolean]) {
-    def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) = 
+    def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) =
     __ifThenElse(lhs, rhs, unit(false)) }
 //  override def boolean_and(lhs: Rep[Boolean], rhs: Rep[Boolean])(implicit pos: SourceContext): Rep[Boolean] = __ifThenElse(lhs, rhs, unit(false))
   def generate_comment(l: String): Rep[Unit]
@@ -75,9 +75,9 @@ with CastingOps {
 }
 
 @virtualize
-trait DslExp extends Dsl with PrimitiveOpsExpOpt with NumericOpsExpOpt with BooleanOpsExp with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp 
-with OrderingOpsExp with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt with UtilOpsExp 
-with UncheckedOpsExp with MathOpsExp with TupleOps with TupledFunctionsExp 
+trait DslExp extends Dsl with PrimitiveOpsExpOpt with NumericOpsExpOpt with BooleanOpsExp with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp
+with OrderingOpsExp with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt with UtilOpsExp
+with UncheckedOpsExp with MathOpsExp with TupleOps with TupledFunctionsExp
 with CastingOpsExp {
   override def boolean_or(lhs: Exp[Boolean], rhs: Exp[Boolean])(implicit pos: SourceContext) : Exp[Boolean] = lhs match {
     case Const(false) => rhs
@@ -108,10 +108,12 @@ with CastingOpsExp {
     case (Def(StaticData(x:Array[T])), Const(n)) =>
       val y = x(n)
       if (y.isInstanceOf[Int]) unit(y) else staticData(y)
-    case _ => super.array_apply(x,n)
+    // case _ => super.array_apply(x,n)
+    // FIXME!!!
+    case _ => reflectEffect(ArrayApply(x, n))
   }
-  
-//  override def array_apply[T:Typ](x: Exp[Array[T]], n: Exp[Int])(implicit pos: SourceContext): Exp[T] = reflectEffect(ArrayApply(x, n))
+
+  // override def array_apply[T:Typ](x: Exp[Array[T]], n: Exp[Int])(implicit pos: SourceContext): Exp[T] = reflectEffect(ArrayApply(x, n))
   override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = reflectEffect(ArrayUpdate(x,n,y))
 /*  override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = {
     if (context ne null) {
@@ -161,7 +163,7 @@ trait DslGen extends ScalaGenNumericOps
     with ScalaGenSeqOps with ScalaGenFunctions with ScalaGenWhile
     with ScalaGenStaticData with ScalaGenVariables
     with ScalaGenObjectOps
-    with ScalaGenUtilOps with ScalaGenMathOps with ScalaGenTupledFunctions 
+    with ScalaGenUtilOps with ScalaGenMathOps with ScalaGenTupledFunctions
     with ScalaGenCastingOps {
   val IR: DslExp
 
@@ -175,11 +177,11 @@ trait DslGen extends ScalaGenNumericOps
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-    case Assign(Variable(a), b) => 
+    case Assign(Variable(a), b) =>
       emitAssignment(a.asInstanceOf[Sym[Variable[Any]]], quote(b))
     case IfThenElse(c,Block(Const(true)),Block(Const(false))) =>
       emitValDef(sym, quote(c))
-    case PrintF(f:String,xs) => 
+    case PrintF(f:String,xs) =>
       emitValDef(sym, src"printf(${Const(f)::xs})")
     case GenerateComment(s) =>
       stream.println("// "+s)
@@ -223,7 +225,7 @@ trait DslGenC extends CGenNumericOps
     with CGenSeqOps with CGenFunctions with CGenWhile
     with CGenStaticData with CGenVariables
     with CGenObjectOps
-    with CGenUtilOps with CGenUncheckedOps with CGenMathOps with CGenTupledFunctions 
+    with CGenUtilOps with CGenUncheckedOps with CGenMathOps with CGenTupledFunctions
     with CGenCastingOps {
   val IR: DslExp
   import IR._
@@ -251,14 +253,14 @@ trait DslGenC extends CGenNumericOps
   override def remap[A](m: Typ[A]): String = m.toString match {
     case "java.lang.String" => "char*"
     case "Char" => "char"
-    
+
     case "Array[Char]" => "char*"
     case "Array[Double]" => "double*"
     case "Array[Int]"    => "int*"
     case "Array[Float]"  => "float*"
     case "Array[Array[Double]]" => "double**"
     case "Array[Array[Float]]"  => "float**"
-    
+
     /*
     case "Array[Char]"   => "unique_ptr<char[]>"
     case "Array[Double]" => "unique_ptr<double[]>"
@@ -281,7 +283,7 @@ trait DslGenC extends CGenNumericOps
       val targsUnboxed = targs.flatMap(t => unwrapTupleStr(remap(t)))
       val sep = if (targsUnboxed.length > 0) "," else ""
       "function<" + res + "(" + targsUnboxed.mkString(",") + ")>"
-      
+
     //scala.Function1[Array[Double], Array[Double]] --> function<double*(double*)>
     case _ => super.remap(m)
   }
@@ -331,6 +333,8 @@ trait DslGenC extends CGenNumericOps
     case _ => super.quote(x)
   }
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case GenerateComment(s) =>
+      stream.println("// "+s)
     case a@ArrayNew(n) =>
       val arrType = remap(a.m)
       //stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
@@ -397,7 +401,7 @@ trait DslGenC extends CGenNumericOps
 
         return hash;
       }
-      int HEAP_SIZE = 1073741826; // 1048576;  //2147483652; //536870912; // 268435456; //2097152; 
+      int HEAP_SIZE = 1073741826; // 1048576;  //2147483652; //536870912; // 268435456; //2097152;
       void *mallocBase = malloc(HEAP_SIZE);
       void *mallocAddr = mallocBase;
       void *waterMark  = mallocBase;
@@ -476,7 +480,7 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] wit
     //TODO: use precompile
     (new java.io.File("/tmp/snippet")).delete
     import scala.sys.process._
-    (s"g++ -std=c++11 -O1 -Wno-pointer-arith /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(Console.println _) //-std=c99 
+    (s"g++ -std=c++11 -O1 -Wno-pointer-arith /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(Console.println _) //-std=c99
     (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
 }
