@@ -19,12 +19,13 @@ def ix_to_char(ix):
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
-learning_rate = 1e-2
+learning_rate = 1e-1
 
 # import relevant supports
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+import torch.nn.functional as F
 
 
 torch.manual_seed(1)
@@ -56,7 +57,7 @@ class RNN(nn.Module):
     #print(input)
     #print(hidden)
     combined = torch.cat((input, hidden), 1)
-    hidden = self.i2h(combined)
+    hidden = F.tanh(self.i2h(combined))
     output = self.i2o(hidden)
     output = self.softmax(output)
     return output, hidden
