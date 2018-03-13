@@ -5,21 +5,25 @@ BSD License
 import numpy as np
 
 # data I/O
-data = open('input.txt', 'r').read() # should be simple plain text file
+data = open('graham.txt', 'r').read() # should be simple plain text file
 chars = list(set(data))
 data_size, vocab_size = len(data), len(chars)
 print 'data has %d characters, %d unique.' % (data_size, vocab_size)
-#char_to_ix = { ch:i for i,ch in enumerate(chars) }
-#ix_to_char = { i:ch for i,ch in enumerate(chars) }
+char_to_ix = { ch:i for i,ch in enumerate(chars) }
+ix_to_char = { i:ch for i,ch in enumerate(chars) }
+"""
 def char_to_ix(ch):
   return ord(ch) - ord('a')
 def ix_to_char(ix):
   return chr(ix + ord('a'))
+"""
 
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
 learning_rate = 1e-1
+n_epoch = 10000
+epoch_step = 500
 
 # model parameters
 Wxh = np.random.randn(hidden_size, vocab_size)*0.01 # input to hidden
@@ -86,13 +90,13 @@ n, p = 0, 0
 mWxh, mWhh, mWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
 mbh, mby = np.zeros_like(bh), np.zeros_like(by) # memory variables for Adagrad
 smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
-for n in range(2001):
+for n in range(n_epoch+1):
   # prepare inputs (we're sweeping from left to right in steps seq_length long)
   if p+seq_length+1 >= len(data) or n == 0: 
     hprev = np.zeros((hidden_size,1)) # reset RNN memory
     p = 0 # go from start of data
-  inputs = [char_to_ix(ch) for ch in data[p:p+seq_length]]
-  targets = [char_to_ix(ch) for ch in data[p+1:p+seq_length+1]]
+  inputs = [char_to_ix[ch] for ch in data[p:p+seq_length]]
+  targets = [char_to_ix[ch] for ch in data[p+1:p+seq_length+1]]
 
   # sample from the model now and then
   if False:
@@ -103,7 +107,7 @@ for n in range(2001):
   # forward seq_length characters through the net and fetch gradient
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
   smooth_loss = smooth_loss * 0.9 + loss * 0.1
-  if (n % 100 == 0): 
+  if (n % epoch_step == 0): 
     print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
   
   # perform parameter update with Adagrad
