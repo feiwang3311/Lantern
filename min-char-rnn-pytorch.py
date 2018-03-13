@@ -19,7 +19,7 @@ def ix_to_char(ix):
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
-learning_rate = 1e-1
+learning_rate = 1e-2
 
 # import relevant supports
 import torch
