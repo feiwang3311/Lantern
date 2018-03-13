@@ -27,6 +27,11 @@ epoch_step = 500
 
 # import relevant supports
 import torch
+import torch.nn as nn
+from torch.autograd import Variable
+
+
+torch.manual_seed(1)
 
 def lineToTensor(line):
   tensor = torch.zeros(len(line), 1, vocab_size)
@@ -40,8 +45,6 @@ def lineToLongTensor(line):
     tensor[li][0] = char_to_ix[letter]
   return tensor
 
-import torch.nn as nn
-from torch.autograd import Variable
 
 class RNN(nn.Module):
   def __init__(self, input_size, hidden_size, output_size):
@@ -65,7 +68,9 @@ class RNN(nn.Module):
   def initHidden(self):
     return Variable(torch.zeros(1, self.hidden_size))
 
-rnn = RNN(vocab_size, hidden_size, vocab_size)    
+rnn = RNN(vocab_size, hidden_size, vocab_size)   
+#for p in rnn.parameters():
+#  p.data = torch.randn(p.data.size()) * 0.01
 
 optimizer = torch.optim.Adagrad(rnn.parameters(), lr = learning_rate)  
 

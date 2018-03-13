@@ -1839,7 +1839,7 @@ object LMS_vector {
     //val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
     //min_char_rnn_file.println(min_char_rnn.code)
     //min_char_rnn_file.flush()
-    min_char_rnn.eval("abc")
+    //min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
 
@@ -2187,9 +2187,9 @@ object LMS_vector {
 
 
     //println("try array2_2_3")
-    //val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
-    //min_char_rnn_file.println(min_char_rnn.code)
-    //min_char_rnn_file.flush()
+    //val min_char_lstm_file = new PrintWriter(new File("mincharlstm.cpp"))
+    //min_char_lstm_file.println(min_char_lstm.code)
+    //min_char_lstm_file.flush()
     //min_char_lstm.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
@@ -2629,6 +2629,8 @@ object LMS_vector {
               (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
             }
 
+            //val i_gate = (tWi.dot(embedding_tensor) + tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbi).sigmoid()
+
             val fl_gate = IF (hidden_size) (lchs(i) < 0) {
               dummy_forget_gate
             } {
@@ -2738,10 +2740,11 @@ object LMS_vector {
       }
     }
 
-
-    val sentit_file = new PrintWriter(new File("sentit.cpp"))
-    sentit_file.println(sentimental_lstm.code)
-    sentit_file.flush()
+    
+    
+    //val sentit_file = new PrintWriter(new File("sentit.cpp"))
+    //sentit_file.println(sentimental_lstm.code)
+    //sentit_file.flush()
     //sentimental_lstm.eval("abc")
 
   }
