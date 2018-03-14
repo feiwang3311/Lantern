@@ -106,7 +106,7 @@ for n in range(n_epoch+1):
 
   # forward seq_length characters through the net and fetch gradient
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
-  smooth_loss = smooth_loss * 0.999 + loss * 0.001
+  smooth_loss = smooth_loss * 0.999 + loss * 0.001 / seq_length # this division makes result quite smooth
   if (n % epoch_step == 0): 
     print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
   

@@ -29,6 +29,7 @@ epoch_step = 250
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+import torch.nn.functional as F
 
 
 torch.manual_seed(1)
@@ -65,7 +66,7 @@ class RNN(nn.Module):
     #print(input)
     #print(hidden)
     combined = torch.cat((input, hidden), 1)
-    hidden = self.i2h(combined)
+    hidden = F.tanh(self.i2h(combined))
     output = self.i2o(hidden)
     return output, hidden
 
@@ -102,7 +103,7 @@ def train(output_tensor, input_tensor):
   #for p in rnn.parameters():
   #  p.data.add_(-learning_rate, p.grad.data)
 
-  return loss.data[0]
+  return loss.data[0]/seq_length
 
 
 p = 0
