@@ -47,7 +47,7 @@ def data_producer(raw_data, batch_size, num_steps):
         return x, y
 """
 # read file
-data = open('input.txt', 'r').read() # should be simple plain text file
+data = open('graham.txt', 'r').read() # should be simple plain text file
 chars = list(set(data))
 data_size, vocab_size = len(data), len(chars)
 print 'data has %d characters, %d unique.' % (data_size, vocab_size)
@@ -58,7 +58,8 @@ ix_to_char = { i:ch for i,ch in enumerate(chars) }
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
 learning_rate = 1e-1
-num_epochs = 2001
+num_epochs = 5000
+epoch_step = 250
 batch_size = 1
 
 # build model
@@ -66,7 +67,7 @@ batchX_placeholder = tf.placeholder(tf.float32, [batch_size, seq_length])
 batchY_placeholder = tf.placeholder(tf.int32, [batch_size, seq_length])
 init_state = tf.placeholder(tf.float32, [batch_size, hidden_size])
 
-W2 = tf.Variable(np.random.randn(hidden_size, vocab_size) * learning_rate,dtype=tf.float32)
+W2 = tf.Variable(np.random.randn(hidden_size, vocab_size) * 0.01,dtype=tf.float32)
 b2 = tf.Variable(np.zeros((1,vocab_size)), dtype=tf.float32)
 
 # Unpack columns
@@ -74,13 +75,8 @@ inputs_series = tf.split(axis=1, num_or_size_splits=seq_length, value=batchX_pla
 labels_series = tf.unstack(batchY_placeholder, axis=1)
 
 # forward pass
-# cell = tf.contrib.rnn.BasicRNNCell(hidden_size)
-cell = tf.contrib.rnn.BasicLSTMCell(hidden_size, state_is_tuple=False)
+cell = tf.contrib.rnn.BasicRNNCell(hidden_size)
 states_series, current_state = tf.contrib.rnn.static_rnn(cell, inputs_series, init_state)
-# state_series = []
-# for input in inputs_series:
-#     output, state = cell(input, init_state[0])
-#     state_series.append(output)
 
 logits_series = [tf.matmul(state, W2) + b2 for state in states_series] #Broadcasted addition
 predictions_series = [tf.nn.softmax(logits) for logits in logits_series]
@@ -90,29 +86,29 @@ total_loss = tf.reduce_sum(losses)
 train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss)
 
 with tf.Session() as sess:
-    sess.run(tf.initialize_all_variables())
+    sess.run(tf.global_variables_initializer())
+    smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
     loss_list = []
     p = 0
-    for epoch_idx in range(num_epochs):
+
+    for epoch_idx in range(num_epochs + 1):
+        _current_state = np.random.randn(1,hidden_size) * 0.01
+
         if p+seq_length+1 >= len(data) or epoch_idx == 0: 
-            hprev = np.zeros((hidden_size,1)) # reset RNN memory
             p = 0 # go from start of data
             inputs = np.array([char_to_ix[ch] for ch in data[p:p+seq_length]]).reshape((1,seq_length))
             targets = np.array([char_to_ix[ch] for ch in data[p+1:p+seq_length+1]]).reshape((1,seq_length))
-
-        _current_state = np.zeros((1,hidden_size))
-
-        # print("New data, epoch", epoch_idx)
 
         _total_loss, _train_step, _current_state, _predictions_series = sess.run(
             [total_loss, train_step, current_state, predictions_series],
             feed_dict={
                 batchX_placeholder:inputs,
                 batchY_placeholder:targets,
-                init_state:_current_state
+                init_state:_current_state,
             })
+        smooth_loss = smooth_loss * 0.999 + _total_loss * 0.001
+        loss_list.append(smooth_loss)
+        p += seq_length
 
-        loss_list.append(_total_loss)
-
-        if epoch_idx%100 == 0:
-            print("Step",epoch_idx, "Loss", _total_loss)
+        if epoch_idx%epoch_step == 0:
+            print("Step",epoch_idx, "Loss", smooth_loss)

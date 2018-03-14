@@ -21,9 +21,9 @@ def ix_to_char(ix):
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
-learning_rate = 1e-2
-n_epoch = 10000
-epoch_step = 500
+learning_rate = 1e-1
+n_epoch = 5000
+epoch_step = 250
 
 # import relevant supports
 import torch
@@ -54,7 +54,12 @@ class RNN(nn.Module):
 
     self.i2h = nn.Linear(input_size + hidden_size, hidden_size)
     self.i2o = nn.Linear(hidden_size, output_size)
-    self.softmax = nn.LogSoftmax(dim=1)
+    # forgot to init weights?
+    initrange = 0.01
+    self.i2h.weight.data.normal_(0, initrange)
+    self.i2h.bias.data.fill_(0)
+    self.i2o.weight.data.uniform_(0, initrange)
+    self.i2o.bias.data.fill_(0)
 
   def forward(self, input, hidden):
     #print(input)
@@ -62,7 +67,6 @@ class RNN(nn.Module):
     combined = torch.cat((input, hidden), 1)
     hidden = self.i2h(combined)
     output = self.i2o(hidden)
-    output = self.softmax(output)
     return output, hidden
 
   def initHidden(self):
@@ -74,7 +78,8 @@ rnn = RNN(vocab_size, hidden_size, vocab_size)
 
 optimizer = torch.optim.Adagrad(rnn.parameters(), lr = learning_rate)  
 
-criterion = nn.NLLLoss()
+# criterion = nn.NLLLoss()
+criterion = nn.CrossEntropyLoss()
 
 def train(output_tensor, input_tensor):
   hidden = rnn.initHidden()
@@ -85,10 +90,7 @@ def train(output_tensor, input_tensor):
 
   for i in range(input_tensor.size()[0]):
     output, hidden = rnn(input_tensor[i], hidden)
-    if (i == 0): 
-      loss = criterion(output, output_tensor[i])
-    else:
-      loss = loss + criterion(output, output_tensor[i]) 
+    loss += criterion(output, output_tensor[i]) 
 
   loss.backward()
 
@@ -100,7 +102,7 @@ def train(output_tensor, input_tensor):
   #for p in rnn.parameters():
   #  p.data.add_(-learning_rate, p.grad.data)
 
-  return output, loss.data[0]
+  return loss.data[0]
 
 
 p = 0
@@ -113,8 +115,8 @@ for iter in range(n_epoch + 1):
 
   inputs  = Variable(lineToTensor(data[p:p+seq_length]))
   targets = Variable(lineToLongTensor(data[p+1:p+seq_length+1]))
-  output, loss = train(targets, inputs)
-  smooth_loss = smooth_loss * 0.9 + loss * 0.1
+  loss = train(targets, inputs)
+  smooth_loss = smooth_loss * 0.999 + loss * 0.001
   # if smooth_loss > 60: smooth_loss = 60
   # Print iter number, loss, name and guess
   if iter % epoch_step == 0: print('iter %d, loss: %f' % (iter, smooth_loss))

@@ -57,11 +57,10 @@ ix_to_char = { i:ch for i,ch in enumerate(chars) }
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
-learning_rate = 1e-2
-num_epochs = 10000
-epoch_step = 500
+learning_rate = 1e-1
+num_epochs = 5000
+epoch_step = 250
 batch_size = 1
-smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
 
 # build model
 batchX_placeholder = tf.placeholder(tf.float32, [batch_size, seq_length])
@@ -85,9 +84,8 @@ logits_series = [tf.matmul(state, W2) + b2 for state in states_series] #Broadcas
 predictions_series = [tf.nn.softmax(logits) for logits in logits_series]
 losses = [tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels) for logits, labels in zip(logits_series,labels_series)]
 total_loss = tf.reduce_sum(losses)
-smooth_loss = smooth_loss * 0.9 + total_loss * 0.1
 
-train_step = tf.train.AdagradOptimizer(learning_rate).minimize(smooth_loss)
+train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss)
 """
 for input in inputs_series:
     print(input.shape)
@@ -98,6 +96,7 @@ for label in labels_series:
 
 with tf.Session() as sess:
     sess.run(tf.initialize_all_variables())
+    smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
     loss_list = []
     p = 0
     for epoch_idx in range(num_epochs + 1):
@@ -124,7 +123,9 @@ with tf.Session() as sess:
 
         _current_cell_state, _current_hidden_state = _current_state
 
-        loss_list.append(_total_loss)
+        smooth_loss = smooth_loss * 0.999 + _total_loss * 0.001
+        loss_list.append(smooth_loss)
+        p += seq_length
 
         if epoch_idx%epoch_step == 0:
-            print("Step",epoch_idx, "Loss", _total_loss)
+            print("Step",epoch_idx, "Loss", smooth_loss)

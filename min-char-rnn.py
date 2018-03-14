@@ -22,8 +22,8 @@ def ix_to_char(ix):
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
 learning_rate = 1e-1
-n_epoch = 10000
-epoch_step = 500
+n_epoch = 5000
+epoch_step = 250
 
 # model parameters
 Wxh = np.random.randn(hidden_size, vocab_size)*0.01 # input to hidden
@@ -106,7 +106,7 @@ for n in range(n_epoch+1):
 
   # forward seq_length characters through the net and fetch gradient
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
-  smooth_loss = smooth_loss * 0.9 + loss * 0.1
+  smooth_loss = smooth_loss * 0.999 + loss * 0.001
   if (n % epoch_step == 0): 
     print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
   
