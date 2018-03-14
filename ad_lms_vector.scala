@@ -751,18 +751,43 @@ object LMS_vector {
       }
 
 
-      // def conv(that: TensorR, stride: (Int, Int) = (1, 1), out: TensorR = null): TensorR @diff = shift { (k: TensorR => Unit) =>
+      def conv(kernel: TensorR, strideRow: Int, strideCol: Int): TensorR @diff = shift { (k: TensorR => Unit) =>
 
-      //   val y = if (out == null) {
-      //     TensorR(convSize(this.x.dims(0), that.x.dims(0), stride(0)), convSize(this.x.dim1, that.x.dim1, stride(1)))
-      //   } else {
-      //     out
-      //   }
-      //   x conv(that.x, stride, y.x)
+        val y = x conv(kernel.x, stride)
+        k(y)
 
-      //   k(y)
-      //   this.d += y.d
-      // }
+        // TODO think about the loop order
+        val offOutputD = var_new(0)
+        val offKernel = var_new(0)
+        assert(y.d.dims(0) == kernel.x.dims(0))
+        for (kOut <- 0 until y.d.dims(0): Rep[Range]) { // forall output pane
+          val offInputR = var_new(0)
+          for (row <- 0 until y.d.dims(1): Rep[Range]) {
+            val offInputC = var_new(offInputR)
+            for (col <- 0 until y.d.dims(2): Rep[Range]) {
+              val dCurr = y.d.data(offOutputD)
+
+              val offKernelR = var_new(offKernel)
+              assert(this.d.dims(0) == kernel.d.dims(1))
+              for (pane <- 0 until this.d.dims(0): Rep[Range]) {
+                val offInputP = var_new(offInputC)
+                for (kR <- 0 until kernel.d.dims(2): Rep[Range]) {
+                  for (kC <- 0 until kernel.d.dims(3): Rep[Range]) {
+                    this.d.data(offInputP + kC) = this.d.data(offInputP + kC) + d * kernel.x.data(offKernelR)
+                    kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + d * this.x.data(offInputP + kC)
+                    offKernelR += 1
+                  }
+                  offInputP += this.x.strides(1)
+                }
+                offInputC += strideCol
+              }
+              offOutputD += 1
+            }
+            offInputR += strideRow * this.x.stides(1)
+          }
+          offKernel += kernel.x.strides(1)
+        }
+      }
 
       /*
       def free() = {
@@ -3010,5 +3035,36 @@ object LMS_vector {
 
   println("start cnn_test2")
   cnn_test2.eval("abc")
+
+  val cnn_test3 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+
+    @virtualize
+    def snippet(a: Rep[String]): Rep[Unit] = {
+
+      val iPane = 1
+      val iRow = 16
+      val iCol = 20
+      val input = Tensor.ones(iPane, iRow, iCol)
+      val kOut = 1
+      val kIn = iPane
+      val kRow = 3
+      val kCol = 3
+      val kernel = Tensor.zeros(kOut, kIn, kRow, kCol)
+
+      var off = (kRow * kCol)/2 // middle of the kernel
+      for (out <- 0 until kOut: Range) {
+        for (in <- 0 until kIn: Range) {
+          kernel.data(off) = 1.0
+          off += kCol * kRow
+        }
+      }
+
+      val res = input.conv2D(kernel, 2, 2)
+      Tensor.assertEqual(res, Tensor.fill(1.0, kOut, (iRow - kRow)/2 + 1, (iCol - kCol)/2 + 1), "CNN 2")
+    }
+  }
+
+  println("start cnn_test3")
+  cnn_test3.eval("abc")
 
 }
