@@ -127,7 +127,6 @@ object LMS_vector {
       def apply(i: Rep[Int]) = data(i)
       def apply(i: Rep[Int], j: Rep[Int]) = data(i + j * dims(0)) // FIXME the index of matrix is not the normal way
 
-
       @virtualize
       def clipAt(bound: Double) = {
         for (i <- (0 until nbElem): Rep[Range]) {
@@ -350,6 +349,48 @@ object LMS_vector {
         }
       }
 
+      def print4D = {
+        val idx = var_new(1)
+        for (i <- 0 until this.dims(0): Rep[Range]) {
+          for (j <- 0 until this.dims(1): Rep[Range]) {
+            printf("Kernel #%d\\n", idx)
+            for (k <- 0 until this.dims(2): Rep[Range]) {
+              for (l <- 0 until this.dims(3): Rep[Range]) {
+                printf("%02.3f ", this.data(i * this.strides(1) + j * this.strides(2) + k * this.strides(3) + l))
+              }
+              printf("\\n")
+            }
+            printf("\\n\\n")
+            idx += 1
+          }
+        }
+      }
+
+      def print3D = {
+        val idx = var_new(1)
+        for (i <- 0 until this.dims(0): Rep[Range]) {
+          printf("Pane #%d\\n", idx)
+          for (k <- 0 until this.dims(1): Rep[Range]) {
+            for (l <- 0 until this.dims(2): Rep[Range]) {
+              printf("%02.3f ", this.data(i * this.strides(1) + k * this.strides(2) + l))
+            }
+            printf("\\n")
+          }
+          printf("\\n\\n")
+          idx += 1
+        }
+      }
+
+      def printRaw(row: Int = 10) = {
+        for (i <- 0 until this.nbElem: Rep[Range]) {
+          printf("%.3f ", data(i))
+          val imod = i % row
+          if (imod == row - 1)
+            printf("\\n")
+        }
+        printf("\\n")
+      }
+
       // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
       // the result is to update this so that this += that * y, where * is cartesian product
       def add_cartesian(that: Tensor, y: Tensor) = {
@@ -454,10 +495,82 @@ object LMS_vector {
           for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + oneMinusThenMult(a.getAt(i)) * b.getAt(i)
         }
       }
+
+      def slice(arr: Rep[Array[Double]], off: Rep[Int]) = uncheckedPure[Array[Double]](arr, "+", off)
+
+      def conv2D(kernel: Tensor, strideRow: Int, strideCol: Int): Tensor = {
+
+        assert(this.nbDims == 3 && kernel.nbDims == 4)
+
+        assert(strideRow >= 1)
+        assert(strideCol >= 1)
+
+        assert(kernel.dims(1) == this.dims(0))
+        assert(this.dims(1) >= kernel.dims(2) && this.dims(2) >= kernel.dims(3), "Image too small")
+
+        val resHeight = convSize(this.dims(1), kernel.dims(2), strideRow)
+        val resWidth = convSize(this.dims(2), kernel.dims(3), strideCol)
+        val res = Tensor(kernel.dims(0), resHeight, resWidth)
+
+        val offOut = var_new(0)
+        val offWeight1 = var_new(0)
+        for (outPane <- 0 until kernel.dims(0): Rep[Range]) {
+          val offWeight2 = var_new(offWeight1)
+          val offInput = var_new(0)
+          val ptrOutput = slice(res.data, offOut)
+          for (inPane <- 0 until this.dims(0): Rep[Range]) {
+            val ptrIntput = slice(this.data, offInput)
+            val ptrWeight = slice(kernel.data, offWeight2)
+
+            Tensor(ptrOutput, resHeight, resWidth).conv2D(Tensor(ptrIntput, this.dims(1), this.dims(2)), Tensor(ptrWeight, kernel.dims(2), kernel.dims(3)), strideRow, strideCol)
+
+            offWeight2 += kernel.strides(2)
+            offInput += this.strides(2)
+          }
+          offWeight1 += kernel.strides(1)
+          offOut += res.strides(1)
+        }
+        res
+      }
+
+      // Taken from Torch: THTensorConv.cpp#198L
+      def conv2D(input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int): Unit = {
+        assert(this.nbDims == 2 && input.nbDims == 2 && kernel.nbDims == 2)
+        assert(strideRow >= 1)
+        assert(strideCol >= 1)
+
+        val offOuput = var_new(0)
+        val offInputR = var_new(0)
+        for (outRow <- 0 until this.dims(0): Rep[Range]) {
+          val offInputC = var_new(offInputR)
+          for (outCol <- 0 until this.dims(1): Rep[Range]) {
+            val offKernel = var_new(0)
+            val offInput = var_new(offInputC)
+            val sum = var_new(0.0)
+            for (kernelRow <- 0 until kernel.dims(0): Rep[Range]) {
+              val ptrIntput = slice(input.data, offInput)
+              val ptrKernel = slice(kernel.data, offKernel)
+              for (kernelCol <- 0 until kernel.dims(1): Rep[Range]) {
+                sum +=  ptrIntput(kernelCol) * ptrKernel(kernelCol)
+              }
+              offKernel += kernel.strides(1)
+              offInput += input.strides(1)
+            }
+            this.data(offOuput) = this.data(offOuput) + sum
+            offOuput += 1
+            offInputC += strideCol
+          }
+          offInputR += strideRow * input.strides(1)
+        }
+      }
     }
 
     object Tensor {
 
+      def apply(dims: Int*) = {
+        val size = dims.product
+        new Tensor(NewArray[Double](size), dims)
+      }
       def apply(data: Rep[Array[Double]], dims: Int*) = new Tensor(data, dims)
 
       def dimCompatible(a: Tensor, b: Tensor) = {
@@ -470,7 +583,7 @@ object LMS_vector {
       def randinit(dim0: Int, dim1: Int, scale: Double): Tensor = randinit(NSeq(dim0, dim1), scale, None)
       def randinit(dims: NSeq[Int], scale: Double = 1.0, seed: Option[Int] = None): Tensor = {
         unchecked[Unit]("srand(",seed.getOrElse("time(NULL)"),")")
-        val size = (1 /: dims)(_ * _)
+        val size = dims.product
         val res = NewArray[Double](size)
         for (i <- (0 until size): Rep[Range]) res(i) = unchecked[Double]("(double)rand()/RAND_MAX*2.0-1.0") * scale
         new Tensor(res, dims)
@@ -483,7 +596,7 @@ object LMS_vector {
       }
 
       def randPositive(dims: Int*) = {
-        val size = (1 /: dims)(_ * _)
+        val size = dims.product
         val res = NewArray[Double](size)
         unchecked[Unit]("srand(time(NULL))")
         for (i <- (0 until size): Rep[Range]) res(i) = unchecked[Double]("(double)rand()/RAND_MAX*2.0")
@@ -491,7 +604,7 @@ object LMS_vector {
       }
 
       def fill(value: Rep[Double], dims: Int*) = {
-        val size = (1 /: dims)(_ * _)
+        val size = dims.product
         val res = NewArray[Double](size)
         for (i <- (0 until size): Rep[Range]) res(i) = value
         new Tensor(res, dims)
@@ -533,6 +646,7 @@ object LMS_vector {
         Tensor(res, y.length)
       }
 
+
       // def conv(that: Tensor, stride: (Int, Int) = (1, 1))
 
       @virtualize
@@ -544,7 +658,7 @@ object LMS_vector {
           i += 1
         }
         if (i < a.nbElem)
-          printf("ERROR: %s not equal in some data\\n", mark)
+          printf("ERROR: %s not equal in some data - %.4f != %.4f (%d)\\n", mark, a(i), b(i), i)
       }
     }
 
@@ -929,7 +1043,8 @@ object LMS_vector {
     import java.io.PrintWriter;
     import java.io.File;
 
-    if (true) {
+    if (false) {
+    if (false) {
       val array0 = new DslDriverC[String, Unit] with TensorExp {
 
         @virtualize
@@ -2841,75 +2956,59 @@ object LMS_vector {
     //sentimental_lstm.eval("abc")
 
   }
+  }
 
-  val cnn = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
-
-    // TODO TensorND ???
-    // TODO: Rename size0 -> nbPanes, size1 -> nbRows, size2 -> nbCols
-    case class Tensor3D(data: Rep[Array[Double]], size0: Int, size1: Int, size2: Int) {
-      val offsets = {
-        val offset1 = size2 * size1
-        val offset0 = offset1 * size0
-
-        assert(offset0 != 0, "Empty tensor")
-
-        Array(offset0, offset1, size2)
-      }
-    }
-
-    // TODO: Rename size0 -> nbImages, size1 -> nbPanes, size2 -> nbRows, size3 -> nbCols
-    case class Tensor4D(data: Rep[Array[Double]], size0: Int, size1: Int, size2: Int, size3: Int) {
-      val offsets = {
-        val offset2 = size2 * size3
-        val offset1 = offset2 * size1
-        val offset0 = offset1 * size0
-
-        assert(offset0 != 0, "Empty tensor")
-
-        Array(offset0, offset1, offset2, size3)
-      }
-    }
-
-
-    def slice(arr: Rep[Array[Double]], off: Rep[Int]) = uncheckedPure[Array[Double]](arr, "+", off)
-
-    // def conv2D(res: Tensor4D, input: Tensor4D, kernel: Tensor4D, strideRow: Int, strideCol: Int) = {
-
-    //   assert(strideRow >= 1)
-    //   assert(strideCol >= 1)
-
-    //   assert(kernel.size1 == input.size1)
-    //   assert(input.size2 >= kernel.size2 && input.size3 >= kernel.size3, "Image too small")
-
-    //   assert(res.size2 == convSize(input.size2, kernel.size2, strideRow), "Incorrect result size")
-    //   assert(res.size3 == convSize(input.size3, kernel.size3, strideCol), "Incorrect result size")
-
-
-    //   var offOut = 0
-    //   var offInput1 = 0
-    //   for (img <- 0 until input.size0) {
-    //     var offWeight1 = 0
-    //     for (outPane <- 0 until kernel.size0) {
-    //       var offWeight2 = offWeight1
-    //       var offInput2 = offInput1
-    //       val ptrOutput = slice(res.data, offOut)
-    //       for (inPane <- 0 until input.size1) {
-    //         val ptrIntput = slice(intput.data, offInput2)
-    //         val ptrWeight = slice(kernel.data, offWeight2)
-    //         TensorR(ptrIntput, input.size2, input.size3).conv(TensorR(ptrWeight, kernel.size2, kernel.size3), TensorR(ptrOutput, res.size2, res.size3))
-    //         offWeight2 += kernel.size1
-    //         offInput2 += input.offsets(2)
-    //       }
-    //       offWeight1 += kernel.size0
-    //     }
-    //     offInput1 += input.offsets(1)
-    //   }
-
-    // }
+  val cnn_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+
+      val iPane = 1
+      val iRow = 16
+      val iCol = 20
+      val input = Tensor.ones(iPane, iRow, iCol)
+      val kOut = 1
+      val kIn = iPane
+      val kRow = 3
+      val kCol = 3
+      val kernel = Tensor.ones(kOut, kIn, kRow, kCol)
+
+      val res = input.conv2D(kernel, 1, 1)
+      Tensor.assertEqual(res, Tensor.fill((kRow * kCol * kIn) * 1.0, kOut, iRow - kRow + 1, iCol - kCol + 1), "CNN 1")
     }
   }
+  println("start cnn_test1")
+  cnn_test1.eval("abc")
+
+  val cnn_test2 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+
+    @virtualize
+    def snippet(a: Rep[String]): Rep[Unit] = {
+
+      val iPane = 1
+      val iRow = 16
+      val iCol = 20
+      val input = Tensor.ones(iPane, iRow, iCol)
+      val kOut = 1
+      val kIn = iPane
+      val kRow = 3
+      val kCol = 3
+      val kernel = Tensor.zeros(kOut, kIn, kRow, kCol)
+
+      var off = (kRow * kCol)/2 // middle of the kernel
+      for (out <- 0 until kOut: Range) {
+        for (in <- 0 until kIn: Range) {
+          kernel.data(off) = 1.0
+          off += kCol * kRow
+        }
+      }
+
+      val res = input.conv2D(kernel, 1, 1)
+      Tensor.assertEqual(res, Tensor.fill(1.0, kOut, iRow - kRow + 1, iCol - kCol + 1), "CNN 2")
+    }
+  }
+
+  println("start cnn_test2")
+  cnn_test2.eval("abc")
 
 }
