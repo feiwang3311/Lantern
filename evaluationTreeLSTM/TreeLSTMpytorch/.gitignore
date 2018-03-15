@@ -1,0 +1,10 @@
+.idea
+
+*.pyc
+
+*.pth
+*.class
+
+data/
+lib/stanford-parser
+lib/stanford-tagger

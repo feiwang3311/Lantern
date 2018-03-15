@@ -1,0 +1,2 @@
+loggly-python-handler
+requests

@@ -1711,7 +1711,7 @@ object LMS_vector {
         /**
          add scanner
          **/
-        val scanner = new Scanner("test_data")
+        val scanner = new Scanner("graham1.txt")
         val training_data = scanner.data
         val data_size = scanner.fl
         // val chars = training_data.distinct  /** this can be done in second stage **/
@@ -1793,7 +1793,7 @@ object LMS_vector {
         val timer = Timer()
         timer.startTimer
 
-        var smooth_loss = 60.0
+        var smooth_loss = 70.0
         for (n <- (0 until 2001): Rep[Range]) {
 
           startAt += seq_length
@@ -2514,6 +2514,10 @@ object LMS_vector {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
+        val timer = Timer()
+        timer.startTimer
+
+
         // read in the data for word embedding
         val word_embedding_size   = 300
         val word_embedding_length = 5265 // need to know the size of file first, need fix
@@ -2539,10 +2543,6 @@ object LMS_vector {
             for (k <- (0 until size(0)): Rep[Range]) getInt(fp1, tree_data(i * 4 + j), k)
           }
         }
-
-        val timer = Timer()
-        timer.startTimer
-
 
         // set up hyperparameters and parameters
         val hidden_size = 150
@@ -2707,6 +2707,9 @@ object LMS_vector {
 
         val addr = getMallocAddr() // remember current allocation pointer here
 
+        printf("before entering loop\\n")
+        timer.printElapsedTime
+
         for (epoc <- (0 until 30): Rep[Range]) {
 
           var average_loss = 0.0
@@ -2742,12 +2745,11 @@ object LMS_vector {
 
     
     
-    //val sentit_file = new PrintWriter(new File("sentit.cpp"))
-    //sentit_file.println(sentimental_lstm.code)
-    //sentit_file.flush()
+    val sentit_file = new PrintWriter(new File("sentit.cpp"))
+    sentit_file.println(sentimental_lstm.code)
+    sentit_file.flush()
     //sentimental_lstm.eval("abc")
 
   }
-
 
 }
