@@ -108,7 +108,7 @@ def train(output_tensor, input_tensor):
   #for p in rnn.parameters():
   #  p.data.add_(-learning_rate, p.grad.data)
 
-  return loss.data[0]/seq_length
+  return loss.data[0]
 
 
 p = 0
@@ -123,7 +123,7 @@ for iter in range(n_epoch + 1):
   inputs  = Variable(lineToTensor(data[p:p+seq_length]))
   targets = Variable(lineToLongTensor(data[p+1:p+seq_length+1]))
   loss = train(targets, inputs)
-  smooth_loss = smooth_loss * 0.999 + loss * 0.001
+  smooth_loss = smooth_loss * 0.9 + loss * 0.1
   # if smooth_loss > 60: smooth_loss = 60
   # Print iter number, loss, name and guess
   if iter % epoch_step == 0: print('iter %d, loss: %f' % (iter, smooth_loss))

@@ -81,9 +81,11 @@ with tf.Session() as sess:
     p = 0
 
     for epoch_idx in range(num_epochs + 1):
+        _current_state = np.zeros((1,hidden_size))    
+
         if p+seq_length+1 >= len(data) or epoch_idx == 0: 
             p = 0 # go from start of data
-            _current_state = np.zeros((1,hidden_size))
+            # _current_state = np.zeros((1,hidden_size))
 
         inputs = np.array([char_to_ix[ch] for ch in data[p:p+seq_length]]).reshape((1,seq_length))
         targets = np.array([char_to_ix[ch] for ch in data[p+1:p+seq_length+1]]).reshape((1,seq_length))
