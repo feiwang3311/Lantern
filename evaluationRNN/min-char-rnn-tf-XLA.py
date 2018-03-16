@@ -76,7 +76,8 @@ labels_series = tf.unstack(batchY_placeholder, axis=1)
 
 # forward pass
 cell = tf.contrib.rnn.BasicRNNCell(hidden_size)
-states_series, current_state = tf.contrib.rnn.static_rnn(cell, inputs_series, init_state)
+compiled_cell = tf.contrib.rnn.CompiledWrapper(cell)
+states_series, current_state = tf.contrib.rnn.static_rnn(compiled_cell, inputs_series, init_state)
 
 logits_series = [tf.matmul(state, W2) + b2 for state in states_series] #Broadcasted addition
 predictions_series = [tf.nn.softmax(logits) for logits in logits_series]

@@ -3,14 +3,19 @@ Minimal character-level Vanilla RNN model. Written by Andrej Karpathy (@karpathy
 BSD License
 """
 import numpy as np
+import time
 
 # data I/O
-data = open('graham1.txt', 'r').read() # should be simple plain text file
+start = time.time()
+data = open('graham.txt', 'r').read() # should be simple plain text file
 chars = list(set(data))
 data_size, vocab_size = len(data), len(chars)
 print('data has %d characters, %d unique.' % (data_size, vocab_size))
 char_to_ix = { ch:i for i,ch in enumerate(chars) }
 ix_to_char = { i:ch for i,ch in enumerate(chars) }
+end = time.time()
+print("data loading time: %f" % (end - start))
+
 """
 def char_to_ix(ch):
   return ord(ch) - ord('a')
@@ -110,6 +115,7 @@ p = 0
 #mWxh, mWhh, mWhy = torch.zeros_like(Wxh), torch.zeros_like(Whh), torch.zeros_like(Why)
 #mbh, mby = torch.zeros_like(bh), torch.zeros_like(by)
 smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
+start = time.time()
 for iter in range(n_epoch + 1):
 
   if p+seq_length+1 >= len(data): p = 0
@@ -123,3 +129,5 @@ for iter in range(n_epoch + 1):
   if iter % epoch_step == 0: print('iter %d, loss: %f' % (iter, smooth_loss))
 
   p += seq_length
+end = time.time()
+print("training loop time: %f" % (end - start))

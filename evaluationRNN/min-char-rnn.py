@@ -3,14 +3,19 @@ Minimal character-level Vanilla RNN model. Written by Andrej Karpathy (@karpathy
 BSD License
 """
 import numpy as np
+import time
 
 # data I/O
+start = time.time()
 data = open('graham.txt', 'r').read() # should be simple plain text file
 chars = list(set(data))
 data_size, vocab_size = len(data), len(chars)
 print 'data has %d characters, %d unique.' % (data_size, vocab_size)
 char_to_ix = { ch:i for i,ch in enumerate(chars) }
 ix_to_char = { i:ch for i,ch in enumerate(chars) }
+end = time.time()
+print("data loading time: %f" % (end - start))
+
 """
 def char_to_ix(ch):
   return ord(ch) - ord('a')
@@ -90,6 +95,8 @@ n, p = 0, 0
 mWxh, mWhh, mWhy = np.zeros_like(Wxh), np.zeros_like(Whh), np.zeros_like(Why)
 mbh, mby = np.zeros_like(bh), np.zeros_like(by) # memory variables for Adagrad
 smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
+
+start = time.time()
 for n in range(n_epoch+1):
   # prepare inputs (we're sweeping from left to right in steps seq_length long)
   if p+seq_length+1 >= len(data) or n == 0: 
@@ -106,9 +113,9 @@ for n in range(n_epoch+1):
 
   # forward seq_length characters through the net and fetch gradient
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
-  smooth_loss = smooth_loss * 0.999 + loss * 0.001 / seq_length # this division makes result quite smooth
+  smooth_loss = smooth_loss * 0.9 + loss * 0.1 # this division makes result quite smooth
   if (n % epoch_step == 0): 
-    print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
+    print 'iter %d, loss: %f' % (n, loss) # print progress
   
   # perform parameter update with Adagrad
   for param, dparam, mem in zip([Wxh, Whh, Why, bh, by], 
@@ -119,3 +126,5 @@ for n in range(n_epoch+1):
 
   p += seq_length # move data pointer
   #n += 1 # iteration counter 
+end = time.time()
+print("training loop time: %f" % (end - start))

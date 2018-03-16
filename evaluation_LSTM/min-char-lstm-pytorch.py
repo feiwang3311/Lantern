@@ -3,20 +3,18 @@ Minimal character-level Vanilla RNN model. Written by Andrej Karpathy (@karpathy
 BSD License
 """
 import numpy as np
+import time
 
 # data I/O
+start = time.time()
 data = open('graham.txt', 'r').read() # should be simple plain text file
 chars = list(set(data))
 data_size, vocab_size = len(data), len(chars)
 print('data has %d characters, %d unique.' % (data_size, vocab_size))
 char_to_ix = { ch:i for i,ch in enumerate(chars) }
 ix_to_char = { i:ch for i,ch in enumerate(chars) }
-"""
-def char_to_ix(ch):
-  return ord(ch) - ord('a')
-def ix_to_char(ix):
-  return chr(ix + ord('a'))
-"""
+end = time.time()
+print("data loading time: %f" % (end - start))
 
 # hyperparameters
 hidden_size = 50 # size of hidden layer of neurons
@@ -89,6 +87,7 @@ optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
 p = 0
 smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
 
+start = time.time()
 for iter in range(n_epoch + 1):
   if p+seq_length+1 >= len(data) or (iter == 0): 
     p = 0
@@ -104,13 +103,12 @@ for iter in range(n_epoch + 1):
   loss.backward()
   torch.nn.utils.clip_grad_norm(model.parameters(), 5.0, norm_type=1)
   optimizer.step()
-    #output, loss = train(targets, inputs)
 
-  smooth_loss = smooth_loss * 0.999 + loss.data[0] / seq_length * 0.001
+  smooth_loss = smooth_loss * 0.9 + loss.data[0] * 0.1
   if iter % epoch_step == 0: print('iter %d, loss: %f' % (iter, smooth_loss))
   p += seq_length
-
-
+end = time.time()
+print("training loop time: %f" % (end - start))
 exit(0)
 
 
