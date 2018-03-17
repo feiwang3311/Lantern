@@ -33,6 +33,8 @@ from trainer import SentimentTrainer
 
 import time
 
+torch.set_num_threads(1)
+
 # MAIN BLOCK
 def main():
 
