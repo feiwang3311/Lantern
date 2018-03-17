@@ -37,7 +37,7 @@ W2 = tf.Variable(np.random.randn(hidden_size, vocab_size) * learning_rate,dtype=
 b2 = tf.Variable(np.zeros((1,vocab_size)), dtype=tf.float32)  # output bias
 
 # Unpack columns
-inputs_series = tf.split(axis=1, num_or_size_splits=batch_size, value=batchX_placeholder)  # [batch_size, seq_length] -> batch_size [1, seq_length] tensors
+inputs_series = tf.split(axis=1, num_or_size_splits=seq_length, value=batchX_placeholder)  # [batch_size, seq_length] -> batch_size [1, seq_length] tensors
 labels_series = tf.unstack(batchY_placeholder, axis=1)  # unpack the [batch_size, vocab_length] tensor into batch_szie [1, seq_length] tensors
 
 # forward pass
@@ -52,7 +52,10 @@ total_loss = tf.reduce_sum(losses)
 train_step = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss)
 
 start = time.time()
-with tf.Session() as sess:
+session_conf = tf.ConfigProto(
+      intra_op_parallelism_threads=1,
+      inter_op_parallelism_threads=1)
+with tf.Session(config=session_conf) as sess:
     sess.run(tf.initialize_all_variables())
     smooth_loss = -np.log(1.0/vocab_size)*seq_length # loss at iteration 0
     loss_list = []

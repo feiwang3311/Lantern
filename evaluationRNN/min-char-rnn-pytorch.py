@@ -27,8 +27,8 @@ def ix_to_char(ix):
 hidden_size = 50 # size of hidden layer of neurons
 seq_length = 20 # number of steps to unroll the RNN for
 learning_rate = 1e-1
-n_epoch = 5000
-epoch_step = 250
+n_epoch = 5
+epoch_step = 1
 
 # import relevant supports
 import torch
@@ -71,6 +71,8 @@ class RNN(nn.Module):
     #print(input)
     #print(hidden)
     combined = torch.cat((input, hidden), 1)
+    print(combined)
+    print(self.i2h(combined))
     hidden = F.tanh(self.i2h(combined))
     output = self.i2o(hidden)
     return output, hidden
@@ -96,6 +98,7 @@ def train(output_tensor, input_tensor):
 
   for i in range(input_tensor.size()[0]):
     output, hidden = rnn(input_tensor[i], hidden)
+    print(output)
     loss += criterion(output, output_tensor[i]) 
 
   loss.backward()
