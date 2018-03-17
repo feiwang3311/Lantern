@@ -366,6 +366,7 @@ trait DslGenC extends CGenNumericOps
       #include <err.h>
       #include <sys/mman.h>
       #include <sys/stat.h>
+      #include <sys/time.h>
       #include <stdio.h>
       #include <stdint.h>
       #include <unistd.h>
@@ -410,6 +411,14 @@ trait DslGenC extends CGenNumericOps
         mallocAddr += bytes;
         return res;
       }
+
+      int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
+        long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
+        result->tv_sec = diff / 1000000;
+        result->tv_usec = diff % 1000000;
+        return (diff<0);
+      }
+
 
 
       void Snippet(char*);
@@ -480,7 +489,9 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] wit
     //TODO: use precompile
     (new java.io.File("/tmp/snippet")).delete
     import scala.sys.process._
-    (s"g++ -std=c++11 -O1 -Wno-pointer-arith /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(Console.println _) //-std=c99
-    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
+    System.out.println("Compile C++ code")
+    (s"g++ -std=c++11 -O1 -Wno-pointer-arith /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println _) //-std=c99
+    System.out.println("Run C++ code")
+    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println _)
   }
 }

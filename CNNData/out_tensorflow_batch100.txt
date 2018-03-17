@@ -1,0 +1,131 @@
+epoch 1: step 60, training loss 0.020459
+epoch 1: step 120, training loss 0.015609
+epoch 1: step 180, training loss 0.012998
+epoch 1: step 240, training loss 0.011366
+epoch 1: step 300, training loss 0.010272
+epoch 1: step 360, training loss 0.009425
+epoch 1: step 420, training loss 0.008766
+epoch 1: step 480, training loss 0.008226
+epoch 1: step 540, training loss 0.007758
+epoch 1: step 600, training loss 0.007386
+Training completed in 32349ms (0.539161515299ms/image)
+Epoch 1: test accuracy 94/10000. Average loss 0.001767
+Testing completed in 2654ms (0.265408691406ms/image)
+epoch 2: step 60, training loss 0.003813
+epoch 2: step 120, training loss 0.003773
+epoch 2: step 180, training loss 0.003643
+epoch 2: step 240, training loss 0.003560
+epoch 2: step 300, training loss 0.003499
+epoch 2: step 360, training loss 0.003450
+epoch 2: step 420, training loss 0.003399
+epoch 2: step 480, training loss 0.003342
+epoch 2: step 540, training loss 0.003272
+epoch 2: step 600, training loss 0.003206
+Training completed in 32127ms (0.535461698405ms/image)
+Epoch 2: test accuracy 96/10000. Average loss 0.001164
+Testing completed in 2667ms (0.266774804687ms/image)
+epoch 3: step 60, training loss 0.002857
+epoch 3: step 120, training loss 0.002919
+epoch 3: step 180, training loss 0.002783
+epoch 3: step 240, training loss 0.002678
+epoch 3: step 300, training loss 0.002656
+epoch 3: step 360, training loss 0.002577
+epoch 3: step 420, training loss 0.002534
+epoch 3: step 480, training loss 0.002479
+epoch 3: step 540, training loss 0.002441
+epoch 3: step 600, training loss 0.002415
+Training completed in 32246ms (0.537439099121ms/image)
+Epoch 3: test accuracy 97/10000. Average loss 0.000875
+Testing completed in 2705ms (0.270587304687ms/image)
+epoch 4: step 60, training loss 0.002205
+epoch 4: step 120, training loss 0.002235
+epoch 4: step 180, training loss 0.002176
+epoch 4: step 240, training loss 0.002136
+epoch 4: step 300, training loss 0.002109
+epoch 4: step 360, training loss 0.002107
+epoch 4: step 420, training loss 0.002103
+epoch 4: step 480, training loss 0.002087
+epoch 4: step 540, training loss 0.002059
+epoch 4: step 600, training loss 0.002044
+Training completed in 32537ms (0.542287784831ms/image)
+Epoch 4: test accuracy 97/10000. Average loss 0.000746
+Testing completed in 2678ms (0.26789699707ms/image)
+epoch 5: step 60, training loss 0.001904
+epoch 5: step 120, training loss 0.001851
+epoch 5: step 180, training loss 0.001870
+epoch 5: step 240, training loss 0.001853
+epoch 5: step 300, training loss 0.001839
+epoch 5: step 360, training loss 0.001846
+epoch 5: step 420, training loss 0.001830
+epoch 5: step 480, training loss 0.001814
+epoch 5: step 540, training loss 0.001796
+epoch 5: step 600, training loss 0.001780
+Training completed in 32363ms (0.539393082682ms/image)
+Epoch 5: test accuracy 97/10000. Average loss 0.000630
+Testing completed in 2685ms (0.268587304687ms/image)
+epoch 6: step 60, training loss 0.001722
+epoch 6: step 120, training loss 0.001656
+epoch 6: step 180, training loss 0.001630
+epoch 6: step 240, training loss 0.001646
+epoch 6: step 300, training loss 0.001637
+epoch 6: step 360, training loss 0.001629
+epoch 6: step 420, training loss 0.001610
+epoch 6: step 480, training loss 0.001623
+epoch 6: step 540, training loss 0.001595
+epoch 6: step 600, training loss 0.001592
+Training completed in 32412ms (0.540207267253ms/image)
+Epoch 6: test accuracy 97/10000. Average loss 0.000653
+Testing completed in 2699ms (0.269905419922ms/image)
+epoch 7: step 60, training loss 0.001554
+epoch 7: step 120, training loss 0.001524
+epoch 7: step 180, training loss 0.001491
+epoch 7: step 240, training loss 0.001508
+epoch 7: step 300, training loss 0.001506
+epoch 7: step 360, training loss 0.001486
+epoch 7: step 420, training loss 0.001470
+epoch 7: step 480, training loss 0.001455
+epoch 7: step 540, training loss 0.001451
+epoch 7: step 600, training loss 0.001437
+Training completed in 32379ms (0.539659403483ms/image)
+Epoch 7: test accuracy 97/10000. Average loss 0.000600
+Testing completed in 2658ms (0.26587331543ms/image)
+epoch 8: step 60, training loss 0.001370
+epoch 8: step 120, training loss 0.001438
+epoch 8: step 180, training loss 0.001444
+epoch 8: step 240, training loss 0.001442
+epoch 8: step 300, training loss 0.001419
+epoch 8: step 360, training loss 0.001399
+epoch 8: step 420, training loss 0.001390
+epoch 8: step 480, training loss 0.001367
+epoch 8: step 540, training loss 0.001358
+epoch 8: step 600, training loss 0.001351
+Training completed in 32102ms (0.535043823242ms/image)
+Epoch 8: test accuracy 98/10000. Average loss 0.000482
+Testing completed in 2682ms (0.268234082031ms/image)
+epoch 9: step 60, training loss 0.001365
+epoch 9: step 120, training loss 0.001313
+epoch 9: step 180, training loss 0.001310
+epoch 9: step 240, training loss 0.001238
+epoch 9: step 300, training loss 0.001246
+epoch 9: step 360, training loss 0.001233
+epoch 9: step 420, training loss 0.001237
+epoch 9: step 480, training loss 0.001249
+epoch 9: step 540, training loss 0.001261
+epoch 9: step 600, training loss 0.001244
+Training completed in 32176ms (0.536275899251ms/image)
+Epoch 9: test accuracy 98/10000. Average loss 0.000464
+Testing completed in 2648ms (0.264834082031ms/image)
+epoch 10: step 60, training loss 0.001305
+epoch 10: step 120, training loss 0.001227
+epoch 10: step 180, training loss 0.001244
+epoch 10: step 240, training loss 0.001248
+epoch 10: step 300, training loss 0.001224
+epoch 10: step 360, training loss 0.001204
+epoch 10: step 420, training loss 0.001202
+epoch 10: step 480, training loss 0.001210
+epoch 10: step 540, training loss 0.001198
+epoch 10: step 600, training loss 0.001193
+Training completed in 32453ms (0.540893469238ms/image)
+Epoch 10: test accuracy 98/10000. Average loss 0.000427
+Testing completed in 2686ms (0.268660009766ms/image)
+

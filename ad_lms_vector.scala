@@ -80,6 +80,24 @@ object LMS_vector {
       }
     }
 
+    class Timer2 (index: Int) {
+      unchecked[Unit](s"struct timeval begin_$index, end_$index, diff_$index")
+      def startTimer = { unchecked[Unit](s"gettimeofday(&begin_$index, NULL)") }
+      def getElapsedTime: Rep[Long] = {
+        unchecked[Unit](s"gettimeofday(&end_$index, NULL)")
+        unchecked[Unit](s"timeval_subtract(&diff_$index, &end_$index, &begin_$index);")
+        unchecked[Long](s"((diff_$index.tv_sec * 1000L) + (diff_$index.tv_usec/1000L))")
+      }
+    }
+
+    object Timer2 {
+      var index: Int = 0
+      def apply(): Timer2 = {
+        val timer = new Timer2(index)
+        index += 1
+        timer
+      }
+    }
     def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
     def mmax(a: Int, b: Int) = if (a >= b) a else b
 
@@ -347,9 +365,25 @@ object LMS_vector {
       @virtualize
       def max() = this.fold(-MAX_DOUBLE)((agg, x) => if (x > agg) x else agg)
 
+      // FIXME: Proper tensor
+      @virtualize
+      def maxIndex() = {
+        assert(this.nbDims == 1)
+        val vMax = var_new(this.data(0))
+        val iMax = var_new(0)
+        for (idx <- 1 until this.nbElem: Rep[Range]) {
+          if (this.data(idx) > vMax) {
+            iMax = idx
+            vMax = this.data(idx)
+          }
+        }
+
+        iMax
+      }
+
       @virtualize
       def logSoftmax() = {
-        assert(this.nbDims == 1)
+        assert(this.nbDims == 1, "TODO")
 
         val m = this.max
         val logsum = m + Math.log(this.fold(0.0)((agg, x) => agg + Math.exp(x - m)))
@@ -360,7 +394,7 @@ object LMS_vector {
       def nllLoss(target: Rep[Int]) = {
         assert(this.nbDims == 1)
 
-        assertC(0 <= target && target < this.nbElem, "Incorrect target")
+        // assertC(0 <= target && target < this.nbElem, "Incorrect target")
         Tensor.scalar(-1.0 * this.data(target))
       }
 
@@ -394,15 +428,15 @@ object LMS_vector {
         }
       }
 
-      def print(msg: String = "") = {
+      def print(msg: String = ""): Unit = {
         if (msg != "")
-          printf(s"$msg:\\n")
+          printf(s"$msg (size ${this.dims.seq mkString " x "})\\n")
         if (this.nbDims == 4) this.print4D
         else if (this.nbDims == 3) this.print3D
         else this.printRaw(this.dims.last)
       }
 
-      val format = "%02.8f "
+      val format = "%.10f "
       def print4D = {
         val idx = var_new(1)
         for (i <- 0 until this.dims(0): Rep[Range]) {
@@ -502,9 +536,9 @@ object LMS_vector {
             val offY = var_new(offYR)
             val offThat = var_new(offThatR)
             for (k <- 0 until that.dims(1): Rep[Range]) {
-              assertC(unit(0) <= offThis && offThis < this.nbElem, s"Index error this %d > ${this.nbElem}", offThis)
-              assertC(unit(0) <= offThat && offThat < that.nbElem, s"Index error that %d > ${that.nbElem}", offThat)
-              assertC(unit(0) <= offY && offY < y.nbElem, s"Index error this %d > ${y.nbElem}", offY)
+              // assertC(unit(0) <= offThis && offThis < this.nbElem, s"Index error this %d > ${this.nbElem}", offThis)
+              // assertC(unit(0) <= offThat && offThat < that.nbElem, s"Index error that %d > ${that.nbElem}", offThat)
+              // assertC(unit(0) <= offY && offY < y.nbElem, s"Index error this %d > ${y.nbElem}", offY)
               this.data(offThis) = this.data(offThis) + that.data(offThat) * y.data(offY)
               offThat += 1
               offY += y.strides(1)
@@ -539,8 +573,10 @@ object LMS_vector {
       def addMul(a: Rep[Double], b: Tensor) = {
         assert(this.dims == b.dims)
 
-        for (i <- 0 until this.nbElem: Rep[Range])
+        generate_comment("Generate code for addMul")
+        for (i <- 0 until this.nbElem: Rep[Range]) {
           this.data(i) = this.data(i) + a * b.data(i)
+        }
       }
       def cmulAdd(a: Double, b: Tensor) = {
         assert(this.dims == b.dims)
@@ -601,7 +637,7 @@ object LMS_vector {
         }
       }
 
-
+      @virtualize
       def conv2D(kernel: Tensor, strideRow: Int, strideCol: Int): Tensor = {
 
         assert(this.nbDims == 3 && kernel.nbDims == 4)
@@ -614,22 +650,26 @@ object LMS_vector {
 
         val resHeight = convSize(this.dims(1), kernel.dims(2), strideRow)
         val resWidth = convSize(this.dims(2), kernel.dims(3), strideCol)
-        val res = Tensor(kernel.dims(0), resHeight, resWidth)
+        val res = Tensor.zeros(kernel.dims(0), resHeight, resWidth)
 
         val offOut = var_new(0)
         val offWeight1 = var_new(0)
         for (outPane <- 0 until kernel.dims(0): Rep[Range]) {
+          // assertC(offOut == outPane * res.strides(1), "Invalid Output Idx %d != %d (%d)", offOut, outPane * res.strides(1), outPane)
+          // assertC(offWeight1 == outPane * kernel.strides(1), "Invalid Kernel Idx")
           val offWeight2 = var_new(offWeight1)
           val offInput = var_new(0)
           val ptrOutput = slice(res.data, offOut)
           for (inPane <- 0 until this.dims(0): Rep[Range]) {
+            // assertC(offInput == inPane * this.strides(1), "Invalid Input Idx")
+            // assertC(offWeight2 == outPane * kernel.strides(1) + inPane * kernel.strides(2), "Invalid kernel Idx (2) %d != %d (%d - %d)", offWeight1, outPane * kernel.strides(1) + inPane * kernel.strides(2), outPane, inPane)
             val ptrIntput = slice(this.data, offInput)
             val ptrWeight = slice(kernel.data, offWeight2)
 
             Tensor(ptrOutput, resHeight, resWidth).conv2D(Tensor(ptrIntput, this.dims(1), this.dims(2)), Tensor(ptrWeight, kernel.dims(2), kernel.dims(3)), strideRow, strideCol)
 
             offWeight2 += kernel.strides(2)
-            offInput += this.strides(2)
+            offInput += this.strides(1)
           }
           offWeight1 += kernel.strides(1)
           offOut += res.strides(1)
@@ -638,6 +678,7 @@ object LMS_vector {
       }
 
       // Taken from Torch: THTensorConv.cpp#198L
+      @virtualize
       def conv2D(input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int): Unit = {
         assert(this.nbDims == 2 && input.nbDims == 2 && kernel.nbDims == 2)
         assert(strideRow >= 1)
@@ -646,12 +687,16 @@ object LMS_vector {
         val offOuput = var_new(0)
         val offInputR = var_new(0)
         for (outRow <- 0 until this.dims(0): Rep[Range]) {
+          // assertC(offInputR == outRow * input.strides(1), "intputR invalid")
           val offInputC = var_new(offInputR)
           for (outCol <- 0 until this.dims(1): Rep[Range]) {
+            // assertC(offInputC == outRow * strideRow * input.strides(1) + outCol * strideCol, "intputC invalid")
             val offKernel = var_new(0)
             val offInput = var_new(offInputC)
             val sum = var_new(0.0)
             for (kernelRow <- 0 until kernel.dims(0): Rep[Range]) {
+              // assertC(offInput == (outRow * strideRow + kernelRow) * input.strides(1) + outCol * strideCol, "input invalid")
+              // assertC(offKernel == kernelRow * kernel.strides(1), "kernel invalid")
               val ptrIntput = slice(input.data, offInput)
               val ptrKernel = slice(kernel.data, offKernel)
               for (kernelCol <- 0 until kernel.dims(1): Rep[Range]) {
@@ -687,12 +732,12 @@ object LMS_vector {
           val oidx = var_new(oidxW)
           for (ox <- 0 until res.dims(1): Rep[Range]) {
             for (sx <- 0 until strideRow: Rep[Range]) {
-              assertC(oidx == ichan * res.strides(1) + ox * res.strides(2), "MAXPOOL output row idx error %d != %d (%d - %d - %d)\\n", oidx, ichan * this.strides(1) + ox * res.strides(2), ichan, ox, sx)
+              // assertC(oidx == ichan * res.strides(1) + ox * res.strides(2), "MAXPOOL output row idx error %d != %d (%d - %d - %d)\\n", oidx, ichan * this.strides(1) + ox * res.strides(2), ichan, ox, sx)
               val oidx2 = var_new(oidx)
               for (oy <- 0 until res.dims(2): Rep[Range]) {
                 for (sy <- 0 until strideCol: Range) { // FIXME unrol by default
-                  assertC(iidx == ichan * this.strides(1) + (ox * strideRow + sx) * this.strides(2) + oy * strideCol + sy, "MAXPOOL input idx error %d != %d (%d - %d (%d), %d (%d))\\n", iidx, ichan * this.strides(1) + (ox * strideRow + sx) * this.strides(2) + oy * strideCol + sy, ichan, ox, sx, oy, sy)
-                  assertC(oidx2 == ichan * res.strides(1) + ox * res.strides(2) + oy, "MAXPOOL output idx error %d != %d (%d - %d (%d), %d (%d))\\n", oidx2, ichan * res.strides(1) + ox * res.strides(2) + oy, ichan, ox, sx, oy, sy)
+                  // assertC(iidx == ichan * this.strides(1) + (ox * strideRow + sx) * this.strides(2) + oy * strideCol + sy, "MAXPOOL input idx error %d != %d (%d - %d (%d), %d (%d))\\n", iidx, ichan * this.strides(1) + (ox * strideRow + sx) * this.strides(2) + oy * strideCol + sy, ichan, ox, sx, oy, sy)
+                  // assertC(oidx2 == ichan * res.strides(1) + ox * res.strides(2) + oy, "MAXPOOL output idx error %d != %d (%d - %d (%d), %d (%d))\\n", oidx2, ichan * res.strides(1) + ox * res.strides(2) + oy, ichan, ox, sx, oy, sy)
                   if (this.data(iidx) > res.data(oidx2)) {
                     res.data(oidx2) = this.data(iidx)
                     savedIdx(oidx2) = iidx
@@ -768,6 +813,7 @@ object LMS_vector {
     object Tensor {
 
       def apply(dims: Int*) = {
+        ???
         val size = dims.product
         new Tensor(NewArray[Double](size), dims)
       }
@@ -777,7 +823,8 @@ object LMS_vector {
         (a.dims == b.dims) || a.isScalar || b.isScalar
       }
 
-      def rand(dims: Int*) = randinit(dims.toSeq, 0.01, None)
+      def rand(dims: Int*) = randinit(dims.toSeq, 1.0, None)
+      def rand(scale: Double, dims: Int*) = randinit(dims.toSeq, scale, None)
       def randinit(dim0: Int): Tensor = randinit(NSeq(dim0), 1.0, None)
       def randinit(dim0: Int, seed: Option[Int]): Tensor = randinit(NSeq(dim0), 1.0, seed)
       def randinit(dim0: Int, dim1: Int, scale: Double): Tensor = randinit(NSeq(dim0, dim1), scale, None)
@@ -859,9 +906,9 @@ object LMS_vector {
         val off = var_new(0)
         for (j <- (0 until dim1): Rep[Range]){
           for (i <- (0 until vector.dims(0)): Rep[Range]) {
-            res(i + off) = vector.data(i)
+            res(off) = vector.data(i)
+            off += 1
           }
-          off += vector.dims(0)
         }
         new Tensor(res, dim1 +: vector.dims)
       }
@@ -918,6 +965,7 @@ object LMS_vector {
 
       def - (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
         val y = TensorR(x - that.x); k(y)
+        //y.d.print("dot")
         this.d += y.d; that.d -= y.d
       }
 
@@ -944,6 +992,7 @@ object LMS_vector {
         val res = x dot that.x
         val y = TensorR(res); k(y)
         // FIXME: intermediate Tensors donot need to be substatiated, can optimize!
+        //y.d.print("dot")
         if (this.d.nbDims == 1) {
           assert(y.d.isScalar)
           this.d.addMul(y.d.data(0), that.x)
@@ -993,11 +1042,11 @@ object LMS_vector {
       def logSoftmax(): TensorR @diff = shift { (k: TensorR => Unit) =>
         val y = TensorR(x.logSoftmax()); k(y)
 
-        printf("Set gradient\\n")
+        //y.d.print("log")
+        val s = y.d.sum().data(0)
         for (i <- 0 until y.x.nbElem: Rep[Range]) {
-          this.d.data(i) = (unit(1.0) - Math.exp(y.x.data(i))) * y.d.data(i)
+          this.d.data(i) = y.d.data(i) - Math.exp(y.x.data(i)) * s
         }
-        this.d.print("Hum")
       }
 
       def resize(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -1008,6 +1057,7 @@ object LMS_vector {
         val y = TensorR(x.nllLoss(target)); k(y)
 
         assert(y.x.isScalar)
+        //y.d.print("nll")
 
         this.d.data(target) = -1.0 * y.d.data(0)
       }
@@ -1020,49 +1070,50 @@ object LMS_vector {
 
         val y = TensorR(x conv2D(kernel.x, strideRow, strideCol))
         k(y)
+        //y.d.print("conv")
 
-        if (!isInput) {
-          // TODO think about the loop order
-          val offOutputD = var_new(0)
-          val offKernel = var_new(0)
-          assert(y.d.dims(0) == kernel.x.dims(0))
-          for (kOut <- 0 until y.d.dims(0): Rep[Range]) { // forall output pane
-            val offInputR = var_new(0)
-            for (row <- 0 until y.d.dims(1): Rep[Range]) {
-              assertC(offInputR == row * strideRow * this.x.strides(2), s"ERROR: input offsetR %d != %d (%d, %d)\\n", offInputR, row * strideRow * this.x.strides(2), kOut, row)
-              val offInputC = var_new(offInputR)
-              for (col <- 0 until y.d.dims(2): Rep[Range]) {
-                val dCurr: Rep[Double] = y.d.data(offOutputD)
+        // TODO think about the loop order
+        val offOutputD = var_new(0)
+        val offKernel = var_new(0)
+        assert(y.d.dims(0) == kernel.x.dims(0))
+        for (kOut <- 0 until y.d.dims(0): Rep[Range]) { // forall output pane
+          val offInputR = var_new(0)
+          for (row <- 0 until y.d.dims(1): Rep[Range]) {
+            // assertC(offInputR == row * strideRow * this.x.strides(2), s"ERROR: input offsetR %d != %d (%d, %d)\\n", offInputR, row * strideRow * this.x.strides(2), kOut, row)
+            val offInputC = var_new(offInputR)
+            for (col <- 0 until y.d.dims(2): Rep[Range]) {
+              val dCurr: Rep[Double] = y.d.data(offOutputD)
 
-                val offInputP = var_new(offInputC)
-                val offKernelR = var_new(offKernel)
-                assert(this.d.dims(0) == kernel.d.dims(1))
-                for (pane <- 0 until this.d.dims(0): Rep[Range]) {
-                  assertC(offInputP == pane * this.x.strides(1) + row * strideRow * this.x.strides(2) + col * strideCol, s"ERROR: input offsetC %d != %d (%d, %d, %d, %d)\\n", offInputP, pane * this.x.strides(1) + row * strideRow * this.x.strides(2) + col * strideCol, kOut, row, col, pane)
-                  val offInputKR = var_new(offInputP)
-                  for (kR <- 0 until kernel.d.dims(2): Rep[Range]) {
-                    assertC(offInputKR == pane * this.x.strides(1) + (row * strideRow + kR) * this.x.strides(2) + col * strideCol, s"ERROR: input offset %d != %d (%d, %d)\\n", offInputKR, pane * this.x.strides(1) + (row + kR) * strideRow * this.x.strides(2) + col * strideCol, pane, kR)
-                    for (kC <- 0 until kernel.d.dims(3): Rep[Range]) {
-                      assert(this.d.nbElem == this.x.nbElem)
-                      assertC(unit[Int](0) <= offInputKR + kC && offInputKR + kC <= this.d.nbElem, "Bounds check error\\n")
+              val offInputP = var_new(offInputC)
+              val offKernelR = var_new(offKernel)
+              assert(this.d.dims(0) == kernel.d.dims(1))
+              for (pane <- 0 until this.d.dims(0): Rep[Range]) {
+                // assertC(offInputP == pane * this.x.strides(1) + row * strideRow * this.x.strides(2) + col * strideCol, s"ERROR: input offsetC %d != %d (%d, %d, %d, %d)\\n", offInputP, pane * this.x.strides(1) + row * strideRow * this.x.strides(2) + col * strideCol, kOut, row, col, pane)
+                val offInputKR = var_new(offInputP)
+                for (kR <- 0 until kernel.d.dims(2): Rep[Range]) {
+                  // assertC(offInputKR == pane * this.x.strides(1) + (row * strideRow + kR) * this.x.strides(2) + col * strideCol, s"ERROR: input offset %d != %d (%d, %d)\\n", offInputKR, pane * this.x.strides(1) + (row + kR) * strideRow * this.x.strides(2) + col * strideCol, pane, kR)
+                  for (kC <- 0 until kernel.d.dims(3): Rep[Range]) {
+                    assert(this.isInput || this.d.nbElem == this.x.nbElem)
+                    // assertC(unit[Int](0) <= offInputKR + kC && offInputKR + kC <= this.d.nbElem, "Bounds check error\\n")
+                    if (!this.isInput)
                       this.d.data(offInputKR + kC) = this.d.data(offInputKR + kC) + dCurr * kernel.x.data(offKernelR)
-                      assertC(unit[Int](0) <= offKernelR && offKernelR <= kernel.d.nbElem, "Bounds check error\\n")
-                      kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
-                      offKernelR += 1
-                    }
-                    offInputKR += this.x.strides(2)
+                    // assertC(unit[Int](0) <= offKernelR && offKernelR <= kernel.d.nbElem, "Bounds check error\\n")
+                    kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
+                    offKernelR += 1
                   }
-                  offInputP += this.x.strides(1)
+                  offInputKR += this.x.strides(2)
                 }
-                offInputC += strideCol
-                assertC(offKernelR/(kOut + 1) == kernel.x.strides(1), s"ERROR: kernel size %d != (%d + 1) * ${kernel.x.strides(1)}\\n", offKernelR, kOut)
-                offOutputD += 1
+                offInputP += this.x.strides(1)
               }
-              offInputR += strideRow * this.x.strides(2)
+              offInputC += strideCol
+              // assertC(offKernelR/(kOut + 1) == kernel.x.strides(1), s"ERROR: kernel size %d != (%d + 1) * ${kernel.x.strides(1)}\\n", offKernelR, kOut)
+              offOutputD += 1
             }
-            offKernel += kernel.x.strides(1)
+            offInputR += strideRow * this.x.strides(2)
           }
+          offKernel += kernel.x.strides(1)
         }
+
         ()
       }
 
@@ -1072,6 +1123,8 @@ object LMS_vector {
 
         val ty = TensorR(y)
         k(ty)
+
+        //t//y.d.print("Maxpool")
 
         for (i <- 0 until y.nbElem: Rep[Range]) {
           this.d.data(sidx(i)) = ty.d.data(i)
@@ -1093,12 +1146,14 @@ object LMS_vector {
         val y = TensorR(this.x.relu(false))
         k(y)
 
+        //y.d.print("relu")
+
         for (i <- 0 until this.x.nbElem: Rep[Range]) {
           this.d.data(i) = if (this.x.data(i) < 0.0) 0.0 else y.d.data(i)
         }
       }
 
-      def print(msg: String = "", derivative: Boolean = false) = {
+      def print(msg: String = "", derivative: Boolean = false): Unit = {
         this.x.print(msg)
         if (derivative) {
           if (msg == "")
@@ -1122,7 +1177,8 @@ object LMS_vector {
 
     object TensorR {
       def apply(a: Tensor, isInput: Boolean = false): TensorR = {
-        val res = new TensorR(a, Tensor.zeros_like(a))
+        val d = if (isInput) Tensor.scalar(0.0) else Tensor.zeros_like(a)
+        val res = new TensorR(a, d)
         res.isInput = isInput
         res
       }
@@ -3723,7 +3779,7 @@ object LMS_vector {
 
           Tensor.assertEqual(res, Tensor.ones(iPane, iRow/sR, iCol/sC), "MAXPOOL 1")
           for (i <- 0 until res.nbElem: Rep[Range]) {
-            assertC(idx(i) ==  (i / res.strides(2)) * sR * input.strides(2) + sC * (i % res.strides(2)), s"Maxpool index invalid %d != %d (%d - %d)\\n", idx(i), (i / res.strides(2)) * sR * input.strides(2) + sC * (i % res.strides(2)), i / res.strides(2), i % res.strides(2))
+            // assertC(idx(i) ==  (i / res.strides(2)) * sR * input.strides(2) + sC * (i % res.strides(2)), s"Maxpool index invalid %d != %d (%d - %d)\\n", idx(i), (i / res.strides(2)) * sR * input.strides(2) + sC * (i % res.strides(2)), i / res.strides(2), i % res.strides(2))
           }
 
         }
@@ -3843,14 +3899,104 @@ object LMS_vector {
 
       println("start dropout back test2")
       dropout_back_test2.eval("abc")
+
+      val test_cnn_full1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+
+        // FIXME: add proper check for result. see adworkplace/pytorch/cnn_test.py
+        def snippet(a: Rep[String]): Rep[Unit] = {
+
+          Random.srand(Some(1000))
+
+          val iChan1 = 2
+          val iRow1 = 10
+          val iCol1 = 10
+
+          val input = Tensor.rand(1.0, iChan1, iRow1, iCol1)
+
+          // Layer 1
+          val inChan1 = iChan1
+          val outChan1 = 2
+          val kRow1 = 3
+          val kCol1 = 3
+
+          // stride conv
+          val sRow1 = 1
+          val sCol1 = 1
+
+          // stride maxpool
+          val smRow1 = 2
+          val smCol1 = 2
+
+          val conv1 = Tensor.rand(1.0, outChan1, inChan1, kRow1, kCol1)
+          val oRow1 = convSize(iRow1, kRow1, sRow1)/smRow1
+          val oCol1 = convSize(iCol1, kCol1, sCol1)/smCol1
+
+          val inChan2 = outChan1
+          val outChan2 = 3
+
+          val conv2 = Tensor.rand(1.0, outChan2, inChan2, kRow1, kCol1)
+
+          val oRow2 = convSize(oRow1, kRow1, sRow1)
+          val oCol2 = convSize(oCol1, kCol1, sCol1)
+          val out3 = 5
+          val in3 = outChan2 * oRow2 * oCol2
+
+          val a1 = Tensor.rand(1.0, out3, in3)
+          val b1 = Tensor.rand(1.0, out3)
+
+
+          val varInput = TensorR(input)
+          val varConv1 = TensorR(conv1)
+          val varConv2 = TensorR(conv2)
+          val varA1 = TensorR(a1)
+          val varB1 = TensorR(b1)
+
+          def lossFun = { (dummy: TensorR) =>
+            varInput.print("Input")
+            val resConv = varInput.conv(varConv1, sRow1, sCol1)
+            resConv.print("First conv")
+            val resMax = resConv.maxPool(smRow1, smCol1)
+            resMax.print("MaxPool")
+            val resRL = resMax.relu()
+            resRL.print("ReLu 2")
+            val resConv2 = resRL.conv(varConv2, sRow1, sCol1)
+            resConv2.print("Second conv")
+            val resRL2 = resConv2.relu()
+            resRL2.print("ReLu 2")
+            val resMMul = varA1 dot resRL2.resize(in3)
+            resMMul.print("Matrix Multiplication")
+            val resVAdd = resMMul + varB1
+            resVAdd.print("Vector Addition")
+            val resLSM = resVAdd.logSoftmax()
+            resLSM.print("LogSoftMax")
+            resLSM.nllLoss(2)
+          }
+
+          for (x <- 0 until 1000: Rep[Range]) {
+            val loss = gradR_loss(lossFun)(Tensor.scalar(0.0))
+            loss.print("Loss")
+
+            // Update weight
+            for ((weight, idx) <- NSeq(varConv1, varConv2, varA1, varB1).zipWithIndex) {
+              weight.print(s"Before ${idx + 1}", derivative = true)
+              weight.x.addMul(-0.5, weight.d)
+              weight.print(s"After ${idx + 1}")
+              weight.clear_grad()
+              printf("\\n")
+            }
+          }
+        }
+      }
+      println("start full CNN test")
+      test_cnn_full1.eval("abc")
     } // if (false) closing
+
 
     val mnist  = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
       // From the MNIST pytorch example
       val mean = 0.1307
       val std = 0.3081
-
 
       class DataLoader(name: String, train: Boolean, dims: Int*) {
 
@@ -3890,6 +4036,7 @@ object LMS_vector {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
+        printf("Here we go!! Go MNIST!!!!\\n")
         Random.srand(Some(42))
 
         val variables = ArrayBuffer[TensorR]()
@@ -3913,10 +4060,11 @@ object LMS_vector {
         val sCol1 = 1
 
         // stride maxpool
-        val smRow1 = 4
-        val smCol1 = 4
+        val smRow1 = 2
+        val smCol1 = 2
 
-        val conv1 = Tensor.rand(outChan1, inChan1, kRow1, kCol1)
+        // FIXME scale based on PyTorch
+        val conv1 = Tensor.rand(0.2, outChan1, inChan1, kRow1, kCol1)
         val varConv1 = TensorR(conv1)
         variables += varConv1
 
@@ -3927,37 +4075,36 @@ object LMS_vector {
 
         System.out.println(s"Layer 1 output size: $iChan2 x $iRow2 x $iCol2")
 
-        // // Layer 2
-        // val inChan2 = outChan1
-        // val outChan2 = 20
-        // val kRow2 = 5
-        // val kCol2 = 5
+        // Layer 2
+        val inChan2 = outChan1
+        val outChan2 = 20
+        val kRow2 = 5
+        val kCol2 = 5
 
-        // // stride conv
-        // val sRow2 = 1
-        // val sCol2 = 1
+        // stride conv
+        val sRow2 = 1
+        val sCol2 = 1
 
-        // // stride maxpool
-        // val smRow2 = 2
-        // val smCol2 = 2
+        // stride maxpool
+        val smRow2 = 2
+        val smCol2 = 2
 
-        // val conv2 = Tensor.rand(outChan2, inChan2, kRow2, kCol2)
-        // val varConv2 = TensorR(conv2)
-        // variables += varConv2
+        val conv2 = Tensor.rand(0.063, outChan2, inChan2, kRow2, kCol2)
+        val varConv2 = TensorR(conv2)
+        variables += varConv2
 
-        // // Layer 3
-        // val oRow2 = convSize(iRow2, kRow2, sRow2)/smRow2
-        // val oCol2 = convSize(iCol2, kCol2, sCol2)/smCol2
-        val in3 = 360
+        // Layer 3
+        val oRow2 = convSize(iRow2, kRow2, sRow2)/smRow2
+        val oCol2 = convSize(iCol2, kCol2, sCol2)/smCol2
+        val in3 = 320
         val out3 = 50
 
-        // System.out.println(s"Layer 2 output size: $outChan2 x $oRow2 x $oCol2")
+        System.out.println(s"Layer 2 output size: $outChan2 x $oRow2 x $oCol2")
 
-        // assert(in3 == outChan2 * oRow2 * oCol2, s"The input of the first Linear layer should be $in3, got ${outChan2 * oRow2 * oCol2}")
-        assert(in3 == iChan2 * iRow2 * iCol2, s"The input of the first Linear layer should be $in3, got ${iChan2 * iRow2 * iCol2}")
+        assert(in3 == outChan2 * oRow2 * oCol2, s"The input of the first Linear layer should be $in3, got ${outChan2 * oRow2 * oCol2}")
 
-        val a1 = Tensor.rand(out3, in3)
-        val b1 = Tensor.rand(out3)
+        val a1 = Tensor.rand(0.055, out3, in3)
+        val b1 = Tensor.rand(0.055, out3)
         val varA1 = TensorR(a1)
         val varB1 = TensorR(b1)
         variables += varA1
@@ -3967,90 +4114,121 @@ object LMS_vector {
         val in4 = out3
         val out4 = 10
 
-        val a2 = Tensor.rand(out4, in4)
-        val b2 = Tensor.rand(out4)
+        val a2 = Tensor.rand(0.15, out4, in4)
+        val b2 = Tensor.rand(0.05, out4)
         val varA2 = TensorR(a2)
         val varB2 = TensorR(b2)
         variables += varA2
         variables += varB2
 
         // Training
-        val nbEpoch = 1
+        val nbEpoch = 10
         val lr = 0.0005
         val mom = 0.0
 
         val momentum = if (mom > 0.0) variables map(tR => Tensor.zeros(tR.d)) else ArrayBuffer[Tensor]()
 
+        val dataTimer = Timer2()
+        dataTimer.startTimer
         val train = new DataLoader("mnist", true, iChan1, iRow1, iCol1)
         printf("Start normalize\\n")
         train.normalize()
         def trainFun(input: TensorR, target: Rep[Int]) = { (dummy: TensorR) =>
-
           val resL1 = input.conv(varConv1, sRow1, sCol1).maxPool(smRow1, smCol1).relu()
-          // val resL2 = resL1.conv(varConv2, sRow2, sCol2).maxPool(smRow2, smCol2).relu()
-          val resL3 = ((varA1 dot resL1.resize(in3)) + varB1).relu()
+          val resL2 = resL1.conv(varConv2, sRow2, sCol2).maxPool(smRow2, smCol2).relu().dropout(0.5)
+          val resL3 = ((varA1 dot resL2.resize(in3)) + varB1).relu()
           val resL4 = (varA2 dot resL3) + varB2
-
-          printf("Target %d\\n", target)
-          resL4.print("Last layer")
-
           val res = resL4.logSoftmax()
-
-          res.print("LogsoftMax")
-
           res.nllLoss(target)
         }
 
-        // val test = new DataLoader("mnist", false, iChan1, iRow, iCol1)
+        val test = new DataLoader("mnist", false, iChan1, iRow1, iCol1)
+        test.normalize()
+        printf("Data normalized in %ldms\\n", dataTimer.getElapsedTime)
+
 
         val addr = getMallocAddr() // remember current allocation pointer here
-        printf("Start training\\n")
         for (epoch <- 0 until nbEpoch: Rep[Range]) {
 
+          val trainTimer = Timer2()
           var imgIdx = var_new(0)
+          var trainLoss = var_new(0.0)
+          printf("Start training epoch %d\\n", epoch + 1)
+          trainTimer.startTimer
           train foreach { (input: Tensor, target: Rep[Int]) =>
             imgIdx += 1
-            assertC(0 <= target && target <= 9, "Target should be a number between 0 and 9, got %d\\n", target)
+            // assertC(0 <= target && target <= 9, "Target should be a number between 0 and 9, got %d\\n", target)
 
-            val inputR = TensorR(input, isInput=true)
+            val inputR = TensorR(input , isInput=true)
             val loss = gradR_loss(trainFun(inputR, target))(Tensor.scalar(0.0))
+            trainLoss += loss.data(0)
 
-            // if (loss.data(0) > 20.0) {
-            //   // for ((weight, idx) <- variables.zipWithIndex) {
-            //   //   weight.print(s"Variable ${idx + 1} (# ${weight.x.nbElem} - ${weight.x.nbDims})", false)
-            //   // }
-            //   printf("Loss diverged %.3f\\n", loss.data(0))
-            //   exit()
+            // for ((weight, idx) <- variables.zipWithIndex) {
+            //   weight.print(s"Variable ${idx + 1}", derivative = true)
             // }
 
-            // Update weight
+            // Update weights
             for ((weight, idx) <- variables.zipWithIndex) {
               val d = if (mom > 0.0) {
+                printf("TBT\\n")
+                exit()
                 val sMom = momentum(idx)
                 sMom.cmulAdd(mom, weight.d)
               } else {
                 weight.d
               }
 
-              if (idx == variables.length - 1) {
-                weight.d.print(s"Variable ${idx + 1} gradient")
-              }
-
+              // printf("Weight before %.10f -", weight.x.data(0))
               weight.x.addMul(-lr, d)
-              if (weight.x.check(5.0)) {
-                weight.print(s"Weight of variable ${idx + 1} diverged!!!", derivative = true)
-                exit()
-              }
+              // if (weight.x.check(5.0)) {
+              //   printf("Iteration %d\\n", imgIdx)
+              //   weight.print(s"Weight of variable ${idx + 1} diverged!!!", derivative = true)
+              //   exit()
+              // }
+              // printf("%.10f weigth after (%.10f - %.5f)\\n", weight.x.data(0), weight.d.data(0), lr)
               weight.clear_grad()
             }
 
-            printf(s"Train epoch %d: [%d/%d (%.0f%%)]\\tLoss: %.6f\\n", epoch, imgIdx, train.length, 100.0 * imgIdx /train.length, loss.data(0))
-            if (imgIdx > 10) exit()
+            // for ((weight, idx) <- variables.zipWithIndex) {
+            //   weight.print(s"Variable ${idx + 1}")
+            // }
+
+            if (imgIdx %  (train.length / 10) == 0) {
+              printf(s"Train epoch %d: [%d/%d (%.0f%%)]\\tAverage Loss: %.6f\\n", epoch, imgIdx, train.length, 100.0 * imgIdx /train.length, trainLoss/imgIdx)
+              unchecked[Unit]("fflush(stdout)")
+            }
             resetMallocAddr(addr)
           }
-          printf("\\n")
+          val delta = trainTimer.getElapsedTime
+          printf("Training completed in %ldms (%ld ms/images)\\n", delta, delta/train.length)
+
+          def testFun(input: Tensor) = {
+            val (resL1, _) = input.conv2D(conv1, sRow1, sCol1).maxPool(smRow1, smCol1)
+            val (resL2, _) = resL1.relu().conv2D(conv2, sRow2, sCol2).maxPool(smRow2, smCol2)
+            val resL3 = ((a1 dot resL2.relu().resize(in3)) + b1).relu()
+            val resL4 = (a2 dot resL3) + b2
+            resL4.logSoftmax()
+          }
+
+          printf("\\nStart testing:\\n")
+          val testTimer = Timer2()
+          testTimer.startTimer
+          imgIdx = var_new(0)
+          var testLoss = var_new(0.0)
+          val correct = var_new(0)
+          test foreach { (input: Tensor, target: Rep[Int]) =>
+            imgIdx += 1
+            val res = testFun(input)
+
+            testLoss += res.nllLoss(target).data(0)
+            if (res.maxIndex() == target)
+              correct += 1
+          }
+          printf("Test set: Average loss: %.4f, Acurracy: %d/%d (%.0f) in %ldms\\n", testLoss / test.length, correct, test.length, 100.0 * correct / test.length, testTimer.getElapsedTime)
+          printf("\\n\\n")
         }
       }
+
     }
     println("start mnist")
     mnist.eval("abc")
