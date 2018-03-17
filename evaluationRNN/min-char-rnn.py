@@ -115,7 +115,7 @@ for n in range(n_epoch+1):
   loss, dWxh, dWhh, dWhy, dbh, dby, hprev = lossFun(inputs, targets, hprev)
   smooth_loss = smooth_loss * 0.9 + loss * 0.1 # this division makes result quite smooth
   if (n % epoch_step == 0): 
-    print 'iter %d, loss: %f' % (n, loss) # print progress
+    print 'iter %d, loss: %f' % (n, smooth_loss) # print progress
   
   # perform parameter update with Adagrad
   for param, dparam, mem in zip([Wxh, Whh, Why, bh, by], 
