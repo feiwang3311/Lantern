@@ -79,6 +79,8 @@ object LMS_vector {
       }
     }
 
+    def get_time() = unchecked[Double]("((double)clock() / CLOCKS_PER_SEC)")
+
     /**
      Add: Scanner class for Input
      Copied from lms-query-tutorial
@@ -835,6 +837,7 @@ object LMS_vector {
   def main(args: Array[String]): Unit = {
     import java.io.PrintWriter;
     import java.io.File;
+
     if (false) {
       val array0 = new DslDriverC[String, Unit] with VectorExp {
 
@@ -1687,6 +1690,7 @@ object LMS_vector {
 
     }
 
+    val root_dir = "/home/fei/bitbucket/privategitrepoforshare/ICFP18evaluation/"
     val min_char_rnn = new DslDriverC[String, Unit] with VectorExp with ScannerLowerExp {
 
       class Scanner(name: Rep[String]) {
@@ -1711,7 +1715,9 @@ object LMS_vector {
         /**
          add scanner
          **/
-        val scanner = new Scanner("graham1.txt")
+        val startTime = get_time()
+
+        val scanner = new Scanner("graham.txt")
         val training_data = scanner.data
         val data_size = scanner.fl
         // val chars = training_data.distinct  /** this can be done in second stage **/
@@ -1785,16 +1791,15 @@ object LMS_vector {
         val mbh  = Vector.zeros_like(bh)
         val mby  = Vector.zeros_like(by)
 
+        val loss_save = NewArray[Double](51) // this array collects all loss
+        val loopStartTime = get_time()
+
         val addr = getMallocAddr() // remember current allocation pointer here
 
         val startAt = var_new[Int](0)
         startAt -= seq_length
-
-        val timer = Timer()
-        timer.startTimer
-
         var smooth_loss = 70.0
-        for (n <- (0 until 2001): Rep[Range]) {
+        for (n <- (0 until 5001): Rep[Range]) {
 
           startAt += seq_length
           if (startAt + seq_length + 1 >= data_size) {
@@ -1814,7 +1819,7 @@ object LMS_vector {
           smooth_loss = smooth_loss * 0.9 + loss_value * 0.1
           if (n % 100 == 0) {
             printf("iter %d, loss %f\\n", n, smooth_loss)
-            //timer.printElapsedTime
+            loss_save(n/100) = smooth_loss
           }
 
           val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
@@ -1831,14 +1836,26 @@ object LMS_vector {
           resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
         }
 
+        val loopEndTime = get_time()
+        val prepareTime = loopStartTime - startTime
+        val loopTime    = loopEndTime - loopStartTime
+
+        val fp = openf(a, "w")
+        fprintf(fp, "unit: %s\\n", "100 iteration")
+        for (i <- (0 until loss_save.length): Rep[Range]) {
+          //printf("loss_saver is %lf \\n", loss_save(i))
+          fprintf(fp, "%lf\\n", loss_save(i))
+        }
+        fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
+        closef(fp)
       }
     }
 
 
-    //println("try array2_2_3")
-    //val min_char_rnn_file = new PrintWriter(new File("minchar.cpp"))
-    //min_char_rnn_file.println(min_char_rnn.code)
-    //min_char_rnn_file.flush()
+    println("run min_char_rnn")
+    val min_char_rnn_file = new PrintWriter(new File(root_dir + "evaluationRNN/Lantern.cpp"))
+    min_char_rnn_file.println(min_char_rnn.code)
+    min_char_rnn_file.flush()
     //min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
@@ -2018,7 +2035,9 @@ object LMS_vector {
         /**
          add scanner
          **/
-        val scanner = new Scanner("test_data")
+        val startTime = get_time()
+         
+        val scanner = new Scanner("graham.txt")
         val training_data = scanner.data
         val data_size = scanner.fl
         // val chars = training_data.distinct  /** this can be done in second stage **/
@@ -2136,15 +2155,19 @@ object LMS_vector {
         val mWhy = Vector.zeros_like(Why)
         val mby = Vector.zeros_like(by)
 
+        val loopStart = get_time()
+        val loss_save = NewArray[Double](51)
+
         val addr = getMallocAddr() // remember current allocation pointer here
 
         val startAt = var_new[Int](0)
         startAt -= seq_length
 
-        val timer = Timer()
-        timer.startTimer
+        //val timer = Timer()
+        //timer.startTimer
 
-        for (n <- (0 until 2001): Rep[Range]) {
+        var smooth_loss = 70.0
+        for (n <- (0 until 5001): Rep[Range]) {
 
           startAt += seq_length
           if (startAt + seq_length + 1 >= data_size) {
@@ -2161,9 +2184,11 @@ object LMS_vector {
 
           val loss = gradR_loss(lossFun(inputs, targets))(Vector.zeros(1))
           val loss_value = loss.data(0) // we suppose the loss is scala (Vector of size 1)
+          smooth_loss = smooth_loss * 0.9 + loss_value * 0.1
           if (n % 100 == 0) {
-            printf("iter %d, loss %f\\n", n, loss_value)
+            printf("iter %d, loss %f\\n", n, smooth_loss)
             //timer.printElapsedTime
+            loss_save(n / 100) = smooth_loss
           }
 
           val pars = ArrayBuffer(tWfh, tWfx, tbf, tWih, tWix, tbi, tWch, tWcx, tbc, tWoh, tWox, tbo, tWhy, tby)
@@ -2182,14 +2207,27 @@ object LMS_vector {
           resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
         }
 
+        val loopEndTime = get_time()
+        val prepareTime = loopStart - startTime
+        val loopTime    = loopEndTime - loopStart
+
+        val fp = openf(a, "w")
+        fprintf(fp, "unit: %s\\n", "100 iteration")
+        for (i <- (0 until loss_save.length): Rep[Range]) {
+          //printf("loss_saver is %lf \\n", loss_save(i))
+          fprintf(fp, "%lf\\n", loss_save(i))
+        }
+        fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
+        closef(fp)
+
       }
     }
 
 
-    //println("try array2_2_3")
-    //val min_char_lstm_file = new PrintWriter(new File("mincharlstm.cpp"))
-    //min_char_lstm_file.println(min_char_lstm.code)
-    //min_char_lstm_file.flush()
+    println("run min_char_lstm")
+    val min_char_lstm_file = new PrintWriter(new File(root_dir + "evaluationLSTM/Lantern.cpp"))
+    min_char_lstm_file.println(min_char_lstm.code)
+    min_char_lstm_file.flush()
     //min_char_lstm.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
@@ -2745,9 +2783,9 @@ object LMS_vector {
 
     
     
-    val sentit_file = new PrintWriter(new File("sentit.cpp"))
-    sentit_file.println(sentimental_lstm.code)
-    sentit_file.flush()
+    //val sentit_file = new PrintWriter(new File("sentit.cpp"))
+    //sentit_file.println(sentimental_lstm.code)
+    //sentit_file.flush()
     //sentimental_lstm.eval("abc")
 
   }

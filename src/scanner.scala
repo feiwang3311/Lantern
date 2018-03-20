@@ -18,6 +18,9 @@ trait ScannerLowerBase extends Base with UncheckedOps { this: Dsl =>
   //def getFloat(fp: Rep[Long], at: Rep[Float]): Rep[Unit]
   def getInt(fp: Rep[Long], at: Rep[Int]): Rep[Unit]
   def getInt(fp: Rep[Long], data: Rep[Array[Int]], i: Rep[Int]): Rep[Unit]
+  def fprintf(fp: Rep[Long], format: Rep[String], content: Rep[Any]): Rep[Unit]
+  def fprintf(fp: Rep[Long], format: Rep[String], content1: Rep[Any], content2: Rep[Any]): Rep[Unit]
+  def fprintf(fp: Rep[Long], format: Rep[String], content1: Rep[Any], content2: Rep[Any], content3: Rep[Any]): Rep[Unit]
 }
 
 trait ScannerLowerExp extends ScannerLowerBase with UncheckedOpsExp { this: DslExp =>
@@ -38,6 +41,15 @@ trait ScannerLowerExp extends ScannerLowerBase with UncheckedOpsExp { this: DslE
     unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%d\", &", at, ")!=1) perror(\"Error reading file\")")
   def getInt(fp: Rep[Long], data: Rep[Array[Int]], i: Rep[Int]) = 
     unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%d\", &", data, "[", i, "]", ")!=1) perror(\"Error reading file\")")
+
+  // for writing to file in c
+  def fprintf(fp: Rep[Long], format: Rep[String], content: Rep[Any]) = 
+    unchecked[Unit]("fprintf((FILE *)", fp, ", ", format, ", ", content, ")")
+  def fprintf(fp: Rep[Long], format: Rep[String], content1: Rep[Any], content2: Rep[Any]) = 
+    unchecked[Unit]("fprintf((FILE *)", fp, ", ", format, ", ", content1, ", ", content2, ")")
+  def fprintf(fp: Rep[Long], format: Rep[String], content1: Rep[Any], content2: Rep[Any], content3: Rep[Any]) = 
+    unchecked[Unit]("fprintf((FILE *)", fp, ", ", format, ", ", content1, ", ", content2, ", ", content3, ")")
+
 }
 
 trait CGenScannerLower extends CGenUncheckedOps
