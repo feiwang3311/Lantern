@@ -30,7 +30,7 @@ def run(write_to):
     batchY_placeholder = tf.placeholder(tf.int32, [batch_size, seq_length])
     init_state = tf.placeholder(tf.float32, [batch_size, hidden_size])
 
-    W2 = tf.Variable(np.random.randn(hidden_size, vocab_size) * learning_rate, dtype=tf.float32)
+    W2 = tf.Variable(np.random.randn(hidden_size, vocab_size) * 0.01, dtype=tf.float32)
     b2 = tf.Variable(np.zeros((1,vocab_size)), dtype=tf.float32)
 
     # Unpack columns

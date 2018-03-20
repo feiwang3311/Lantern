@@ -19,8 +19,8 @@ def run(write_to):
   hidden_size = 50 # size of hidden layer of neurons
   seq_length = 20 # number of steps to unroll the RNN for
   learning_rate = 1e-1
-  n_epoch = 5000
-  epoch_step = 100
+  n_iters = 5000
+  iter_step = 100
 
   # import relevant supports
   import torch
@@ -79,8 +79,8 @@ def run(write_to):
 
 
   model = RNN(vocab_size, hidden_size, vocab_size)
-  # loss_function = nn.NLLLoss()
-  loss_function = nn.CrossEntropyLoss()
+  loss_function = nn.NLLLoss(size_average=False, reduce=True)
+  #loss_function = nn.CrossEntropyLoss()
   optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
 
   p = 0
@@ -92,7 +92,7 @@ def run(write_to):
 
   start = time.time()
   loss_save = []
-  for iter in range(n_epoch + 1):
+  for iter in range(n_iters + 1):
     if p+seq_length+1 >= len(data) or (iter == 0): 
       p = 0
       #model.hidden = model.init_hidden()  
@@ -103,13 +103,13 @@ def run(write_to):
     model.zero_grad()
     model.hidden = model.init_hidden()
     tag_scores = model(inputs)
-    loss = loss_function(tag_scores, Variable(lineToLongTensor1D(targets)))
+    loss = loss_function(tag_scores, Variable(lineToLongTensor1D(targets))) 
     loss.backward()
     torch.nn.utils.clip_grad_norm(model.parameters(), 5.0, norm_type=1)
     optimizer.step()
 
-    smooth_loss = smooth_loss * 0.9 + loss.data[0] * 0.1
-    if iter % epoch_step == 0: 
+    smooth_loss = smooth_loss * 0.9 + loss.data[0] * 0.1 
+    if iter % iter_step == 0: 
       print('iter %d, loss: %f' % (iter, smooth_loss))
       loss_save.append(smooth_loss)
     p += seq_length
