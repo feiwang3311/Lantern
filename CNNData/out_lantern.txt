@@ -1,0 +1,172 @@
+Here we go!! Go MNIST!!!!
+Start normalize
+Data normalized in 233996ms
+Start training epoch 1
+Train epoch 0: [6000/60000 (10%)]	Average Loss: 2.297353
+Train epoch 0: [12000/60000 (20%)]	Average Loss: 2.218128
+Train epoch 0: [18000/60000 (30%)]	Average Loss: 1.870245
+Train epoch 0: [24000/60000 (40%)]	Average Loss: 1.595563
+Train epoch 0: [30000/60000 (50%)]	Average Loss: 1.402094
+Train epoch 0: [36000/60000 (60%)]	Average Loss: 1.258488
+Train epoch 0: [42000/60000 (70%)]	Average Loss: 1.142300
+Train epoch 0: [48000/60000 (80%)]	Average Loss: 1.051833
+Train epoch 0: [54000/60000 (90%)]	Average Loss: 0.975816
+Train epoch 0: [60000/60000 (100%)]	Average Loss: 0.906420
+Training completed in 36116ms (601 us/images)
+
+Start testing:
+Test set: Average loss: 0.1553, Acurracy: 9479/10000 (95) in 2513ms
+
+
+Start training epoch 2
+Train epoch 1: [6000/60000 (10%)]	Average Loss: 0.293488
+Train epoch 1: [12000/60000 (20%)]	Average Loss: 0.294006
+Train epoch 1: [18000/60000 (30%)]	Average Loss: 0.300369
+Train epoch 1: [24000/60000 (40%)]	Average Loss: 0.285204
+Train epoch 1: [30000/60000 (50%)]	Average Loss: 0.280280
+Train epoch 1: [36000/60000 (60%)]	Average Loss: 0.273845
+Train epoch 1: [42000/60000 (70%)]	Average Loss: 0.267529
+Train epoch 1: [48000/60000 (80%)]	Average Loss: 0.264757
+Train epoch 1: [54000/60000 (90%)]	Average Loss: 0.259991
+Train epoch 1: [60000/60000 (100%)]	Average Loss: 0.251606
+Training completed in 36279ms (604 us/images)
+
+Start testing:
+Test set: Average loss: 0.0895, Acurracy: 9709/10000 (97) in 2489ms
+
+
+Start training epoch 3
+Train epoch 2: [6000/60000 (10%)]	Average Loss: 0.196247
+Train epoch 2: [12000/60000 (20%)]	Average Loss: 0.195712
+Train epoch 2: [18000/60000 (30%)]	Average Loss: 0.198210
+Train epoch 2: [24000/60000 (40%)]	Average Loss: 0.192346
+Train epoch 2: [30000/60000 (50%)]	Average Loss: 0.191101
+Train epoch 2: [36000/60000 (60%)]	Average Loss: 0.189108
+Train epoch 2: [42000/60000 (70%)]	Average Loss: 0.186501
+Train epoch 2: [48000/60000 (80%)]	Average Loss: 0.186834
+Train epoch 2: [54000/60000 (90%)]	Average Loss: 0.185642
+Train epoch 2: [60000/60000 (100%)]	Average Loss: 0.180200
+Training completed in 36186ms (603 us/images)
+
+Start testing:
+Test set: Average loss: 0.0679, Acurracy: 9770/10000 (98) in 2489ms
+
+
+Start training epoch 4
+Train epoch 3: [6000/60000 (10%)]	Average Loss: 0.155708
+Train epoch 3: [12000/60000 (20%)]	Average Loss: 0.156970
+Train epoch 3: [18000/60000 (30%)]	Average Loss: 0.158394
+Train epoch 3: [24000/60000 (40%)]	Average Loss: 0.152637
+Train epoch 3: [30000/60000 (50%)]	Average Loss: 0.151796
+Train epoch 3: [36000/60000 (60%)]	Average Loss: 0.151965
+Train epoch 3: [42000/60000 (70%)]	Average Loss: 0.149621
+Train epoch 3: [48000/60000 (80%)]	Average Loss: 0.150734
+Train epoch 3: [54000/60000 (90%)]	Average Loss: 0.150373
+Train epoch 3: [60000/60000 (100%)]	Average Loss: 0.147399
+Training completed in 36139ms (602 us/images)
+
+Start testing:
+Test set: Average loss: 0.0581, Acurracy: 9815/10000 (98) in 2491ms
+
+
+Start training epoch 5
+Train epoch 4: [6000/60000 (10%)]	Average Loss: 0.128309
+Train epoch 4: [12000/60000 (20%)]	Average Loss: 0.132935
+Train epoch 4: [18000/60000 (30%)]	Average Loss: 0.134271
+Train epoch 4: [24000/60000 (40%)]	Average Loss: 0.129087
+Train epoch 4: [30000/60000 (50%)]	Average Loss: 0.130191
+Train epoch 4: [36000/60000 (60%)]	Average Loss: 0.129372
+Train epoch 4: [42000/60000 (70%)]	Average Loss: 0.128751
+Train epoch 4: [48000/60000 (80%)]	Average Loss: 0.129470
+Train epoch 4: [54000/60000 (90%)]	Average Loss: 0.129196
+Train epoch 4: [60000/60000 (100%)]	Average Loss: 0.126363
+Training completed in 36415ms (606 us/images)
+
+Start testing:
+Test set: Average loss: 0.0531, Acurracy: 9829/10000 (98) in 2545ms
+
+
+Start training epoch 6
+Train epoch 5: [6000/60000 (10%)]	Average Loss: 0.114513
+Train epoch 5: [12000/60000 (20%)]	Average Loss: 0.115766
+Train epoch 5: [18000/60000 (30%)]	Average Loss: 0.121201
+Train epoch 5: [24000/60000 (40%)]	Average Loss: 0.116245
+Train epoch 5: [30000/60000 (50%)]	Average Loss: 0.117060
+Train epoch 5: [36000/60000 (60%)]	Average Loss: 0.115002
+Train epoch 5: [42000/60000 (70%)]	Average Loss: 0.113847
+Train epoch 5: [48000/60000 (80%)]	Average Loss: 0.114801
+Train epoch 5: [54000/60000 (90%)]	Average Loss: 0.114073
+Train epoch 5: [60000/60000 (100%)]	Average Loss: 0.112217
+Training completed in 37225ms (620 us/images)
+
+Start testing:
+Test set: Average loss: 0.0482, Acurracy: 9841/10000 (98) in 2502ms
+
+
+Start training epoch 7
+Train epoch 6: [6000/60000 (10%)]	Average Loss: 0.102471
+Train epoch 6: [12000/60000 (20%)]	Average Loss: 0.103132
+Train epoch 6: [18000/60000 (30%)]	Average Loss: 0.106184
+Train epoch 6: [24000/60000 (40%)]	Average Loss: 0.100522
+Train epoch 6: [30000/60000 (50%)]	Average Loss: 0.100745
+Train epoch 6: [36000/60000 (60%)]	Average Loss: 0.100126
+Train epoch 6: [42000/60000 (70%)]	Average Loss: 0.099171
+Train epoch 6: [48000/60000 (80%)]	Average Loss: 0.100575
+Train epoch 6: [54000/60000 (90%)]	Average Loss: 0.101117
+Train epoch 6: [60000/60000 (100%)]	Average Loss: 0.099315
+Training completed in 36130ms (602 us/images)
+
+Start testing:
+Test set: Average loss: 0.0471, Acurracy: 9845/10000 (98) in 2490ms
+
+
+Start training epoch 8
+Train epoch 7: [6000/60000 (10%)]	Average Loss: 0.101755
+Train epoch 7: [12000/60000 (20%)]	Average Loss: 0.094616
+Train epoch 7: [18000/60000 (30%)]	Average Loss: 0.093392
+Train epoch 7: [24000/60000 (40%)]	Average Loss: 0.090360
+Train epoch 7: [30000/60000 (50%)]	Average Loss: 0.089715
+Train epoch 7: [36000/60000 (60%)]	Average Loss: 0.089382
+Train epoch 7: [42000/60000 (70%)]	Average Loss: 0.089277
+Train epoch 7: [48000/60000 (80%)]	Average Loss: 0.091149
+Train epoch 7: [54000/60000 (90%)]	Average Loss: 0.092154
+Train epoch 7: [60000/60000 (100%)]	Average Loss: 0.090743
+Training completed in 36113ms (601 us/images)
+
+Start testing:
+Test set: Average loss: 0.0412, Acurracy: 9861/10000 (99) in 2500ms
+
+
+Start training epoch 9
+Train epoch 8: [6000/60000 (10%)]	Average Loss: 0.087707
+Train epoch 8: [12000/60000 (20%)]	Average Loss: 0.085231
+Train epoch 8: [18000/60000 (30%)]	Average Loss: 0.084794
+Train epoch 8: [24000/60000 (40%)]	Average Loss: 0.080986
+Train epoch 8: [30000/60000 (50%)]	Average Loss: 0.081728
+Train epoch 8: [36000/60000 (60%)]	Average Loss: 0.083643
+Train epoch 8: [42000/60000 (70%)]	Average Loss: 0.083159
+Train epoch 8: [48000/60000 (80%)]	Average Loss: 0.084852
+Train epoch 8: [54000/60000 (90%)]	Average Loss: 0.085151
+Train epoch 8: [60000/60000 (100%)]	Average Loss: 0.083833
+Training completed in 36132ms (602 us/images)
+
+Start testing:
+Test set: Average loss: 0.0393, Acurracy: 9868/10000 (99) in 2507ms
+
+
+Start training epoch 10
+Train epoch 9: [6000/60000 (10%)]	Average Loss: 0.077790
+Train epoch 9: [12000/60000 (20%)]	Average Loss: 0.081039
+Train epoch 9: [18000/60000 (30%)]	Average Loss: 0.079304
+Train epoch 9: [24000/60000 (40%)]	Average Loss: 0.076283
+Train epoch 9: [30000/60000 (50%)]	Average Loss: 0.076073
+Train epoch 9: [36000/60000 (60%)]	Average Loss: 0.076882
+Train epoch 9: [42000/60000 (70%)]	Average Loss: 0.077102
+Train epoch 9: [48000/60000 (80%)]	Average Loss: 0.077666
+Train epoch 9: [54000/60000 (90%)]	Average Loss: 0.078841
+Train epoch 9: [60000/60000 (100%)]	Average Loss: 0.077926
+Training completed in 36121ms (602 us/images)
+
+Start testing:
+Test set: Average loss: 0.0387, Acurracy: 9869/10000 (99) in 2490ms
+
