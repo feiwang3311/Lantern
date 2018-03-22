@@ -29,6 +29,10 @@ def getColor(label):
     return 'y'
   if label == 'TensorFold':
     return 'y'
+  if label == 'TensorFold20':
+    return 'y'
+  if label == 'TensorFold1':
+    return 'm'
 
 def plot(files, model):
   # save dir 
@@ -63,7 +67,10 @@ def plot(files, model):
   # get unit and other description
   unit = datas[labels[0]][0]
   print(unit)
-  steps = len(losses[0]) - 1
+  if (unit == ' 1 epoch'): 
+    steps = len(losses[0])
+  else: 
+    steps = len(losses[0]) - 1
   temp = unit.split()
   step_desc = str(int(temp[0]) * steps) + " " + temp[1] + "s"
   

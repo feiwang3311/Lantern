@@ -1852,10 +1852,10 @@ object LMS_vector {
     }
 
 
-    println("run min_char_rnn")
-    val min_char_rnn_file = new PrintWriter(new File(root_dir + "evaluationRNN/Lantern.cpp"))
-    min_char_rnn_file.println(min_char_rnn.code)
-    min_char_rnn_file.flush()
+    //println("run min_char_rnn")
+    //val min_char_rnn_file = new PrintWriter(new File(root_dir + "evaluationRNN/Lantern.cpp"))
+    //min_char_rnn_file.println(min_char_rnn.code)
+    //min_char_rnn_file.flush()
     //min_char_rnn.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
@@ -2224,10 +2224,10 @@ object LMS_vector {
     }
 
 
-    println("run min_char_lstm")
-    val min_char_lstm_file = new PrintWriter(new File(root_dir + "evaluationLSTM/Lantern.cpp"))
-    min_char_lstm_file.println(min_char_lstm.code)
-    min_char_lstm_file.flush()
+    //println("run min_char_lstm")
+    //val min_char_lstm_file = new PrintWriter(new File(root_dir + "evaluationLSTM/Lantern.cpp"))
+    //min_char_lstm_file.println(min_char_lstm.code)
+    //min_char_lstm_file.flush()
     //min_char_lstm.eval("abc")
     //println("verified that in this small example the values of gradients are about right (up to precision)")
 
@@ -2552,14 +2552,16 @@ object LMS_vector {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
-        val timer = Timer()
-        timer.startTimer
-
+        val startTime = get_time()
 
         // read in the data for word embedding
-        val word_embedding_size   = 300
-        val word_embedding_length = 5265 // need to know the size of file first, need fix
-        val fp = openf("senti/small_glove.txt", "r")
+        val word_embedding_size   = 300 // this is statically known
+        
+        val readingSlot1 = NewArray[Int](1) // this is a slot of memory used for reading from file
+        val fp = openf("small_glove.txt", "r")
+        getInt(fp, readingSlot1, 0) // read the first number in the file, which is "How many rows"
+        val word_embedding_length = readingSlot1(0)
+
         val word_embedding_data = NewArray[Array[Double]](word_embedding_length)
 
         for (i <- (0 until word_embedding_length): Rep[Range]) {
@@ -2568,19 +2570,22 @@ object LMS_vector {
         }
         closef(fp)
 
-        // read in the data for trees
-        val tree_number = 1101 // need to know the size of training data, need fix
-        val fp1 = openf("senti/array_tree.txt", "r")
+        // read in the data for trees (in array format)
+        val readingSlot2 = NewArray[Int](1) // need a new readingSlot, other wise have error
+        val fp1 = openf("array_tree.txt", "r")
+        getInt(fp1, readingSlot2, 0)
+        val tree_number = readingSlot2(0) 
         val tree_data = NewArray[Array[Int]](tree_number * 4) // each tree data has 4 lines (score, word, lch, rch)
 
-        val size = NewArray[Int](1)
+        val readingSlot3 = NewArray[Int](1) // yet another readingSlot, not sure if this one can be reused
         for (i <- (0 until tree_number): Rep[Range]) {
-          getInt(fp1, size, 0)
+          getInt(fp1, readingSlot3, 0)
           for (j <- (0 until 4): Rep[Range]) {
-            tree_data(i * 4 + j) = NewArray[Int](size(0))
-            for (k <- (0 until size(0)): Rep[Range]) getInt(fp1, tree_data(i * 4 + j), k)
+            tree_data(i * 4 + j) = NewArray[Int](readingSlot3(0))
+            for (k <- (0 until readingSlot3(0)): Rep[Range]) getInt(fp1, tree_data(i * 4 + j), k)
           }
         }
+        closef(fp1)
 
         // set up hyperparameters and parameters
         val hidden_size = 150
@@ -2743,11 +2748,13 @@ object LMS_vector {
         val mWhy = Vector.zeros_like(Why)
         val mby  = Vector.zeros_like(by)
 
+        // for saving loss array
+        val loss_save = NewArray[Double](30)
+
         val addr = getMallocAddr() // remember current allocation pointer here
 
-        printf("before entering loop\\n")
-        timer.printElapsedTime
-
+        val loopStart = get_time()
+        
         for (epoc <- (0 until 30): Rep[Range]) {
 
           var average_loss = 0.0
@@ -2774,20 +2781,35 @@ object LMS_vector {
             resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer */
           }
 
-          printf("epoc %d, average_loss %f\\n", epoc, average_loss)
-          timer.printElapsedTime
+          loss_save(epoc) = average_loss
+          val tempTime = get_time()
+          printf("epoc %d, average_loss %f, time %lf\\n", epoc, average_loss, (tempTime - loopStart))
+          
+          //timer.printElapsedTime
 
         }
+
+        val loopEnd = get_time()
+        val prepareTime = loopStart - startTime
+        val loopTime = loopEnd - loopStart
+        val timePerEpoc = loopTime / 30
+
+        val fp2 = openf(a, "w")
+        fprintf(fp2, "unit: %s\\n", "1 epoch")
+        for (i <- (0 until loss_save.length): Rep[Range]) {
+          //printf("loss_saver is %lf \\n", loss_save(i))
+          fprintf(fp2, "%lf\\n", loss_save(i))
+        }
+        fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+        closef(fp2)
+
       }
-    }
-
+    }   
     
-    
-    //val sentit_file = new PrintWriter(new File("sentit.cpp"))
-    //sentit_file.println(sentimental_lstm.code)
-    //sentit_file.flush()
+    println("run sentiment analysis tree LSTM")
+    val sentit_file = new PrintWriter(new File(root_dir + "evaluationTreeLSTM/Lantern/Lantern.cpp"))
+    sentit_file.println(sentimental_lstm.code)
+    sentit_file.flush()
     //sentimental_lstm.eval("abc")
-
   }
-
 }

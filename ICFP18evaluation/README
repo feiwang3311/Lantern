@@ -1,0 +1,15 @@
+simply run ./run_exp.sh should start the experiment and generate plots
+
+Note:
+
+manuscript_fig contains the figures we used for submission. There is slight error in them, i.e. the LSTM used average loss per char instead of total loss per sequence
+
+save_fig contains the figures/plots we generate using the script run_exp.sh
+
+source files for the experiments are in evaluationRNN evaluationLSTM and evaluationTreeLSTM respectively
+
+the plot.py handles plotting
+
+check the run_exp.sh if you have questions about the script.
+running TreeLSTM is slightly more complicated, because we need to download a big 2G data and assume some setup.
+Details can be found in the run_exp.sh file. 
