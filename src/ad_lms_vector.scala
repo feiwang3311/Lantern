@@ -488,15 +488,16 @@ object LMS_vector {
       // the result is to update this so that this += that * y, where * is cartesian product
       def add_cartesian(that: Tensor, y: Tensor) = {
         generate_comment("add_cartesian")
-        assert(this.nbDims == 2 && that.dims == TTT(NSeq(this.dims(0))) && y.dims == TTT(NSeq(this.dims(1))) || this.nbDims == 1 && that.dims == this.dims && y.isScalar, s"${dims} - ${that.dims} - ${y.dims}")
+        assert(this.nbDims == 2 && that.dims == TTT(NSeq(this.dims(1))) && y.dims == TTT(NSeq(this.dims(0))) || 
+          this.nbDims == 1 && that.dims == this.dims && y.isScalar, s"${dims} - ${that.dims} - ${y.dims}")
         val off = var_new(0)
         // TODO remove loop if not used
-        val up = if (this.nbDims > 1) this.dims(1) else 1
+        val up = if (this.nbDims > 1) this.dims(0) else 1
         for (i <- (0 until up): Rep[Range]) {
-          for (j <- (0 until dims(0)): Rep[Range]) {
+          for (j <- (0 until dims(1)): Rep[Range]) {
             this.data(off + j) = this.data(off + j) + that.data(j) * y.data(i)
           }
-          off += this.dims(0)
+          off += this.dims(1)
         }
       }
       // FIXME: Maybe try to support slicing??
@@ -507,16 +508,16 @@ object LMS_vector {
       // setting: this is dims(0)-sized vector, that is matrix (dims(0) * dims(1)), y is dims(1)-sized vector
       // the result is to update this so that this accumulate every matrix col * y
       def add_composion(that: Tensor, y: Tensor) = {
-        assert(that.nbDims == 2 && this.dims.seq == NSeq(that.dims(0)) && y.dims.seq == NSeq(that.dims(1))
+        assert(that.nbDims == 2 && this.dims.seq == NSeq(that.dims(1)) && y.dims.seq == NSeq(that.dims(0))
           || that.nbDims == 1 && this.dims == that.dims && y.isScalar, s"${dims} - ${that.dims} - ${y.dims}")
         val off = var_new(0)
         // FIXME!!
-        val up = if (that.nbDims > 1) that.dims(1) else 1
+        val up = if (that.nbDims > 1) that.dims(0) else 1
         for (i <- (0 until up): Rep[Range]) {
-          for (j <- (0 until this.dims(0)): Rep[Range]) {
+          for (j <- (0 until that.dims(1)): Rep[Range]) {
             data(j) += that.data(off + j) * y.data(i)
           }
-          off += this.dims(0)
+          off += that.dims(1)
         }
       }
       // def add_composion(that: Tensor, y: Tensor) = {
@@ -1000,8 +1001,11 @@ object LMS_vector {
           this.d.addMul(y.d.data(0), that.x)
           that.d.addMul(y.d.data(0), this.x)
         } else {
-          this.d.addMul(y.d.resize(y.d.dims(0), 1), that.x.resize(1, that.x.dims(0)))
-          that.d.resize(1, that.d.dims(0)).addMul(y.d.resize(1, y.d.dims(0)), this.x)
+          // FIXME: need optimization using addMul and dataloop!!
+          this.d.add_cartesian(that.x, y.d)
+          that.d.add_composion(this.x, y.d)
+          //this.d.addMul(y.d.resize(y.d.dims(0), 1), that.x.resize(1, that.x.dims(0)))
+          //that.d.resize(1, that.d.dims(0)).addMul(y.d.resize(1, y.d.dims(0)), this.x)
         }
         // this.d += that.x * y.d // broadcasting
         // that.d += this.x * y.d // broadcasting
@@ -3420,10 +3424,10 @@ object LMS_vector {
         }
       }
 
-      println("run sentiment analysis tree LSTM")
-      val sentit_file = new PrintWriter(new File(root_dir + "evaluationTreeLSTM/Lantern/Lantern.cpp"))
-      sentit_file.println(sentimental_lstm.code)
-      sentit_file.flush()
+      //println("run sentiment analysis tree LSTM")
+      //val sentit_file = new PrintWriter(new File(root_dir + "evaluationTreeLSTM/Lantern/Lantern.cpp"))
+      //sentit_file.println(sentimental_lstm.code)
+      //sentit_file.flush()
 
     if (false) {
       val cnn_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
@@ -4067,12 +4071,12 @@ object LMS_vector {
         def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
         def mmap[T:Typ](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",codegen.remap(typ[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
 
-        val fd = open(s"data/bin/${name}_${if (train) "train" else "test"}.bin")
+        val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
         val len = filelen(fd)
         val data = mmap[Double](fd, len)
         val dLength = (len/8L).toInt
 
-        val tfd = open(s"data/bin/${name}_${if (train) "train" else "test"}_target.bin")
+        val tfd = open(s"../data/bin/${name}_${if (train) "train" else "test"}_target.bin")
         val tlen = filelen(tfd)
         val target = mmap[Int](tfd, tlen)
         val length = (tlen/4L).toInt
@@ -4294,7 +4298,11 @@ object LMS_vector {
       }
 
     }
-    //println("start mnist")
-    //mnist.eval("abc")
+    
+    println("run simple CNN test case")
+    val cnn_file = new PrintWriter(new File(root_dir + "evaluationCNN/Lantern/Lantern.cpp"))
+    cnn_file.println(mnist.code)
+    cnn_file.flush()
+    
   }
 }

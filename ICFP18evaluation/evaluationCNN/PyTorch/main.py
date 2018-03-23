@@ -100,10 +100,10 @@ def train(epoch):
         tloss += loss.data[0]
         loss.backward()
         optimizer.step()
-        if ((batch_idx + 1) * len(data)) % args.log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), tloss / (batch_idx * len(data))))
+    #    if ((batch_idx + 1) * len(data)) % args.log_interval == 0:
+    print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+        epoch, batch_idx * len(data), len(train_loader.dataset),
+        100. * batch_idx / len(train_loader), tloss / (batch_idx)))
 
 def test():
     model.eval()
@@ -129,7 +129,7 @@ for epoch in range(1, args.epochs + 1):
     train(epoch)
     stop = time.time() * 1000
     print('Training completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/60000))
-    start = time.time() * 1000
-    test()
-    stop = time.time() * 1000
-    print('Testing completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/10000))
+    #start = time.time() * 1000
+    #test()
+    #stop = time.time() * 1000
+    #print('Testing completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/10000))

@@ -47,9 +47,14 @@ test_loader = torch.utils.data.DataLoader(
                        transforms.ToTensor()),
     batch_size=1, shuffle=False, **kwargs)
 
+import os
+target_dir = '../data/bin/'
+if not os.path.exists(target_dir):
+    os.makedirs(target_dir)
+
 def train():
-    with open('mnist_train.bin', 'wb') as f:
-        with open('mnist_train_target.bin', 'wb') as g:
+    with open(target_dir + 'mnist_train.bin', 'wb') as f:
+        with open(target_dir + 'mnist_train_target.bin', 'wb') as g:
             for batch_idx, (data, target) in enumerate(train_loader):
                 for by in data.storage().tolist():
                     f.write(struct.pack("@f", by))
@@ -61,8 +66,8 @@ def train():
                         100. * batch_idx / len(train_loader)))
 
 def test():
-    with open('mnist_test.bin', 'wb') as f:
-        with open('mnist_test_target.bin', 'wb') as g:
+    with open(target_dir + 'mnist_test.bin', 'wb') as f:
+        with open(target_dir + 'mnist_test_target.bin', 'wb') as g:
             for data, target in test_loader:
                 for by in data.storage().tolist():
                     f.write(struct.pack("@f", by))
