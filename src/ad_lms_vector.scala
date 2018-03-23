@@ -181,7 +181,7 @@ object LMS_vector {
       }
 
       def fold(init: Rep[Double])(op: (Rep[Double], Rep[Double]) => Rep[Double]) = {
-        generate_comment("Here")
+        //generate_comment("Here")
         val res = var_new[Double](init)
         for (i <- (0 until nbElem): Rep[Range]) var_assign(res, op(res, this.data(i)))
         res
@@ -769,7 +769,7 @@ object LMS_vector {
         val guard: Rep[Boolean] = prob < 1.0
         for (i <- 0 until this.nbElem: Rep[Range]) {
           if (guard && Random.rand() > prob) {
-            res(i) = this(i) * scale
+            res(i) = this.data(i) * scale
             mask(i) = scale
           } else {
             res(i) = 0.0
@@ -786,10 +786,10 @@ object LMS_vector {
 
         val res = NewArray[Double](this.nbElem)
         for (i <- 0 until this.nbElem: Rep[Range]) {
-          if (this(i) < 0.0)
+          if (this.data(i) < 0.0)
             res(i) = 0.0
           else
-            res(i) = this(i)
+            res(i) = this.data(i)
         }
 
         Tensor(res, this.dims.seq : _*)
@@ -936,11 +936,11 @@ object LMS_vector {
         assert(a.dims == b.dims, s"ERROR: $mark not equal in dimensionsi ${a.dims.seq} != ${b.dims.seq}\\n")
 
         val i = var_new(0)
-        while (i < a.nbElem && { val diff = a(i) - b(i); diff > -tal && diff < tal }) {
+        while (i < a.nbElem && { val diff = a.data(i) - b.data(i); diff > -tal && diff < tal }) {
           i += 1
         }
         if (i < a.nbElem)
-          printf("ERROR: %s not equal in some data - %.4f != %.4f (%d)\\n", mark, a(i), b(i), i)
+          printf("ERROR: %s not equal in some data - %.4f != %.4f (%d)\\n", mark, a.data(i), b.data(i), i)
       }
     }
 
@@ -1487,7 +1487,7 @@ object LMS_vector {
           //result.print()
 
           // assertions
-          if (res(0) * res2(0) + res(1) * res2(1) != result(0))
+          if (res.data(0) * res2.data(0) + res.data(1) * res2.data(1) != result.data(0))
             println("ERROR: the dot product of two vectors is not correct")
 
         }
@@ -2310,6 +2310,7 @@ object LMS_vector {
       println("run test case array11_1")
       array11_1.eval("abc")
 
+    } // if (false) closing
 
       val root_dir = "/home/fei/bitbucket/privategitrepoforshare/ICFP18evaluation/"
 
@@ -2340,7 +2341,7 @@ object LMS_vector {
 
           val startTime = get_time()
 
-          val scanner = new Scanner("test_data")
+          val scanner = new Scanner("graham.txt")
           val training_data = scanner.data
           val data_size = scanner.fl
           // val chars = training_data.distinct  /** this can be done in second stage **/
@@ -2804,8 +2805,9 @@ object LMS_vector {
 
             val loss = gradR_loss(lossFun(inputs, targets))(Tensor.zeros(1))
             val loss_value = loss.data(0) // we suppose the loss is scala (Tensor of size 1)
+            smooth_loss = smooth_loss * 0.9 + loss_value * 0.1
             if (n % 100 == 0) {
-              printf("iter %d, loss %f\\n", n, loss_value)
+              printf("iter %d, loss %f\\n", n, smooth_loss)
               loss_save(n / 100) = smooth_loss
             }
 
@@ -3423,7 +3425,7 @@ object LMS_vector {
       sentit_file.println(sentimental_lstm.code)
       sentit_file.flush()
 
-
+    if (false) {
       val cnn_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
         @virtualize
@@ -4049,8 +4051,8 @@ object LMS_vector {
       }
       println("start full CNN test")
       test_cnn_full1.eval("abc")
-    } // if (false) closing
-
+    
+    } // if false 2 closing
 
     val mnist  = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
@@ -4292,7 +4294,7 @@ object LMS_vector {
       }
 
     }
-    println("start mnist")
-    mnist.eval("abc")
+    //println("start mnist")
+    //mnist.eval("abc")
   }
 }
