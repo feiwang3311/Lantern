@@ -14,7 +14,7 @@ trait ScannerLowerBase extends Base with UncheckedOps { this: Dsl =>
 
   def openf(name: Rep[String], mode: Rep[String]): Rep[Long] // return a file pointer
   def closef(fp: Rep[Long]): Rep[Unit]
-  def getFloat(fp: Rep[Long], data: Rep[Array[Double]], i: Rep[Int]): Rep[Unit]
+  def getFloat(fp: Rep[Long], data: Rep[Array[Float]], i: Rep[Int]): Rep[Unit]
   //def getFloat(fp: Rep[Long], at: Rep[Float]): Rep[Unit]
   def getInt(fp: Rep[Long], at: Rep[Int]): Rep[Unit]
   def getInt(fp: Rep[Long], data: Rep[Array[Int]], i: Rep[Int]): Rep[Unit]
@@ -33,13 +33,13 @@ trait ScannerLowerExp extends ScannerLowerBase with UncheckedOpsExp { this: DslE
 
   def openf(name: Rep[String], mode: Rep[String]) = unchecked[Long]("(long)fopen(", name, ", ", mode, ")")
   def closef(fp: Rep[Long]) = unchecked[Unit]("fclose((FILE*)", fp, ")")
-  def getFloat(fp: Rep[Long], data: Rep[Array[Double]], i: Rep[Int]) = 
-    unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%lf\", &", data, "[", i, "]", ")!=1) perror(\"Error reading file\")")
-  //def getFloat(fp: Rep[Long], at: Rep[Float]) = 
+  def getFloat(fp: Rep[Long], data: Rep[Array[Float]], i: Rep[Int]) =
+    unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%f\", &", data, "[", i, "]", ")!=1) perror(\"Error reading file\")")
+  //def getFloat(fp: Rep[Long], at: Rep[Float]) =
   //  unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%f\", &", at, ")!=1) perror(\"Error reading file\")")
   def getInt(fp: Rep[Long], at: Rep[Int]) =
     unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%d\", &", at, ")!=1) perror(\"Error reading file\")")
-  def getInt(fp: Rep[Long], data: Rep[Array[Int]], i: Rep[Int]) = 
+  def getInt(fp: Rep[Long], data: Rep[Array[Int]], i: Rep[Int]) =
     unchecked[Unit]("if (fscanf((FILE *)", fp, ",\"%d\", &", data, "[", i, "]", ")!=1) perror(\"Error reading file\")")
 
   // for writing to file in c
