@@ -135,6 +135,7 @@ def run(write_to):
       loss_save.append(smooth_loss)
 
     p += seq_length
+  
   end = time.time()
   loopTime = end -start
 #  print("training loop time: %f" % (end - start))

@@ -23,16 +23,20 @@ def getColor(label):
     return 'g'
   if label == 'Lantern':
     return 'b'
-  if label == 'PyTorch':
+  if label == 'PyTorch' or label == 'PyTorch1':
     return 'r'
-  if label == 'TensorFlow':
+  if label == 'PyTorch20' or label == 'PyTorch100':
+    return 'c'
+  if label == 'TensorFlow' or label == 'TensorFlow1' or label == 'TF' or label == 'TF1':
     return 'y'
-  if label == 'TensorFold':
-    return 'y'
-  if label == 'TensorFold20':
-    return 'y'
-  if label == 'TensorFold1':
+  if label == 'TensorFlow20' or label == 'TensorFlow100' or label == 'TF20' or label == 'TF100':
     return 'm'
+  if label == 'TensorFold' or label == 'TensorFold1':
+    return 'y'
+  if label == 'TensorFold20' or label == 'TensorFold100':
+    return 'm'
+  else:
+    print("NOTE: color not defined for label: %s" % label)
 
 def plot(files, model):
   # save dir 

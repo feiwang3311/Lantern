@@ -2486,12 +2486,12 @@ object LMS_vector {
         }
       }
 
-      //println("run min_char_rnn")
-      //val min_char_rnn_file = new PrintWriter(new File(root_dir + "evaluationRNN/Lantern.cpp"))
-      //min_char_rnn_file.println(min_char_rnn.code)
-      //min_char_rnn_file.flush()
-      //min_char_rnn.eval("abc")
-      //println("verified that in this small example the values of gradients are about right (up to precision)")
+      /*
+      println("run min_char_rnn")
+      val min_char_rnn_file = new PrintWriter(new File(root_dir + "evaluationRNN/Lantern.cpp"))
+      min_char_rnn_file.println(min_char_rnn.code)
+      min_char_rnn_file.flush()
+      */
 
       val min_char_list = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
@@ -2637,15 +2637,12 @@ object LMS_vector {
         }
       }
 
-
-
-      //println("run min_char_list")
-      //val min_char_list_file = new PrintWriter(new File(root_dir + "evaluationRNNlist/Lantern.cpp"))
-      //min_char_list_file.println(min_char_list.code)
-      //min_char_list_file.flush()
-      //min_char_list.eval("abc")
-      //println("verified that in this small example the values of gradients are about right (up to precision)")
-
+      /*
+      println("run min_char_list")
+      val min_char_list_file = new PrintWriter(new File(root_dir + "evaluationRNNlist/Lantern.cpp"))
+      min_char_list_file.println(min_char_list.code)
+      min_char_list_file.flush()
+      */
 
       val min_char_lstm = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
@@ -2853,12 +2850,12 @@ object LMS_vector {
         }
       }
 
-      //println("run min_char_lstm")
-      //val min_char_lstm_file = new PrintWriter(new File(root_dir + "evaluationLSTM/Lantern.cpp"))
-      //min_char_lstm_file.println(min_char_lstm.code)
-      //min_char_lstm_file.flush()
-      //min_char_lstm.eval("abc")
-      //println("verified that in this small example the values of gradients are about right (up to precision)")
+      /*
+      println("run min_char_lstm")
+      val min_char_lstm_file = new PrintWriter(new File(root_dir + "evaluationLSTM/Lantern.cpp"))
+      min_char_lstm_file.println(min_char_lstm.code)
+      min_char_lstm_file.flush()
+      */
 
       val senti_seq_lstm = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
@@ -3191,7 +3188,7 @@ object LMS_vector {
           getInt(fp, readingSlot1, 0) // read the first number in the file, which is "How many rows"
           val word_embedding_length = readingSlot1(0)
 
-          val word_embedding_data = NewArray[Array[Double]](word_embedding_length)
+          val word_embedding_data = NewArray[Array[Float]](word_embedding_length)
           
           for (i <- (0 until word_embedding_length): Rep[Range]) {
             word_embedding_data(i) = NewArray[Float](word_embedding_size)
@@ -3430,10 +3427,12 @@ object LMS_vector {
         }
       }
 
-      //println("run sentiment analysis tree LSTM")
-      //val sentit_file = new PrintWriter(new File(root_dir + "evaluationTreeLSTM/Lantern/Lantern.cpp"))
-      //sentit_file.println(sentimental_lstm.code)
-      //sentit_file.flush()
+      /*
+      println("run sentiment analysis tree LSTM")
+      val sentit_file = new PrintWriter(new File(root_dir + "evaluationTreeLSTM/Lantern/Lantern.cpp"))
+      sentit_file.println(sentimental_lstm.code)
+      sentit_file.flush()
+      */
 
     if (false) {
       val cnn_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
@@ -4120,6 +4119,10 @@ object LMS_vector {
         printf("Here we go!! Go MNIST!!!!\\n")
         Random.srand(Some(42))
 
+        //move timer here to track all of the prepare time
+        val dataTimer = Timer2()
+        dataTimer.startTimer
+        
         val variables = ArrayBuffer[TensorR]()
 
         // input size
@@ -4212,11 +4215,13 @@ object LMS_vector {
         val tot1 = NewArray[Long](2)
         val tot2 = NewArray[Long](2)
 
-        val dataTimer = Timer2()
-        dataTimer.startTimer
+        //val dataTimer = Timer2()
+        //dataTimer.startTimer
+        
         val train = new DataLoader("mnist", true, iChan1, iRow1, iCol1)
         printf("Start normalize\\n")
         train.normalize()
+
         def trainFun(input: TensorR, target: Rep[Int]) = { (dummy: TensorR) =>
           val resL1 = input.conv(varConv1, sRow1, sCol1, tot1).maxPool(smRow1, smCol1).relu()
           val resL2 = resL1.conv(varConv2, sRow2, sCol2, tot2).maxPool(smRow2, smCol2).relu()
@@ -4225,19 +4230,19 @@ object LMS_vector {
           val res = resL4.logSoftmax()
           res.nllLoss(target)
         }
+        
+        // we skip tests for the experiments
+        //val test = new DataLoader("mnist", false, iChan1, iRow1, iCol1)
+        //test.normalize()
+        
+        val prepareTime = dataTimer.getElapsedTime / 1e6f
+        printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
 
-        val test = new DataLoader("mnist", false, iChan1, iRow1, iCol1)
-        test.normalize()
-        printf("Data normalized in %ldms\\n", dataTimer.getElapsedTime)
-
+        val loss_save = NewArray[Double](nbEpoch)
 
         val addr = getMallocAddr() // remember current allocation pointer here
         for (epoch <- 0 until nbEpoch: Rep[Range]) {
-          // tot1(0) = 0L
-          // tot1(1) = 0L
-          // tot2(0) = 0L
-          // tot2(1) = 0L
-
+      
           val trainTimer = Timer2()
           var imgIdx = var_new(0)
           var trainLoss = var_new(0.0f)
@@ -4291,7 +4296,11 @@ object LMS_vector {
           }
           val delta = trainTimer.getElapsedTime
           printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
+          
+          // save trainLoss / train.length to loss_save
+          loss_save(epoch) = trainLoss / train.length
 
+          /* skip tests
           def testFun(input: Tensor) = {
             val (resL1, _) = input.conv2D(conv1, sRow1, sCol1).maxPool(smRow1, smCol1)
             val (resL2, _) = resL1.relu().conv2D(conv2, sRow2, sCol2).maxPool(smRow2, smCol2)
@@ -4316,9 +4325,23 @@ object LMS_vector {
           }
           printf("Test set: Average loss: %.4f, Acurracy: %d/%d (%.0f) in %ldms\\n", testLoss / test.length, correct, test.length, 100.0 * correct / test.length, testTimer.getElapsedTime/1000L)
           printf("\\n\\n")
-        }
-      }
+          */
 
+        }
+
+        val totalTime = dataTimer.getElapsedTime / 1e6f 
+        val loopTime = totalTime - prepareTime
+        val timePerEpoc = loopTime / nbEpoch
+
+        val fp2 = openf(a, "w")
+        fprintf(fp2, "unit: %s\\n", "1 epoch")
+        for (i <- (0 until loss_save.length): Rep[Range]) {
+          //printf("loss_saver is %lf \\n", loss_save(i))
+          fprintf(fp2, "%lf\\n", loss_save(i))
+        }
+        fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+        closef(fp2)
+      }
     }
     
     println("run simple CNN test case")

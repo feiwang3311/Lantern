@@ -1,3 +1,3 @@
 # adworkspace
 
-LMS-AutoDiff
+Lantern

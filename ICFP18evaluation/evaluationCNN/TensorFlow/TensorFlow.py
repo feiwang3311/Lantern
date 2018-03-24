@@ -35,7 +35,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 import tensorflow as tf
 
-FLAGS = None
+#FLAGS = None
 
 
 def deepnn(x):
@@ -121,10 +121,13 @@ def bias_variable(shape):
   initial = tf.constant(0.1, shape=shape)
   return tf.Variable(initial)
 
-
-def main(_):
+def run(write_to):
+  
+  print("this is the start of reading data")
+  startTime = time.time()
+  
   # Import data
-  mnist = input_data.read_data_sets(FLAGS.data_dir)
+  mnist = input_data.read_data_sets(args.data_dir)
 
   # Create the model
   x = tf.placeholder(tf.float32, [None, 784])
@@ -141,53 +144,100 @@ def main(_):
   cross_entropy = tf.reduce_mean(cross_entropy)
 
   with tf.name_scope('adam_optimizer'):
-    train_step = tf.train.GradientDescentOptimizer(5e-2).minimize(cross_entropy)
+    train_step = tf.train.GradientDescentOptimizer(args.lr).minimize(cross_entropy)
 
   with tf.name_scope('accuracy'):
     correct_prediction = tf.equal(tf.argmax(y_conv, 1), y_)
     correct_prediction = tf.cast(correct_prediction, tf.float32)
   accuracy = tf.reduce_mean(correct_prediction)
 
-  graph_location = tempfile.mkdtemp()
-  print('Saving graph to: %s' % graph_location)
-  train_writer = tf.summary.FileWriter(graph_location)
-  train_writer.add_graph(tf.get_default_graph())
+  #graph_location = tempfile.mkdtemp()
+  #print('Saving graph to: %s' % graph_location)
+  #train_writer = tf.summary.FileWriter(graph_location)
+  #train_writer.add_graph(tf.get_default_graph())
 
+  loopStart = time.time()
+  loss_save = []
   with tf.Session(config=tf.ConfigProto(
         intra_op_parallelism_threads=1,
         inter_op_parallelism_threads=1)) as sess:
     sess.run(tf.global_variables_initializer())
-    for epoch in range(10):
+    for epoch in range(args.epochs):
       train_accuracy = 0.0
       start = time.time() * 1000
-      for i in range(600):
-        batch = mnist.train.next_batch(100)
+      for i in range(60000 // args.batch_size):
+        batch = mnist.train.next_batch(args.batch_size)
         _, loss = sess.run([train_step, cross_entropy], feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
-        print(loss)
+        #print(loss)
         train_accuracy += loss
-        if (i + 1) % 60 == 0:
-          print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))
+        #if (i + 1) % 60 == 0:
+        #  print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))
       stop = time.time() * 1000
       print('Training completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/60000))
+      average_loss = train_accuracy / (60000 / args.batch_size)
+      print('average loss is %s' % average_loss)
+      loss_save.append(average_loss)
 
-      start = time.time() * 1000
-      tloss = 0
-      tacc = 0
-      for i in range(100):
-        batch = mnist.test.next_batch(100)
-        loss, acc = sess.run([cross_entropy, accuracy], feed_dict={
-          x: batch[0], y_: batch[1], keep_prob: 1.0})
-        tloss += loss
-        tacc += acc
-      stop = time.time() * 1000
+      #start = time.time() * 1000
+      #tloss = 0
+      #tacc = 0
+      #for i in range(100):
+      #  batch = mnist.test.next_batch(100)
+      #  loss, acc = sess.run([cross_entropy, accuracy], feed_dict={
+      #    x: batch[0], y_: batch[1], keep_prob: 1.0})
+      #  tloss += loss
+      #  tacc += acc
+      #stop = time.time() * 1000
 
-      print('Epoch %d: test accuracy %d/10000. Average loss %f' % (epoch + 1, tacc, tloss / 10000))
-      print('Testing completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/10000))
+      #print('Epoch %d: test accuracy %d/10000. Average loss %f' % (epoch + 1, tacc, tloss / 10000))
+      #print('Testing completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/10000))
+  loopEnd = time.time()
+  prepareTime = loopStart - startTime
+  loopTime = loopEnd - loopStart
+  timePerEpoch = loopTime / args.epochs
+
+  with open(write_to, "w") as f:
+    f.write("unit: " + "1 epoch\n")
+    for loss in loss_save:
+      f.write(str(loss) + "\n")
+    f.write("run time: " + str(prepareTime) + " " + str(timePerEpoch) + "\n")
+
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--data_dir', type=str,
-                      default='/tmp/tensorflow/mnist/input_data',
-                      help='Directory for storing input data')
-  FLAGS, unparsed = parser.parse_known_args()
-  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+    # Training settings
+    parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+    parser.add_argument('--batch-size', type=int, default=100, metavar='N',
+                        help='input batch size for training (default: 64)')
+    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
+                        help='input batch size for testing (default: 1000)')
+    parser.add_argument('--epochs', type=int, default=10, metavar='N',
+                        help='number of epochs to train (default: 10)')
+    parser.add_argument('--lr', type=float, default=0.05, metavar='LR',
+                        help='learning rate (default: 0.01)')
+    parser.add_argument('--momentum', type=float, default=0.0, metavar='M',
+                        help='SGD momentum (default: 0.5)')
+    parser.add_argument('--no-cuda', action='store_true', default=False,
+                        help='disables CUDA training')
+    parser.add_argument('--seed', type=int, default=42, metavar='S',
+                        help='random seed (default: 1)')
+    parser.add_argument('--log-interval', type=int, default=6000, metavar='N',
+                        help='how many batches to wait before logging training status')
+    parser.add_argument('--data_dir', type=str,
+                       default='./input_data',
+                       help='Directory for storing input data')
+    args = parser.parse_args()
+
+    import os
+    if not os.path.exists(args.data_dir):
+      # only try to download the data here
+      input_data.read_data_sets(args.data_dir)    
+
+    run("result_TensorFlow"+str(args.batch_size)+".txt")
+
+#if __name__ == '__main__':
+#  parser = argparse.ArgumentParser()
+#  parser.add_argument('--data_dir', type=str,
+#                      default='/tmp/tensorflow/mnist/input_data',
+##                     help='Directory for storing input data')
+#  FLAGS, unparsed = parser.parse_known_args()
+#  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)

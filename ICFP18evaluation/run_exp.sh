@@ -5,8 +5,7 @@ echo "Note: make sure you are using the most updated .cpp file!"
 cd evaluationRNN
 echo "Note: Let's run vanilla RNN experiment first"
 echo "RUN: run Lantern"
-echo "Note: we can only do -O2 flag now, -O3 has segfault"
-g++ -std=c++11 -O2 -Wno-pointer-arith Lantern.cpp -o Lantern
+g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern
 ./Lantern result_Lantern.txt
 echo "RUN: run Numpy"
 python min-char-rnn.py result_Numpy.txt
@@ -23,8 +22,7 @@ cd ..
 cd evaluationLSTM
 echo "Note: Let's run LSTM experiment now"
 echo "RUN: run Lantern"
-echo "Note: we can only do -O2 flag now, -O3 has segfault"
-g++ -std=c++11 -O2 -Wno-pointer-arith Lantern.cpp -o Lantern
+g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern
 ./Lantern result_Lantern.txt
 echo "RUN: run PyTorch"
 python min-char-lstm-pytorch.py result_PyTorch.txt
@@ -69,9 +67,8 @@ echo "Result: run sentiment in TensorFold is successful"
 cd ..
 cd Lantern
 echo "RUN: run Lantern"
-echo "Note: we can only do -O2 flag now, -O3 has segfault"
 python preprocess_data.py
-g++ -std=c++11 -O2 -Wno-pointer-arith Lantern.cpp -o Lantern
+g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern
 ./Lantern result_Lantern.txt
 echo "Result: run sentiment in Lantern is successful"
 cd ..
@@ -82,4 +79,42 @@ cp TensorFold/result_TensorFold20.txt result_TensorFold20.txt
 cp TensorFold/result_TensorFold1.txt result_TensorFold1.txt
 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_TensorFold1.txt
 echo "RESULT: run TreeLSTM experiment successful"
+cd ..
+
+
+cd evaluationCNN
+cd PyTorch
+echo "Note: Let's run CNN in PyTorch first, which also helps downloading the training data"
+echo "Download data and also extract data for Lantern to use"
+python download_data.py
+python extract_data.py
+echo "RUN: PyTorch CNN with batch size 100 and learning rate 0.05"
+python PyTorch.py
+echo "RUN: PyTorch CNN with batch size 1 and learning rate 0.0005"
+python PyTorch.py --batch-size 1 --lr 0.0005
+echo "Result: PyTorch CNN run successfully"
+cd ..
+cd TensorFlow
+echo "Note: now Let's run TensorFlow CNN"
+echo "RUN: TensorFlow CNN with batch size 100 and learning rate 0.05"
+python TensorFlow.py
+echo "RUN: TensorFlow CNN with batch size 1 and learning rate 0.0005"
+python TensorFlow.py --batch-size 1 --lr 0.0005
+echo "Result: TensorFlow CNN run successfully"
+cd ..
+cd Lantern
+echo "Note: Let's run Lantern now"
+g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern
+echo "RUN: Lantern CNN"
+./Lantern result_Lantern.txt
+echo "Result: Lantern CNN successful"
+cd ..
+echo "RUN: copy the result files and do plotting"
+cp Lantern/result_Lantern.txt result_Lantern.txt
+cp PyTorch/result_PyTorch100.txt result_PyTorch100.txt
+cp PyTorch/result_PyTorch1.txt result_PyTorch1.txt
+cp TensorFlow/result_TensorFlow100.txt result_TF100.txt
+cp TensorFlow/result_TensorFlow1.txt result_TF1.txt
+../plot.py CNN result_Lantern.txt result_PyTorch100.txt result_PyTorch1.txt result_TF100.txt result_TF1.txt
+echo "RESULT: run CNN experiment successful"
 cd ..
