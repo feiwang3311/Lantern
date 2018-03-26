@@ -5,7 +5,7 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
 
-object LMS_test {
+object LMS_Greg {
 
   trait TestExp extends Dsl {
     type Size = Int
@@ -78,6 +78,7 @@ object LMS_test {
 
       @virtualize
       def apply(x: Rep[Size]*) = {
+        // Fei: should we make sure that length of x is the same as length of Dimensions 
         val idx: Rep[Size] = ((x zip (if (x.length == 1) NSeq(1) else dims.strides)) :\ (0: Rep[Int])) { (c, agg) => agg + c._1 * c._2 }
         assertC(0 <= idx && idx < nbElem, s"Out of bound: %d not in [0, ${nbElem}]", idx)
         data(idx)

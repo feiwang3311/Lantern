@@ -101,6 +101,7 @@ object LMS_vector {
         timer
       }
     }
+
     def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
     def mmax(a: Int, b: Int) = if (a >= b) a else b
 
@@ -134,12 +135,34 @@ object LMS_vector {
     }
 
     implicit def ttttoSeq(x: TTT) = x.seq
+    
     object Random {
       def rand() = unchecked[Float]("(float)rand()/RAND_MAX")
       def srand(seed: Option[Int] = None) = unchecked[Unit]("srand(",seed.map(_.toString).getOrElse("time(NULL)"),")")
     }
 
     def exit() = unchecked[Unit]("exit(0)")
+
+    abstract class DataLoop {
+      def foreach(f: Rep[Int] => Unit): Unit
+    }
+
+    @virtualize
+    object DataLoop {
+      def apply(size: Int) = if (size <= 1) {
+        new DataLoop {
+          def foreach(f: Rep[Int] => Unit) = {
+            for (i <- 0 until size: Range) f(unit(i))
+          }
+        }
+      } else {
+        new DataLoop {
+          def foreach(f: Rep[Int] => Unit) = {
+            for (i <- 0 until size: Rep[Range]) f(i)
+          }
+        }
+      }
+    }
 
     class Tensor(val data: Rep[Array[Float]], val dimsSeq: NSeq[Int]) extends Serializable {
 
@@ -165,25 +188,25 @@ object LMS_vector {
 
       @virtualize
       def clipAt(bound: Float) = {
-        for (i <- (0 until nbElem): Rep[Range]) {
+        for (i <- DataLoop(nbElem)) {
           if (data(i) > bound) data(i) = bound
           if (data(i) < -1.0f * bound) data(i) = -1.0f * bound
         }
       }
 
       def mapInPlace(op: Rep[Float] => Rep[Float]) = {
-        for (i <- (0 until nbElem): Rep[Range]) this.data(i) = op(this.data(i))
+        for (i <- DataLoop(nbElem)) this.data(i) = op(this.data(i))
       }
 
       def map(op: Rep[Float] => Rep[Float]) = {
         val res = NewArray[Float](nbElem)
-        for (i <- (0 until nbElem): Rep[Range]) res(i) = op(this.data(i))
+        for (i <- DataLoop(nbElem)) res(i) = op(this.data(i))
         new Tensor(res, dims)
       }
 
       def fold(init: Rep[Float])(op: (Rep[Float], Rep[Float]) => Rep[Float]) = {
         val res = var_new[Float](init)
-        for (i <- (0 until nbElem): Rep[Range]) var_assign(res, op(res, this.data(i)))
+        for (i <- DataLoop(nbElem)) var_assign(res, op(res, this.data(i)))
         res
       }
 
@@ -193,7 +216,7 @@ object LMS_vector {
         else if (that.nbElem == 1) this + that.data(0)
         else if (that.dims == this.dims) {
           val res = NewArray[Float](nbElem)
-          for (i <- (0 until nbElem): Rep[Range]) res(i) = this.data(i) + that.data(i)
+          for (i <- DataLoop(nbElem)) res(i) = this.data(i) + that.data(i)
           new Tensor(res, dims)
         }
         else throw new IllegalArgumentException(s"dimensions of vector do not match +! ${this.dims.seq} != ${that.dims.seq}")
@@ -208,7 +231,7 @@ object LMS_vector {
         }
         else if (this.nbElem == 1) ??? // this.data(0) = that.fold(this.data(0))((agg, x) => agg + x)
         else if (this.dims == that.dims)
-          for (i <- (0 until nbElem): Rep[Range]) this.data(i) += that.data(i)
+          for (i <- DataLoop(nbElem)) this.data(i) += that.data(i)
         else throw new IllegalArgumentException(s"dimensions of vector do not match +=! ${this.dims.seq} != ${that.dims.seq}")
       }
 
@@ -218,7 +241,7 @@ object LMS_vector {
         else if (that.nbElem == 1) this - that.data(0)
         else if (that.dims == this.dims) {
           val res = NewArray[Float](nbElem)
-          for (i <- (0 until nbElem): Rep[Range]) res(i) = this.data(i) - that.data(i)
+          for (i <- DataLoop(nbElem)) res(i) = this.data(i) - that.data(i)
           new Tensor(res, dims)
         }
         else throw new IllegalArgumentException("dimensions of vector do not match +!")
@@ -233,7 +256,7 @@ object LMS_vector {
           // this.data(0) = that.fold(this.data(0))((agg, x) => agg - x)
         }
         else if (this.dims == that.dims)
-          for (i <- (0 until nbElem): Rep[Range]) this.data(i) -= that.data(i)
+          for (i <- DataLoop(nbElem)) this.data(i) -= that.data(i)
         else throw new IllegalArgumentException("dimensions of vector do not match +=!")
       }
 
@@ -244,7 +267,7 @@ object LMS_vector {
         else if (that.nbElem == 1) this * that.data(0)
         else if (that.dims == this.dims) {
           val res = NewArray[Float](nbElem)
-          for (i <- (0 until nbElem): Rep[Range]) res(i) = this.data(i) * that.data(i)
+          for (i <- DataLoop(nbElem)) res(i) = this.data(i) * that.data(i)
           new Tensor(res, dims)
         }
         else throw new IllegalArgumentException(s"dimensions of vector do not match * ${this.dims.seq} != ${that.dims.seq}")
@@ -259,7 +282,7 @@ object LMS_vector {
           // this.data(0) = that.fold(this.data(0))((agg, x) => agg * x)
         }
         else if (this.dims == that.dims)
-          for (i <- (0 until nbElem): Rep[Range]) this.data(i) *= that.data(i)
+          for (i <- DataLoop(nbElem)) this.data(i) *= that.data(i)
         else throw new IllegalArgumentException("dimensions of vector do not match +=!")
       }
 
@@ -270,7 +293,7 @@ object LMS_vector {
         else if (that.nbElem == 1) this / that.data(0)
         else if (that.dims == this.dims) {
           val res = NewArray[Float](nbElem)
-          for (i <- (0 until nbElem): Rep[Range]) res(i) = this.data(i) / that.data(i)
+          for (i <- DataLoop(nbElem)) res(i) = this.data(i) / that.data(i)
           new Tensor(res, dims)
         }
         else throw new IllegalArgumentException("dimensions of vector do not match +!")
@@ -282,7 +305,7 @@ object LMS_vector {
         if (that.nbElem == 1) this /= that.data(0) // broadcast
         else if (this.nbElem == 1) ??? // this.data(0) = that.fold(this.data(0))((agg, x) => agg / x)
         else if (this.dims == that.dims)
-          for (i <- (0 until nbElem): Rep[Range]) this.data(i) /= that.data(i)
+          for (i <- DataLoop(nbElem)) this.data(i) /= that.data(i)
         else throw new IllegalArgumentException("dimensions of vector do not match +=!")
       }
 
@@ -291,7 +314,7 @@ object LMS_vector {
 
       def copy_data(that: Tensor) = {
         assert(this.nbElem == that.nbElem, "dimensions of vector do not match copy_data!")
-        for (i <- (0 until nbElem): Rep[Range]) this.data(i) = that.data(i)
+        for (i <- DataLoop(nbElem)) this.data(i) = that.data(i)
       }
 
       // NOTE: only handles (Matrix dot Vector) and (Vector dot Vector)
@@ -304,9 +327,11 @@ object LMS_vector {
         val off = var_new(0)
         val up = if (this.nbDims > 1) this.dims(0) else 1
         val res = NewArray[Float](up)
-        for (j <- (0 until up): Rep[Range]) {
+        for (j <- DataLoop(up)) {
+        //for (j <- (0 until up): Rep[Range]) {
           val value = var_new(0.0f)
-          for (i <- (0 until this.dims.last): Rep[Range]) {
+          for (i <- DataLoop(this.dims.last)) {
+          //for (i <- (0 until this.dims.last): Rep[Range]) {
             value += data(off) * that.data(i)
             off += 1
           }
@@ -321,8 +346,10 @@ object LMS_vector {
         assert(this.nbDims == 1 && that.nbDims == 1, "cartesian product is only for 1d vectors")
         val res = NewArray[Float](this.dims(0) * that.dims(0))
         val off = var_new(0)
-        for (i <- (0 until this.dims(0)): Rep[Range]) {
-          for (j <- (0 until that.dims(0)): Rep[Range]) {
+        for (i <- DataLoop(this.dims(0))) {
+        //for (i <- (0 until this.dims(0)): Rep[Range]) {
+          for (j <- DataLoop(that.dims(0))) {
+          //for (j <- (0 until that.dims(0)): Rep[Range]) {
             res(off) = data(i) * that.data(j)
             off += 1
           }
@@ -334,9 +361,11 @@ object LMS_vector {
         assert(this.nbDims == 2, "transpose is only for matrix. Tensor transpose is not supported here")
         val res = NewArray[Float](this.nbElem)
         val offT = var_new(0)
-        for (i <- (0 until this.dims(1)): Rep[Range]) {
+        for (i <- DataLoop(this.dims(1))) {
+        //for (i <- (0 until this.dims(1)): Rep[Range]) {
           val off = var_new(0)
-          for (j <- (0 until this.dims(0)): Rep[Range]) {
+          for (j <- DataLoop(this.dims(0))) {
+          //for (j <- (0 until this.dims(0)): Rep[Range]) {
             res(offT + j) = data(off + i)
             off += this.dims(1)
           }
@@ -414,13 +443,16 @@ object LMS_vector {
         else {
           val res = NewArray[Float](this.dims(1))
           val off = var_new(0)
-          for (j <- (0 until this.dims(1)): Rep[Range]) {
+          for (j <- DataLoop(this.dims(1))) {
+          //for (j <- (0 until this.dims(1)): Rep[Range]) {
             res(off) = this.data(off)
             off += 1
           }
+
           for (i <- (1 until this.dims(0)): Rep[Range]) {
             val offR = var_new(0)
-            for (j <- (0 until this.dims(1)): Rep[Range]) {
+            for (j <- DataLoop(this.dims(1))) {
+            //for (j <- (0 until this.dims(1)): Rep[Range]) {
               res(offR) += data(off)
               off += 1
               offR += 1
@@ -493,8 +525,10 @@ object LMS_vector {
         val off = var_new(0)
         // TODO remove loop if not used
         val up = if (this.nbDims > 1) this.dims(0) else 1
-        for (i <- (0 until up): Rep[Range]) {
-          for (j <- (0 until dims(1)): Rep[Range]) {
+        for (i <- DataLoop(up)) {
+        //for (i <- (0 until up): Rep[Range]) {
+          for (j <- DataLoop(dims(1))) {
+          //for (j <- (0 until dims(1)): Rep[Range]) {
             this.data(off + j) = this.data(off + j) + that.data(j) * y.data(i)
           }
           off += this.dims(1)
@@ -513,8 +547,10 @@ object LMS_vector {
         val off = var_new(0)
         // FIXME!!
         val up = if (that.nbDims > 1) that.dims(0) else 1
-        for (i <- (0 until up): Rep[Range]) {
-          for (j <- (0 until that.dims(1)): Rep[Range]) {
+        for (i <- DataLoop(up)) {
+        //for (i <- (0 until up): Rep[Range]) {
+          for (j <- DataLoop(that.dims(1))) {
+          //for (j <- (0 until that.dims(1)): Rep[Range]) {
             data(j) += that.data(off + j) * y.data(i)
           }
           off += that.dims(1)
@@ -533,12 +569,15 @@ object LMS_vector {
         var offThis = var_new(0)
         var offThatR = var_new(0)
         var offYC = var_new(0)
-        for (i <- 0 until this.dims(0): Rep[Range]) {
+        for (i <- DataLoop(this.dims(0))) {
+        //for (i <- 0 until this.dims(0): Rep[Range]) {
           val offYR = var_new(offYC)
-          for (j <- 0 until this.dims(1): Rep[Range]) {
+          for (j <- DataLoop(this.dims(1))) {
+          //for (j <- 0 until this.dims(1): Rep[Range]) {
             val offY = var_new(offYR)
             val offThat = var_new(offThatR)
-            for (k <- 0 until that.dims(1): Rep[Range]) {
+            for (k <- DataLoop(that.dims(1))) {
+            //for (k <- 0 until that.dims(1): Rep[Range]) {
               // assertC(unit(0) <= offThis && offThis < this.nbElem, s"Index error this %d > ${this.nbElem}", offThis)
               // assertC(unit(0) <= offThat && offThat < that.nbElem, s"Index error that %d > ${that.nbElem}", offThat)
               // assertC(unit(0) <= offY && offY < y.nbElem, s"Index error this %d > ${y.nbElem}", offY)
@@ -566,10 +605,14 @@ object LMS_vector {
         // FIXME!!!
         val dims0M = mmax(dims(0), mmax(a.dims(0), b.dims(0)))
         val dims1M = mmax(if (this.nbDims > 1) dims(1) else 1, mmax(if (a.nbDims > 1) a.dims(1) else 1, if (b.nbDims > 1) b.dims(1) else 1))
-        if (this.isScalar) {
-          for (i <- 0 until (dims0M * dims1M): Rep[Range]) data(0) = data(0) + a.getAt(i) * b.getAt(i)
-        } else {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + a.getAt(i) * b.getAt(i)
+        //if (this.isScalar) {
+        //  for (i <- 0 until (dims0M * dims1M): Rep[Range]) data(0) = data(0) + a.getAt(i) * b.getAt(i)
+        //} else {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + a.getAt(i) * b.getAt(i)
+        //}
+        for (i <- DataLoop(dims0M * dims1M)) {
+          if (this.isScalar) { data(0) = data(0) + a.getAt(i) * b.getAt(i) }
+          else { data(i) = data(i) + a.getAt(i) * b.getAt(i) }
         }
       }
 
@@ -577,14 +620,16 @@ object LMS_vector {
         assert(this.dims == b.dims)
 
         generate_comment("Generate code for addMul")
-        for (i <- 0 until this.nbElem: Rep[Range]) {
+        for (i <- DataLoop(this.nbElem)) {
+        //for (i <- 0 until this.nbElem: Rep[Range]) {
           this.data(i) = this.data(i) + a * b.data(i)
         }
       }
+
       def cmulAdd(a: Float, b: Tensor) = {
         assert(this.dims == b.dims)
-
-        for (i <- 0 until this.nbElem: Rep[Range])
+        for (i <- DataLoop(this.nbElem)) 
+        //for (i <- 0 until this.nbElem: Rep[Range])
           this.data(i) = a * this.data(i) + b.data(i)
 
         this // FIXME ??
@@ -595,10 +640,14 @@ object LMS_vector {
         val dims0M = mmax(dims(0), mmax(a.dims(0), b.dims(0)))
         // FIXME
         val dims1M = mmax(if (nbDims > 1) dims(1) else 1, mmax(if (a.nbDims > 1) a.dims(1) else 1, if (b.nbDims > 1) b.dims(1) else 1))
-        if (this.isScalar) {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(0) = data(0) + a.getAt(i) / b.getAt(i)
-        } else {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + a.getAt(i) / b.getAt(i)
+        //if (this.isScalar) {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(0) = data(0) + a.getAt(i) / b.getAt(i)
+        //} else {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + a.getAt(i) / b.getAt(i)
+        //}
+        for (i <- DataLoop(dims0M * dims1M)) {
+          if (this.isScalar) { data(0) = data(0) + a.getAt(i) / b.getAt(i) }
+          else { data(i) = data(i) + a.getAt(i) / b.getAt(i) }
         }
       }
 
@@ -609,10 +658,14 @@ object LMS_vector {
         val dims0M = mmax(dims(0), mmax(a.dims(0), mmax(b.dims(0), c.dims(0))))
         // FIXME
         val dims1M = mmax(if (nbDims > 1) dims(1) else 1, mmax(if (a.nbDims > 1) a.dims(1) else 1, if (b.nbDims > 1) b.dims(1) else 1))
-        if (this.isScalar) {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(0) = data(0) - a.getAt(i) * b.getAt(i) / square(c.getAt(i))
-        } else {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) - a.getAt(i) * b.getAt(i) / square(c.getAt(i))
+        //if (this.isScalar) {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(0) = data(0) - a.getAt(i) * b.getAt(i) / square(c.getAt(i))
+        //} else {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) - a.getAt(i) * b.getAt(i) / square(c.getAt(i))
+        //}
+        for (i <- DataLoop(dims0M * dims1M)) {
+          if (this.isScalar) { data(0) = data(0) - a.getAt(i) * b.getAt(i) / square(c.getAt(i)) }
+          else { data(i) = data(i) - a.getAt(i) * b.getAt(i) / square(c.getAt(i)) }
         }
       }
 
@@ -621,22 +674,32 @@ object LMS_vector {
         val dims0M = mmax(dims(0), mmax(a.dims(0), b.dims(0)))
         // FIXME
         val dims1M = mmax(if (nbDims > 1) dims(1) else 1, mmax(if (a.nbDims > 1) a.dims(1) else 1, if (b.nbDims > 1) b.dims(1) else 1))
-        if (this.isScalar) {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(0) = data(0) + (1.0f - square(a.getAt(i))) * b.getAt(i)
-        } else {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + (1.0f - square(a.getAt(i))) * b.getAt(i)
+        //if (this.isScalar) {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(0) = data(0) + (1.0f - square(a.getAt(i))) * b.getAt(i)
+        //} else {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + (1.0f - square(a.getAt(i))) * b.getAt(i)
+        //}
+        for (i <- DataLoop(dims0M * dims1M)) {
+          if (this.isScalar) { data(0) = data(0) + (1.0f - square(a.getAt(i))) * b.getAt(i) }
+          else { data(i) = data(i) + (1.0f - square(a.getAt(i))) * b.getAt(i) }
         }
       }
+
       def oneMinusThenMult(t: Rep[Float]) = (1.0f - t) * t
+
       def add_oneMinusThenMult_mult(a: Tensor, b: Tensor) = {
         assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_oneMinusThenMult_mult")
         val dims0M = mmax(dims(0), mmax(a.dims(0), b.dims(0)))
         // FIXME
         val dims1M = mmax(if (nbDims > 1) dims(1) else 1, mmax(if (a.nbDims > 1) a.dims(1) else 1, if (b.nbDims > 1) b.dims(1) else 1))
-        if (this.isScalar) {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(0) = data(0) + oneMinusThenMult(a.getAt(i)) * b.getAt(i)
-        } else {
-          for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + oneMinusThenMult(a.getAt(i)) * b.getAt(i)
+        //if (this.isScalar) {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(0) = data(0) + oneMinusThenMult(a.getAt(i)) * b.getAt(i)
+        //} else {
+        //  for (i <- (0 until dims0M * dims1M): Rep[Range]) data(i) = data(i) + oneMinusThenMult(a.getAt(i)) * b.getAt(i)
+        //}
+        for (i <- DataLoop(dims0M * dims1M)) {
+          if (this.isScalar) { data(0) = data(0) + oneMinusThenMult(a.getAt(i)) * b.getAt(i) }
+          else { data(i) = data(i) + oneMinusThenMult(a.getAt(i)) * b.getAt(i) }
         }
       }
 
@@ -657,13 +720,15 @@ object LMS_vector {
 
         val offOut = var_new(0)
         val offWeight1 = var_new(0)
-        for (outPane <- 0 until kernel.dims(0): Rep[Range]) {
+        for (outPane <- DataLoop(kernel.dims(0))) {
+        //for (outPane <- 0 until kernel.dims(0): Rep[Range]) {
           // assertC(offOut == outPane * res.strides(1), "Invalid Output Idx %d != %d (%d)", offOut, outPane * res.strides(1), outPane)
           // assertC(offWeight1 == outPane * kernel.strides(1), "Invalid Kernel Idx")
           val offWeight2 = var_new(offWeight1)
           val offInput = var_new(0)
           val ptrOutput = slice(res.data, offOut)
-          for (inPane <- 0 until this.dims(0): Rep[Range]) {
+          for (inPane <- DataLoop(this.dims(0))) {
+          //for (inPane <- 0 until this.dims(0): Rep[Range]) {
             // assertC(offInput == inPane * this.strides(1), "Invalid Input Idx")
             // assertC(offWeight2 == outPane * kernel.strides(1) + inPane * kernel.strides(2), "Invalid kernel Idx (2) %d != %d (%d - %d)", offWeight1, outPane * kernel.strides(1) + inPane * kernel.strides(2), outPane, inPane)
             val ptrIntput = slice(this.data, offInput)
@@ -689,20 +754,24 @@ object LMS_vector {
 
         val offOuput = var_new(0)
         val offInputR = var_new(0)
-        for (outRow <- 0 until this.dims(0): Rep[Range]) {
+        for (outRow <- DataLoop(this.dims(0))) {
+        //for (outRow <- 0 until this.dims(0): Rep[Range]) {
           // assertC(offInputR == outRow * input.strides(1), "intputR invalid")
           val offInputC = var_new(offInputR)
-          for (outCol <- 0 until this.dims(1): Rep[Range]) {
+          for (outCol <- DataLoop(this.dims(1))) {
+          //for (outCol <- 0 until this.dims(1): Rep[Range]) {
             // assertC(offInputC == outRow * strideRow * input.strides(1) + outCol * strideCol, "intputC invalid")
             val offKernel = var_new(0)
             val offInput = var_new(offInputC)
             val sum = var_new(0.0f)
-            for (kernelRow <- 0 until kernel.dims(0): Rep[Range]) {
+            for (kernelRow <- DataLoop(kernel.dims(0))) {
+            //for (kernelRow <- 0 until kernel.dims(0): Rep[Range]) {
               // assertC(offInput == (outRow * strideRow + kernelRow) * input.strides(1) + outCol * strideCol, "input invalid")
               // assertC(offKernel == kernelRow * kernel.strides(1), "kernel invalid")
               val ptrIntput = slice(input.data, offInput)
               val ptrKernel = slice(kernel.data, offKernel)
-              for (kernelCol <- 0 until kernel.dims(1): Rep[Range]) {
+              for (kernelCol <- DataLoop(kernel.dims(1))) {
+              //for (kernelCol <- 0 until kernel.dims(1): Rep[Range]) {
                 sum +=  ptrIntput(kernelCol) * ptrKernel(kernelCol)
               }
               offKernel += kernel.strides(1)
@@ -715,6 +784,8 @@ object LMS_vector {
           offInputR += strideRow * input.strides(1)
         }
       }
+
+      // TO HERE DataLoop
 
       @virtualize
       def maxPool(strideRow: Int, strideCol: Int) = {
@@ -3427,12 +3498,12 @@ object LMS_vector {
         }
       }
 
-      /*
+      
       println("run sentiment analysis tree LSTM")
       val sentit_file = new PrintWriter(new File(root_dir + "evaluationTreeLSTM/Lantern/Lantern.cpp"))
       sentit_file.println(sentimental_lstm.code)
       sentit_file.flush()
-      */
+      
 
     if (false) {
       val cnn_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
@@ -4344,11 +4415,12 @@ object LMS_vector {
       }
     }
     
+    /*
     println("run simple CNN test case")
     val cnn_file = new PrintWriter(new File(root_dir + "evaluationCNN/Lantern/Lantern.cpp"))
     cnn_file.println(mnist.code)
     cnn_file.flush()
-    
+    */
 
     val becky = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
