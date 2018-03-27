@@ -2393,7 +2393,7 @@ object LMS_vector {
 
     } // if (false) closing
 
-      val root_dir = "/home/fei/bitbucket/privategitrepoforshare/ICFP18evaluation/"
+      val root_dir = "../ICFP18evaluation/"
 
       val min_char_rnn = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
