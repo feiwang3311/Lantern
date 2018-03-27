@@ -30,9 +30,14 @@ libraryDependencies += "org.scala-lang" % "scala-library" % scalaVersion.value %
 
 libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value % "compile"
 
+//libraryDependencies += "org.scalactic" %% "scalactic" % scalaVersion.value
+
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
+
 val paradiseVersion = "2.1.0"
 
 addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
+
 
 
 // libraryDependencies += "org.scala-lang.lms" %% "lms-core" % "1.0.0-SNAPSHOT"
@@ -42,3 +47,6 @@ addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVe
 // libraryDependencies += "org.scala-lang.virtualized" % "scala-library" % "2.11.2"
 
 // libraryDependencies += "org.scala-lang.virtualized" % "scala-reflect" % "2.11.2"
+
+// set the main class for packaging the main jar
+// mainClass in (Compile, packageBin) := Some("scala.lantern")

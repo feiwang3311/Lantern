@@ -1,3 +1,5 @@
+package lantern
+
 import org.scala_lang.virtualized.virtualize
 import org.scala_lang.virtualized.SourceContext
 

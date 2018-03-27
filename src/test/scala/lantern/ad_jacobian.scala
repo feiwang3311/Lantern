@@ -1,5 +1,15 @@
+package lantern
+
+import org.scala_lang.virtualized.virtualize
+import org.scala_lang.virtualized.SourceContext
+
+import scala.virtualization.lms._
+import org.scalatest.FunSuite
+
+/*
 /** in this file I try to produce Jacobian **/
 object Jacobian {
+  
   def main(args: Array[String]): Unit = {
 
     import scala.util.continuations._
@@ -530,3 +540,4 @@ object Hessian_vector_product {
     assert (hess3 == ArrayBuffer(176.0, 112.0, 80.0, 62.0))
   }
 }
+*/
