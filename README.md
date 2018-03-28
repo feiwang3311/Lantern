@@ -37,7 +37,7 @@ forAll { x =>
 
 ```
 
-The next step is to add support for reverse-mode AD (aka backpropagation). Even though the intrinsics of forward-mode and reverse-mode AD are different, we implement reverse-mode AD in the same fashion as forward-mode AD. This is done by using delimited continuations.  
+Even though the intrinsics of forward-mode and reverse-mode AD are different, we implement reverse-mode AD in the same fashion as forward-mode AD. This is done by using delimited continuations.  
 
 ```scala
 // differentiable number type
