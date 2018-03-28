@@ -1225,6 +1225,9 @@ trait TensorExp extends Dsl {
     def apply(dim0: Int, dim1: Int): TensorR = {
       new TensorR(Tensor.zeros(dim0, dim1), Tensor.zeros(dim0, dim1))
     }
+
+    def add(x: TensorR, y: TensorR): TensorR @diff = x.add(y)
+    def dot(x: TensorR, y: TensorR): TensorR @diff = x.dot(y)
   }
 
   // change fun signature for memory leak issue (no more returning of array, just update the array provided by the caller)
