@@ -1,4 +1,4 @@
-<img src="website/images/logo.png" alt="snek-LMS + Lantern logo" width="200px">
+<img align="right" src="website/images/logo.png" alt="snek-LMS + Lantern logo" width="200px">
 
 # Lantern
 
