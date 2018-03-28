@@ -1,4 +1,4 @@
-name := "ad"
+name := "Lantern"
 
 version := "1.0"
 
