@@ -2,11 +2,11 @@
 const people = [
     {
         name:"Tiark Rompf",
-        image:"person.jpg"
+        image:"tiarkrompf.jpg"
     },
     {
         name:"Fei Wang",
-        image: "person.jpg" //images will need to be in website/images/people
+        image: "feiwang.jpg" //images will need to be in website/images/people
     },
     {
         name: "Xilun Wu",
