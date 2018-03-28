@@ -16,8 +16,8 @@ These instructions will get you a copy of the project up and running on your loc
 ### Directory Organization
 * [root directory for Lantern](./src)
   * [Lantern code directory](./src/main/scala/lantern)
-    * [Code for AD on scalar variable](./src/main/scala/lantern/ad_lms.scala)
-    * [Code for AD on vector and tensor](./src/main/scala/lantern/ad_lms_vector.scala)
+    * [code for AD on scalar variable](./src/main/scala/lantern/ad_lms.scala)
+    * [code for AD on vector and tensor](./src/main/scala/lantern/ad_lms_vector.scala)
     * [LMS framework code](./src/main/scala/lantern/dslapi.scala)
     * [data loader](./src/main/scala/lantern/scanner.scala)
   * [Lantern test directory](./src/test/scala/lantern)
@@ -31,15 +31,15 @@ These instructions will get you a copy of the project up and running on your loc
       * [directory for TreeLSTM evaluation code](./src/out/ICFP18evaluation/evaluationTreeLSTM)
       * [directory for CNN evaluation code](./src/out/ICFP18evaluation/evaluationCNN)
       * [script for evaluation](./src/out/ICFP18evaluation/run_exp.sh)
+      * [directory for evaluation results](./src/out/ICFP18evaluation/save_fig/)
       
-### How to run
+### Compile deep learning models to C++ programs
 
-Fork and clone this repo to your local machine.
+Once you have cloned this repo, enter into the root directory of Lantern ($PATH_REPO/src).
 
-In a terminal:
+If you want to :
 
 ```
-$ cd to src
 $ sbt 
 ```
 
