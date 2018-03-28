@@ -209,7 +209,7 @@ Here $TEST_instance can be one of the following 4 test instances:
 * SentimentTreeLSTM
 * MnistCNN
 
-You can also choose to run all 4 test cases in one command:
+You can also choose to run all 4 test cases as well as a bunch of basic tests in one command:
 
 ```
 $ sbt
