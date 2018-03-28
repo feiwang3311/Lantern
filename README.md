@@ -35,48 +35,52 @@ These instructions will get you a copy of the project up and running on your loc
       
 ### Compile deep learning models to C++ programs
 
-Once you have cloned this repo, enter into the root directory of Lantern ($PATH_REPO/src).
+Once you have cloned this repo, enter into the root directory of Lantern repo ($PATH_REPO/).
 
-If you want to :
-
-```
-$ sbt 
-```
-
-In sbt terminal:
+If you want to compile our demo code, execute:
 
 ```
-sbt:ad> run
-
-Multiple main classes detected, select one to run:
-
- [1] Hessian_JacobianOfGradient
- [2] Hessian_MuWang_1
- [3] Hessian_MuWang_LMS
- [4] Hessian_MuWang_LMS_IFLOOP
- [5] Hessian_vector_product
- [6] Jacobian
- [7] Jacobian_Forward
- [8] Jacobian_Map
- [9] LMS
- [10] LMS_Greg
- [11] LMS_vector
- [12] ShiftReset
-
-Enter number: [info] Packaging /home/fei/bitbucket/Lantern/src/target/scala-2.12/ad_2.12-1.0.jar ...
-[info] Done packaging.
-11
+$ sbt
+sbt> testOnly lantern.$TEST_instance
 ```
 
+Here $TEST_instance can be one of the following 4 test instances:
+* VanillaRNN
+* LSTMTest
+* SentimentTreeLSTM
+* MnistCNN
 
-## Running the tests
-
-There are numerous tests in the main functions in each files. Using ``sbt run`` should trigger those test cases
-
-## Running the evaluations
+You can also choose to run all 4 test cases in one command:
 
 ```
-cd ICFP18evaluation/
+$ sbt
+sbt> test
+```
+
+All generated C++ code will be put in corresponding subdirectory under the directory for evaluation code (./src/out/ICFP18evaluation/).
+
+## Running the deep learning model
+
+Once you have compiled the deep learning model that you want to try, the C++ code is in corresponding directory. All you need is to compile that C++ program and run it. For example, suppose you are about to play with the Vanilla RNN language model and you already compiled the model and heve the generated code in directory. You can take the following steps to train it:
+
+```
+## make sure you are in the root directory of repo
+cd ./src/out/ICFP18evaluation/evaluationRNN/
+g++ -std=c++11 -O3 -march=native -Wno-pointer-arith Lantern.cpp -o Lantern
+./Lantern 1
+```
+
+## Running the evaluations and plotting results
+
+Running evaluations for CNN and TreeLSTM can take long time. We suggest users try VanillaRNN and LSTMTest first.
+
+To run all test cases and plot their results, users only need to change working directory to repo and execute the following commands:
+
+```
+## suppose you already have all 4 models compiled
+## make sure you are in the root directory of repo
+cd ./src/out/ICFP18evaluation/
 ./run_exp.sh
 ```
-The resulting plots are generated in the save_fig/ dir.
+
+The resulting plots are generated in the $PATH_REPO/src/out/ICFP18evaluation/save_fig/ dir.
