@@ -15,51 +15,12 @@ import scala.math._
 trait TensorExp extends Dsl {
 
   /**
-    Note: Need to see how to manage memory because everytime the NewArray is used,
-      C code will use malloc without thinking about where to call free.
-      The memory will leak unless we explicitly use unchecked("free(",x,")")
-
-      This is a deep problem because statically determine the free sites is unsolvable
-      but stronger type systems or regulations is possible, like Rust
-      Either we manually maintain the memory, or build some sort of system to handle it in a stronger way.
-      Leo's escape paper maybe of interest too.
-
-      However Greg just gave me a very good idea. Basically by using delimited continuations, our intermediate
-      values are only used within the lexical scope of that operation, and the continuation it calls.
-      Just like a withFile("filename") {} or withArray("array") {} construct,
-      where the file and array are only used in the scope of with, can can be implicitly closed or deleted at escape
-      Our intermediate Tensors are created by an overloaded operation, used in delimited continuations and updating
-      the gradients of @this@ and @that@, and then never used outside
-      So we can add unchecked("free") to reclaim their memory right at the end of each overloaded operator def.
-
-    Note:
-
-      There is a bug using the above method. Using free at the end of scope with LOOP together had an issue of
-      use-after-free. Not sure why.
-
-      Tiark suggested to use smart pointer in c++, which is a good idea because it takes away the burden of manually managing them.
-      All we should have changed is the c code generation for NewArray[Float], so that the malloc is in the hand of smart pointers
-
-      However, using smart pointers has problems too. we cannot define a function that takes a smartpointer as argument and return a smartpointer
-      the returned smartpointer out-lives the data, which is not OK for smart pointer.
-
-    Note:
-
+    Memory Management:
       finally we used a temperate solution called "memory arena". The base code will claim a large piece of code for the whole program.
       internally, every malloc will borrow memory from this arena.
-
       By using getAllocMem and setAllocMem, we can selectively return a big trunk of memory after one iteration of training.
-
-    Note:
-
-      We are currently only very narrowly supporting matrix (2d vectors)
-      We only support Matrix vector multiplication, which is like several vector_vector dot product
-      Matrix has >1 dims(1) field and number of values dims(0) * dims(1)
-      but the current implementation silently ignore the 2:end columns unless it is dot product
-      The idea of thinking Matrix row as dims(0) and colume as dims(1) is not the common way, but we are going by it for now because
-      we want to simplify the implementation and just borrow the logic of dot
-
    **/
+
   class Timer (val index: Int){
     unchecked[Unit](s"clock_t begin_$index, end_$index; double time_spent_$index")
     def startTimer = { unchecked[Unit](s"begin_$index = clock()") }
@@ -111,11 +72,6 @@ trait TensorExp extends Dsl {
   }
 
   def slice(arr: Rep[Array[Float]], off: Rep[Int]) = uncheckedPure[Array[Float]](arr, "+", off)
-
-  /**
-   Add: Scanner class for Input
-   Copied from lms-query-tutorial
-   **/
 
   object Encoding {
     val ix_a = 96  // index starts from 1
@@ -1253,9 +1209,6 @@ trait TensorExp extends Dsl {
     def clear_grad() = {
       d.clear()
     }
-
-
-
   }
 
   object TensorR {

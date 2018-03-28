@@ -8,8 +8,8 @@ import org.scalatest.FunSuite
 
 class GregTest extends FunSuite {
 
-  
-  val test1 = new DslDriverC[String, Unit] with TestExp {
+  test("1") {
+    val test1 = new DslDriverC[String, Unit] with TestExp {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val arr1 = NewArray[Int](1)
@@ -26,12 +26,11 @@ class GregTest extends FunSuite {
         t3.printRaw()
       }
     }
-    println("Test 1")
-    test1.eval("1")
-
-
-    
-
+    //println("Test 1")
+    //test1.eval("1")  
+  }
+  
+  test("2") {
     val test2 = new DslDriverC[String, Unit] with TestExp {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -49,9 +48,11 @@ class GregTest extends FunSuite {
         t3.printRaw()
       }
     }
-    println("Test 2")
-    test2.eval("2")
+    //println("Test 2")
+    //test2.eval("2")
+  }
 
+  test("3") {
     val test3 = new DslDriverC[String, Unit] with TestExp {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -71,9 +72,12 @@ class GregTest extends FunSuite {
         t3.printRaw()
       }
     }
-    println("Test 3")
-    test3.eval("2")
+    //println("Test 3")
+    //test3.eval("2")
+  }
 
+    
+  test("4") {
     val test4 = new DslDriverC[String, Unit] with TestExp {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -91,4 +95,6 @@ class GregTest extends FunSuite {
     }
     println("Test 4")
     test4.eval("2")
+  }
+    
 }

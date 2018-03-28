@@ -51,9 +51,6 @@ trait DiffApi extends Dsl {
       this.d += that.x * y.d; that.d += this.x * y.d }
   }
 
-
-
-
   // Note: we make the generated function return the accumulated deltaVar
   // and add it to the var after calling the continuation. Slightly different
   // than in the unstaged version. The main reason is that we don't (want to)
@@ -284,7 +281,7 @@ trait DiffApi extends Dsl {
     val x1 = new NumR(x, var_new(0.0))
     reset { 
       val r = f(x1)
-      printf("result of model is %f\n", r.x)
+      //printf("result of model is %f\n", r.x)
       var_assign(r.d, 1.0); () 
     }
     x1.d
