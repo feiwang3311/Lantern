@@ -13,6 +13,25 @@ These instructions will get you a copy of the project up and running on your loc
 [JDK](http://www.oracle.com/technetwork/java/javase/downloads/index.html)
 [sbt](https://www.scala-sbt.org/1.0/docs/)
 
+### Directory Organization
+.
++-- src # this is the root directory for Lantern
+    +-- main/scala/lantern
+    |   +-- ad_lms.scala # Code for AD on scalar variable
+    |   +-- ad_lms_vector.scala # Code for AD on vector and tensor
+    |   +-- dslapi.scala # LMS framework code
+    |   +-- scanner.scala # data loader
+    +-- test/scala/lantern
+    |   +-- vanillaRNN.scala # ScalaTest instance which compiles RNN code and generate c++ code in src/out/ICFP18evaluation/evaluationRNN/
+    |   +-- LSTM.scala # ScalaTest instance which compiles LSTM code and generate c++ code in src/out/ICFP18evaluation/evaluationLSTM/
+    |   +-- sentimentTreeLSTM.scala # ScalaTest instance which compiles TreeLSTM code and generate c++ code in src/out/ICFP18evaluation/evaluationTreeLSTM/Lantern/
+    |   +-- mnistCNN.scala # ScalaTest instance which compiles CNN code and generate c++ code in src/out/ICFP18evaluation/evaluationCNN/Lantern/
+    +-- out/ICFP18evaluation # the root directory for evaluation code; generated c++ code also goes here
+        +-- evaluationRNN # directory for RNN evaluation code
+        +-- evaluationLSTM # directory for LSTM evaluation code
+        +-- evaluationTreeLSTM # directory for TreeLSTM evaluation code
+        +-- evaluationCNN # directory for CNN evaluation code
+        
 ### How to run
 
 Fork and clone this repo to your local machine.
