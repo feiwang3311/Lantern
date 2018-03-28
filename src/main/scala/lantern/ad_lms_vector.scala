@@ -1226,7 +1226,7 @@ trait TensorExp extends Dsl {
       new TensorR(Tensor.zeros(dim0, dim1), Tensor.zeros(dim0, dim1))
     }
 
-    def add(x: TensorR, y: TensorR): TensorR @diff = x.add(y)
+    def add(x: TensorR, y: TensorR): TensorR @diff = x + y
     def dot(x: TensorR, y: TensorR): TensorR @diff = x.dot(y)
   }
 

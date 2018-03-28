@@ -93,8 +93,8 @@ class GregTest extends FunSuite {
         t1.printRaw()
       }
     }
-    println("Test 4")
-    test4.eval("2")
+    //println("Test 4")
+    //test4.eval("2")
   }
     
 }
