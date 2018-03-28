@@ -32,6 +32,86 @@ These instructions will get you a copy of the project up and running on your loc
       * [directory for CNN evaluation code](./src/out/ICFP18evaluation/evaluationCNN)
       * [script for evaluation](./src/out/ICFP18evaluation/run_exp.sh)
       * [directory for evaluation results](./src/out/ICFP18evaluation/save_fig/)
+
+### Automatic differentiation in Lantern
+
+We first support forward-mode AD in Lantern. This is done via operator overloading:
+
+```scala
+// differentiable number type
+class NumF(val x: Double, val d: Double) {
+  def +(that: NumF) =
+      new NumF(this.x + that.x, this.d + that.d)
+  def *(that: NumF) =
+    new NumF(this.x * that.x,
+             this.d * that.x + that.d * this.x)
+  ...
+}
+
+// differentiation operator
+def grad(f: NumF => NumF)(x: Double) = {
+  val y = f(new NumF(x, 1.0))
+  y.d
+}
+
+// example
+val df = grad(x => 2*x + x*x*x)
+forAll { x =>
+  df(x) == 2 + 3*x*x }
+
+```
+
+The next step is to add support for reverse-mode AD (aka backpropagation). Even though the intrinsics of forward-mode and reverse-mode AD are different, we still want to nest them. This is done by using delimited continuations. Here's how we implement reverse-mode AD in the same fashion of forward-mode AD. 
+
+```scala
+// differentiable number type
+class NumR(val x: Double, var d: Double) {
+  def +(that: NumR) = shift { (k:NumR=>Unit)=>
+    val y = new NumR(x + that.x, 0.0)
+    k(y)
+    this.d += y.d
+    that.d += y.d
+  }
+  def *(that: NumR) = shift { (k:NumR=>Unit)=>
+    val y = new NumR(x * that.x, 0.0)
+    k(y)
+    this.d += that.x * y.d
+    that.d += this.x * y.d
+  }
+  ...
+}
+
+// differentiation operator
+def grad(f: NumR => NumR@cps[Unit])(x: Double) = {
+  val z = new NumR(x, 0.0)
+  reset { f(z).d = 1.0 }
+  z.d
+}
+
+// example
+val df = grad(x => 2*x + x*x*x)
+forAll { x =>
+  df(x) = 2 + 3*x*x
+}
+
+```
+
+### Write deep learning models in Lantern
+
+The automatic differentiation support of Lantern makes writing deep learning model extremely easy. Here is a code snippet of simple CNN model in Lantern:
+
+```scala
+val pars = ... // all trainable parameters
+def trainFun(input: TensorR, target: Rep[Int]) = { (dummy: TensorR) =>
+  val resL1 = input.conv(pars(0)).maxPool(stride).relu()
+  val resL2 = resL1.conv(pars(1)).maxPool(stride).relu()
+  val resL3 = ((pars(2) dot resL2.resize(in3)) + pars(3)).relu().dropout(0.5f)
+  val resL4 = (pars(4) dot resL3) + pars(5)
+  val res = resL4.logSoftmax()
+  res.nllLoss(target)
+```
+
+Each layer is constructed and nested in a very elegant way. This is thanks to the functional implementation of automatic differentiation in Lantern.
       
 ### Compile deep learning models to C++ programs
 
