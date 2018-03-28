@@ -14,42 +14,24 @@ These instructions will get you a copy of the project up and running on your loc
 [sbt](https://www.scala-sbt.org/1.0/docs/)
 
 ### Directory Organization
-.
-+-- src # this is the root directory for Lantern
-    +-- main/scala/lantern
-    |   +-- ad_lms.scala # Code for AD on scalar variable
-    |   +-- ad_lms_vector.scala # Code for AD on vector and tensor
-    |   +-- dslapi.scala # LMS framework code
-    |   +-- scanner.scala # data loader
-    +-- test/scala/lantern
-    |   +-- vanillaRNN.scala # ScalaTest instance which compiles RNN code and generate c++ code in src/out/ICFP18evaluation/evaluationRNN/
-    |   +-- LSTM.scala # ScalaTest instance which compiles LSTM code and generate c++ code in src/out/ICFP18evaluation/evaluationLSTM/
-    |   +-- sentimentTreeLSTM.scala # ScalaTest instance which compiles TreeLSTM code and generate c++ code in src/out/ICFP18evaluation/evaluationTreeLSTM/Lantern/
-    |   +-- mnistCNN.scala # ScalaTest instance which compiles CNN code and generate c++ code in src/out/ICFP18evaluation/evaluationCNN/Lantern/
-    +-- out/ICFP18evaluation # the root directory for evaluation code; generated c++ code also goes here
-        +-- evaluationRNN # directory for RNN evaluation code
-        +-- evaluationLSTM # directory for LSTM evaluation code
-        +-- evaluationTreeLSTM # directory for TreeLSTM evaluation code
-        +-- evaluationCNN # directory for CNN evaluation code
-
-.
-+-- src
-    +-- main/scala/lantern
-    |   +-- ad_lms.scala
-    |   +-- ad_lms_vector.scala
-    |   +-- dslapi.scala
-    |   +-- scanner.scala 
-    +-- test/scala/lantern
-    |   +-- vanillaRNN.scala 
-    |   +-- LSTM.scala 
-    |   +-- sentimentTreeLSTM.scala 
-    |   +-- mnistCNN.scala 
-    +-- out/ICFP18evaluation 
-        +-- evaluationRNN 
-        +-- evaluationLSTM 
-        +-- evaluationTreeLSTM
-        +-- evaluationCNN
-
+* [root directory for Lantern](./src)
+  * [Lantern code directory](./src/main/scala/lantern)
+    * [Code for AD on scalar variable](./src/main/scala/lantern/ad_lms.scala)
+    * [Code for AD on vector and tensor](./src/main/scala/lantern/ad_lms_vector.scala)
+    * [LMS framework code](./src/main/scala/lantern/dslapi.scala)
+    * [data loader](./src/main/scala/lantern/scanner.scala)
+  * [Lantern test directory](./src/test/scala/lantern)
+      * [ScalaTest instance of RNN evaluation](./src/test/scala/lantern/vanillaRNN.scala)
+      * [ScalaTest instance of LSTM evaluation](./src/test/scala/lantern/LSTM.scala)
+      * [ScalaTest instance of TreeLSTM evaluation](./src/test/scala/lantern/sentimentTreeLSTM.scala)
+      * [ScalaTest instance of CNN evaluation](./src/test/scala/lantern/mnistCNN.scala)
+  * [directory for evaluation code](./src/out/ICFP18evaluation)
+      * [directory for RNN evaluation code](./src/out/ICFP18evaluation/evaluationRNN)
+      * [directory for LSTM evaluation code](./src/out/ICFP18evaluation/evaluationLSTM)
+      * [directory for TreeLSTM evaluation code](./src/out/ICFP18evaluation/evaluationTreeLSTM)
+      * [directory for CNN evaluation code](./src/out/ICFP18evaluation/evaluationCNN)
+      * [script for evaluation](./src/out/ICFP18evaluation/run_exp.sh)
+      
 ### How to run
 
 Fork and clone this repo to your local machine.
