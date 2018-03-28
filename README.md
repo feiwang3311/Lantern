@@ -67,7 +67,7 @@ Once you have compiled the deep learning model that you want to try, the C++ cod
 ## make sure you are in the root directory of repo
 cd ./src/out/ICFP18evaluation/evaluationRNN/
 g++ -std=c++11 -O3 -march=native -Wno-pointer-arith Lantern.cpp -o Lantern
-./Lantern 1
+./Lantern result.txt
 ```
 
 ## Running the evaluations and plotting results
