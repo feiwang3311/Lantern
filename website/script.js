@@ -2,7 +2,7 @@
 const people = [
     {
         name:"Tiark Rompf",
-        image:"tiarkrompf.jpg"
+        image:"tiarkrompf.png"
     },
     {
         name:"Fei Wang",
