@@ -41,7 +41,7 @@ We first support forward-mode AD in Lantern. This is done via operator overloadi
 // differentiable number type
 class NumF(val x: Double, val d: Double) {
   def +(that: NumF) =
-      new NumF(this.x + that.x, this.d + that.d)
+    new NumF(this.x + that.x, this.d + that.d)
   def *(that: NumF) =
     new NumF(this.x * that.x,
              this.d * that.x + that.d * this.x)
