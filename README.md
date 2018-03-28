@@ -96,6 +96,82 @@ forAll { x =>
 
 ```
 
+### Staging in Lantern
+
+Efficiency is a big issue for practical deep learning tasks. Since Lantern is hosted in Scala, user's deep learning model runs on JVM which is not efficient enough for practical tasks. A good way to solve this problem is to stage our code and transform high-level Scala code into low-level code for efficient back-ends such as C++. This is another important feature of Lantern -- it supports Staging and code transformation!
+
+We take the advantage of compatibility betweeen continuations and multi-stage programming and introduce Staging within 2 steps:
+
+The first step is to extend data type to staged type.
+
+```scala
+// Staged Num (variable of type double with AD)
+class Num(val x: Rep[Double], val d: Rep[Var[Double]]) {...}
+
+// Staged Tensor and Tensor with AD
+class Tensor(val data: Rep[Array[Double]], val shape: Array[Int]) {...}
+class TensorR(val x: Tensor, val d: Tensor) {...}
+```
+
+The second step is to define basic control structures using delimited continuations with LMS support.
+
+2.1. IF
+
+IF invokes the continuation either with then-branch param or else-branch parameter.
+
+```scala
+def fun(f: Rep[A] => Rep[B]): Rep[A => B] // LMS support for staging a function
+
+def IF(c: Rep[Boolean])(a: =>Rep[A] @cps[Rep[B]])(b: =>Rep[A] @cps[Rep[B]]): Rep[A] @cps[Rep[B]] =
+shift { k:(Rep[A] => Rep[B]) =>
+  val k1 = fun(k) // generate lambda for k
+  if (c) reset(k1(a)) else reset(k1(b))
+}
+```
+
+2.2. While loop
+
+While loop is transformed into a recursive function in CPS.
+
+```scala
+// LMS recursive function construction
+def f: Rep[A => B] = fun { x => ... f(...) ... } 
+
+def WHILE(init: Rep[A])(c: Rep[A] => Rep[Boolean])(b: Rep[A] => Rep[A] @cps[Rep[B]]):
+Rep[A] @cps[Rep[B]] = shift {
+  k:(Rep[A] => Rep[B]) =>
+  lazy val loop: Rep[A] => Rep[B] = fun { (x: Rep[A]) =>
+    if (c(x)) RST(loop(b(x))) else RST(k(x))
+  }
+  loop(init)
+}
+```
+
+2.3. Recursion call
+
+Recursion abstract in CPS requires us to form a lambda for each recursive call and put it before the continuation that comes after. 
+
+```scala
+// recursive call support in LMS
+def FUN(f: Rep[A] => Rep[B] @cps[Rep[C]]): {
+  val f1 = fun((x, k) => reset(k(f(x)))) // put f in between k and x
+  { (x: Rep[A]) => shift { k: (Rep[B] => Rep[C]) => f1((x, fun(k)))}}
+}
+```
+
+With this support, writing recursive function with continuations in LMS becomes straightforward. We implement a staged tree traversal function as an example.
+
+```scala
+def TREE(init: Rep[B])(t: Rep[Tree])(b: (Rep[B], Rep[B]) => Rep[B] @cps[Rep[C]]):
+Rep[B] @cps[Rep[C]] = {
+  def f = FUN { tree: Rep[Tree] =>
+    if (tree.isEmpty) init
+    else b(f(tree.left), f(tree.right))
+  }
+  f(t)
+}
+```
+
 ### Write deep learning models in Lantern
 
 The automatic differentiation support of Lantern makes writing deep learning model extremely easy. Here is a code snippet of simple CNN model in Lantern:
