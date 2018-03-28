@@ -38,8 +38,8 @@ val paradiseVersion = "2.1.0"
 
 addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
 
-assemblyJarName in assembly := "lantern.jar"
-test in assembly := {}
+//assemblyJarName in assembly := "lantern.jar"
+//test in assembly := {}
 
 // libraryDependencies += "org.scala-lang.lms" %% "lms-core" % "1.0.0-SNAPSHOT"
 
