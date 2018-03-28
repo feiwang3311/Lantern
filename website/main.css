@@ -1,0 +1,223 @@
+@import url('https://fonts.googleapis.com/css?family=Roboto:400,500');
+
+html, body {
+    min-height: 100vh;
+    width: 100vw;
+    background: #222;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    padding: 0;
+    margin: 0;
+    color: #eee;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    background: url("./images/use_your_illusion.png");
+    background-repeat: repeat;
+}
+
+main * {
+    z-index: 5;
+}
+
+a {
+    color: #222;
+    font-size: 1.5rem;
+    text-decoration: none;
+}
+
+a:hover {
+    transition: 0.3s;
+    color: #04ada6;
+}
+
+a:focus, a:active {
+    text-decoration: underline;
+}
+
+.flex-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.flex-column {
+    flex-direction: column;
+}
+
+.orange-text {
+    color: #ee8d06;
+}
+
+.blue-text {
+    color: #00827e;
+}
+
+
+.masthead {
+    color: white;
+    min-height: 80vh;
+}
+
+.masthead-h1 {
+    text-align: center;
+    font-size: 4rem;
+}
+
+.masthead-img {
+    width: 200px;
+}
+
+.section {
+    background: #eee;
+    background: url("./images/geometry.png");
+    background-repeat: repeat;
+    color: #222;
+    padding: 20px;
+}
+
+.section-title {
+    font-size: 3rem;
+    width: 800px;
+}
+
+.section-p {
+    color: #222;
+    font-size: 1.4rem;
+    width: 800px;
+    text-align: justify;
+}
+
+.display-row {
+    padding: 30px 0;
+}
+
+.github-button {
+    background: #222;
+    color: #eee;
+    border: none;
+    font-size: 1.2rem;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 30px;
+}
+
+.github-button:hover {
+    color: white;
+    background: #00827e;
+    transition: 0.3s;
+}
+
+.github-button:active {
+    background: #00827e;
+    transition: 0.3s;
+    border:none;
+}
+
+.link {
+    margin: 5px;
+    font-size: 1.7rem;
+}
+
+.small-text {
+    font-size: 1.4rem;
+}
+
+.demos {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    height: 200px;
+}
+
+.demos-title {
+    font-size: 2rem;
+    padding: 0;
+    margin: 0;
+}
+
+.demos-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.demo-link {
+    color: #eee;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.people {
+    padding: 10px 20px;
+    flex-wrap: wrap;
+}
+
+.person {
+    margin: 10px 5px;
+}
+
+.person-img {
+    max-height: 200px;
+    max-width: 200px;
+}
+
+.person-name {
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+footer {
+    height: 40px;
+    background: #00827e;
+    z-index: 5;
+    color: #eee;
+    text-align: center;
+}
+
+@media (max-width: 900px) {
+    html,body {
+        font-size: 12px;
+    }
+
+    .masthead-img {
+        width: 150px;
+    }
+
+    .section-title {
+        width: 80%;
+    }
+
+    .section-p {
+        padding: 0 10px;
+        width: 80%;
+        min-width: 80%;
+
+    }
+
+    .people {
+        padding: 10px 5px;
+        flex-wrap: wrap;
+    }
+
+    .person {
+        background: #eee;
+        margin: 10px 5px;
+    }
+
+    .person-img {
+        height: 150px;
+        width: 150px;
+    }
+}
+
+@media (max-width: 500px) {
+    .masthead-img {
+        width: 100px;
+    }
+}
