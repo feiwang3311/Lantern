@@ -31,7 +31,25 @@ These instructions will get you a copy of the project up and running on your loc
         +-- evaluationLSTM # directory for LSTM evaluation code
         +-- evaluationTreeLSTM # directory for TreeLSTM evaluation code
         +-- evaluationCNN # directory for CNN evaluation code
-        
+
+.
++-- src
+    +-- main/scala/lantern
+    |   +-- ad_lms.scala
+    |   +-- ad_lms_vector.scala
+    |   +-- dslapi.scala
+    |   +-- scanner.scala 
+    +-- test/scala/lantern
+    |   +-- vanillaRNN.scala 
+    |   +-- LSTM.scala 
+    |   +-- sentimentTreeLSTM.scala 
+    |   +-- mnistCNN.scala 
+    +-- out/ICFP18evaluation 
+        +-- evaluationRNN 
+        +-- evaluationLSTM 
+        +-- evaluationTreeLSTM
+        +-- evaluationCNN
+
 ### How to run
 
 Fork and clone this repo to your local machine.
