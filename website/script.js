@@ -22,7 +22,7 @@ const people = [
     },
     {
         name: "Guannan Wei",
-        image: "person.jpg"
+        image: "guannanwei.jpg"
     },
     {
         name: "Vritant Bhardwaj",
