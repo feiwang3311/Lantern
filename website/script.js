@@ -10,7 +10,7 @@ const people = [
     },
     {
         name: "Xilun Wu",
-        image: "person.jpg"
+        image: "xilunwu.jpg"
     },
     {
         name: "Gregory Essertel",
