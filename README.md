@@ -4,6 +4,8 @@ Lantern is the implementation of a machine learning framework prototype in [Scal
 
 An accompanying technical paper is here: [Demystifying Differentiable Programming: Shift/Reset the Penultimate Backpropagator](https://www.cs.purdue.edu/homes/rompf/papers/wang-draft2018c.pdf).
 
+A Python front-end that JIT-compiles TensorFlow and PyTorch code to Lantern is currently under development, based on [Snek-LMS](https://github.com/jmd1011/snek-LMS).
+
 ## Features of Lantern
 
 ### Automatic differentiation in Lantern
