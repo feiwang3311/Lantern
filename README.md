@@ -6,11 +6,12 @@ An accompanying technical paper is here: [Demystifying Differentiable Programmin
 
 A Python front-end that JIT-compiles TensorFlow and PyTorch code to Lantern is currently under development, based on [Snek-LMS](https://github.com/jmd1011/snek-LMS).
 
-## Features of Lantern
+## Automatic differentiation in Lantern
 
-### Automatic differentiation in Lantern
-
-We first support forward-mode AD in Lantern. This is done via operator overloading:
+Lantern is based on a novel implementation of reverse-mode AD,
+the algorithm that underlies backpropagation in neural networks. 
+It is well known that forward-mode AD can be implemented using 
+operator overloading:
 
 ```scala
 // differentiable number type
@@ -36,7 +37,7 @@ forAll { x =>
 
 ```
 
-The next step is to add support for reverse-mode AD (aka backpropagation). Even though the intrinsics of forward-mode and reverse-mode AD are different, we still want to nest them. This is done by using delimited continuations. Here's how we implement reverse-mode AD in the same fashion of forward-mode AD. 
+Even though the intrinsics of forward-mode and reverse-mode AD are different, we implement reverse-mode AD in the same fashion as forward-mode AD. This is done by using delimited continuations.  
 
 ```scala
 // differentiable number type
@@ -73,7 +74,7 @@ forAll { x =>
 
 ### Staging in Lantern
 
-Efficiency is a big issue for practical deep learning tasks. Since Lantern is hosted in Scala, user's deep learning model runs on JVM which is not efficient enough for practical tasks. A good way to solve this problem is to stage our code and transform high-level Scala code into low-level code for efficient back-ends such as C++. This is another important feature of Lantern -- it supports Staging and code transformation!
+Efficiency is a big issue for practical deep learning tasks. Since Lantern is hosted in Scala, a user's deep learning model would run on the JVM which is not efficient enough for practical tasks. A good way to solve this problem is to stage our code and transform high-level Scala code into low-level code for efficient back-ends such as C++. This is another important feature of Lantern -- it supports Staging and code transformation!
 
 We take the advantage of compatibility betweeen continuations and multi-stage programming and introduce Staging within 2 steps:
 
@@ -90,6 +91,7 @@ class TensorR(val x: Tensor, val d: Tensor) {...}
 
 The second step is to define basic control structures using delimited continuations with LMS support.
 
+<!--
 2.1. IF
 
 IF invokes the continuation either with then-branch param or else-branch parameter.
@@ -146,6 +148,7 @@ Rep[B] @cps[Rep[C]] = {
   f(t)
 }
 ```
+-->
 
 ## Getting Started
 
