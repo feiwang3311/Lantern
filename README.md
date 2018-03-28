@@ -1,4 +1,6 @@
-<img align="right" src="website/images/logo.png" alt="snek-LMS + Lantern logo" width="200px">
+<a href="https://feiwang3311.github.io/Lantern/"><img align="right" src="website/images/logo.png" alt="snek-LMS + Lantern logo" width="200px"></a>
+
+Check out our <a href="https://feiwang3311.github.io/Lantern/">website!</a>
 
 # Lantern
 
