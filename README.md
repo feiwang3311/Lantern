@@ -91,7 +91,7 @@ class TensorR(val x: Tensor, val d: Tensor) {...}
 
 The second step is to define basic control structures using delimited continuations with LMS support.
 
-<--
+<!--
 2.1. IF
 
 IF invokes the continuation either with then-branch param or else-branch parameter.
