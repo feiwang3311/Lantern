@@ -131,6 +131,7 @@ a:focus, a:active {
 .link {
     margin: 5px;
     font-size: 1.7rem;
+    text-align: center;
 }
 
 .small-text {
