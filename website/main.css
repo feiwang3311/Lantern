@@ -87,7 +87,7 @@ a:focus, a:active {
     color: #222;
     font-size: 1.4rem;
     width: 800px;
-    text-align: justify;
+    /* text-align: justify; */
 }
 
 .display-row {
@@ -123,7 +123,7 @@ a:focus, a:active {
 }
 
 .small-text {
-    font-size: 1.4rem;
+    font-size: 1.2rem;
 }
 
 .demos {
