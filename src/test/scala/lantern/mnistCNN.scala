@@ -19,7 +19,7 @@ import java.io.File;
 
 class MnistCNN extends FunSuite {
 
-  val root_dir = "src/out/ICFP18evaluation/"  
+  val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationCNN/Lantern/Lantern.cpp"
 
   val mnist  = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
@@ -74,7 +74,7 @@ class MnistCNN extends FunSuite {
       //move timer here to track all of the prepare time
       val dataTimer = Timer2()
       dataTimer.startTimer
-      
+
       val variables = ArrayBuffer[TensorR]()
 
       // input size
@@ -169,7 +169,7 @@ class MnistCNN extends FunSuite {
 
       //val dataTimer = Timer2()
       //dataTimer.startTimer
-      
+
       val train = new DataLoader("mnist", true, iChan1, iRow1, iCol1)
       printf("Start normalize\\n")
       train.normalize()
@@ -182,11 +182,11 @@ class MnistCNN extends FunSuite {
         val res = resL4.logSoftmax()
         res.nllLoss(target)
       }
-      
+
       // we skip tests for the experiments
       //val test = new DataLoader("mnist", false, iChan1, iRow1, iCol1)
       //test.normalize()
-      
+
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
 
@@ -194,7 +194,7 @@ class MnistCNN extends FunSuite {
 
       val addr = getMallocAddr() // remember current allocation pointer here
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
-    
+
         val trainTimer = Timer2()
         var imgIdx = var_new(0)
         var trainLoss = var_new(0.0f)
@@ -248,7 +248,7 @@ class MnistCNN extends FunSuite {
         }
         val delta = trainTimer.getElapsedTime
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
-        
+
         // save trainLoss / train.length to loss_save
         loss_save(epoch) = trainLoss / train.length
 
@@ -281,7 +281,7 @@ class MnistCNN extends FunSuite {
 
       }
 
-      val totalTime = dataTimer.getElapsedTime / 1e6f 
+      val totalTime = dataTimer.getElapsedTime / 1e6f
       val loopTime = totalTime - prepareTime
       val timePerEpoc = loopTime / nbEpoch
 
@@ -295,11 +295,11 @@ class MnistCNN extends FunSuite {
       closef(fp2)
     }
   }
-    
+
   test("generate_code_for_mnist_cnn") {
     val cnn_file = new PrintWriter(new File(root_dir + file_dir))
     cnn_file.println(mnist.code)
-    cnn_file.flush()  
+    cnn_file.flush()
   }
-  
+
 }

@@ -63,6 +63,50 @@ trait TensorExp extends Dsl {
     }
   }
 
+  object Dataset {
+
+    class DataLoader(name: String, train: Boolean, mean: Float, std: Float, dims: Int*) {
+
+      def remap[T:Typ] = if (typ[T] == typ[Float]) "float"
+        else if (typ[T] == typ[Int]) "int"
+        else ???
+      def open(path: Rep[String]) = uncheckedPure[Int]("open(",path,",0)")
+      def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
+      def mmap[T:Typ](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",remap(typ[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
+
+      val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
+      val len = filelen(fd)
+      val data = mmap[Float](fd, len)
+      val dLength = (len/4L).toInt
+
+      val tfd = open(s"../data/bin/${name}_${if (train) "train" else "test"}_target.bin")
+      val tlen = filelen(tfd)
+      val target = mmap[Int](tfd, tlen)
+      val length = (tlen/4L).toInt
+
+      def dataset = new Tensor(data, NSeq(60000, dims(1), dims(2)))
+
+      @virtualize
+      def normalize() = {
+        this.foreach { (i, t, d) =>
+          t.normalize(mean, std, inPlace = true)
+        }
+      }
+
+      @virtualize
+      def foreach(f: (Rep[Int], Tensor, Rep[Int]) => Unit) = {
+        var off = var_new(0)
+        for (img <- 0 until length: Rep[Range]) {
+          val dataPtr = slice(data, off)
+          val t = Tensor(dataPtr, dims : _*)
+          f(img, t, target(img))
+          off += t.nbElem
+        }
+        assertC(off == dLength, "Data length doesn't match\\n")
+      }
+    }
+  }
+
   def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
   def mmax(a: Int, b: Int) = if (a >= b) a else b
 
@@ -91,7 +135,7 @@ trait TensorExp extends Dsl {
   }
 
   implicit def ttttoSeq(x: TTT) = x.seq
-  
+
   object Random {
     def rand() = unchecked[Float]("(float)rand()/RAND_MAX")
     def srand(seed: Option[Int] = None) = unchecked[Unit]("srand(",seed.map(_.toString).getOrElse("time(NULL)"),")")
@@ -476,7 +520,7 @@ trait TensorExp extends Dsl {
     // the result is to update this so that this += that * y, where * is cartesian product
     def add_cartesian(that: Tensor, y: Tensor) = {
       generate_comment("add_cartesian")
-      assert(this.nbDims == 2 && that.dims == TTT(NSeq(this.dims(1))) && y.dims == TTT(NSeq(this.dims(0))) || 
+      assert(this.nbDims == 2 && that.dims == TTT(NSeq(this.dims(1))) && y.dims == TTT(NSeq(this.dims(0))) ||
         this.nbDims == 1 && that.dims == this.dims && y.isScalar, s"${dims} - ${that.dims} - ${y.dims}")
       val off = var_new(0)
       // TODO remove loop if not used
@@ -584,7 +628,7 @@ trait TensorExp extends Dsl {
 
     def cmulAdd(a: Float, b: Tensor) = {
       assert(this.dims == b.dims)
-      for (i <- DataLoop(this.nbElem)) 
+      for (i <- DataLoop(this.nbElem))
       //for (i <- 0 until this.nbElem: Rep[Range])
         this.data(i) = a * this.data(i) + b.data(i)
 
