@@ -253,6 +253,7 @@ trait DslGenC extends CGenNumericOps
   }
 
   override def remap[A](m: Typ[A]): String = m.toString match {
+    case "Any" => "NOOOOOOOOOO"
     case "java.lang.String" => "char*"
     case "Char" => "char"
 

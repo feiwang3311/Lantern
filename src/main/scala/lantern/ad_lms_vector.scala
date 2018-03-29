@@ -74,12 +74,12 @@ trait TensorExp extends Dsl {
       def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
       def mmap[T:Typ](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",remap(typ[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
 
-      val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
+      val fd = open(s"data/bin/${name}_${if (train) "train" else "test"}.bin")
       val len = filelen(fd)
       val data = mmap[Float](fd, len)
       val dLength = (len/4L).toInt
 
-      val tfd = open(s"../data/bin/${name}_${if (train) "train" else "test"}_target.bin")
+      val tfd = open(s"data/bin/${name}_${if (train) "train" else "test"}_target.bin")
       val tlen = filelen(tfd)
       val target = mmap[Int](tfd, tlen)
       val length = (tlen/4L).toInt
