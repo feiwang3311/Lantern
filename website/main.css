@@ -142,7 +142,10 @@ a:focus, a:active {
     text-align: center;
     margin-top: 40px;
     padding: 20px;
-    height: 200px;
+}
+
+.demos-container {
+    width: 80%;
 }
 
 .demos-title {
