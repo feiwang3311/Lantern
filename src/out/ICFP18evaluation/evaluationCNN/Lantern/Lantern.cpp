@@ -46,7 +46,9 @@
       void *waterMark  = mallocBase;
       void* myMalloc(size_t bytes) {
         void* res = mallocAddr;
-        mallocAddr += bytes;
+        char* tmp = (char*) mallocAddr;
+        tmp += bytes;
+        mallocAddr = (void*) tmp;
         return res;
       }
 

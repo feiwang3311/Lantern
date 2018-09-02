@@ -46,7 +46,7 @@ class AdLMSVectorTest extends FunSuite {
 
   test("array1") {
 
-    val array1 = new DslDriverC[String, Unit]  with TensorExp {
+    val array1 = new DslDriverC[String, Unit] with TensorExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
