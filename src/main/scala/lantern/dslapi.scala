@@ -495,7 +495,7 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] wit
     (new java.io.File("/tmp/snippet")).delete
     import scala.sys.process._
     System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 -Wno-pointer-arith /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println _) //-std=c99
+    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println _) //-std=c99
     System.out.println("Run C++ code")
     (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println _)
   }
