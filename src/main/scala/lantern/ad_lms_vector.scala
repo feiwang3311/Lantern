@@ -164,6 +164,66 @@ trait TensorExp extends Dsl {
     }
   }
 
+  /**
+    * Defines tensor-specific operations.
+    * Eventually, a tensor operation IR may be introduced to enable analyses/transformations.
+    */
+  trait Backend {
+    def dot(x: Tensor, y: Tensor): Tensor
+    // TODO: Add more ops.
+  }
+
+  /**
+    * Native tensor op backend.
+    * Tensor ops are defined in terms of primitive operations.
+    */
+  trait BackendNative extends Backend {
+    override def dot(x: Tensor, y: Tensor): Tensor = {
+      // TODO: remove loop if not needed
+      val off = var_new(0)
+      val up = if (x.nbDims > 1) x.dims(0) else 1
+      val res = NewArray[Float](up)
+      for (j <- DataLoop(up)) {
+        //for (j <- (0 until up): Rep[Range]) {
+        val value = var_new(0.0f)
+        for (i <- DataLoop(x.dims.last)) {
+          //for (i <- (0 until x.dims.last): Rep[Range]) {
+          value += x.data(off) * y.data(i)
+          off += 1
+        }
+        res(j) = readVar(value)
+      }
+      val dim = if (x.nbDims == 1) 1 else x.dims(0)
+      Tensor(res, dim)
+    }
+  }
+
+  /**
+    * cuBLAS tensor op backend. WIP.
+    */
+  trait BackendCUBLAS extends Backend {
+    // GEMM reference:
+    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
+    //
+    // cublasStatus_t cublasSgemm(cublasHandle_t handle,
+    //                            cublasOperation_t transa, cublasOperation_t transb,
+    //                            int m, int n, int k,
+    //                            const float           *alpha,
+    //                            const float           *A, int lda,
+    //                            const float           *B, int ldb,
+    //                            const float           *beta,
+    //                            float           *C, int ldc)
+    def sgemm(a: Array[Float], b: Array[Float], c: Array[Float]) = unchecked[Array[Float]]("cublasSgemm(...)")
+
+    override def dot(x: Tensor, y: Tensor): Tensor = ???
+  }
+
+  /**
+    * Default tensor op backend, extending `BackendNative`.
+    */
+  class BackendDefault extends BackendNative
+  val backend: Backend = new BackendDefault
+
   class Tensor(val data: Rep[Array[Float]], val dimsSeq: NSeq[Int]) extends Serializable {
 
     val MAX_DOUBLE = 1e10f // FIXME
@@ -323,22 +383,7 @@ trait TensorExp extends Dsl {
       generate_comment(s"dot ${this.dims.seq} - ${that.dims.seq}")
       assert(this.nbDims <= 2 && that.nbDims == 1, s"Only M x V or V x V allowed ${this.dims} - ${that.dims}")
       assert(this.dims.last == that.dims(0), s"dimensions of vector do not match dot! ${this.dims.seq} - ${that.dims.seq}")
-      // TODO: remove loop if not needed
-      val off = var_new(0)
-      val up = if (this.nbDims > 1) this.dims(0) else 1
-      val res = NewArray[Float](up)
-      for (j <- DataLoop(up)) {
-      //for (j <- (0 until up): Rep[Range]) {
-        val value = var_new(0.0f)
-        for (i <- DataLoop(this.dims.last)) {
-        //for (i <- (0 until this.dims.last): Rep[Range]) {
-          value += data(off) * that.data(i)
-          off += 1
-        }
-        res(j) = readVar(value)
-      }
-      val dim = if (this.nbDims == 1) 1 else this.dims(0)
-      Tensor(res, dim)
+      backend.dot(this, that)
     }
 
     // NOTE: only handles (Vector cart Vector)
