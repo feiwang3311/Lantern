@@ -411,9 +411,7 @@ trait DslGenC extends CGenNumericOps
       void *waterMark  = mallocBase;
       void* myMalloc(size_t bytes) {
         void* res = mallocAddr;
-        char* tmp = (char*) mallocAddr;
-        tmp += bytes;
-        mallocAddr = (void*) tmp;
+        mallocAddr = (void *)((char *)mallocAddr + bytes);
         return res;
       }
 
