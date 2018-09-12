@@ -942,6 +942,8 @@ trait TensorExp extends Dsl {
       (a.dims == b.dims) || a.isScalar || b.isScalar
     }
 
+    def randseed(seed: Int) = unchecked[Unit]("srand(", seed, ")")
+    def randseed() = unchecked[Unit]("srand(time(NULL))")
     def rand(dims: Int*) = randinit(dims.toSeq, 1.0f, None)
     def rand(scale: Float, dims: Int*) = randinit(dims.toSeq, scale, None)
     def randinit(dim0: Int): Tensor = randinit(NSeq(dim0), 1.0f, None)
@@ -1315,24 +1317,22 @@ trait TensorExp extends Dsl {
       new TensorR(Tensor.zeros(dim0, dim1), Tensor.zeros(dim0, dim1))
     }
 
-    def add(x: TensorR, y: TensorR): TensorR @diff = x + y
-    def dot(x: TensorR, y: TensorR): TensorR @diff = x.dot(y)
   }
 
   // change fun signature for memory leak issue (no more returning of array, just update the array provided by the caller)
-  // this is in accordance of the destination-programming style
+  // this is in accordance of the destination-passing style
   // the fun take array[array[double]] of size 2, with the first array to be the x, and the second array to be the d
-  def FUNc(dim0: Int)(f: TensorR => Unit): (TensorR => Unit) = {
-    val f1 = fun { (x: Rep[Array[Array[Float]]]) =>
-      val tensor = new TensorR(Tensor(x(0), dim0), Tensor(x(1), dim0))
-      f(tensor)
-    };
-    {
-      (x:TensorR) => {
-        val in = NewArray[Array[Float]](2)
-        in(0) = x.x.data; in(1) = x.d.data
-        f1(in) // f1 should take Array[Array[Float]] and update the gradient of x
-      }
+  def FUNc(f: TensorR => Unit): (TensorR => Unit) = {
+    (x:TensorR) => {
+      val dims = x.x.dims.toSeq
+      val f1 = fun { (x: Rep[Array[Array[Float]]]) =>
+        val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
+        f(tensor)
+      };
+
+      val in = NewArray[Array[Float]](2)
+      in(0) = x.x.data; in(1) = x.d.data
+      f1(in) // f1 should take Array[Array[Float]] and update the gradient of x
     }
   }
 
@@ -1342,8 +1342,8 @@ trait TensorExp extends Dsl {
   }
 
   @virtualize
-  def IF(dim0: Int)(c: Rep[Boolean])(a: =>TensorR @diff)(b: =>TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
-    val k1 = FUNc(dim0)(k)
+  def IF(c: Rep[Boolean])(a: =>TensorR @diff)(b: =>TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+    val k1 = FUNc(k)
 
     if (c) RST(k1(a)) else RST(k1(b))
   }
@@ -1352,59 +1352,57 @@ trait TensorExp extends Dsl {
   def LOOP(init: TensorR)(c: TensorR => Rep[Boolean])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
     // val k1 = FUN(init.x.dims(0))(k)
 
-    lazy val loop: TensorR => Unit = FUNc (init.x.dims(0)) { (x: TensorR) =>
+    lazy val loop: TensorR => Unit = FUNc { (x: TensorR) =>
       if (c(x)) RST(loop(b(x))) else RST(k(x))
     }
     loop(init)
   }
 
-  def FUNs(dim0: Int)(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = {
-    val f1 = fun { (xx: Rep[(Int, Array[Array[Float]])]) =>
-      val i: Rep[Int]                  = tuple2_get1(xx)
-      val x: Rep[Array[Array[Float]]] = tuple2_get2(xx)
-      val tensor = new TensorR(Tensor(x(0), dim0), Tensor(x(1), dim0))
-      f(i)(tensor)
-    };
-    {
-      (i: Rep[Int]) => (x:TensorR) => {
-        val in = NewArray[Array[Float]](2)
-        in(0) = x.x.data; in(1) = x.d.data
-        f1((i, in))
-      }
+  def FUNs(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = {
+    (i: Rep[Int]) => (x:TensorR) => {
+      val dims = x.x.dims.toSeq
+      val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) => 
+        val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
+        f(i)(tensor)
+      };    
+
+      val in = NewArray[Array[Float]](2)
+      in(0) = x.x.data; in(1) = x.d.data
+      f1(i, in)
     }
   }
 
   @virtualize
   def LOOPS(init: TensorR)(c: Rep[Int])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
-    lazy val loop: Rep[Int] => TensorR => Unit = FUNs (init.x.dims(0)) { (i: Rep[Int]) => (x: TensorR) =>
+    lazy val loop: Rep[Int] => TensorR => Unit = FUNs { (i: Rep[Int]) => (x: TensorR) =>
       if (i < c) { RST(loop(i+1)(b(i)(x))) } else RST(k(x))
     }
     loop(0)(init)
   }
 
-  def FUNsm(dim0s: ArrayBuffer[Seq[Int]])(f: Rep[Int] => ArrayBuffer[TensorR] => Unit): (Rep[Int] => ArrayBuffer[TensorR] => Unit) = {
-    val f1 = fun { (xx: Rep[(Int, Array[Array[Float]])]) =>
-      val i: Rep[Int]                  = tuple2_get1(xx)
-      val x: Rep[Array[Array[Float]]] = tuple2_get2(xx)
-      val tensors = ArrayBuffer[TensorR]()
-      for (u <- (0 until dim0s.length): Range) {
-        tensors.append(new TensorR(Tensor(x(u*2), dim0s(u) : _*), Tensor(x(u*2+1), dim0s(u) : _*)))
-      }
-      f(i)(tensors)
-    };
+  def FUNsm(f: Rep[Int] => ArrayBuffer[TensorR] => Unit): (Rep[Int] => ArrayBuffer[TensorR] => Unit) = {
     (i: Rep[Int]) => (x:ArrayBuffer[TensorR]) => {
-      val in = NewArray[Array[Float]](2 * dim0s.length)
-      for (u <- (0 until dim0s.length): Range) {
+      val dims = x.map(_.x.dims.seq)
+      val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
+        val tensors = ArrayBuffer[TensorR]()
+        for (u <- (0 until dims.length): Range) {
+          tensors.append(new TensorR(Tensor(x(u*2), dims(u) : _*), Tensor(x(u*2+1), dims(u) : _*)))
+        }
+        f(i)(tensors)
+      };
+
+      val in = NewArray[Array[Float]](2 * dims.length)
+      for (u <- (0 until dims.length): Range) {
         in(u*2) = x(u).x.data; in(u*2+1) = x(u).d.data
       }
-      f1((i, in))
+      f1(i, in)
     }
   }
 
   @virtualize
   def LOOPSM(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
   ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
-    lazy val loop: Rep[Int] => ArrayBuffer[TensorR] => Unit = FUNsm (init map (_.x.dims.seq)) { (i: Rep[Int]) => (x: ArrayBuffer[TensorR]) =>
+    lazy val loop: Rep[Int] => ArrayBuffer[TensorR] => Unit = FUNsm { (i: Rep[Int]) => (x: ArrayBuffer[TensorR]) =>
       if (i < c) {
         RST(loop(i+1)(b(i)(x)))
       } else {
@@ -1416,10 +1414,7 @@ trait TensorExp extends Dsl {
 
   def FUNl(dim0: Int)(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {
 
-    val f1 = fun { (yy: Rep[(Int, (Array[Array[Float]] => Unit), Array[Array[Float]])]) =>
-      val i:  Rep[Int] = tuple3_get1(yy)
-      val t1: Rep[Array[Array[Float]] => Unit] = tuple3_get2(yy)
-      val xx: Rep[Array[Array[Float]]] = tuple3_get3(yy)
+    val f1 = fun { (i:  Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) => 
       val t2: (TensorR => Unit) = { (x:TensorR) =>
         val temp = NewArray[Array[Float]](2)
         temp(0) = x.x.data; temp(1) = x.d.data
@@ -1437,7 +1432,7 @@ trait TensorExp extends Dsl {
         val k4: (TensorR => Unit) = {(x: TensorR) =>
           val temp = NewArray[Array[Float]](2)
           temp(0) = x.x.data; temp(1) = x.d.data
-          f1((i, k2, temp))
+          f1(i, k2, temp)
         }
         k4
       }
@@ -1465,11 +1460,7 @@ trait TensorExp extends Dsl {
   def FUNlm(dim0s: ArrayBuffer[Int])(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit))):
   (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit)) = {
     val length = dim0s.length
-    val f1 = fun { (yy: Rep[(Int, (Array[Array[Float]] => Unit), Array[Array[Float]])]) =>
-      val i: Rep[Int] = tuple3_get1(yy)
-      val t1: Rep[Array[Array[Float]] => Unit] = tuple3_get2(yy)
-      val xx: Rep[Array[Array[Float]]] = tuple3_get3(yy)
-
+    val f1 = fun { (i: Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) => 
       val t2: (ArrayBuffer[TensorR] => Unit) = { (x: ArrayBuffer[TensorR]) =>
         val aa = NewArray[Array[Float]](2*length)
         for (u <- (0 until length): Range) {
@@ -1499,7 +1490,7 @@ trait TensorExp extends Dsl {
           for (u <- (0 until length): Range) {
             arrays(u*2) = x(u).x.data; arrays(u*2+1) = x(u).d.data
           }
-          f1((i, k2, arrays))
+          f1(i, k2, arrays)
         }
         k4
       }

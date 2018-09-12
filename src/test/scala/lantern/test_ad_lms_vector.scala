@@ -248,8 +248,8 @@ class AdLMSVectorTest extends FunSuite {
          outputs(0)                          // return the final loss
        }
        val loss1 = gradR_loss(lossFun)(Tensor.zeros(1))
-       printf("bh1\\n")
-       bh1.d.printRaw(hidden_size)
+       //printf("bh1\\n")
+       //bh1.d.printRaw(hidden_size)
 
        generate_comment("Compute real value")
 
@@ -380,7 +380,7 @@ class AdLMSVectorTest extends FunSuite {
         //v.print()
 
         // calcuate gradient
-        val grad = gradR(t => {val y = IF (length)(t.x.data(0) > 0.0f) {t + t}{t * t}
+        val grad = gradR(t => {val y = IF(t.x.data(0) > 0.0f) {t + t}{t * t}
         y.sum() })(v)
         
         // another way of implementing it
@@ -390,7 +390,7 @@ class AdLMSVectorTest extends FunSuite {
         else Tensor.assertEqual(grad, grad2)
       }
     }
-
+    //println(array3.code)
     array3.eval("abc")
   }
 
@@ -401,8 +401,9 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         // use random array as input
         val length = 2
+        Tensor.randseed()
         val v = Tensor.randinit(length)
-        // v.print()
+        v.print()
 
         val halfv = Tensor.halves(length)
         val half = (new TensorR(halfv, Tensor.zeros(length)))

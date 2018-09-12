@@ -38,6 +38,10 @@ trait DiffApi extends Dsl {
       // is it worth optimizing x*x --> 2*x (this == that)?
       val y = new NumR(x * that.x, var_new(0.0)); k(y)
       this.d += that.x * y.d; that.d += this.x * y.d }
+    def print() = {
+      printf("the value is %f\n", x)
+      printf("the gradient is %f\n", d)
+    }
   }
 
   // difference between static var and staged var:
@@ -51,9 +55,11 @@ trait DiffApi extends Dsl {
       this.d += that.x * y.d; that.d += this.x * y.d }
   }
 
+  def getNumR(x: RDouble) = new NumR(x, var_new(0.0)) 
+
   // Note: we make the generated function return the accumulated deltaVar
   // and add it to the var after calling the continuation. Slightly different
-  // than in the unstaged version. The main reason is that we don't (want to)
+  // than in the upstaged version. The main reason is that we don't (want to)
   // have NumR objects in the generated code and that we can't (easily) pass
   // a mutable var to a function with reference semantics (we could with 
   // explicit boxing, and in C/C++ we could just pass the address)
@@ -156,10 +162,7 @@ trait DiffApi extends Dsl {
 
   def FUNL1(f: (Rep[Int] => (NumR => Unit) => (NumR => Unit))): (Rep[Int] => (NumR => Unit) => (NumR => Unit)) = {      
 
-    val f1 = fun { (yy: Rep[(Int, (Double => Double), Double)]) => 
-      val i: Rep[Int] = tuple3_get1(yy)
-      val t1: Rep[Double => Double] = tuple3_get2(yy)
-      val xx: Rep[Double] = tuple3_get3(yy)
+    val f1 = fun { (i: Rep[Int], t1: Rep[Double => Double], xx: Rep[Double]) =>
       val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
       val t3: (NumR => Unit) = f(i)(t2)
 
@@ -176,7 +179,7 @@ trait DiffApi extends Dsl {
           readVar(deltaVar)
         }
         val k4: (NumR => Unit) = {(x: NumR) => 
-          x.d += f1((i, k2, x.x))
+          x.d += f1(i, k2, x.x)
         }
         k4
       } 
@@ -192,24 +195,24 @@ trait DiffApi extends Dsl {
   }    
 
   /*
-    Note: summerize for list recursive continuation:
+    Note: summarize for list recursive continuation:
 
-    Senario A: for an array, the desired operation is like:
+    Scenario A: for an array, the desired operation is like:
     def loop(x) = if (done) kf(x) else kf(loop(b(x))) // note "b" happens within loop, "kf" is the final continuation
     cps version:
     def loop(x, k) = if (done) k(x) else loop(b(x), k); loop(x, kf)
-    can be simplifed as:
+    can be simplified as:
     def loop(x) = if (done) x else loop(b(x)); kf(loop(x))
 
-    Senario B: for a list, the desired operation is like:
+    Scenario B: for a list, the desired operation is like:
     def loop(x) = if (done) kf(x) else kf(b(loop(x))) // note "b" happens outside of loop, because the head of list should be the last element to process
     cps version:
     def loop(x, k) = if (done) k(x) else loop(x, r => k(b(r))); loop(x, kf)
     can be simplified as:
     def loop(k) = if (done) k else loop(r => k(b(r))); loop(kf)(x)
 
-    Now you see the key difference is that in Senario A, the recursion is changing "x", but in Senario B, the recursion is changing "k"
-    so the type of loop should be different: "Double => Double" in Senario A, "(Double => Double) => (Double => Double)" in Senario B.
+    Now you see the key difference is that in Scenario A, the recursion is changing "x", but in Scenario B, the recursion is changing "k"
+    so the type of loop should be different: "Double => Double" in Scenario A, "(Double => Double) => (Double => Double)" in Scenario B.
     In our type setting, "Double => Double" is equivalent with "NumR => Unit", because updating NumR.d with NumR.x is like "Double => Double"
     and correspondingly, "(Double => Double) => (Double => Double)" is like "(NumR => Unit) => (NumR => Unit)".
     In this way, the LOOP* constructs work with NumR type, while the recursive closure "fun" in "FUN" works with simple Double types.
@@ -267,10 +270,101 @@ trait DiffApi extends Dsl {
     k: (NumR => Unit) =>
 
     lazy val tree: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
-      if (i >= 0) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
+      //if (i >= 0) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
+      def tt(i: Rep[Int]) = shift{ k: (NumR => Unit) => tree(i)(k)(x) }
+      if (i >= 0) { RST { k(b(tt(lch(i)), tt(rch(i)), i)) } } else { RST(k(x)) }
     }
     tree(0)(k)(init)
   }
+
+  
+
+
+  /*
+  def FUNR(f: Rep[Int] => NumR @diff) = { (x: Rep[Int]) => (k: NumR => Unit) =>
+    val k2: Rep[Double => Double] = fun { (x: Rep[Double]) =>
+      val deltaVar = var_new(0.0)
+      k(new NumR(x, deltaVar))
+      readVar(deltaVar)
+    }
+    val f1 = fun { (i: Rep[Int], t1: Rep[Double => Double]) =>
+      val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
+      RST(t2(f(i)))
+    }
+    f1(x, k2)
+  }
+
+  @virtualize
+  def TREE3(init: NumR)(lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (NumR, NumR, Rep[Int]) => NumR @diff): NumR @diff = shift {
+    k: (NumR => Unit) =>
+
+    lazy val f: (Rep[Int] => NumR @diff) = FUNR { (i: Rep[Int]) =>
+      if (i >= 0) b(f(lch(i)), f(rch(i)), i) else init
+    }
+    f(0)(k)
+  }  */
+
+
+  /*
+  @virtualize
+  def FUNRR(f: Rep[Int] => NumR @diff) = { (x: Rep[Int]) =>
+    shift { k: (NumR => Unit) =>
+      RST(k(f(x)))
+    }
+  }
+
+  @virtualize
+  def TREE3(init: NumR)(lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (NumR, NumR, Rep[Int]) => NumR @diff): NumR @diff = {
+    @virtualize
+    lazy val f: (Rep[Int] => NumR @diff) = FUNRR { (i: Rep[Int]) =>
+      if (i >= 0) { b(f(lch(i)), f(rch(i)), i) } else { init }
+    }
+    f(0)
+  }*/
+  
+  
+  /*
+  def FUNins[A, B, C](f: Rep[A] => Rep[B] @cps[Rep[C]]) = {
+    val f1 = fun((x: Rep[A], k: (Rep[B] => Rep[C])) => reset(k(f(x)))) // put f in between k and x
+    { (x: Rep[A]) => shift { k: (Rep[B] => Rep[C]) => f1((x, fun(k)))}}
+  }*/
+
+  /*
+  def FUNr(f: (Rep[Int] => (NumR => Unit) => Unit)): (Rep[Int] => (NumR => Unit) => Unit) = { i: Rep[Int] => k1: (NumR => Unit) => 
+    val k2: Rep[Double => Double] = fun { (x: Rep[Double]) =>
+      val deltaVar = var_new(0.0)
+      k1(new NumR(x, deltaVar))
+      readVar(deltaVar)
+    }
+    val f1 = fun { (i: Rep[Int], t1: Rep[Double => Double]) =>
+      val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
+      f(i)(t2)
+    };
+
+    f1(i, k2)
+  } 
+
+  def FUNR(f: Rep[Int] => NumR @diff): (Rep[Int] => NumR @diff) = {
+    val f1: (Rep[Int] => (NumR => Unit) => Unit) = FUNr((x: Rep[Int]) => (k: (NumR => Unit)) => RST(k(f(x))))
+    ( (x: Rep[Int]) => shift { k: (NumR => Unit) => f1(x)(FUN(k)) } )
+  }
+
+  @virtualize // NOTE: this version cannot handle empty trees // assume that children array use -1 for leaf nodes
+  def TREE3(init: NumR)(lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (NumR, NumR, Rep[Int]) => NumR @diff): NumR @diff = {
+    @virtualize
+    lazy val f: (Rep[Int] => NumR @diff) = FUNR { (i: Rep[Int]) =>
+      if (i >= 0) b( f(lch(i)), f(rch(i)), i ) else init
+    }
+    f(0)
+  }*/
+
+  /* TODO: still working on the tree abstraction!!
+  def FUNins[A, B, C](f: Rep[A] => Rep[B] @cps[Rep[C]]) = {
+    val f1 = fun { (x: Rep[A], k: Rep[B => C]) => reset(k(f(x))) }
+    (x: Rep[A]) => shift { k: (Rep[B] => Rep[C]) =>
+      f1(x, fun(k))
+    }
+  }*/
 
   def gradRV(f: NumRV => NumRV @diff)(x: Rep[Double]): Rep[Double] = {
     val x1 = new NumRV(x, 0.0)

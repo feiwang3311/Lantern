@@ -137,41 +137,41 @@ class SentimentTreeLSTM extends FunSuite {
 
           val targ = Tensor.zeros(output_size); targ.data(scores(i)) = 1; val targ1 = TensorR(targ)
 
-          val embedding_tensor = IF (word_embedding_size) (lchs(i) < 0) {
+          val embedding_tensor = IF (lchs(i) < 0) {
             TensorR(Tensor(word_embedding_data(words(i)), word_embedding_size))
           } {dummy_word_embedding}
 
-          val i_gate = IF (hidden_size) (lchs(i) < 0) {
+          val i_gate = IF (lchs(i) < 0) {
           (tWi.dot(embedding_tensor) + tbi).sigmoid()
           } {
             (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
           }
 
-          val fl_gate = IF (hidden_size) (lchs(i) < 0) {
+          val fl_gate = IF (lchs(i) < 0) {
             dummy_forget_gate
           } {
             (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).sigmoid()
           }
 
-          val fr_gate = IF (hidden_size) (lchs(i) < 0) {
+          val fr_gate = IF (lchs(i) < 0) {
             dummy_forget_gate
           } {
             (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).sigmoid()
           }
 
-          val o_gate = IF (hidden_size) (lchs(i) < 0) {
+          val o_gate = IF (lchs(i) < 0) {
             (tWo.dot(embedding_tensor) + tbo).sigmoid()
           } {
             (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).sigmoid()
           }
 
-          val u_value = IF (hidden_size) (lchs(i) < 0) {
+          val u_value = IF (lchs(i) < 0) {
             (tWu.dot(embedding_tensor) + tbu).tanh()
           } {
             (tU0u.dot(hiddenl) + tU1u.dot(hiddenr) + tbbu).tanh()
           }
 
-          val cell = IF (hidden_size) (lchs(i) < 0) {
+          val cell = IF (lchs(i) < 0) {
             i_gate * u_value
           } {
             i_gate * u_value + fl_gate * celll + fr_gate * cellr

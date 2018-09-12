@@ -91,20 +91,20 @@ def plot(files, model):
   #plt.text(60, .025, r'$\mu=100,\ \sigma=15$')
   #plt.axis([40, 160, 0, 0.03])
   #plt.grid(True)
-  plt.subplot(122)
+  ax = plt.subplot(122)
   width = 0.5
   space = 0.5
   start = space + 0.25
   bars = []
   for i in range(len(labels)):
-    plt.bar([start], [loopTimes[i]], width, color=getColor(labels[i]))
-    plt.bar([start], [prepareTimes[i]], width, bottom=[loopTimes[i]], color = 'k')
+    plt.bar([start], [loopTimes[i]], width, bottom=[0], color=getColor(labels[i]))
+    # plt.bar([start], [prepareTimes[i]], width, bottom=[loopTimes[i]], color = 'k')
     start = start + width + space
   import matplotlib.patches as mpatches
-  black_patch = mpatches.Patch(color='black', label='prepare time')
+  black_patch = mpatches.Patch(color='black', label='preparation time')
   mix_patch = mpatches.Patch()
   plt.legend(handles=[black_patch], bbox_to_anchor=(0, 1), loc='upper left', ncol=1)
-  plt.title("prepare time and iteration time of " + step_desc)
+  plt.title("preparation time and iteration time of " + step_desc)
   plt.ylabel("seconds")
   plt.xticks((np.arange(len(labels)) + 1), labels)
   #plt.show()

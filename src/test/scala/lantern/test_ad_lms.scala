@@ -14,6 +14,54 @@ import java.io.PrintWriter;
 import java.io.File;  
 
 class AdLMSTest extends FunSuite {
+
+  test("function_composition") {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        def f1(x: NumR) = x * x * x
+        def f2(x: NumR) = x * x
+        def f3(x: NumR) = f2(f1(x))
+        gradR(f3)(x)
+      }
+    }
+    def grad(x: Double) = 6 * x * x * x * x * x
+    for (x <- (-5 until 5)) {
+      assert (g1.eval(x) == grad(x))
+    }
+  }
+
+  test("leaky") {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        def f1(x: NumR) = x * x * x
+        val v1: NumR = getNumR(1.0)
+        
+        gradR(x => f1(x) * (v1 + v1))(x)
+      }
+    }
+    def grad(x: Double) = 6 * x * x 
+    for (x <- (-5 until 5)) {
+      assert (g1.eval(x) == grad(x))
+    }
+  }
+
+  test("side_effect") {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val v1: NumR = getNumR(1.0)
+        val v2: NumR = getNumR(2.0)
+        gradR(x => {
+          val v3 = v1 + v2
+          v3.print()
+          x * v3
+        })(x)
+      }
+    }
+    def grad(x: Double) = 3
+    for (x <- (-5 until 5)) {
+      assert (g1.eval(x) == grad(x))
+    }
+  }
   
   test("reverse_mode") {
     val gr1 = new DslDriver[Double,Double] with DiffApi {
@@ -364,14 +412,15 @@ class AdLMSTest extends FunSuite {
         }
 
         val res = gradR(model)(x)
-        //printf("the grad of para is %f\n",  readVar(para.d))
-        //printf("the grad of paral is %f\n", readVar(paral.d))
-        //printf("the grad of parar is %f\n", readVar(parar.d))
-        //printf("the grad of bias is %f\n",  readVar(bias.d))
+        printf("the grad of para is %f\n",  readVar(para.d))
+        printf("the grad of paral is %f\n", readVar(paral.d))
+        printf("the grad of parar is %f\n", readVar(parar.d))
+        printf("the grad of bias is %f\n",  readVar(bias.d))
         0.0
       }
     }
     // Fix me
+    gr12_4.eval(2.0)
   }
   
 }

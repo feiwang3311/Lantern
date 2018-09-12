@@ -103,7 +103,7 @@ class SentimentTreeRNN extends FunSuite {
          val lossl = l(0); val hiddenl = l(1)
          val lossr = r(0); val hiddenr = r(1)
 
-         val hidden = IF (hidden_size) (lchs(i) < 0) { // leaf node
+         val hidden = IF (lchs(i) < 0) { // leaf node
            val embedding_array = word_embedding_data(words(i))
            val embedding_tensor = TensorR(Tensor(embedding_array, word_embedding_size))
            (Wxh1.dot(embedding_tensor) + bx1).tanh()
