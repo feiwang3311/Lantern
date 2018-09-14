@@ -60,7 +60,7 @@ trait CGenUtilOps extends CGenBase {
 }
 
 @virtualize
-trait Dsl extends PrimitiveOps with NumericOps with BooleanOps with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps
+trait Dsl extends PrimitiveOps with NumericOpsExtra with BooleanOps with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps
 with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables with ObjectOps with UtilOps
 with UncheckedOps with MathOps with TupleOps with TupledFunctions
 with CastingOps {
@@ -77,7 +77,7 @@ with CastingOps {
 }
 
 @virtualize
-trait DslExp extends Dsl with PrimitiveOpsExpOpt with NumericOpsExpOpt with BooleanOpsExp with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp
+trait DslExp extends Dsl with PrimitiveOpsExpOpt with NumericOpsExpOpt with NumericOpsExtraExp with BooleanOpsExp with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp
 with OrderingOpsExp with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt with UtilOpsExp
 with UncheckedOpsExp with MathOpsExp with TupleOps with TupledFunctionsExp
 with CastingOpsExp {
@@ -220,7 +220,7 @@ trait DslImpl extends DslExp { q =>
 
 // TODO: currently part of this is specific to the query tests. generalize? move?
 @virtualize
-trait DslGenC extends CGenNumericOps
+trait DslGenC extends CGenNumericOpsExtra
     with CGenPrimitiveOps with CGenBooleanOps with CGenIfThenElse
     with CGenEqual with CGenRangeOps with CGenOrderingOps
     with CGenMiscOps with CGenArrayOps with CGenStringOps
