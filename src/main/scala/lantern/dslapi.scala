@@ -179,6 +179,7 @@ trait DslGen extends ScalaGenNumericOps
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs mkString ",") + "}; // ;)")
     case Assign(Variable(a), b) =>
       emitAssignment(a.asInstanceOf[Sym[Variable[Any]]], quote(b))
     case IfThenElse(c,Block(Const(true)),Block(Const(false))) =>
@@ -336,6 +337,7 @@ trait DslGenC extends CGenNumericOpsExtra
     case _ => super.quote(x)
   }
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
     case GenerateComment(s) =>
       stream.println("// "+s)
     case a@ArrayNew(n) =>
