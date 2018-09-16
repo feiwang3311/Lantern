@@ -51,3 +51,12 @@ addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVe
 
 // set the main class for packaging the main jar
 // mainClass in (Compile, packageBin) := Some("scala.lantern")
+
+// scala support for protobuf (for adding onnx support)
+PB.targets in Compile := Seq(
+  scalapb.gen() -> (sourceManaged in Compile).value
+)
+
+// (optional) If you need scalapb/scalapb.proto or anything from
+// google/protobuf/*.proto
+libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"

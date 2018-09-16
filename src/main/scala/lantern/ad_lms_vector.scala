@@ -116,6 +116,7 @@ trait TensorExp extends Dsl {
   }
 
   def slice(arr: Rep[Array[Float]], off: Rep[Int]) = uncheckedPure[Array[Float]](arr, "+", off)
+  def sliceI(arr: Rep[Array[Int]], off: Rep[Int]) = uncheckedPure[Array[Int]](arr, "+", off)
 
   object Encoding {
     val ix_a = 96  // index starts from 1
@@ -163,6 +164,28 @@ trait TensorExp extends Dsl {
       }
     }
   }
+
+  /* Not supported in LMS?? 
+  abstract class ForLoop {
+    def foreach(f: Rep[Int] => Unit): Unit
+  }
+
+  @virtualize
+  object ForLoop {
+    def apply(start: Int, step: Int, step_size: Int) = if (step <= 5) {
+      new ForLoop {
+        def foreach(f: Rep[Int] => Unit) = {
+          for (i <- (start until (start + step_size * step) by step_size): Range) f(unit(i)) 
+        }
+      }
+    } else {
+      new ForLoop {
+        def foreach(f: Rep[Int] => Unit) = {
+          for (i <- (start until (start + step * step_size) by step_size): Rep[Range]) f(i)
+        }
+      }
+    }
+  } */
 
   /**
     * Defines tensor-specific operations.
@@ -429,6 +452,28 @@ trait TensorExp extends Dsl {
     def sum() = Tensor.scalar(this.fold(0.0f)(_ + _))
 
     @virtualize
+    def sum2D(dim: Int) = {
+
+      assert (this.nbDims == 2, "Only deal with 2D tensor")
+      assert (dim == 0 || dim == 1, "dim must be in range of this.nbDims")
+
+      if (dim == 0) ???
+      else {
+        val res = NewArray[Float](this.dims(0))
+        val offset = var_new(0)
+        for (i <- DataLoop(this.dims(0))) {
+          val sum = var_new(0.0f)
+          for (j <- DataLoop(this.dims(1))) {
+            sum += this.data(offset)
+            offset += 1
+          }
+          res(i) = sum
+        }
+        Tensor(res, this.dims(0))
+      }
+    }
+
+    @virtualize
     def check(limit: Float) = {
       val idx = var_new(0)
       while (idx < this.nbElem && -limit < this.data(idx) && this.data(idx) < limit) {
@@ -439,7 +484,29 @@ trait TensorExp extends Dsl {
     }
 
     @virtualize
-    def max() = this.fold(-MAX_DOUBLE)((agg, x) => if (x > agg) x else agg)
+    def max() = this.fold(scala.Float.MinValue)((agg, x) => if (x > agg) x else agg)
+
+    @virtualize
+    def max2D(dim: Int) = {
+      
+      assert (this.nbDims == 2, "Only deal with 2D tensor")
+      assert (dim == 0 || dim == 1, "dim must be in range of this.nbDims")
+      
+      if (dim == 0) ???
+      else {
+        val res = NewArray[Float](this.dims(0))
+        val offset = var_new(0)
+        for (i <- DataLoop(this.dims(0))) {
+          val max = var_new(scala.Float.MinValue)
+          for (j <- DataLoop(this.dims(1))) {
+            if (this.data(offset) > max) max = this.data(offset)
+            offset += 1  
+          }
+          res(i) = max           
+        }
+        Tensor(res, this.dims(0))
+      }
+    }
 
     // FIXME: Proper tensor
     @virtualize
@@ -459,11 +526,44 @@ trait TensorExp extends Dsl {
 
     @virtualize
     def logSoftmax() = {
-      assert(this.nbDims == 1, "TODO")
+      assert(this.nbDims == 1, "TODO: logSoftmax only handles 1d vectors so far")
 
       val m = this.max
       val logsum = m + Math.log(this.fold(0.0f)((agg, x) => agg + Math.exp(x - m).toFloat)).toFloat
       this.map(x => x - logsum)
+    }
+
+    @virtualize
+    def softmax_batch() = {
+      assert(this.nbDims == 2, "softmax input should be 2-D (batch * 1D logits)")
+      val max = this.max2D(dim = 1)
+      val res = Tensor.zeros_like(this)
+      val offset = var_new(0)
+      for (batch <- DataLoop(this.dims(0))) {
+        for (i <- DataLoop(this.dims(1))) {
+          res.data(offset) = Math.exp(this.data(offset) - max.data(batch)).toFloat
+          offset += 1
+        }
+      }
+      val sum = res.sum2D(dim = 1)
+      offset = 0
+      for (batch <- DataLoop(res.dims(0))) {
+        for (i <- DataLoop(res.dims(1))) {
+          res.data(offset) = res.data(offset) / sum.data(batch)
+          offset += 1
+        }
+      }
+      res
+    }
+
+    @virtualize
+    def softmax() = {
+      assert(this.nbDims == 1, "TODO: softmax only handles 1d vectors so far: " + this.nbDims)
+
+      val m = this.max
+      val normalized = this.map(x => x - m)
+      val nor_exp = normalized.exp()
+      nor_exp / nor_exp.sum()
     }
 
     @virtualize
@@ -749,37 +849,110 @@ trait TensorExp extends Dsl {
     }
 
     @virtualize
-    def conv2D(kernel: Tensor, strideRow: Int, strideCol: Int): Tensor = {
+    def conv2D_batch(kernel: Tensor, bias: Tensor, strides: NSeq[Int], pads: NSeq[Int]): Tensor = {
+      assert (this.nbDims == 4, "For conv_batch , input should be 4-D, with the first dim to be batch")
+      assert(kernel.nbDims == 4, "For Conv, kernel should be 4-D")
+      assert(bias.nbDims == 1, "For Conv, bias should be 1-D")
+      assert(bias.dims(0) == kernel.dims(0), "For Conv, bias length should be the same as number of kernels")
+      assert(kernel.dims(1) == this.dims(1), "For Conv, input dim_0 should be the same as kernel dim_1")
+      assert(this.dims(2) >= kernel.dims(2) && this.dims(3) >= kernel.dims(3), "Image too small for Conv")
+      
+      val totalPads = pads.fold(0)((x: Int, y: Int) => x + y)
+      // TODO: (Fei Wang) not sure if the order is correct!!!
+      assert(pads.size == 4, "pads should have 4 values, up, down, left, right")
+      assert(strides.size == 2, "strides should have a strideRow and a strideCol")
+      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
+      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
+      assert(strideRow >= 1, "stride of row should be at least 1")
+      assert(strideCol >= 1, "stride of col should be at least 1")
+      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "For now, assume all values in pads are the same")
 
-      assert(this.nbDims == 3 && kernel.nbDims == 4)
+      val resWidth = convSize(this.dims(2) + padLeft + padRight, kernel.dims(2), strideRow)
+      val resHeight = convSize(this.dims(3) + padUp + padDown, kernel.dims(3), strideCol)
+      val res = Tensor.zeros(this.dims(0), kernel.dims(0), resWidth, resHeight)  // batch, channel, width, height
 
-      assert(strideRow >= 1)
-      assert(strideCol >= 1)
+      for (i <- DataLoop(this.dims(0))) {
+        val ptrInput = slice(this.data, i * this.strides(1))
+        val ptrOutput = slice(res.data, i * res.strides(1))
+        Tensor(ptrInput, this.dims.drop(1): _*).conv2D_inplace(kernel, bias, strides, pads, Tensor(ptrOutput, res.dims.drop(1): _*))
+      }
+      res
+    }
 
-      assert(kernel.dims(1) == this.dims(0))
-      assert(this.dims(1) >= kernel.dims(2) && this.dims(2) >= kernel.dims(3), "Image too small")
+    @virtualize
+    def conv2D_inplace(kernel: Tensor, bias: Tensor, strides: NSeq[Int], pads: NSeq[Int], res: Tensor): Unit = {
+      val totalPads = pads.fold(0)((x: Int, y: Int) => x + y)
+      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
+      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
+      val resWidth = res.dims(1)
+      val resHeight = res.dims(2)
 
-      val resHeight = convSize(this.dims(1), kernel.dims(2), strideRow)
-      val resWidth = convSize(this.dims(2), kernel.dims(3), strideCol)
-      val res = Tensor.zeros(kernel.dims(0), resHeight, resWidth)
-
-      val offOut = var_new(0)
-      val offWeight1 = var_new(0)
+      val offOut = var_new(0)                         // offset for the res by channel
+      val offWeight1 = var_new(0)                     // offset for the kernel by channel (dim_0)
       for (outPane <- DataLoop(kernel.dims(0))) {
-      //for (outPane <- 0 until kernel.dims(0): Rep[Range]) {
-        // assertC(offOut == outPane * res.strides(1), "Invalid Output Idx %d != %d (%d)", offOut, outPane * res.strides(1), outPane)
-        // assertC(offWeight1 == outPane * kernel.strides(1), "Invalid Kernel Idx")
-        val offWeight2 = var_new(offWeight1)
-        val offInput = var_new(0)
-        val ptrOutput = slice(res.data, offOut)
+        val offWeight2 = var_new(offWeight1)          // offset for the kernel for each z-dim of a given channel
+        val offInput = var_new(0)                     // offset for this for each channel of input
+        val ptrOutput = slice(res.data, offOut)           // res, restarting from the start of this output channel (2D)
         for (inPane <- DataLoop(this.dims(0))) {
-        //for (inPane <- 0 until this.dims(0): Rep[Range]) {
-          // assertC(offInput == inPane * this.strides(1), "Invalid Input Idx")
-          // assertC(offWeight2 == outPane * kernel.strides(1) + inPane * kernel.strides(2), "Invalid kernel Idx (2) %d != %d (%d - %d)", offWeight1, outPane * kernel.strides(1) + inPane * kernel.strides(2), outPane, inPane)
-          val ptrIntput = slice(this.data, offInput)
-          val ptrWeight = slice(kernel.data, offWeight2)
+          val ptrInput = slice(this.data, offInput)      // input, restarting from the start of this input channel (2D)
+          val ptrWeight = slice(kernel.data, offWeight2)  // kernel, restarting from the start of this input channel (2D)
 
-          Tensor(ptrOutput, resHeight, resWidth).conv2D(Tensor(ptrIntput, this.dims(1), this.dims(2)), Tensor(ptrWeight, kernel.dims(2), kernel.dims(3)), strideRow, strideCol)
+          if (totalPads == 0) Tensor(ptrOutput, resHeight, resWidth).conv2D1(
+            Tensor(ptrInput, this.dims(1), this.dims(2)),
+            Tensor(ptrWeight, kernel.dims(2), kernel.dims(3)),
+            strideRow, strideCol, bias(outPane))
+          else Tensor(ptrOutput, resHeight, resWidth).conv2D2(
+            Tensor(ptrInput, this.dims(1), this.dims(2)),
+            Tensor(ptrWeight, kernel.dims(2), kernel.dims(3)),
+            strideRow, strideCol, padUp, padDown, padLeft, padRight, bias(outPane))
+
+          offWeight2 += kernel.strides(2)
+          offInput += this.strides(1)
+        }
+        offWeight1 += kernel.strides(1)
+        offOut += res.strides(1)
+      }
+    }
+
+    @virtualize
+    def conv2D(kernel: Tensor, bias: Tensor, strides: NSeq[Int], pads: NSeq[Int]) = {
+
+      assert(this.nbDims == 3 && kernel.nbDims == 4, "For Conv, input should be 3-D and kernel should be 4-D: " + this.nbDims + "|" + kernel.nbDims)
+      assert(kernel.dims(1) == this.dims(0), "For Conv, input dim_0 should be the same as kernel dim_1")
+      assert(this.dims(1) >= kernel.dims(2) && this.dims(2) >= kernel.dims(3), "Image too small for Conv")
+      
+      val totalPads = pads.fold(0)((x: Int, y: Int) => x + y)
+      // TODO: (Fei Wang) not sure if the order is correct!!!
+      assert(pads.size == 4, "pads should have 4 values, up, down, left, right")
+      assert(strides.size == 2, "strides should have a strideRow and a strideCol")
+      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
+      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
+      assert(strideRow >= 1, "stride of row should be at least 1")
+      assert(strideCol >= 1, "stride of col should be at least 1")
+      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "For now, assume all values in pads are the same")
+      
+      val resWidth = convSize(this.dims(1) + padLeft + padRight, kernel.dims(2), strideRow)
+      val resHeight = convSize(this.dims(2) + padUp + padDown, kernel.dims(3), strideCol)
+      val res = Tensor.zeros(kernel.dims(0), resWidth, resHeight)
+
+      val offOut = var_new(0)                         // offset for the res by channel
+      val offWeight1 = var_new(0)                     // offset for the kernel by channel (dim_0)
+      for (outPane <- DataLoop(kernel.dims(0))) {
+        val offWeight2 = var_new(offWeight1)          // offset for the kernel for each z-dim of a given channel
+        val offInput = var_new(0)                     // offset for this for each channel of input
+        val ptrOutput = slice(res.data, offOut)           // res, restarting from the start of this output channel (2D)
+        for (inPane <- DataLoop(this.dims(0))) {
+          val ptrInput = slice(this.data, offInput)      // input, restarting from the start of this input channel (2D)
+          val ptrWeight = slice(kernel.data, offWeight2)  // kernel, restarting from the start of this input channel (2D)
+
+          if (totalPads == 0) Tensor(ptrOutput, resHeight, resWidth).conv2D1(
+            Tensor(ptrInput, this.dims(1), this.dims(2)),
+            Tensor(ptrWeight, kernel.dims(2), kernel.dims(3)),
+            strideRow, strideCol, bias(outPane))
+          else Tensor(ptrOutput, resHeight, resWidth).conv2D2(
+            Tensor(ptrInput, this.dims(1), this.dims(2)),
+            Tensor(ptrWeight, kernel.dims(2), kernel.dims(3)),
+            strideRow, strideCol, padUp, padDown, padLeft, padRight, bias(outPane))
 
           offWeight2 += kernel.strides(2)
           offInput += this.strides(1)
@@ -790,73 +963,137 @@ trait TensorExp extends Dsl {
       res
     }
 
-    // Taken from Torch: THTensorConv.cpp#198L
     @virtualize
-    def conv2D(input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int): Unit = {
+    def conv2D2(input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, bias: Rep[Float] = 0.0f): Unit = {
       assert(this.nbDims == 2 && input.nbDims == 2 && kernel.nbDims == 2)
-      assert(strideRow >= 1)
-      assert(strideCol >= 1)
 
-      val offOuput = var_new(0)
-      val offInputR = var_new(0)
+      // looping for the output
+      val offOutput = var_new(0)                 // offset of the output, move one by one in second loop
+      // val offInputR = var_new(0)                 // offset of the input, move by each row * strideRow
+      val InputR = var_new(-padLeft)
       for (outRow <- DataLoop(this.dims(0))) {
-      //for (outRow <- 0 until this.dims(0): Rep[Range]) {
-        // assertC(offInputR == outRow * input.strides(1), "intputR invalid")
-        val offInputC = var_new(offInputR)
+        // val offInputC = var_new(offInputR)       // offset of the input, build on offInputR, move by each strideCol
+        val InputC = var_new(-padUp)
         for (outCol <- DataLoop(this.dims(1))) {
-        //for (outCol <- 0 until this.dims(1): Rep[Range]) {
-          // assertC(offInputC == outRow * strideRow * input.strides(1) + outCol * strideCol, "intputC invalid")
-          val offKernel = var_new(0)
-          val offInput = var_new(offInputC)
-          val sum = var_new(0.0f)
+
+          // looping for the kernel
+          val sum = var_new(bias)
+          val offKernel = var_new(0)                // offset of the kernel, move by row of kernel
+          // val offInput  = var_new(offInputC)     // offset of the input, built on offInputC, move by row of input
+          val i = var_new(InputR)
           for (kernelRow <- DataLoop(kernel.dims(0))) {
-          //for (kernelRow <- 0 until kernel.dims(0): Rep[Range]) {
-            // assertC(offInput == (outRow * strideRow + kernelRow) * input.strides(1) + outCol * strideCol, "input invalid")
-            // assertC(offKernel == kernelRow * kernel.strides(1), "kernel invalid")
-            val ptrIntput = slice(input.data, offInput)
+            // val ptrInput = slice(input.data, offInput)
+            val j = var_new(InputC)
             val ptrKernel = slice(kernel.data, offKernel)
             for (kernelCol <- DataLoop(kernel.dims(1))) {
-            //for (kernelCol <- 0 until kernel.dims(1): Rep[Range]) {
-              sum +=  ptrIntput(kernelCol) * ptrKernel(kernelCol)
+              if (i < 0 || j < 0 || i >= this.dims(0) || j >= this.dims(1)) ()
+              else {
+                sum += ptrKernel(kernelCol) * input.data(i * input.strides(1) + j)
+              }
+              j += 1
+            }
+            offKernel += kernel.strides(1)
+            // offInput  += input.strides(1)
+            i += 1
+          }
+          this.data(offOutput) = this.data(offOutput) + sum
+          offOutput += 1
+          // offInputC += strideCol
+          InputC += strideCol
+        }
+        // offInputR += strideRow * input.strides(1)
+        InputR += strideRow
+      }
+    }
+
+    @virtualize
+    def conv2D(kernel: Tensor, strideRow: Int, strideCol: Int): Tensor = {
+
+      assert(this.nbDims == 3 && kernel.nbDims == 4, "input should be 3-D and kernel should be 4-D for Conv")
+      assert(strideRow >= 1, "stride of row should be at least 1")
+      assert(strideCol >= 1, "stride of col should be at least 1")
+      assert(kernel.dims(1) == this.dims(0), "input dim_0 should be the same as kernel dim_1")
+      assert(this.dims(1) >= kernel.dims(2) && this.dims(2) >= kernel.dims(3), "Image too small for Conv")
+
+      val resHeight = convSize(this.dims(1), kernel.dims(2), strideRow)
+      val resWidth = convSize(this.dims(2), kernel.dims(3), strideCol)
+      val res = Tensor.zeros(kernel.dims(0), resHeight, resWidth)
+
+      val offOut = var_new(0)                      // offset for the res for each channel of the output
+      val offWeight1 = var_new(0)                  // offset for the kernel for each channel of the output
+      for (outPane <- DataLoop(kernel.dims(0))) {
+        val offWeight2 = var_new(offWeight1)       // offset for the kernel for each z-dim of a given channel
+        val offInput = var_new(0)                  // offset for this for each channel of input
+        val ptrOutput = slice(res.data, offOut)          // res, restarting from the start of this output channel (2D)
+        for (inPane <- DataLoop(this.dims(0))) {
+          val ptrInput = slice(this.data, offInput)     // input, restarting from the start of this input channel (2D)
+          val ptrWeight = slice(kernel.data, offWeight2) // kernel, restarting from the start of this input channel (2D)
+
+          Tensor(ptrOutput, resHeight, resWidth).conv2D1(Tensor(ptrInput, this.dims(1), this.dims(2)), Tensor(ptrWeight, kernel.dims(2), kernel.dims(3)), strideRow, strideCol)
+
+          offWeight2 += kernel.strides(2)
+          offInput += this.strides(1)
+        }
+        offWeight1 += kernel.strides(1)
+        offOut += res.strides(1)
+      }
+      res
+    }
+
+    // Taken from Torch: THTensorConv.cpp#198L 
+    // https://github.com/pytorch/pytorch/blob/master/aten/src/TH/generic/THTensorConv.cpp
+    @virtualize
+    def conv2D1(input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int, bias: Rep[Float] = 0.0f): Unit = {
+      assert(this.nbDims == 2 && input.nbDims == 2 && kernel.nbDims == 2)
+
+      // looping for the output
+      val offOutput = var_new(0)                 // offset of the output, move one by one in second loop
+      val offInputR = var_new(0)                 // offset of the input, move by each row * strideRow
+      for (outRow <- DataLoop(this.dims(0))) {
+        val offInputC = var_new(offInputR)       // offset of the input, built on offInputR, move by each strideCol
+        for (outCol <- DataLoop(this.dims(1))) {
+
+          // looping for the kernel
+          val sum = var_new(bias)
+          val offKernel = var_new(0)             // offset of the kernel, move by kernel.strides(1) i.e. by row of kernel
+          val offInput = var_new(offInputC)      // offset of the input, built on offInputC, move by row of input
+          for (kernelRow <- DataLoop(kernel.dims(0))) {
+            val ptrInput = slice(input.data, offInput)
+            val ptrKernel = slice(kernel.data, offKernel)
+            for (kernelCol <- DataLoop(kernel.dims(1))) {
+              sum +=  ptrInput(kernelCol) * ptrKernel(kernelCol)
             }
             offKernel += kernel.strides(1)
             offInput += input.strides(1)
           }
-          this.data(offOuput) = this.data(offOuput) + sum
-          offOuput += 1
+          this.data(offOutput) = this.data(offOutput) + sum
+          offOutput += 1
           offInputC += strideCol
         }
         offInputR += strideRow * input.strides(1)
       }
     }
 
-    // TO HERE DataLoop
-
     @virtualize
     def maxPool(strideRow: Int, strideCol: Int) = {
       assert(this.nbDims == 3)
 
-
       val resHeight = this.dims(1) / strideRow
       val resWidth = this.dims(2) / strideCol
-      val res = Tensor.fill(-MAX_DOUBLE, this.dims(0), resHeight, resWidth)
+      val res = Tensor.fill(scala.Float.MinValue, this.dims(0), resHeight, resWidth)
 
       // FIXME adhoc transform tensor to be using generic type!
       val savedIdx = NewArray[Int](res.nbElem)
 
-
-      val oidxW = var_new(0)
-      val iidx = var_new(0)
-      for (ichan <- 0 until this.dims(0): Rep[Range]) {
-        val oidx = var_new(oidxW)
-        for (ox <- 0 until res.dims(1): Rep[Range]) {
-          for (sx <- 0 until strideRow: Rep[Range]) {
-            // assertC(oidx == ichan * res.strides(1) + ox * res.strides(2), "MAXPOOL output row idx error %d != %d (%d - %d - %d)\\n", oidx, ichan * this.strides(1) + ox * res.strides(2), ichan, ox, sx)
-            val oidx2 = var_new(oidx)
-            for (oy <- 0 until res.dims(2): Rep[Range]) {
-              for (sy <- 0 until strideCol: Range) { // FIXME unrol by default
-                // assertC(iidx == ichan * this.strides(1) + (ox * strideRow + sx) * this.strides(2) + oy * strideCol + sy, "MAXPOOL input idx error %d != %d (%d - %d (%d), %d (%d))\\n", iidx, ichan * this.strides(1) + (ox * strideRow + sx) * this.strides(2) + oy * strideCol + sy, ichan, ox, sx, oy, sy)
-                // assertC(oidx2 == ichan * res.strides(1) + ox * res.strides(2) + oy, "MAXPOOL output idx error %d != %d (%d - %d (%d), %d (%d))\\n", oidx2, ichan * res.strides(1) + ox * res.strides(2) + oy, ichan, ox, sx, oy, sy)
+      val oidxW = var_new(0)  // walks by channel in res
+      val iidx = var_new(0)   // walks by 1 in input (this.data)
+      for (ichan <- DataLoop(this.dims(0))) {
+        val oidx = var_new(oidxW)  // walks by row in res
+        for (ox <- DataLoop(res.dims(1))) {
+          for (sx <- DataLoop(strideRow)) {
+            val oidx2 = var_new(oidx)  // walks by 1 in res
+            for (oy <- DataLoop(res.dims(2))) {
+              for (sy <- DataLoop(strideCol)) {
                 if (this.data(iidx) > res.data(oidx2)) {
                   res.data(oidx2) = this.data(iidx)
                   savedIdx(oidx2) = iidx
@@ -875,6 +1112,119 @@ trait TensorExp extends Dsl {
     }
 
     @virtualize
+    def maxPool_k_batch(kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int): (Tensor, Rep[Array[Int]]) = {
+      assert(this.nbDims == 4, "the input for maxPool (with batch) should have 4 dimensions")
+      assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
+      assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
+      assert(this.dims(2) >= kernelRow && this.dims(3) >= kernelCol, "Image too small for maxPool_k: " + this.dims + "|" + (kernelRow, kernelCol))
+
+      val resWidth = convSize(this.dims(1), kernelRow, strideRow)
+      val resHeight = convSize(this.dims(2), kernelCol, strideCol)
+      val res = Tensor.fill(scala.Float.MinValue, this.dims(0), this.dims(1), resWidth, resHeight)
+      val savedIdx = NewArray[Int](res.nbElem)
+
+      for (i <- DataLoop(this.dims(0))) {
+        val ptrInput  = slice(this.data, i * this.strides(1))
+        val ptrOutput = slice(res.data, i * res.strides(1))
+        val ptrIdx    = sliceI(savedIdx, i * res.strides(1))
+        Tensor(ptrInput, this.dims.drop(1): _*).maxPool_k_inplace(
+          kernelRow, kernelCol, strideRow, strideCol, Tensor(ptrOutput, res.dims.drop(1): _*), ptrIdx)
+      }
+      (res, savedIdx)
+    }
+
+    @virtualize
+    def maxPool_k_inplace(kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, res: Tensor, savedIdx: Rep[Array[Int]]): Unit = {
+      val resWidth = res.dims(1)
+      val resHeight = res.dims(2)
+
+      // looping for the output
+      val offout = var_new[Int](0)                              // offset of res, by channel  
+      val offin  = var_new[Int](0)                              // offset of input, by channel
+      for (outPane <- DataLoop(res.dims(0))) {
+        val offout_1 = var_new[Int](offout)                     // offset of res, built on offout, by row
+        val offin_1  = var_new[Int](offin)                      // offset of input, built on offin, by row
+        for (outRow <- DataLoop(res.dims(1))) {
+          val offout_2 = var_new[Int](offout_1)                 // offset of res, built on offout_1, by col
+          val offin_2  = var_new[Int](offin_1)                  // offset of input, built on offin_1, by col
+          for (outCol <- DataLoop(res.dims(2))) {
+
+            // looping for the kernel
+            val this_index_1 = var_new[Int](offin_2)            // offset of this (input) by row of kernel size
+            for (dummy1 <- DataLoop(kernelRow)) {
+              val this_index_2 = var_new[Int](this_index_1)     // offset of this (input), built on this_index_1, by col of kernel size
+              for (dummy <- DataLoop(kernelCol)) {
+                if (this.data(this_index_2) > res(offout_2)) {
+                  res.data(offout_2) = this.data(this_index_2)
+                  savedIdx(offout_2) = this_index_2
+                } else ()
+                this_index_2 += 1
+              }
+              this_index_1 += this.strides(2)
+            }
+
+            offout_2 += 1
+            offin_2  += strideCol
+          }
+          offout_1 += res.strides(2)
+          offin_1  += strideRow * this.strides(2)
+        }
+        offout += res.strides(1)
+        offin  += this.strides(1)
+      }
+    }
+
+    @virtualize
+    def maxPool_k(kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int) = {
+
+      assert(this.nbDims == 3, "the input for maxPool should have 3 dimensions")
+      assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
+      assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
+      assert(this.dims(1) >= kernelRow && this.dims(2) >= kernelCol, "Image too small for maxPool_k")
+
+      val resWidth = convSize(this.dims(1), kernelRow, strideRow)
+      val resHeight = convSize(this.dims(2), kernelCol, strideCol)
+      val res = Tensor.fill(scala.Float.MinValue, this.dims(0), resWidth, resHeight)
+      val savedIdx = NewArray[Int](res.nbElem)
+
+      // looping for the output
+      val offout = var_new[Int](0)                              // offset of res, by channel  
+      val offin  = var_new[Int](0)                              // offset of input, by channel
+      for (outPane <- DataLoop(res.dims(0))) {
+        val offout_1 = var_new[Int](offout)                     // offset of res, built on offout, by row
+        val offin_1  = var_new[Int](offin)                      // offset of input, built on offin, by row
+        for (outRow <- DataLoop(res.dims(1))) {
+          val offout_2 = var_new[Int](offout_1)                 // offset of res, built on offout_1, by col
+          val offin_2  = var_new[Int](offin_1)                  // offset of input, built on offin_1, by col
+          for (outCol <- DataLoop(res.dims(2))) {
+
+            // looping for the kernel
+            val this_index_1 = var_new[Int](offin_2)            // offset of this (input) by row of kernel size
+            for (dummy1 <- DataLoop(kernelRow)) {
+              val this_index_2 = var_new[Int](this_index_1)     // offset of this (input), built on this_index_1, by col of kernel size
+              for (dummy <- DataLoop(kernelCol)) {
+                if (this.data(this_index_2) > res(offout_2)) {
+                  res.data(offout_2) = this.data(this_index_2)
+                  savedIdx(offout_2) = this_index_2
+                } else ()
+                this_index_2 += 1
+              }
+              this_index_1 += this.strides(2)
+            }
+
+            offout_2 += 1
+            offin_2  += strideCol
+          }
+          offout_1 += res.strides(2)
+          offin_1  += strideRow * this.strides(2)
+        }
+        offout += res.strides(1)
+        offin  += this.strides(1)
+      }
+      (res, savedIdx)
+    }
+
+    @virtualize
     def dropout(prob: Float = 0.5f) = {
       assert(0.0f <= prob && prob <= 1.0f)
 
@@ -884,7 +1234,8 @@ trait TensorExp extends Dsl {
       val scale = if (prob < 1.0f) 1.0f / (1.0f - prob) else 0.0f
 
       val guard: Rep[Boolean] = prob < 1.0f
-      for (i <- 0 until this.nbElem: Rep[Range]) {
+      for (i <- DataLoop(this.nbElem)) {
+      // for (i <- 0 until this.nbElem: Rep[Range]) {
         if (guard && Random.rand() > prob) {
           res(i) = this.data(i) * scale
           mask(i) = scale
@@ -912,6 +1263,90 @@ trait TensorExp extends Dsl {
       Tensor(res, this.dims.seq : _*)
     }
 
+    @virtualize
+    def concat(dim: Int, others: Tensor*) = {
+      assert(others.size >= 1, "there should be at least one tensor in others")
+      assert(dim >= 0 && dim < this.nbDims, "dim should be within range of this.nbDims")
+      assert(others.forall(x => x.nbDims == this.nbDims), "all tensors should have the same number of dimensions")
+      assert(others.forall(x => (0 until this.nbDims: Range).forall(i =>  i == dim || x.dims(i) == this.dims(i))),
+        "all dimensions except the concatenation dimension should be the same")
+
+      // prepare result tensor
+      val higherDims = this.dims.take(dim)
+      val higherDimsSquashed = higherDims.fold(1)(_ * _)
+      val resDims    = (0 until this.nbDims: Range).map{i => 
+        if (i != dim) this.dims(i)
+        else others.map(x => x.dims(dim)).fold(this.dims(dim))(_ + _)}
+      val totalnbElem = resDims.fold(1)(_ * _)
+      val res = NewArray[Float](totalnbElem)
+      
+      // prepare for looping/copying
+      val totalFrom = this +: others        // put all tensors in one Seq for easy of handling
+      val targetId = var_new(0)             // this is the index of res to write to
+      // looping over dims higher than dim, squashed
+      for (high <- DataLoop(higherDimsSquashed)) {
+        // looping over the concatenation dim
+        for (whichTensor <- totalFrom) {
+          // looping over the dimensions lower than or equal to dim, in the current tensor
+          val ptrIntput = slice(whichTensor.data, high * whichTensor.strides(dim))
+          for (lowOrEqual <- DataLoop(whichTensor.strides(dim))) {
+            res(targetId) = ptrIntput(lowOrEqual)
+            targetId += 1
+          }
+        }
+      }
+      Tensor(res, resDims: _*)
+    }
+
+    @virtualize
+    def global_ave_batch() = {
+      assert(this.nbDims == 4, "assume this is Tensor with 4D (batch * channel * width * height")
+      val resTensor = Tensor.zeros(this.dims.take(2): _*)
+      
+      val offset = var_new(0)                      // offset of this, should step by this.strides(2)
+      val res_offset = var_new(0)                  // offset of res, should step by 1
+      // looping over each batch 
+      for (batch <- DataLoop(this.dims(0))) {
+        // looping over each channel
+        for (channel <- DataLoop(this.dims(1))) {
+          // get average of a channel
+          val sum = var_new(0.0f)
+          val offset_a = var_new(offset)           // offset of this for averaging, should step by this.strides(3)
+          for (i <- DataLoop(this.dims(2))) {
+            for (j <- DataLoop(this.dims(3))) {
+              sum += this.data(offset_a + j)
+            }
+            offset_a += this.strides(3)
+          }
+          resTensor.data(res_offset) = sum / this.strides(2)
+          offset += this.strides(2)
+          res_offset += 1
+        }
+      }
+      resTensor
+    }
+
+    @virtualize
+    def global_ave() = {
+      // the result should be 1D (channel), by averaging the numbers in (width * height)
+      assert(this.nbDims == 3, "assume this is Tensor with 3D (channel * width * height)")
+
+      val res = NewArray[Float](this.dims(0))
+      // looping over each channel
+      for (channel <- DataLoop(this.dims(0))) {
+        val offset = var_new(this.strides(1) * channel)
+        val sum = var_new(0.0f)
+        for (i <- DataLoop(this.dims(1))) {          
+          for (j <- DataLoop(this.dims(2))) {
+            sum += this.data(offset + j)
+          }
+          offset += this.strides(2)
+        }
+        res(channel) = sum / (this.strides(1))
+      }
+      Tensor(res, this.dims(0))
+    }
+
     // FIXME: the MNIST example precomput the mean and std
     // I thought that normalize would need to compute it first and then
     // modify the data to match the one requested.
@@ -932,7 +1367,6 @@ trait TensorExp extends Dsl {
   object Tensor {
 
     def apply(dims: Int*) = {
-      ???
       val size = dims.product
       new Tensor(NewArray[Float](size), dims)
     }
