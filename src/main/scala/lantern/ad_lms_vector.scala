@@ -597,8 +597,21 @@ trait TensorExp extends Dsl {
     }
 
     @virtualize
+    def nllLossB(target: Rep[Array[Int]]) = {
+      assert(this.nbDims == 2, "For nllLossB, input should be 2D and target should be 1D")
+
+      val res = NewArray[Float](this.dims(0))
+      val offset = var_new(0)
+      for (batch <- DataLoop(this.dims(0))) {
+        res(batch) = -1.0f * this.data(offset + target(batch))
+        offset += this.strides(1)
+      }
+      Tensor(res, this.dims(0))
+    }
+
+    @virtualize
     def nllLoss(target: Rep[Int]) = {
-      assert(this.nbDims == 1)
+      assert(this.nbDims == 1, "input for nllLoss has to be 1d")
 
       // assertC(0 <= target && target < this.nbElem, "Incorrect target")
       Tensor.scalar(-1.0f * this.data(target))
@@ -1661,13 +1674,21 @@ trait TensorExp extends Dsl {
       k(new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*)))
     }
 
+    def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.nllLossB(target)); k(y)
+
+      // back propagate
+      val offset = var_new(0)
+      for (batch <- DataLoop(this.x.dims(0))) {
+        this.d.data(offset + target(batch)) += -1.0f * y.d.data(batch)
+        offset += this.x.strides(1)
+      }
+    }
+
     def nllLoss(target: Rep[Int]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.nllLoss(target)); k(y)
-
-      assert(y.x.isScalar)
-      //y.d.print("nll")
-
-      this.d.data(target) = -1.0f * y.d.data(0)
+      assert(y.x.isScalar, "y need to be a scalar")
+      this.d.data(target) += -1.0f * y.d.data(0)
     }
 
     def update(lr: Float, mom: Float) = {

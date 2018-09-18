@@ -25,7 +25,7 @@ import onnx.onnx_ml;
 
 trait ONNXLib extends TensorExp {
 
-  def readONNX(model_file: String) = {
+  case class readONNX(val model_file: String) {
 
     val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
     val graph = model.getGraph
@@ -86,29 +86,16 @@ trait ONNXLib extends TensorExp {
     }
 
     // find out the output
-    def real_output(): String = {
+    def real_output(): (String, Seq[Int]) = {
       val out_keys = output_map.keys
       assert (out_keys.size == 1, "we hope that there is only one output for the model")
       val out_key: String = out_keys.head
-      out_key
+      val out_dims = output_map(out_key)._1.map(x => x.toInt)
+      (out_key, out_dims)
     }
 
     val (x_name, x_dims) = real_input()
-    val y_name = real_output()
-
-    // collect basic info of the model, can be used for pretty printing
-    val modelMap: MMap[String, Any] = MMap()
-    modelMap += ("irversion:" -> model.getIrVersion)
-    modelMap += ("producer name:" -> model.getProducerName)
-    modelMap += ("producer version:" -> model.getProducerVersion)
-    modelMap += ("domain:" -> model.getDomain)
-    modelMap += ("model version:" -> model.getModelVersion)
-    modelMap += ("doc string:" -> model.getDocString)
-    modelMap += ("name of graph:" -> graph.getName)
-    modelMap += ("number of initializer:" -> initializer.size)
-    modelMap += ("number of inputs:" -> inputs.size)
-    modelMap += ("number of outputs:" -> outputs.size)
-    modelMap += ("number of nodes:" -> nodes.size)
+    val (y_name, y_dims) = real_output()
 
     abstract class Node
     case class convNode(inputs: Seq[String], output: String, attributes: Map[String, Seq[Int]]) extends Node
@@ -233,8 +220,24 @@ trait ONNXLib extends TensorExp {
       }
     }
 
+    // collect basic info of the model, can be used for pretty printing
+    val modelMap: Map[String, Any] = Map(
+      "irversion:" -> model.getIrVersion,
+      "producer name:" -> model.getProducerName,
+      "producer version:" -> model.getProducerVersion,
+      "domain:" -> model.getDomain,
+      "model version:" -> model.getModelVersion,
+      "doc string:" -> model.getDocString,
+      "name of graph:" -> graph.getName,
+      "number of initializer:" -> initializer.size,
+      "number of inputs:" -> inputs.size,
+      "number of outputs:" -> outputs.size,
+      "number of nodes:" -> nodes.size,
+      "all nodes:" -> allNodes,
+    )
+
     // read the nodes and build the function for inference
-    val inference_func: (Tensor => Tensor) = { x: Tensor => 
+    lazy val inference_func: (Tensor => Tensor) = { x: Tensor => 
       
       assert(x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
 
@@ -328,101 +331,104 @@ trait ONNXLib extends TensorExp {
     }
 
     // read the nodes and build the function for training
-    /*
-    val training_func: (Tensor => Tensor @diff) = { x: Tensor => 
 
-      assert(x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
+    lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR => 
+
+      assert(x.x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
-      val intermediate_map_tensor: MMap[String, Tensor @diff] = MMap()
-      intermediate_map_tensor += (x_name -> x)
+      val intermediate_map_tensorR: MMap[String, TensorR] = MMap()
+      intermediate_map_tensorR.update(x_name, x)
 
       // TODO (Fei Wang): ask Greg, is there a better way to do this?
-      def get_from_two_maps(key: String): Tensor @diff = {
-        initializer_map_tensor.get(key) match {
+      def get_from_two_maps(key: String): TensorR = {
+        initializer_map_tensorR.get(key) match {
           case Some(v) => v
-          case None => intermediate_map_tensor.get(key) match {
+          case None => intermediate_map_tensorR.get(key) match {
             case Some(v) => v
             case None => throw new RuntimeException(key + " is not found in either maps")
           }
         }
       }
 
-      allNodes.foreach { node =>
+      val iter = allNodes.iterator
+
+      while (iter.hasNext) {
+
+        val node = iter.next
         
-        node match {
+        if (node.isInstanceOf[convNode]) {
           
-          case convNode(inputs, output, atts) => {
+          val convNode(inputs, output, atts) = node
+          val input1 = get_from_two_maps(inputs.head)
+          val input2 = get_from_two_maps(inputs.tail.head)
+          val input3 = get_from_two_maps(inputs.last)
+          
+          val strides = atts("strides")
+          val pads = atts("pads")
+          val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
+          
+          val out = input1.convBBP(input2, input3, strides, pads)
+          intermediate_map_tensorR.update(output, out)
 
-            val input1 = get_from_two_maps(inputs.head)
-            val input2 = get_from_two_maps(inputs.tail.head)
-            val input3 = get_from_two_maps(inputs.last)
-            
-            val strides = atts("strides")
-            val pads = atts("pads")
-            val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
-            
-            val out = input1.convBBP(input2, input3, strides, pads)
-            intermediate_map_tensor += (output -> out)
-          }
+        } else if (node.isInstanceOf[reluNode]) {
 
-          case reluNode(input, output) => {
+          val reluNode(input, output) = node 
+          val in = get_from_two_maps(input)
+          val out = in.relu()
+          intermediate_map_tensorR.update(output, out)
 
-            val in = get_from_two_maps(input)
-            val out = in.relu()
-            intermediate_map_tensor += (output -> out)
-          }
+        } else if (node.isInstanceOf[maxpoolNode]) {
 
-          case maxpoolNode(input, output, atts) => {
+          val maxpoolNode(input, output, atts) = node
+          val in = get_from_two_maps(input)
+          val strides = atts("strides")
+          val pads = atts("pads")
+          val kernel_shape = atts("kernel_shape")
+          
+          // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
+          val out = in.maxPoolBK(kernel_shape, strides)
+          intermediate_map_tensorR.update(output, out)
 
-            val in = get_from_two_maps(input)
+        } else if (node.isInstanceOf[concatNode]) {
 
-            val strides = atts("strides")
-            val pads = atts("pads")
-            val kernel_shape = atts("kernel_shape")
-            
-            // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-            val out = in.maxPoolBK(kernel_shape, strides)
-            intermediate_map_tensor += (output -> out)
-          }
+          val concatNode(inputs, output, axis) = node
+          val input_s = inputs.map(x => get_from_two_maps(x))
+          val out = input_s.head.concat(axis, input_s.tail: _*)
+          intermediate_map_tensorR.update(output, out)
 
-          case concatNode(inputs, output, axis) => {
+        } else if (node.isInstanceOf[dropoutNode]) {
 
-            val input_s = inputs.map(x => get_from_two_maps(x))
-            val out = input_s.head.concat(axis, input_s.tail: _*)
-            intermediate_map_tensor += (output -> out)
-          }
+          val dropoutNode(input, outputs, ratio, is_test) = node
+          val in = get_from_two_maps(input)
+          val out = in.dropout(ratio)
+          intermediate_map_tensorR.update(outputs.head, out)
+          // intermediate_map_tensor += (outputs.last -> out2)
 
-          case dropoutNode(input, outputs, ratio, is_test) => {
+        } else if (node.isInstanceOf[globalAveragePoolNode]) {
 
-            val in = get_from_two_maps(input)
-            val out = in.dropout(ratio)
-            intermediate_map_tensor += (outputs.head -> out)
-            // intermediate_map_tensor += (outputs.last -> out2)
-          }
+          val globalAveragePoolNode(input, output) = node
+          val in = get_from_two_maps(input)
+          val out = in.global_ave_batch()
+          intermediate_map_tensorR.update(output, out)
 
-          case globalAveragePoolNode(input, output) => {
+        } else if (node.isInstanceOf[softmaxNode]) {
 
-            val in = get_from_two_maps(input)
-            val out = in.global_ave_batch()
-            intermediate_map_tensor += (output -> out)
-          }
+          val softmaxNode(input, output) = node
+          val in = get_from_two_maps(input)
+          val out = in.logSoftmaxB()
+          intermediate_map_tensorR.update(output, out)
 
-          case softmaxNode(input, output) => {
+        } else {
 
-            val in = get_from_two_maps(input)
-            val out = in.logSoftmaxB()
-            intermediate_map_tensor += (output -> out)
-          }
-
-          case _ => throw new RuntimeException("not yet implemented")
+          shift{ (k: Tensor => Unit) => ???}
         }
       }
 
-      intermediate_map_tensor(y_name)
-    }*/
+      intermediate_map_tensorR(y_name)
+    }
 
-    (inference_func, x_dims)
+    // TODO: (Fei Wang) define nicer API for inferencing and training
 
   }
 

@@ -1,3 +1,4 @@
 *.bin
 .*.sw*
 target/
+src/out/

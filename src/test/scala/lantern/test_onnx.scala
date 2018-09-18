@@ -209,7 +209,7 @@ class ONNXTest extends FunSuite {
   }
 
   val model_file = "src/test/onnxModel/squeezenet/model.onnx"
-  val gene_dir = "src/out/untested/squeezenet.cpp/"
+  val gene_dir = "src/out/untested/"
   
   val squeezenet = new DslDriverC[String, Unit] with TensorExp {
 
@@ -489,13 +489,13 @@ class ONNXTest extends FunSuite {
     
     println(s"testing reading ONNX models from $model_file")
 
-    val squeezenet_file = new PrintWriter(new File(gene_dir))
+    val squeezenet_file = new PrintWriter(new File(gene_dir + "squeezenet.cpp"))
     squeezenet_file.println(squeezenet.code)
     squeezenet_file.flush()
 
   }
 
-  test("use_library") {
+  test("inference") {
 
     System.out.println(s"testing reading ONNX model using library from $model_file")
 
@@ -504,7 +504,9 @@ class ONNXTest extends FunSuite {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         
-        val (func, x_dims) = readONNX(model_file)
+        val model = readONNX(model_file)
+
+        val (func, x_dims) = (model.inference_func, model.x_dims)
         
         // must use the function in order to generate it
         if (a == "run") {
@@ -515,10 +517,42 @@ class ONNXTest extends FunSuite {
       }
     }
 
-    val squeezenet_file = new PrintWriter(new File(gene_dir))
+    val squeezenet_file = new PrintWriter(new File(gene_dir + "squeezenet.cpp"))
     squeezenet_file.println(inference_func.code)
     squeezenet_file.flush()
 
+  }
+
+  test("training") {
+
+    System.out.println(s"testing reading ONNX model using library from $model_file for training")
+
+    val training_func = new DslDriverC[String, Unit] with ONNXLib {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+
+        // reading ONNX model
+        val model = readONNX(model_file)
+        val func = model.training_func
+        val x_dims = model.x_dims
+        val y_dims = model.y_dims
+
+
+        // fake input and target
+        val input = TensorR(Tensor.zeros(x_dims: _*))
+        val target = NewArray[Int](x_dims(0))
+        for (i <- DataLoop(x_dims(0))) target(i) = 1
+        def lossFun(dummy: TensorR) = func(input).nllLossB(target).sum()
+
+        val loss = gradR_loss(lossFun)(Tensor.zeros(1))
+        println(loss.data(0))
+      }
+    }
+
+    val squeezenet_file = new PrintWriter(new File(gene_dir + "squeezenetTraining.cpp"))
+    squeezenet_file.println(training_func.code)
+    squeezenet_file.flush()
   }
 
 }
