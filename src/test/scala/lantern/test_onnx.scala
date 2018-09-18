@@ -35,7 +35,7 @@ class ONNXTest extends FunSuite {
     // println("producer version is " + model.getProducerVersion)
     // println("domain is " + model.getDomain)
     // println("model version is " + model.getModelVersion)
-    // println("doc string is " + model.getDocString)s
+    // println("doc string is " + model.getDocString)
 
 
     // graph information
@@ -243,6 +243,7 @@ class ONNXTest extends FunSuite {
         
       def extract_inits(inits: Seq[onnx_ml.TensorProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = {
         val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = Map()
+        // TODO: (Fei Wang) use immutable map instead!!
         inits.foreach { init => 
           val (name, dims, datatype, floatarray) = extract_init(init)
           map += (name -> (dims, datatype, floatarray))
@@ -268,6 +269,7 @@ class ONNXTest extends FunSuite {
 
       def extract_values(puts: Seq[onnx_ml.ValueInfoProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = {
         val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = Map()
+        // TODO: (Fei Wang) use immutable map instead!!
         puts.foreach { put =>
           val (name, dims, elem_type) = extract_value(put)
           map += (name -> (dims, elem_type))
@@ -377,7 +379,7 @@ class ONNXTest extends FunSuite {
             assert(kernel_shape.size == 2, "kernel_shape should be length 2")
             
             // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-            val (out, dummy) = input1.maxPool_k_batch(kernel_shape.head, kernel_shape.last, strides.head, strides.last)
+            val (out, dummy) = input1.maxPool_k_batch(kernel_shape, strides)
             intermediate_map_tensor += (outputs.head -> out)
           }
 
@@ -492,4 +494,31 @@ class ONNXTest extends FunSuite {
     squeezenet_file.flush()
 
   }
+
+  test("use_library") {
+
+    System.out.println(s"testing reading ONNX model using library from $model_file")
+
+    val inference_func = new DslDriverC[String, Unit] with ONNXLib {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        
+        val (func, x_dims) = readONNX(model_file)
+        
+        // must use the function in order to generate it
+        if (a == "run") {
+          val input = Tensor.zeros(x_dims: _*)
+          val output = func(input)
+          println(output.data(0))
+        }
+      }
+    }
+
+    val squeezenet_file = new PrintWriter(new File(gene_dir))
+    squeezenet_file.println(inference_func.code)
+    squeezenet_file.flush()
+
+  }
+
 }
