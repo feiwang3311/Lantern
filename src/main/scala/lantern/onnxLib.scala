@@ -12,7 +12,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
 import scala.math._
 import scala.collection.mutable.{Map => MMap};
-
 import scala.io.Source
 
 import java.io.PrintWriter;
@@ -38,7 +37,6 @@ trait ONNXLib extends TensorExp {
     // TODO (Fei Wang): problem: this function is assuming that the data type is Float, will break if not!!!
     // extract information from TensorProto
     def extract_init(init: onnx_ml.TensorProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])) = {
-      System.out.println(s"proto: ${init.toProtoString}")
       val dims: Seq[Int] = init.dims.map(x => x.toInt)
       val name: String = init.getName
       val datatype: onnx_ml.TensorProto.DataType = init.getDataType
@@ -131,6 +129,7 @@ trait ONNXLib extends TensorExp {
         }
 
         case "Relu" => {
+
           val inputs: Seq[String] = node.input
           assert (inputs.size == 1, "number of inputs of a relu node should always be 1")
 
@@ -141,6 +140,7 @@ trait ONNXLib extends TensorExp {
         }
 
         case "MaxPool" => {
+
           val inputs: Seq[String] = node.input
           assert (inputs.size == 1, "number of inputs of a maxpool node should always be 1")
 
@@ -445,4 +445,5 @@ trait ONNXLib extends TensorExp {
   //     System.out.println(c)
   //   }
   // }
+
 }

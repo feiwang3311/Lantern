@@ -210,7 +210,11 @@ class ONNXTest extends FunSuite {
 
   val model_file = "src/test/onnxModel/squeezenet/model.onnx"
   val gene_dir = "src/out/untested/"
+<<<<<<< 05a321f05e18897098c660d0e574843ba3563039
 
+=======
+  
+>>>>>>> ONNXLib for model reading, generating inference func, and training func
   val squeezenet = new DslDriverC[String, Unit] with TensorExp {
 
     @virtualize
@@ -244,7 +248,11 @@ class ONNXTest extends FunSuite {
       def extract_inits(inits: Seq[onnx_ml.TensorProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = {
         val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = Map()
         // TODO: (Fei Wang) use immutable map instead!!
+<<<<<<< 05a321f05e18897098c660d0e574843ba3563039
         inits.foreach { init =>
+=======
+        inits.foreach { init => 
+>>>>>>> ONNXLib for model reading, generating inference func, and training func
           val (name, dims, datatype, floatarray) = extract_init(init)
           map += (name -> (dims, datatype, floatarray))
         }
@@ -529,6 +537,7 @@ class ONNXTest extends FunSuite {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
+
         // reading ONNX model
         val model = readONNX(model_file)
         val func = model.training_func
