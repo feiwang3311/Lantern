@@ -12,9 +12,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
 import scala.math._
 import scala.collection.mutable.{Map => MMap};
- 
+
 import java.io.PrintWriter;
-import java.io.File;  
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -25,7 +25,11 @@ import onnx.onnx_ml;
 
 trait ONNXLib extends TensorExp {
 
+<<<<<<< HEAD
   case class readONNX(val model_file: String) {
+=======
+  def readONNX(model_file: String) = {
+>>>>>>> roadblock -- cannot construct training function from ONNX model
 
     val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
     val graph = model.getGraph
@@ -57,7 +61,7 @@ trait ONNXLib extends TensorExp {
 
     val initializer_map_tensor: Map[String, Tensor] =
       initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
-    val initializer_map_tensorR: Map[String, TensorR] = 
+    val initializer_map_tensorR: Map[String, TensorR] =
       initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
     // extract information from ValueInfoProto
@@ -86,6 +90,7 @@ trait ONNXLib extends TensorExp {
     }
 
     // find out the output
+<<<<<<< HEAD
     def real_output(): (String, Seq[Int]) = {
       val out_keys = output_map.keys
       assert (out_keys.size == 1, "we hope that there is only one output for the model")
@@ -96,6 +101,31 @@ trait ONNXLib extends TensorExp {
 
     val (x_name, x_dims) = real_input()
     val (y_name, y_dims) = real_output()
+=======
+    def real_output(): String = {
+      val out_keys = output_map.keys
+      assert (out_keys.size == 1, "we hope that there is only one output for the model")
+      val out_key: String = out_keys.head
+      out_key
+    }
+
+    val (x_name, x_dims) = real_input()
+    val y_name = real_output()
+
+    // collect basic info of the model, can be used for pretty printing
+    val modelMap: MMap[String, Any] = MMap()
+    modelMap += ("irversion:" -> model.getIrVersion)
+    modelMap += ("producer name:" -> model.getProducerName)
+    modelMap += ("producer version:" -> model.getProducerVersion)
+    modelMap += ("domain:" -> model.getDomain)
+    modelMap += ("model version:" -> model.getModelVersion)
+    modelMap += ("doc string:" -> model.getDocString)
+    modelMap += ("name of graph:" -> graph.getName)
+    modelMap += ("number of initializer:" -> initializer.size)
+    modelMap += ("number of inputs:" -> inputs.size)
+    modelMap += ("number of outputs:" -> outputs.size)
+    modelMap += ("number of nodes:" -> nodes.size)
+>>>>>>> roadblock -- cannot construct training function from ONNX model
 
     abstract class Node
     case class convNode(inputs: Seq[String], output: String, attributes: Map[String, Seq[Int]]) extends Node
@@ -116,7 +146,7 @@ trait ONNXLib extends TensorExp {
 
           val outputs: Seq[String] = node.output
           assert (outputs.size == 1, "number of output of a conv node should always be 1")
-          
+
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
           assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
           val atts: Map[String, Seq[Int]] = attributes.map(att => att.getName -> att.ints.map(x => x.toInt)).toMap
@@ -125,8 +155,8 @@ trait ONNXLib extends TensorExp {
           assert (atts.contains("kernel_shape"), "attributes of a conv node should have kernel_shape")
           assert(atts("strides").size == 2, "strides should be length 2")
           assert(atts("kernel_shape").size == 2, "kernel_shape should be length 2")
-          
-          convNode(inputs, outputs.head, atts)          
+
+          convNode(inputs, outputs.head, atts)
         }
 
         case "Relu" => {
@@ -147,7 +177,7 @@ trait ONNXLib extends TensorExp {
 
           val outputs: Seq[String] = node.output
           assert (outputs.size == 1, "number of outputs of a maxpool node should always be 1")
-          
+
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
           assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
           val atts: Map[String, Seq[Int]] = attributes.map(att => att.getName -> att.ints.map(x => x.toInt)).toMap
@@ -220,6 +250,7 @@ trait ONNXLib extends TensorExp {
       }
     }
 
+<<<<<<< HEAD
     // collect basic info of the model, can be used for pretty printing
     val modelMap: Map[String, Any] = Map(
       "irversion:" -> model.getIrVersion,
@@ -237,8 +268,12 @@ trait ONNXLib extends TensorExp {
     )
 
     // read the nodes and build the function for inference
-    lazy val inference_func: (Tensor => Tensor) = { x: Tensor => 
-      
+    lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
+=======
+    // read the nodes and build the function for inference
+    val inference_func: (Tensor => Tensor) = { x: Tensor =>
+>>>>>>> roadblock -- cannot construct training function from ONNX model
+
       assert(x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
@@ -257,19 +292,19 @@ trait ONNXLib extends TensorExp {
       }
 
       allNodes.foreach { node =>
-        
+
         node match {
-          
+
           case convNode(inputs, output, atts) => {
 
             val input1 = get_from_two_maps(inputs.head)
             val input2 = get_from_two_maps(inputs.tail.head)
             val input3 = get_from_two_maps(inputs.last)
-            
+
             val strides = atts("strides")
             val pads = atts("pads")
             val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
-            
+
             val out = input1.conv2D_batch(input2, input3, strides, pads)
             intermediate_map_tensor += (output -> out)
           }
@@ -288,7 +323,7 @@ trait ONNXLib extends TensorExp {
             val strides = atts("strides")
             val pads = atts("pads")
             val kernel_shape = atts("kernel_shape")
-            
+
             // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
             val (out, _) = in.maxPool_k_batch(kernel_shape, strides)
             intermediate_map_tensor += (output -> out)
@@ -332,7 +367,7 @@ trait ONNXLib extends TensorExp {
 
     // read the nodes and build the function for training
 
-    lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR => 
+    lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
 
       assert(x.x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
 
@@ -356,47 +391,38 @@ trait ONNXLib extends TensorExp {
       while (iter.hasNext) {
 
         val node = iter.next
-        
+
         if (node.isInstanceOf[convNode]) {
-          
           val convNode(inputs, output, atts) = node
           val input1 = get_from_two_maps(inputs.head)
           val input2 = get_from_two_maps(inputs.tail.head)
           val input3 = get_from_two_maps(inputs.last)
-          
+
           val strides = atts("strides")
           val pads = atts("pads")
           val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
-          
+
           val out = input1.convBBP(input2, input3, strides, pads)
           intermediate_map_tensorR.update(output, out)
-
         } else if (node.isInstanceOf[reluNode]) {
-
-          val reluNode(input, output) = node 
+          val reluNode(input, output) = node
           val in = get_from_two_maps(input)
           val out = in.relu()
           intermediate_map_tensorR.update(output, out)
-
         } else if (node.isInstanceOf[maxpoolNode]) {
-
           val maxpoolNode(input, output, atts) = node
           val in = get_from_two_maps(input)
           val strides = atts("strides")
           val pads = atts("pads")
           val kernel_shape = atts("kernel_shape")
-          
           // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
           val out = in.maxPoolBK(kernel_shape, strides)
           intermediate_map_tensorR.update(output, out)
-
         } else if (node.isInstanceOf[concatNode]) {
-
           val concatNode(inputs, output, axis) = node
           val input_s = inputs.map(x => get_from_two_maps(x))
           val out = input_s.head.concat(axis, input_s.tail: _*)
           intermediate_map_tensorR.update(output, out)
-
         } else if (node.isInstanceOf[dropoutNode]) {
 
           val dropoutNode(input, outputs, ratio, is_test) = node
@@ -429,7 +455,6 @@ trait ONNXLib extends TensorExp {
     }
 
     // TODO: (Fei Wang) define nicer API for inferencing and training
-
   }
 
 }

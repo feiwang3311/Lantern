@@ -11,7 +11,7 @@ import scala.virtualization.lms._
 import org.scalatest.FunSuite
 
 import java.io.PrintWriter;
-import java.io.File;  
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -24,7 +24,7 @@ import java.nio.FloatBuffer;
 class ONNXTest extends FunSuite {
 
   test("onnx_reading_basic") {
-    
+
     val filename = "src/test/onnxModel/squeezenet/model.onnx"
     println(s"testing reading onnx models from $filename")
 
@@ -65,7 +65,7 @@ class ONNXTest extends FunSuite {
       println(floatbuffer)
       val floatarray = new Array[Float](rawdata.size / 4)
       floatbuffer.get(floatarray)
-      floatarray.foreach { f => 
+      floatarray.foreach { f =>
         print(f + ",")
       }
       println()
@@ -74,7 +74,7 @@ class ONNXTest extends FunSuite {
       val data_type_name: String = data_type.name
       println(data_type.name)
     }
-    
+
 
     // input information: Type of data and dimension information
     //val input = graph.input
@@ -85,11 +85,11 @@ class ONNXTest extends FunSuite {
       println("name of this value info is " + name)
       val ty: onnx_ml.TypeProto = in.getType
       val tensor: onnx_ml.TypeProto.Tensor = ty.getTensorType
-      
+
       val elem_type: onnx_ml.TensorProto.DataType = tensor.getElemType
       println(elem_type)
-      
-      val shape: onnx_ml.TensorShapeProto = tensor.getShape      
+
+      val shape: onnx_ml.TensorShapeProto = tensor.getShape
       val dim: Seq[onnx_ml.TensorShapeProto.Dimension] = shape.dim
       val dims: Seq[Long] = dim.map(x => x.getDimValue)
       println(dims)
@@ -106,13 +106,13 @@ class ONNXTest extends FunSuite {
     // node information
     val nodes = graph.node
     println("number of node is " + nodes.length)
-    
+
     nodes.foreach { node =>
       println(node.toProtoString)
     }
-    
+
     /*
-    nodes.foreach { node => 
+    nodes.foreach { node =>
       node.getOpType match {
         case "Conv" => ConvNode(node)
         case "Relu" => ReluNode(node)
@@ -179,7 +179,7 @@ class ONNXTest extends FunSuite {
       assert (node.getOpType == "Dropout")
       val inputs: Seq[String] = node.input
       val outputs: Seq[String] = node.output
-      val ratio: Float = if (node.attribute.head.name == "ratio") node.attribute.head.getF 
+      val ratio: Float = if (node.attribute.head.name == "ratio") node.attribute.head.getF
                          else (node.attribute.last.getF)
       val is_test: Long = if (node.attribute.last.name == "is_test") node.attribute.last.getI
                           else (node.attribute.head.getI)
@@ -210,7 +210,7 @@ class ONNXTest extends FunSuite {
 
   val model_file = "src/test/onnxModel/squeezenet/model.onnx"
   val gene_dir = "src/out/untested/"
-  
+
   val squeezenet = new DslDriverC[String, Unit] with TensorExp {
 
     @virtualize
@@ -240,11 +240,11 @@ class ONNXTest extends FunSuite {
         val (func, x_dims) = map_function(nodes, initializer_map_tensor, input_map, output_map)
         (func, x_dims)
       }
-        
+
       def extract_inits(inits: Seq[onnx_ml.TensorProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = {
         val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = Map()
         // TODO: (Fei Wang) use immutable map instead!!
-        inits.foreach { init => 
+        inits.foreach { init =>
           val (name, dims, datatype, floatarray) = extract_init(init)
           map += (name -> (dims, datatype, floatarray))
         }
@@ -299,8 +299,8 @@ class ONNXTest extends FunSuite {
         val x_name: String = non_initialized_inputs.head
         val x_dims: Seq[Int] = input_map(x_name)._1.map(x => x.toInt)
 
-        val ret: (Rep[Array[Float]] => Tensor) = { x: Rep[Array[Float]] => 
-          
+        val ret: (Rep[Array[Float]] => Tensor) = { x: Rep[Array[Float]] =>
+
           val x_tensor: Tensor = Tensor(x, x_dims: _*)
           initializer_map_tensor += (x_name -> x_tensor)
 
@@ -318,16 +318,16 @@ class ONNXTest extends FunSuite {
           }
 
           def handle_conv(node: onnx_ml.NodeProto) = {
-            
+
             val inputs: Seq[String] = node.input
             assert (inputs.size == 3, "number of inputs of a conv node should always be 3")
             val input1 = get_from_two_maps(inputs.head)
             val input2 = get_from_two_maps(inputs.tail.head)
             val input3 = get_from_two_maps(inputs.last)
-            
+
             val outputs: Seq[String] = node.output
             assert (outputs.size == 1, "number of output of a conv node should always be 1")
-            
+
             val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
             assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
             val atts: Map[String, Seq[Int]] = Map()
@@ -338,20 +338,20 @@ class ONNXTest extends FunSuite {
             val strides = atts("strides")
             val pads = atts("pads")
             val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
-            
+
             val out = input1.conv2D_batch(input2, input3, strides, pads)
             intermediate_map_tensor += (outputs.head -> out)
           }
 
           def handle_relu(node: onnx_ml.NodeProto) = {
-            
+
             val inputs: Seq[String] = node.input
             assert (inputs.size == 1, "number of inputs of a relu node should always be 1")
             val input1 = get_from_two_maps(inputs.head)
 
             val outputs: Seq[String] = node.output
             assert (outputs.size == 1, "number of outputs of a relu node should always be 1")
-            
+
             val out = input1.relu()
             intermediate_map_tensor += (outputs.head -> out)
           }
@@ -364,7 +364,7 @@ class ONNXTest extends FunSuite {
 
             val outputs: Seq[String] = node.output
             assert (outputs.size == 1, "number of outputs of a maxpool node should always be 1")
-            
+
             val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
             assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
             val atts: Map[String, Seq[Int]] = Map()
@@ -377,7 +377,7 @@ class ONNXTest extends FunSuite {
             val kernel_shape = atts("kernel_shape")
             assert(strides.size == 2, "strides should be length 2")
             assert(kernel_shape.size == 2, "kernel_shape should be length 2")
-            
+
             // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
             val (out, dummy) = input1.maxPool_k_batch(kernel_shape, strides)
             intermediate_map_tensor += (outputs.head -> out)
@@ -486,7 +486,7 @@ class ONNXTest extends FunSuite {
   }
 
   test("build_from_onnx") {
-    
+
     println(s"testing reading ONNX models from $model_file")
 
     val squeezenet_file = new PrintWriter(new File(gene_dir + "squeezenet.cpp"))
@@ -503,11 +503,9 @@ class ONNXTest extends FunSuite {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
-        
         val model = readONNX(model_file)
-
         val (func, x_dims) = (model.inference_func, model.x_dims)
-        
+
         // must use the function in order to generate it
         if (a == "run") {
           val input = Tensor.zeros(x_dims: _*)
@@ -531,13 +529,11 @@ class ONNXTest extends FunSuite {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
-
         // reading ONNX model
         val model = readONNX(model_file)
         val func = model.training_func
         val x_dims = model.x_dims
         val y_dims = model.y_dims
-
 
         // fake input and target
         val input = TensorR(Tensor.zeros(x_dims: _*))
@@ -554,5 +550,4 @@ class ONNXTest extends FunSuite {
     squeezenet_file.println(training_func.code)
     squeezenet_file.flush()
   }
-
 }
