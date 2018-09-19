@@ -43,13 +43,14 @@ trait ONNXLib extends TensorExp {
       val datatype: onnx_ml.TensorProto.DataType = init.getDataType
       if (datatype.name != "FLOAT") throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
       val rawdata: com.google.protobuf.ByteString = init.getRawData
+      assert(false, s"rawdata.length = ${rawdata.size}")
       val bytearray: Array[Byte] = rawdata.toByteArray
       val bytebuffer: ByteBuffer = ByteBuffer.wrap(bytearray)
       val floatbuffer: FloatBuffer = bytebuffer.asFloatBuffer()
       val floatarray: Array[Float] = new Array[Float](rawdata.size / 4)
       floatbuffer.get(floatarray)
       // make sure that the initialization values correspond with the dims
-      assert (floatarray.length == dims.fold(1)(_ * _))
+      assert(floatarray.length == dims.fold(1)(_ * _), s"${floatarray.length} != $dims.fold(1)")
       (name -> (dims, datatype, floatarray))
     }
 
