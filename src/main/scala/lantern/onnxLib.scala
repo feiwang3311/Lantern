@@ -13,6 +13,8 @@ import scala.collection.{Seq => NSeq}
 import scala.math._
 import scala.collection.mutable.{Map => MMap};
 
+import scala.io.Source
+
 import java.io.PrintWriter;
 import java.io.File;
 import java.io.FileInputStream;
@@ -25,12 +27,7 @@ import onnx.onnx_ml;
 
 trait ONNXLib extends TensorExp {
 
-<<<<<<< HEAD
   case class readONNX(val model_file: String) {
-=======
-  def readONNX(model_file: String) = {
->>>>>>> roadblock -- cannot construct training function from ONNX model
-
     val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
     val graph = model.getGraph
     val initializer: Seq[onnx_ml.TensorProto] = graph.initializer
@@ -90,7 +87,6 @@ trait ONNXLib extends TensorExp {
     }
 
     // find out the output
-<<<<<<< HEAD
     def real_output(): (String, Seq[Int]) = {
       val out_keys = output_map.keys
       assert (out_keys.size == 1, "we hope that there is only one output for the model")
@@ -101,31 +97,6 @@ trait ONNXLib extends TensorExp {
 
     val (x_name, x_dims) = real_input()
     val (y_name, y_dims) = real_output()
-=======
-    def real_output(): String = {
-      val out_keys = output_map.keys
-      assert (out_keys.size == 1, "we hope that there is only one output for the model")
-      val out_key: String = out_keys.head
-      out_key
-    }
-
-    val (x_name, x_dims) = real_input()
-    val y_name = real_output()
-
-    // collect basic info of the model, can be used for pretty printing
-    val modelMap: MMap[String, Any] = MMap()
-    modelMap += ("irversion:" -> model.getIrVersion)
-    modelMap += ("producer name:" -> model.getProducerName)
-    modelMap += ("producer version:" -> model.getProducerVersion)
-    modelMap += ("domain:" -> model.getDomain)
-    modelMap += ("model version:" -> model.getModelVersion)
-    modelMap += ("doc string:" -> model.getDocString)
-    modelMap += ("name of graph:" -> graph.getName)
-    modelMap += ("number of initializer:" -> initializer.size)
-    modelMap += ("number of inputs:" -> inputs.size)
-    modelMap += ("number of outputs:" -> outputs.size)
-    modelMap += ("number of nodes:" -> nodes.size)
->>>>>>> roadblock -- cannot construct training function from ONNX model
 
     abstract class Node
     case class convNode(inputs: Seq[String], output: String, attributes: Map[String, Seq[Int]]) extends Node
@@ -140,9 +111,8 @@ trait ONNXLib extends TensorExp {
       node.getOpType match {
 
         case "Conv" => {
-
           val inputs: Seq[String] = node.input
-          assert (inputs.size == 3, "number of inputs of a conv node should always be 3")
+          assert (inputs.size == 3, s"number of inputs of a conv node should always be 3, got ${inputs.size}")
 
           val outputs: Seq[String] = node.output
           assert (outputs.size == 1, "number of output of a conv node should always be 1")
@@ -160,7 +130,6 @@ trait ONNXLib extends TensorExp {
         }
 
         case "Relu" => {
-
           val inputs: Seq[String] = node.input
           assert (inputs.size == 1, "number of inputs of a relu node should always be 1")
 
@@ -171,7 +140,6 @@ trait ONNXLib extends TensorExp {
         }
 
         case "MaxPool" => {
-
           val inputs: Seq[String] = node.input
           assert (inputs.size == 1, "number of inputs of a maxpool node should always be 1")
 
@@ -250,7 +218,6 @@ trait ONNXLib extends TensorExp {
       }
     }
 
-<<<<<<< HEAD
     // collect basic info of the model, can be used for pretty printing
     val modelMap: Map[String, Any] = Map(
       "irversion:" -> model.getIrVersion,
@@ -269,11 +236,6 @@ trait ONNXLib extends TensorExp {
 
     // read the nodes and build the function for inference
     lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
-=======
-    // read the nodes and build the function for inference
-    val inference_func: (Tensor => Tensor) = { x: Tensor =>
->>>>>>> roadblock -- cannot construct training function from ONNX model
-
       assert(x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
@@ -366,7 +328,6 @@ trait ONNXLib extends TensorExp {
     }
 
     // read the nodes and build the function for training
-
     lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
 
       assert(x.x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
@@ -457,4 +418,32 @@ trait ONNXLib extends TensorExp {
     // TODO: (Fei Wang) define nicer API for inferencing and training
   }
 
+  def readOnnxData(filename: String) =
+    if (filename.contains(".csv"))
+      readCsv(filename)
+    else
+      ???
+
+  type NumpyArray = Array[Array[Array[Array[Float]]]]
+
+  def readCsv(filename: String): NumpyArray = {
+    var a = List[Array[Float]]()
+    for (line <- Source.fromFile(filename).getLines) {
+      if (line != "" && line != "\n") {
+        val nums = line.split(",")
+        a ::= (nums map {x => x.toFloat}).toArray
+      }
+    }
+    a foreach { l => l foreach System.out.println }
+    val d3 = scala.Array(a.toArray)
+    scala.Array(d3)
+  }
+
+  def readNumpy(filename: String) = {
+    val in = new FileInputStream(filename)
+    var c = 0
+    while ({c = in.read; c != -1}) {
+      System.out.println(c)
+    }
+  }
 }
