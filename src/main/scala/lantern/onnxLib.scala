@@ -419,13 +419,15 @@ trait ONNXLib extends TensorExp {
     // TODO: (Fei Wang) define nicer API for inferencing and training
   }
 
-  def readOnnxData(filename: String) =
-    if (filename.contains(".csv"))
+  def readOnnxData(filename: String): Rep[Array[Float]] =
+    if (filename.endsWith(".csv"))
       readCsv(filename)
+    else if (filename.endsWith(".pb"))
+      ???
     else
       ???
 
-  def readCsv(filename: String): Rep[Array[Float]] = {
+  def readCsv(filename: String) = {
     Array(
       Source.fromFile(filename).getLines.flatMap { (line: String) =>
         if (line != "" && line != "\n")
