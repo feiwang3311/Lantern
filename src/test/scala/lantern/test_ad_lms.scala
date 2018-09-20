@@ -145,10 +145,34 @@ class AdLMSTest extends FunSuite {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val half = (new NumR(0.5,var_new(0.0)))
         val res = gradR(x => LOOP(x)(x1 => x1.x > 1.0)(x1 => half * x1))(x)
-        println(readVar(half.d))
+        // println(readVar(half.d))
         res
       }
     }
+
+    System.out.println(gr3.code)
+    /*****************************************
+      Emitting Generated Code                  
+    *******************************************
+    class Snippet extends ((Double)=>(Double)) {
+      def apply(x0:Double): Double = {
+        val k = { x: Double => 1.0 } 
+        var loop: [scala.Function1[Double,Double]] = {x10: (Double) => 
+          var x11: Double = 0.0
+          if (x10 > 1.0) {
+            val x13 = 0.5 * x10
+            x11 += 0.5 * loop(x13)
+          } else {
+            x11 += k(x10)
+          }
+          x11
+        }
+        loop(x0)
+      }
+    }
+    *****************************************
+      End of Generated Code                  
+    *******************************************/
     // Hand-coded correct derivative
     def gfr(x: Double): Double = {
       if (x > 1.0) 0.5 * gfr(0.5 * x) else 1.0
