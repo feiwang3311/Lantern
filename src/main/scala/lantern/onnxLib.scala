@@ -38,12 +38,12 @@ trait ONNXLib extends TensorExp {
     // TODO (Fei Wang): problem: this function is assuming that the data type is Float, will break if not!!!
     // extract information from TensorProto
     def extract_init(init: onnx_ml.TensorProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])) = {
+      System.out.println(s"proto: ${init.toProtoString}")
       val dims: Seq[Int] = init.dims.map(x => x.toInt)
       val name: String = init.getName
       val datatype: onnx_ml.TensorProto.DataType = init.getDataType
       if (datatype.name != "FLOAT") throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
       val rawdata: com.google.protobuf.ByteString = init.getRawData
-      assert(false, s"rawdata.length = ${rawdata.size}")
       val bytearray: Array[Byte] = rawdata.toByteArray
       val bytebuffer: ByteBuffer = ByteBuffer.wrap(bytearray)
       val floatbuffer: FloatBuffer = bytebuffer.asFloatBuffer()
@@ -425,26 +425,22 @@ trait ONNXLib extends TensorExp {
     else
       ???
 
-  type NumpyArray = Array[Array[Array[Array[Float]]]]
-
-  def readCsv(filename: String): NumpyArray = {
-    var a = List[Array[Float]]()
-    for (line <- Source.fromFile(filename).getLines) {
-      if (line != "" && line != "\n") {
-        val nums = line.split(",")
-        a ::= (nums map {x => x.toFloat}).toArray
-      }
-    }
-    a foreach { l => l foreach System.out.println }
-    val d3 = scala.Array(a.toArray)
-    scala.Array(d3)
+  def readCsv(filename: String): Rep[Array[Float]] = {
+    Array(
+      Source.fromFile(filename).getLines.flatMap { (line: String) =>
+        if (line != "" && line != "\n")
+          line.split(",") map { x => System.out.println(x); unit(x.toFloat) }
+        else
+          Nil
+      }.toSeq : _*
+    )
   }
 
-  def readNumpy(filename: String) = {
-    val in = new FileInputStream(filename)
-    var c = 0
-    while ({c = in.read; c != -1}) {
-      System.out.println(c)
-    }
-  }
+  // def readNumpy(filename: String) = {
+  //   val in = new FileInputStream(filename)
+  //   var c = 0
+  //   while ({c = in.read; c != -1}) {
+  //     System.out.println(c)
+  //   }
+  // }
 }
