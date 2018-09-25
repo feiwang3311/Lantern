@@ -12,9 +12,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
 import scala.math._
 import scala.collection.mutable.{Map => MMap};
- 
+
 import java.io.PrintWriter;
-import java.io.File;  
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -57,7 +57,7 @@ trait ONNXLib extends TensorExp {
 
     val initializer_map_tensor: Map[String, Tensor] =
       initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
-    val initializer_map_tensorR: Map[String, TensorR] = 
+    val initializer_map_tensorR: Map[String, TensorR] =
       initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
     // extract information from ValueInfoProto
@@ -116,7 +116,7 @@ trait ONNXLib extends TensorExp {
 
           val outputs: Seq[String] = node.output
           assert (outputs.size == 1, "number of output of a conv node should always be 1")
-          
+
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
           assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
           val atts: Map[String, Seq[Int]] = attributes.map(att => att.getName -> att.ints.map(x => x.toInt)).toMap
@@ -125,8 +125,8 @@ trait ONNXLib extends TensorExp {
           assert (atts.contains("kernel_shape"), "attributes of a conv node should have kernel_shape")
           assert(atts("strides").size == 2, "strides should be length 2")
           assert(atts("kernel_shape").size == 2, "kernel_shape should be length 2")
-          
-          convNode(inputs, outputs.head, atts)          
+
+          convNode(inputs, outputs.head, atts)
         }
 
         case "Relu" => {
@@ -147,7 +147,7 @@ trait ONNXLib extends TensorExp {
 
           val outputs: Seq[String] = node.output
           assert (outputs.size == 1, "number of outputs of a maxpool node should always be 1")
-          
+
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
           assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
           val atts: Map[String, Seq[Int]] = attributes.map(att => att.getName -> att.ints.map(x => x.toInt)).toMap
@@ -185,7 +185,7 @@ trait ONNXLib extends TensorExp {
           assert (outputs.size == 2, "number of outputs for dropout node should always be 2")
 
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-          assert (attributes.size == 2, "number of attributes for dropout node should be 2")
+          assert (attributes.size == 1, "number of attributes for dropout node should be 1")
           val ratio: Float = if (attributes.head.name == "ratio") attributes.head.getF else attributes.last.getF
           val is_test: Int = (if (attributes.last.name == "is_test") attributes.last.getI else attributes.head.getI).toInt
           // TODO: (Fei Wang) warning - the is_test is not considered by the implementation (Don't know what it means!!)
@@ -237,8 +237,8 @@ trait ONNXLib extends TensorExp {
     )
 
     // read the nodes and build the function for inference
-    lazy val inference_func: (Tensor => Tensor) = { x: Tensor => 
-      
+    lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
+
       assert(x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
@@ -257,19 +257,19 @@ trait ONNXLib extends TensorExp {
       }
 
       allNodes.foreach { node =>
-        
+
         node match {
-          
+
           case convNode(inputs, output, atts) => {
 
             val input1 = get_from_two_maps(inputs.head)
             val input2 = get_from_two_maps(inputs.tail.head)
             val input3 = get_from_two_maps(inputs.last)
-            
+
             val strides = atts("strides")
             val pads = atts("pads")
             val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
-            
+
             val out = input1.conv2D_batch(input2, input3, strides, pads)
             intermediate_map_tensor += (output -> out)
           }
@@ -288,7 +288,7 @@ trait ONNXLib extends TensorExp {
             val strides = atts("strides")
             val pads = atts("pads")
             val kernel_shape = atts("kernel_shape")
-            
+
             // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
             val (out, _) = in.maxPool_k_batch(kernel_shape, strides)
             intermediate_map_tensor += (output -> out)
@@ -332,7 +332,7 @@ trait ONNXLib extends TensorExp {
 
     // read the nodes and build the function for training
 
-    lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR => 
+    lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
 
       assert(x.x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
 
@@ -356,24 +356,24 @@ trait ONNXLib extends TensorExp {
       while (iter.hasNext) {
 
         val node = iter.next
-        
+
         if (node.isInstanceOf[convNode]) {
-          
+
           val convNode(inputs, output, atts) = node
           val input1 = get_from_two_maps(inputs.head)
           val input2 = get_from_two_maps(inputs.tail.head)
           val input3 = get_from_two_maps(inputs.last)
-          
+
           val strides = atts("strides")
           val pads = atts("pads")
           val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
-          
+
           val out = input1.convBBP(input2, input3, strides, pads)
           intermediate_map_tensorR.update(output, out)
 
         } else if (node.isInstanceOf[reluNode]) {
 
-          val reluNode(input, output) = node 
+          val reluNode(input, output) = node
           val in = get_from_two_maps(input)
           val out = in.relu()
           intermediate_map_tensorR.update(output, out)
@@ -385,7 +385,7 @@ trait ONNXLib extends TensorExp {
           val strides = atts("strides")
           val pads = atts("pads")
           val kernel_shape = atts("kernel_shape")
-          
+
           // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
           val out = in.maxPoolBK(kernel_shape, strides)
           intermediate_map_tensorR.update(output, out)
