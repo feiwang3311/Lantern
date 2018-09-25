@@ -169,7 +169,7 @@ trait TensorExp extends Dsl {
     }
   }
 
-  /* Not supported in LMS?? 
+  /* Not supported in LMS??
   abstract class ForLoop {
     def foreach(f: Rep[Int] => Unit): Unit
   }
@@ -179,7 +179,7 @@ trait TensorExp extends Dsl {
     def apply(start: Int, step: Int, step_size: Int) = if (step <= 5) {
       new ForLoop {
         def foreach(f: Rep[Int] => Unit) = {
-          for (i <- (start until (start + step_size * step) by step_size): Range) f(unit(i)) 
+          for (i <- (start until (start + step_size * step) by step_size): Range) f(unit(i))
         }
       }
     } else {
@@ -492,10 +492,10 @@ trait TensorExp extends Dsl {
 
     @virtualize
     def max2D(dim: Int) = {
-      
+
       assert (this.nbDims == 2, "Only deal with 2D tensor")
       assert (dim == 0 || dim == 1, "dim must be in range of this.nbDims")
-      
+
       if (dim == 0) ???
       else {
         val res = NewArray[Float](this.dims(0))
@@ -504,9 +504,9 @@ trait TensorExp extends Dsl {
           val max = var_new(scala.Float.MinValue)
           for (j <- DataLoop(this.dims(1))) {
             if (this.data(offset) > max) max = this.data(offset)
-            offset += 1  
+            offset += 1
           }
-          res(i) = max           
+          res(i) = max
         }
         Tensor(res, this.dims(0))
       }
@@ -899,7 +899,7 @@ trait TensorExp extends Dsl {
       assert(bias.dims(0) == kernel.dims(0), "For Conv, bias length should be the same as number of kernels")
       assert(kernel.dims(1) == this.dims(1), "For Conv, input dim_0 should be the same as kernel dim_1")
       assert(this.dims(2) >= kernel.dims(2) && this.dims(3) >= kernel.dims(3), "Image too small for Conv")
-      
+
       val totalPads = pads.fold(0)((x: Int, y: Int) => x + y)
       // TODO: (Fei Wang) not sure if the order is correct!!!
       assert(pads.size == 4, "pads should have 4 values, up, down, left, right")
@@ -963,7 +963,7 @@ trait TensorExp extends Dsl {
       assert(this.nbDims == 3 && kernel.nbDims == 4, "For Conv, input should be 3-D and kernel should be 4-D: " + this.nbDims + "|" + kernel.nbDims)
       assert(kernel.dims(1) == this.dims(0), "For Conv, input dim_0 should be the same as kernel dim_1")
       assert(this.dims(1) >= kernel.dims(2) && this.dims(2) >= kernel.dims(3), "Image too small for Conv")
-      
+
       val totalPads = pads.fold(0)((x: Int, y: Int) => x + y)
       // TODO: (Fei Wang) not sure if the order is correct!!!
       assert(pads.size == 4, "pads should have 4 values, up, down, left, right")
@@ -973,7 +973,7 @@ trait TensorExp extends Dsl {
       assert(strideRow >= 1, "stride of row should be at least 1")
       assert(strideCol >= 1, "stride of col should be at least 1")
       assert(padUp == padDown && padUp == padLeft && padUp == padRight, "For now, assume all values in pads are the same")
-      
+
       val resWidth = convSize(this.dims(1) + padLeft + padRight, kernel.dims(2), strideRow)
       val resHeight = convSize(this.dims(2) + padUp + padDown, kernel.dims(3), strideCol)
       val res = Tensor.zeros(kernel.dims(0), resWidth, resHeight)
@@ -1083,7 +1083,7 @@ trait TensorExp extends Dsl {
       res
     }
 
-    // Taken from Torch: THTensorConv.cpp#198L 
+    // Taken from Torch: THTensorConv.cpp#198L
     // https://github.com/pytorch/pytorch/blob/master/aten/src/TH/generic/THTensorConv.cpp
     @virtualize
     def conv2D1(input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int, bias: Rep[Float] = 0.0f): Unit = {
@@ -1185,7 +1185,7 @@ trait TensorExp extends Dsl {
       val resHeight = res.dims(2)
 
       // looping for the output
-      val offout = var_new[Int](0)                              // offset of res, by channel  
+      val offout = var_new[Int](0)                              // offset of res, by channel
       val offin  = var_new[Int](0)                              // offset of input, by channel
       for (outPane <- DataLoop(res.dims(0))) {
         val offout_1 = var_new[Int](offout)                     // offset of res, built on offout, by row
@@ -1237,7 +1237,7 @@ trait TensorExp extends Dsl {
       val savedIdx = NewArray[Int](res.nbElem)
 
       // looping for the output
-      val offout = var_new[Int](0)                              // offset of res, by channel  
+      val offout = var_new[Int](0)                              // offset of res, by channel
       val offin  = var_new[Int](0)                              // offset of input, by channel
       for (outPane <- DataLoop(res.dims(0))) {
         val offout_1 = var_new[Int](offout)                     // offset of res, built on offout, by row
@@ -1323,12 +1323,12 @@ trait TensorExp extends Dsl {
       // prepare result tensor
       val higherDims = this.dims.take(dim)
       val higherDimsSquashed = higherDims.fold(1)(_ * _)
-      val resDims    = (0 until this.nbDims: Range).map{i => 
+      val resDims    = (0 until this.nbDims: Range).map{i =>
         if (i != dim) this.dims(i)
         else others.map(x => x.dims(dim)).fold(this.dims(dim))(_ + _)}
       val totalnbElem = resDims.fold(1)(_ * _)
       val res = NewArray[Float](totalnbElem)
-      
+
       // prepare for looping/copying
       val totalFrom = this +: others        // put all tensors in one Seq for easy of handling
       val targetId = var_new(0)             // this is the index of res to write to
@@ -1351,11 +1351,11 @@ trait TensorExp extends Dsl {
     def global_ave_batch() = {
       assert(this.nbDims == 4, "assume this is Tensor with 4D (batch * channel * width * height")
       val resTensor = Tensor.zeros(this.dims.take(2): _*)
-      
+
       val scale = this.strides(2)
       val offset = var_new(0)                      // offset of this, should step by this.strides(2)
       val res_offset = var_new(0)                  // offset of res, should step by 1
-      // looping over each batch 
+      // looping over each batch
       for (batch <- DataLoop(this.dims(0))) {
         // looping over each channel
         for (channel <- DataLoop(this.dims(1))) {
@@ -1386,7 +1386,7 @@ trait TensorExp extends Dsl {
       for (channel <- DataLoop(this.dims(0))) {
         val offset = var_new(this.strides(1) * channel)
         val sum = var_new(0.0f)
-        for (i <- DataLoop(this.dims(1))) {          
+        for (i <- DataLoop(this.dims(1))) {
           for (j <- DataLoop(this.dims(2))) {
             sum += this.data(offset + j)
           }
@@ -1764,7 +1764,7 @@ trait TensorExp extends Dsl {
                 // looping for the kernel
                 val offKernelR = var_new(offKernel)            // offset if kernel, based on offKernel, step by 1
                 // offset of input based on batch, pane, and index of output
-                val InputI_pane = var_new[Int](offInputD + InputR * this.x.strides(3) + InputC) 
+                val InputI_pane = var_new[Int](offInputD + InputR * this.x.strides(3) + InputC)
                 for (pane <- DataLoop(kernel.d.dims(1))) {
                   val InputI_kR = var_new[Int](InputI_pane)    // offset of input based on InputI_pane and row
                   for (kR <- DataLoop(kernel.d.dims(2))) {
@@ -1799,7 +1799,7 @@ trait TensorExp extends Dsl {
     @virtualize
     // conv with bias and pads
     def convBP(kernel: TensorR, bias: TensorR, strides: NSeq[Int], pads: NSeq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
-      
+
       assert(this.isInput || this.d.nbElem == this.x.nbElem)
       assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
       val y = TensorR(x conv2D(kernel.x, bias.x, strides, pads))
@@ -1813,12 +1813,12 @@ trait TensorExp extends Dsl {
         val offOutputD = var_new(0)                          // offset for the output, step by 1
         val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
         // looping for the output
-        for (kOut <- 0 until y.d.dims(0): Rep[Range]) { 
+        for (kOut <- 0 until y.d.dims(0): Rep[Range]) {
           val offInputR = var_new(0)                         // offset of input, step by input.strides(2) * strideRow
           val sum = var_new(0.0f)                            // collector of bias gradient
-          for (row <- 0 until y.d.dims(1): Rep[Range]) { 
+          for (row <- 0 until y.d.dims(1): Rep[Range]) {
             val offInputC = var_new(offInputR)               // offset of input, step by strideCol, based on offInputR
-            for (col <- 0 until y.d.dims(2): Rep[Range]) {  
+            for (col <- 0 until y.d.dims(2): Rep[Range]) {
               val dCurr: Rep[Float] = y.d.data(offOutputD)
               sum += dCurr                                   // collect bias gradient
 
@@ -1871,7 +1871,7 @@ trait TensorExp extends Dsl {
                       val InputI = InputI_kR + kC                                  // offset of input based on pane and row and col
                       if (!this.isInput) this.d.data(InputI) = this.d.data(InputI) + dCurr * kernel.x.data(offKernelR)
                       kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(InputI)
-                      offKernelR += 1  
+                      offKernelR += 1
                     }
                   }
                   InputI_kR += this.x.strides(2)
@@ -1880,7 +1880,7 @@ trait TensorExp extends Dsl {
               }
 
               InputC += strideCol
-              offOutputD += 1 
+              offOutputD += 1
             }
             InputR += strideRow
           }
@@ -1908,17 +1908,17 @@ trait TensorExp extends Dsl {
       val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
       assert(y.d.dims(0) == kernel.x.dims(0))
       // timerBwd.startTimer
-      
+
       // looping for the output
-      for (kOut <- 0 until y.d.dims(0): Rep[Range]) { 
+      for (kOut <- 0 until y.d.dims(0): Rep[Range]) {
         val offInputR = var_new(0)                         // offset of input, step by input.strides(2) * strideRow
-        for (row <- 0 until y.d.dims(1): Rep[Range]) { 
+        for (row <- 0 until y.d.dims(1): Rep[Range]) {
           val offInputC = var_new(offInputR)               // offset of input, step by strideCol, based on offInputR
-          for (col <- 0 until y.d.dims(2): Rep[Range]) {  
+          for (col <- 0 until y.d.dims(2): Rep[Range]) {
             val dCurr: Rep[Float] = y.d.data(offOutputD)
             val offInputP = var_new(offInputC)             // offset of input, step by input.strides(1), based on offInputC
             val offKernelR = var_new(offKernel)            // offset of kernel, step by 1, based on offKernel
-            
+
             // looping for the kernel
             for (pane <- 0 until kernel.d.dims(1): Rep[Range]) {
               val offInputKR = var_new(offInputP)                  // offset of input, step by input.strides(2) -- row
@@ -1945,7 +1945,7 @@ trait TensorExp extends Dsl {
     }
 
     @virtualize  // maxpool with kernel size potentially different from strides, and works with batch dimension!
-    def maxPoolBK(kernels: Seq[Int], strides: Seq[Int]): TensorR @diff = shift { (k: TensorR => Unit) => 
+    def maxPoolBK(kernels: Seq[Int], strides: Seq[Int]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (y, sidx) = this.x.maxPool_k_batch(kernels, strides)
       val ty = TensorR(y)
       k(ty)
@@ -2012,12 +2012,12 @@ trait TensorExp extends Dsl {
       val y = this.x.global_ave_batch()
       val ty = TensorR(y)
       k(ty)
-      
+
       // back propagate
       val scale = 1.0f / this.x.strides(2)
       val offset = var_new(0)                      // offset of this, should step by this.x.strides(2)
       val res_offset = var_new(0)                  // offset of res, should step by 1
-      // looping over each batch 
+      // looping over each batch
       for (batch <- DataLoop(this.x.dims(0))) {
         // looping over each channel
         for (channel <- DataLoop(this.x.dims(1))) {
@@ -2135,10 +2135,10 @@ trait TensorExp extends Dsl {
   def FUNs(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = {
     (i: Rep[Int]) => (x:TensorR) => {
       val dims = x.x.dims.toSeq
-      val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) => 
+      val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
         val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
         f(i)(tensor)
-      };    
+      };
 
       val in = NewArray[Array[Float]](2)
       in(0) = x.x.data; in(1) = x.d.data
@@ -2188,7 +2188,7 @@ trait TensorExp extends Dsl {
 
   def FUNl(dim0: Int)(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {
 
-    val f1 = fun { (i:  Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) => 
+    val f1 = fun { (i:  Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
       val t2: (TensorR => Unit) = { (x:TensorR) =>
         val temp = NewArray[Array[Float]](2)
         temp(0) = x.x.data; temp(1) = x.d.data
@@ -2234,7 +2234,7 @@ trait TensorExp extends Dsl {
   def FUNlm(dim0s: ArrayBuffer[Int])(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit))):
   (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit)) = {
     val length = dim0s.length
-    val f1 = fun { (i: Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) => 
+    val f1 = fun { (i: Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
       val t2: (ArrayBuffer[TensorR] => Unit) = { (x: ArrayBuffer[TensorR]) =>
         val aa = NewArray[Array[Float]](2*length)
         for (u <- (0 until length): Range) {
