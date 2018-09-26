@@ -8,9 +8,12 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
 
-trait DiffApi extends Dsl {
-
+trait Diff {
   type diff = cps[Unit]
+  def RST(a: =>Unit @diff) = continuations.reset { a; () }
+}
+
+trait DiffApi extends Dsl with Diff {
 
   type RDouble = Rep[Double]
 
@@ -71,8 +74,6 @@ trait DiffApi extends Dsl {
     };
     { (x:NumR) => x.d += f1(x.x) }
   }
-
-  def RST(a: =>Unit @diff) = continuations.reset { a; () }
 
   @virtualize
   def IF(c: Rep[Boolean])(a: =>NumR @diff)(b: =>NumR @diff): NumR @diff = shift { k:(NumR => Unit) =>

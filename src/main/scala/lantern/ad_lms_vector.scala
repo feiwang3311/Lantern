@@ -12,7 +12,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
 import scala.math._
 
-trait TensorExp extends Dsl {
+trait TensorExp extends Dsl with Diff {
 
   /**
     Memory Management:
@@ -1552,7 +1552,7 @@ trait TensorExp extends Dsl {
   // also Tensor internally use array, which is mutable by default
   // so both field are val (not var) and can be updated by += -= *= /= setAsOne()
   // all instances of vectors will be shepherded by c++ smart pointers, alleviating the memory leak problem
-  type diff = cps[Unit]
+  // type diff = cps[Unit]
 
   class TensorR(val x: Tensor, val d: Tensor) extends Serializable {
     var isInput: Boolean = false // true if it is an input (no need to compute gradient)
@@ -2110,10 +2110,6 @@ trait TensorExp extends Dsl {
     }
   }
 
-  def RST(a: => Unit @diff) = continuations.reset {
-    a;
-    ()
-  }
 
   @virtualize
   def IF(c: Rep[Boolean])(a: =>TensorR @diff)(b: =>TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
