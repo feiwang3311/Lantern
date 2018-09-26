@@ -13,6 +13,8 @@ import scala.collection.{Seq => NSeq}
 import scala.math._
 import scala.collection.mutable.{Map => MMap};
 
+import scala.io.Source
+
 import java.io.PrintWriter;
 import java.io.File;
 import java.io.FileInputStream;
@@ -431,5 +433,32 @@ trait ONNXLib extends TensorExp {
     // TODO: (Fei Wang) define nicer API for inferencing and training
 
   }
+
+  def readOnnxData(filename: String): Rep[Array[Float]] =
+    if (filename.endsWith(".csv"))
+      readCsv(filename)
+    else if (filename.endsWith(".pb"))
+      ???
+    else
+      ???
+
+  def readCsv(filename: String) = {
+    Array(
+      Source.fromFile(filename).getLines.flatMap { (line: String) =>
+        if (line != "" && line != "\n")
+          line.split(",") map { x => System.out.println(x); unit(x.toFloat) }
+        else
+          Nil
+      }.toSeq : _*
+    )
+  }
+
+  // def readNumpy(filename: String) = {
+  //   val in = new FileInputStream(filename)
+  //   var c = 0
+  //   while ({c = in.read; c != -1}) {
+  //     System.out.println(c)
+  //   }
+  // }
 
 }
