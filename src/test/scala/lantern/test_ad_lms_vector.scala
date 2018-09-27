@@ -20,7 +20,7 @@ import java.io.File;
 class AdLMSVectorTest extends FunSuite {
 
   test("array0") {
-    
+
     val array0 = new DslDriverC[String, Unit] with TensorExp {
 
       @virtualize
@@ -53,9 +53,9 @@ class AdLMSVectorTest extends FunSuite {
         val length = 2
         val res = Tensor.randinit(length)
         val res2 = Tensor.randinit(length, seed = Some(5))
-        
+
         val result = res dot res2
-        
+
         // assertions
         if (res.data(0) * res2.data(0) + res.data(1) * res2.data(1) != result.data(0))
           println("ERROR: the dot product of two vectors is not correct")
@@ -73,7 +73,7 @@ class AdLMSVectorTest extends FunSuite {
         val dim1 = 3
         val matrix = Tensor.rand(dim0, dim1)
         val vector = Tensor.randinit(dim1, seed = Some(4))
-        
+
         //println("the result is:")
         val result = matrix dot vector
         //result.print()
@@ -138,7 +138,7 @@ class AdLMSVectorTest extends FunSuite {
     }
     array2_1.eval("abc")
   }
-  
+
   test("array2_2") {
     val array2_2 = new DslDriverC[String, Unit] with TensorExp {
 
@@ -362,7 +362,7 @@ class AdLMSVectorTest extends FunSuite {
           (p1 dot y1).log()
         }
         val dummy = gradR(lossFun)(Tensor.zeros(1))
-        
+
         // FIXME: need a correct implementation of gradient to check with
       }
     }
@@ -382,7 +382,7 @@ class AdLMSVectorTest extends FunSuite {
         // calcuate gradient
         val grad = gradR(t => {val y = IF(t.x.data(0) > 0.0f) {t + t}{t * t}
         y.sum() })(v)
-        
+
         // another way of implementing it
         val grad1 = gradR(t => (t + t).sum())(v)
         val grad2 = gradR(t => (t * t).sum())(v)
@@ -435,7 +435,7 @@ class AdLMSVectorTest extends FunSuite {
           val y = LOOPS(t)(3)(i => t => t * half )
           y.sum()
         })(v)
-        
+
         val save_half_grad = Tensor.zeros(length)
         save_half_grad.copy_data(half.d)
 
@@ -485,7 +485,7 @@ class AdLMSVectorTest extends FunSuite {
         }
 
         val grad = gradR(model)(v)
-        
+
         // alternative implememetation
         val grad1 = gradR(t =>
             (t * TensorR(Tensor(data(0), ddim1)) * TensorR(Tensor(data(1), ddim1))).sum()
@@ -521,7 +521,7 @@ class AdLMSVectorTest extends FunSuite {
             ArrayBuffer[TensorR](vvv, uuu)
           })
         y(1).sum() + y(0).sum()})(Tensor.zeros(1))
-        
+
         // save gradients
         val save_vv_grad = Tensor.zeros(length); save_vv_grad.copy_data(vv.d);   vv.clear_grad()
         val save_uu_grad = Tensor.zeros(length); save_uu_grad.copy_data(uu.d);   uu.clear_grad()
@@ -650,7 +650,7 @@ class AdLMSVectorTest extends FunSuite {
       }
     }
 
-    array9.eval("abc")    
+    array9.eval("abc")
   }
 
   test("array10") {
@@ -805,7 +805,7 @@ class AdLMSVectorTest extends FunSuite {
     }
     array11_1.eval("abc")
   }
- 
+
   test("cnn_test1") {
     val cnn_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
@@ -913,7 +913,7 @@ class AdLMSVectorTest extends FunSuite {
         val resC = (iCol - kCol)/cS + 1
 
         Tensor.assertEqual(loss, Tensor.scalar(resR * resC * 9.0f), "BACK - LOSS")
-        
+
         Tensor.assertEqual(varKernel.d, Tensor.fill(resR * resC * 1.0f, kIn, kOut, kRow, kCol), "BACK 1 - KERNEL D")
       }
     }
@@ -951,7 +951,7 @@ class AdLMSVectorTest extends FunSuite {
         }
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-        
+
         val resR = (iRow - kRow)/rS + 1
         val resC = (iCol - kCol)/cS + 1
         Tensor.assertEqual(loss, Tensor.scalar(resR * resC * 1.0f), "BACK 2 - LOSS")
@@ -992,7 +992,7 @@ class AdLMSVectorTest extends FunSuite {
         }
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-        
+
         val resR = (iRow - kRow)/rS + 1
         val resC = (iCol - kCol)/cS + 1
         Tensor.assertEqual(loss, Tensor.scalar(resR * resC * 1.0f), "BACK 2 - LOSS")
@@ -1059,7 +1059,7 @@ class AdLMSVectorTest extends FunSuite {
         }
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-        
+
         val resR = (iRow - kRow)/rS + 1
         val resC = (iCol - kCol)/cS + 1
         Tensor.assertEqual(loss, Tensor.scalar(kOut * resR * resC * 27.0f), "BACK 4 - LOSS")
@@ -1127,7 +1127,7 @@ class AdLMSVectorTest extends FunSuite {
         }
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-        
+
         val resR = (iRow - kRow)/rS + 1
         val resC = (iCol - kCol)/cS + 1
         Tensor.assertEqual(loss, Tensor.scalar(kOut * resR * resC * kIn * 1.0f), "BACK 5 - LOSS")
@@ -1162,7 +1162,7 @@ class AdLMSVectorTest extends FunSuite {
 
     }
     maxpool_test1.eval("abc")
-  }  
+  }
 
   test("maxpool_back_test1") {
     val maxpool_back_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
@@ -1188,7 +1188,7 @@ class AdLMSVectorTest extends FunSuite {
 
         Tensor.assertEqual(loss, Tensor.scalar(iPane * (iRow/sR) * (iCol/sC) * 1.0f), "MAXPOOL BACK 1 - LOSS")
         Tensor.assertEqual(varInput.d, Tensor.fill((i: NSeq[Rep[Int]]) => if (i(1) % sR == 0 && i(2) % sC == 0) 1.0f else 0.0f, iPane, iRow, iCol), "MAXPOOL BACK 1 - D")
-      
+
       }
 
     }
@@ -1242,10 +1242,10 @@ class AdLMSVectorTest extends FunSuite {
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
         Tensor.assertEqual(varInput.d, Tensor.ones(input), "DROPOUT BACK 1 - D")
-        
+
       }
     }
-    
+
     dropout_back_test1.eval("abc")
   }
 
@@ -1268,7 +1268,7 @@ class AdLMSVectorTest extends FunSuite {
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
         Tensor.assertEqual(varInput.d, Tensor.zeros(input), "DROPOUT BACK 1 - D")
-       
+
       }
     }
 

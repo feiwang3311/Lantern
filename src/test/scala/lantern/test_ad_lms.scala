@@ -30,6 +30,61 @@ class AdLMSTest extends FunSuite {
     }
   }
 
+  test("simple") {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        def f(x: NumR) = x * x
+        gradR(f)(x)
+      }
+    }
+    System.out.println(g1.code)
+  }
+
+  test("reccc") {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        def f(x: NumR) = shift { (k: NumR => Unit) =>
+          lazy val rec = FUNL { (k: NumR => Unit) => (x: NumR) =>
+            RST{k( x * x )}
+          }
+          rec(k)(x)
+        }
+        gradR(f)(x)
+      }
+    }
+    System.out.println(g1.code)
+  }
+
+  test("rec") {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        def f(x: NumR) = Rec(x)(y => y * y)
+        gradR(f)(x)
+      }
+    }
+    System.out.println(g1.code)
+  }
+  /*
+  class Snippet extends ((Double)=>(Double)) {
+    def apply(x0:Double): Double = {
+      val x2 = {x3: (scala.Function1[Double,Double]) =>
+        val x4 = {x5: (Double) =>
+          var x6: Double = 0.0
+          val x7 = x5 * x5
+          val x9 = x3(x7)
+          val x12 = x5 * x9
+          x6 += x12
+          x6 += x12
+          x6
+        }
+        x4: scala.Function1[Double,Double]
+      }
+      val x23 = x2({x18: (Double) => 1.0})
+      x23(x0)
+    }
+  }
+  */
+
   test("leaky") {
     val g1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {

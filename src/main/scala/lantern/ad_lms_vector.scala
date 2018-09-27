@@ -2096,18 +2096,15 @@ trait TensorExp extends Dsl with Diff {
   // change fun signature for memory leak issue (no more returning of array, just update the array provided by the caller)
   // this is in accordance of the destination-passing style
   // the fun take array[array[double]] of size 2, with the first array to be the x, and the second array to be the d
-  def FUNc(f: TensorR => Unit): (TensorR => Unit) = {
-    (x:TensorR) => {
-      val dims = x.x.dims.toSeq
-      val f1 = fun { (x: Rep[Array[Array[Float]]]) =>
-        val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
-        f(tensor)
-      };
-
-      val in = NewArray[Array[Float]](2)
-      in(0) = x.x.data; in(1) = x.d.data
-      f1(in) // f1 should take Array[Array[Float]] and update the gradient of x
+  def FUNc(f: TensorR => Unit): (TensorR => Unit) = { (x:TensorR) =>
+    val dims = x.x.dims.toSeq
+    val f1 = fun { (x: Rep[Array[Array[Float]]]) =>
+      val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
+      f(tensor)
     }
+    val in = NewArray[Array[Float]](2)
+    in(0) = x.x.data; in(1) = x.d.data
+    f1(in) // f1 should take Array[Array[Float]] and update the gradient of x
   }
 
 
@@ -2128,18 +2125,15 @@ trait TensorExp extends Dsl with Diff {
     loop(init)
   }
 
-  def FUNs(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = {
-    (i: Rep[Int]) => (x:TensorR) => {
-      val dims = x.x.dims.toSeq
-      val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
-        val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
-        f(i)(tensor)
-      };
-
-      val in = NewArray[Array[Float]](2)
-      in(0) = x.x.data; in(1) = x.d.data
-      f1(i, in)
+  def FUNs(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = { (i: Rep[Int]) => (x:TensorR) =>
+    val dims = x.x.dims.toSeq
+    val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
+      val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
+      f(i)(tensor)
     }
+    val in = NewArray[Array[Float]](2)
+    in(0) = x.x.data; in(1) = x.d.data
+    f1(i, in)
   }
 
   @virtualize
@@ -2150,23 +2144,20 @@ trait TensorExp extends Dsl with Diff {
     loop(0)(init)
   }
 
-  def FUNsm(f: Rep[Int] => ArrayBuffer[TensorR] => Unit): (Rep[Int] => ArrayBuffer[TensorR] => Unit) = {
-    (i: Rep[Int]) => (x:ArrayBuffer[TensorR]) => {
-      val dims = x.map(_.x.dims.seq)
-      val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
-        val tensors = ArrayBuffer[TensorR]()
-        for (u <- (0 until dims.length): Range) {
-          tensors.append(new TensorR(Tensor(x(u*2), dims(u) : _*), Tensor(x(u*2+1), dims(u) : _*)))
-        }
-        f(i)(tensors)
-      };
-
-      val in = NewArray[Array[Float]](2 * dims.length)
+  def FUNsm(f: Rep[Int] => ArrayBuffer[TensorR] => Unit): (Rep[Int] => ArrayBuffer[TensorR] => Unit) = { (i: Rep[Int]) => (x:ArrayBuffer[TensorR]) =>
+    val dims = x.map(_.x.dims.seq)
+    val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
+      val tensors = ArrayBuffer[TensorR]()
       for (u <- (0 until dims.length): Range) {
-        in(u*2) = x(u).x.data; in(u*2+1) = x(u).d.data
+        tensors.append(new TensorR(Tensor(x(u*2), dims(u) : _*), Tensor(x(u*2+1), dims(u) : _*)))
       }
-      f1(i, in)
+      f(i)(tensors)
     }
+    val in = NewArray[Array[Float]](2 * dims.length)
+    for (u <- (0 until dims.length): Range) {
+      in(u*2) = x(u).x.data; in(u*2+1) = x(u).d.data
+    }
+    f1(i, in)
   }
 
   @virtualize
@@ -2181,7 +2172,7 @@ trait TensorExp extends Dsl with Diff {
     }
     loop(0)(init)
   }
-
+/*
   def FUNl(dim0: Int)(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {
 
     val f1 = fun { (i:  Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
@@ -2207,11 +2198,33 @@ trait TensorExp extends Dsl with Diff {
         k4
       }
     }
+  }*/
+
+  def FUNl(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
+
+    val dims = x.x.dims.toSeq
+
+    val f1 = fun { (i: Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
+      val t2: (TensorR => Unit) = { (x: TensorR) =>
+        val temp = NewArray[Array[Float]](2)
+        temp(0) = x.x.data; temp(1) = x.d.data
+        t1(temp)
+      }
+      val t3: (TensorR => Unit) = f(i)(t2)
+      t3(new TensorR(Tensor(xx(0), dims: _*), Tensor(xx(1), dims: _*)))
+    }
+
+    val k2: Rep[Array[Array[Float]] => Unit] = fun { (x: Rep[Array[Array[Float]]]) =>
+      k1(new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*)))
+    }
+    val temp = NewArray[Array[Float]](2)
+    temp(0) = x.x.data; temp(1) = x.d.data
+    f1(i, k2, temp)
   }
 
   @virtualize
   def LOOPL(init: TensorR)(c: Rep[Int])(b: Rep[Int] => TensorR => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
-    lazy val loop: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNl(init.x.dims(0)){ (gc: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
+    lazy val loop: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNl{ (gc: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
       if (gc < c) { loop(gc+1)((x: TensorR) => RST(k(b(gc)(x))))(x) } else { RST(k(x)) }
     }
     loop(0)(k)(init)
@@ -2221,15 +2234,17 @@ trait TensorExp extends Dsl with Diff {
   def LOOPT(init: TensorR)(lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (TensorR, TensorR, Rep[Int]) => TensorR @diff): TensorR @diff = shift {
     k: (TensorR => Unit) =>
 
-      lazy val tree: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNl(init.x.dims(0)){ (i: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
+      lazy val tree: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNl{ (i: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
         if (i >= 0) { tree(lch(i))((l: TensorR) => tree(rch(i))((r: TensorR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
       }
       tree(0)(k)(init)
   }
 
-  def FUNlm(dim0s: ArrayBuffer[Int])(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit))):
-  (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => (ArrayBuffer[TensorR] => Unit)) = {
-    val length = dim0s.length
+  def FUNlm(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit)):
+  (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit) = {i: Rep[Int] => k1: (ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
+
+    val length = x.length
+    val dims = x.map(_.x.dims.toSeq)
     val f1 = fun { (i: Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
       val t2: (ArrayBuffer[TensorR] => Unit) = { (x: ArrayBuffer[TensorR]) =>
         val aa = NewArray[Array[Float]](2*length)
@@ -2241,36 +2256,28 @@ trait TensorExp extends Dsl with Diff {
       val t3: (ArrayBuffer[TensorR] => Unit) = f(i)(t2)
       val tensors = ArrayBuffer[TensorR]()
       for (u <- (0 until length): Range) {
-        tensors.append(new TensorR(Tensor(xx(u*2), dim0s(u)), Tensor(xx(u*2+1), dim0s(u))))
+        tensors.append(new TensorR(Tensor(xx(u*2), dims(u): _*), Tensor(xx(u*2+1), dims(u): _*)))
       }
       t3(tensors)
-    };
-
-    {i: Rep[Int] => k1: (ArrayBuffer[TensorR] => Unit) =>
-      {
-        val k2: Rep[Array[Array[Float]] => Unit] = fun { (x: Rep[Array[Array[Float]]]) =>
-          val tensors = ArrayBuffer[TensorR]()
-          for (u <- (0 until length): Range) {
-            tensors.append(new TensorR(Tensor(x(u*2), dim0s(u)), Tensor(x(u*2+1), dim0s(u))))
-          }
-          k1(tensors)
-        }
-        val k4: (ArrayBuffer[TensorR] => Unit) = {(x: ArrayBuffer[TensorR]) =>
-          val arrays = NewArray[Array[Float]](2*length)
-          for (u <- (0 until length): Range) {
-            arrays(u*2) = x(u).x.data; arrays(u*2+1) = x(u).d.data
-          }
-          f1(i, k2, arrays)
-        }
-        k4
-      }
     }
+    val k2: Rep[Array[Array[Float]] => Unit] = fun { (x: Rep[Array[Array[Float]]]) =>
+      val tensors = ArrayBuffer[TensorR]()
+      for (u <- (0 until length): Range) {
+        tensors.append(new TensorR(Tensor(x(u*2), dims(u): _*), Tensor(x(u*2+1), dims(u): _*)))
+      }
+      k1(tensors)
+    }
+    val arrays = NewArray[Array[Float]](2*length)
+    for (u <- (0 until length): Range) {
+      arrays(u*2) = x(u).x.data; arrays(u*2+1) = x(u).d.data
+    }
+    f1(i, k2, arrays)
   }
 
   @virtualize
   def LOOPLM(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
   ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
-    lazy val loop: Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit = FUNlm(init map (_.x.dims(0))) {
+    lazy val loop: Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit = FUNlm {
       (i: Rep[Int]) => (k: ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
         if (i < c) { loop(i+1)((x: ArrayBuffer[TensorR]) => RST(k(b(i)(x))))(x) } else { RST(k(x)) }
     }
@@ -2282,7 +2289,7 @@ trait TensorExp extends Dsl with Diff {
   (b: (ArrayBuffer[TensorR], ArrayBuffer[TensorR], Rep[Int]) => ArrayBuffer[TensorR] @diff): ArrayBuffer[TensorR] @diff = shift {
     k: (ArrayBuffer[TensorR] => Unit) =>
 
-      lazy val tree: Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit = FUNlm(init.map(_.x.dims(0))) {
+      lazy val tree: Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit = FUNlm {
         (i: Rep[Int]) => (k: ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
           if (i >= 0) { tree(lch(i))((l: ArrayBuffer[TensorR]) => tree(rch(i))((r: ArrayBuffer[TensorR]) => RST(k(b(l, r, i))))(x))(x) }
           else { RST(k(x)) }

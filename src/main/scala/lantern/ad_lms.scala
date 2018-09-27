@@ -66,13 +66,13 @@ trait DiffApi extends Dsl with Diff {
   // have NumR objects in the generated code and that we can't (easily) pass
   // a mutable var to a function with reference semantics (we could with
   // explicit boxing, and in C/C++ we could just pass the address)
-  def FUN(f: NumR => Unit): (NumR => Unit) = {
+  def FUN(f: NumR => Unit): (NumR => Unit) = { (x: NumR) =>
     val f1 = fun { (x:Rep[Double]) =>
       val deltaVar = var_new(0.0)
       f(new NumR(x, deltaVar))
       readVar(deltaVar)
-    };
-    { (x:NumR) => x.d += f1(x.x) }
+    }
+    x.d += f1(x.x)
   }
 
   @virtualize
@@ -129,33 +129,24 @@ trait DiffApi extends Dsl with Diff {
 
   // the FUN function lift continuations (type NumR => Unit) to Rep type
   // this FUNL function lift continuations composer (type (NumR => Unit) => (NumR => Unit)) to Rep type
-  def FUNL(f: ((NumR => Unit) => (NumR => Unit))): ((NumR => Unit) => (NumR => Unit)) = {
+  def FUNL(f: ((NumR => Unit) => NumR => Unit)): ((NumR => Unit) => NumR => Unit) = {k1: (NumR => Unit) => (x: NumR) =>
     /* we have to have the continuation to be dynamic here:
        meaning that we almost have to have Rep[NumR => Unit] type as the fun parameter
        but we do extra trick to equivalently transform between Rep[NumR => Unit] and Rep[Double => Double]
     */
-    val f1 = fun { (t1: Rep[Double => Double]) =>
+    val f1 = fun { (t1: Rep[Double => Double], xx: Rep[Double]) =>
       val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
       val t3: (NumR => Unit) = f(t2)
-      fun {(x: Rep[Double]) =>
-        val deltaVar = var_new(0.0)
-        t3(new NumR(x, deltaVar))
-        readVar(deltaVar)
-      }
+      val deltaVar = var_new(0.0)
+      t3(new NumR(xx, deltaVar))
+      readVar(deltaVar)
     };
-
-    {k1: (NumR => Unit) =>
-      {
-        val k2: Rep[Double => Double] = fun { (x: Rep[Double]) =>
-          val deltaVar = var_new(0.0)
-          k1(new NumR(x, deltaVar))
-          readVar(deltaVar)
-        }
-        val k3: Rep[Double => Double] = f1(k2)
-        val k4: (NumR => Unit) = {(x: NumR) => x.d += k3(x.x)}
-        k4
-      }
+    val k2: Rep[Double => Double] = fun { (x: Rep[Double]) =>
+      val deltaVar = var_new(0.0)
+      k1(new NumR(x, deltaVar))
+      readVar(deltaVar)
     }
+    x.d += f1(k2, x.x)
   }
 
   // erroneous implementation by using var as indexer, you can ignore this function
@@ -170,30 +161,21 @@ trait DiffApi extends Dsl with Diff {
 
   // similar to FUNL, but a Rep[Int] is carried along, so that we don't use a var as indexer
   // avoiding the mistake of the function above.
-  def FUNL1(f: (Rep[Int] => (NumR => Unit) => (NumR => Unit))): (Rep[Int] => (NumR => Unit) => (NumR => Unit)) = {
+  def FUNL1(f: (Rep[Int] => (NumR => Unit) => NumR => Unit)): (Rep[Int] => (NumR => Unit) => NumR => Unit) = { i: Rep[Int] => k1: (NumR => Unit) => (x: NumR) =>
 
     val f1 = fun { (i: Rep[Int], t1: Rep[Double => Double], xx: Rep[Double]) =>
       val t2: (NumR => Unit) = { (x: NumR) => x.d += t1(x.x) }
       val t3: (NumR => Unit) = f(i)(t2)
-
       val deltaVar = var_new(0.0)
       t3(new NumR(xx, deltaVar))
       readVar(deltaVar)
-    };
-
-    {i: Rep[Int] => k1: (NumR => Unit) =>
-      {
-        val k2: Rep[Double => Double] = fun { (x: Rep[Double]) =>
-          val deltaVar = var_new(0.0)
-          k1(new NumR(x, deltaVar))
-          readVar(deltaVar)
-        }
-        val k4: (NumR => Unit) = {(x: NumR) =>
-          x.d += f1(i, k2, x.x)
-        }
-        k4
-      }
     }
+    val k2: Rep[Double => Double] = fun { (x: Rep[Double]) =>
+      val deltaVar = var_new(0.0)
+      k1(new NumR(x, deltaVar))
+      readVar(deltaVar)
+    }
+    x.d += f1(i, k2, x.x)
   }
 
   // fix LOOPL4 by using the FUNL1 function.
@@ -301,6 +283,15 @@ trait DiffApi extends Dsl with Diff {
       if (i >= 0) { RST { k(b(tt(lch(i)), tt(rch(i)), i)) } } else { RST(k(x)) }
     }
     tree(0)(k)(init)
+  }
+
+  @virtualize
+  def Rec(init: NumR)(b: NumR => NumR @diff): NumR @diff = shift { (k: NumR => Unit) =>
+
+    lazy val rec: (NumR => Unit) => NumR => Unit = FUNL { (k: NumR => Unit) => (x: NumR) =>
+      RST{k(b(x))}
+    }
+    rec(k)(init)
   }
 
   def gradRV(f: NumRV => NumRV @diff)(x: Rep[Double]): Rep[Double] = {
