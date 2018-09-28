@@ -83,7 +83,7 @@ class VanillaRNNList extends FunSuite {
         val in = ArrayBuffer[TensorR]()
         in.append(loss)
         in.append(hprev1)
-        val outputs = LOOPLM(in)(inputs.length){i => t =>
+        val outputs = LOOPLM(0)(in)(inputs.length){i => t =>
 
           // printf("at iteration %d ", i)
           // get input as one-hot tensor

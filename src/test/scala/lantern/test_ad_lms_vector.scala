@@ -716,7 +716,7 @@ class AdLMSVectorTest extends FunSuite {
 
        // create a model that recursively use the data (originated from tree)
        def model: TensorR => TensorR @diff = { (x: TensorR) =>
-         LOOPT(x)(lch1, rch1){ (l: TensorR, r: TensorR, i: Rep[Int]) =>
+         LOOPT(0)(x)(lch1, rch1){ (l: TensorR, r: TensorR, i: Rep[Int]) =>
            l * r * new TensorR(Tensor(arra(i), length), Tensor.zeros(length))
          }
        }
@@ -773,7 +773,7 @@ class AdLMSVectorTest extends FunSuite {
        // create a model that recursively use the data (originated from tree)
        def model: TensorR => TensorR @diff = { (x: TensorR) =>
          val in = new ArrayBuffer[TensorR](); in.append(x); in.append(add)
-         val tmp = LOOPTM(in)(lch1, rch1){ (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
+         val tmp = LOOPTM(0)(in)(lch1, rch1){ (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
            val curr = TensorR(Tensor(arra(i), length))
            val new_x = l(0) * r(0) * curr; val new_add = l(1) + r(1) + curr
            val out = new ArrayBuffer[TensorR](); out.append(new_x); out.append(new_add)

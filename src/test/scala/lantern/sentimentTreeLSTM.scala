@@ -130,7 +130,7 @@ class SentimentTreeLSTM extends FunSuite {
         val inBuffer     = new ArrayBuffer[TensorR]()
         inBuffer.append(initial_loss); inBuffer.append(initial_hidd); inBuffer.append(initial_cell)
 
-        val outBuffer = LOOPTM(inBuffer)(lchs, rchs) { (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
+        val outBuffer = LOOPTM(0)(inBuffer)(lchs, rchs) { (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
 
           val lossl = l(0); val hiddenl = l(1); val celll = l(2)
           val lossr = r(0); val hiddenr = r(1); val cellr = r(2)
