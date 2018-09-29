@@ -22,33 +22,18 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 
 class ONNXTest extends FunSuite {
+
   val model_file = s"""${sys.env("HOME")}/onnx_models/squeezenet/model.onnx"""
+  val model_dir = s"""${sys.env("HOME")}/onnx_models/squeezenet/"""
+  val gene_dir = "src/out/untested/"
 
   test("onnx_reading_basic") {
 
-    println(s"testing reading onnx models from $model_file")
-
-    // model information
+    System.out.println(s"testing reading onnx models from $model_file")
     val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
-    // println("irversion is " + model.getIrVersion)
-    // println("producer name is " + model.getProducerName)
-    // println("producer version is " + model.getProducerVersion)
-    // println("domain is " + model.getDomain)
-    // println("model version is " + model.getModelVersion)
-    // println("doc string is " + model.getDocString)
-
 
     // graph information
     val graph = model.getGraph
-    // println("name of graph is " + graph.getName)
-
-
-    // initialize information: initialization values of all inputs except the data
-    // val init = graph.initializer
-    // println("number of initializer is " + init.length)
-    // val inithead: onnx_ml.TensorProto = init.head
-    // println(inithead.toProtoString)
-    // InitInfo(inithead)
 
     def InitInfo(init: onnx_ml.TensorProto) = {
       val dims: Seq[Long] = init.dims
@@ -75,10 +60,25 @@ class ONNXTest extends FunSuite {
       println(data_type.name)
     }
 
+    // initialize information: initialization values of all inputs except the data
+    val init = graph.initializer
+    // println("number of initializer is " + init.length)
+    // val inithead: onnx_ml.TensorProto = init.head
+    // System.out.println(inithead.toProtoString)
+    // InitInfo(inithead)
+
+    //val initEnd = init.last
+    //System.out.println(initEnd.toProtoString)
+    //InitInfo(initEnd)
+
+    //val init2head = init.tail.head
+    //println(init2head.toProtoString)
+    //InitInfo(init2head)
 
     // input information: Type of data and dimension information
-    //val input = graph.input
+    val input = graph.input
     //println("number of input is " + input.length)
+    input.foreach {in => System.out.println(in.toProtoString)}
 
     def ValueInfo(in: onnx_ml.ValueInfoProto) = {
       val name = in.getName
@@ -208,282 +208,281 @@ class ONNXTest extends FunSuite {
     }
   }
 
-  val gene_dir = "src/out/untested/"
+  test("build_from_onnx") {
 
-  val squeezenet = new DslDriverC[String, Unit] with TensorExp {
+    val squeezenet = new DslDriverC[String, Unit] with TensorExp {
 
-    @virtualize
-    def snippet(a: Rep[String]): Rep[Unit] = {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
 
-      val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
-      val graph = model.getGraph
+        val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
+        val graph = model.getGraph
 
-      def graphBuilder(graph: onnx_ml.GraphProto) = {
-        val initializer: Seq[onnx_ml.TensorProto] = graph.initializer
-        val inputs: Seq[onnx_ml.ValueInfoProto] = graph.input
-        val outputs: Seq[onnx_ml.ValueInfoProto] = graph.output
-        val nodes: Seq[onnx_ml.NodeProto] = graph.node
+        def graphBuilder(graph: onnx_ml.GraphProto) = {
+          val initializer: Seq[onnx_ml.TensorProto] = graph.initializer
+          val inputs: Seq[onnx_ml.ValueInfoProto] = graph.input
+          val outputs: Seq[onnx_ml.ValueInfoProto] = graph.output
+          val nodes: Seq[onnx_ml.NodeProto] = graph.node
 
-        // extract the initialization tensor values (as array[Float]) and dims (as Vector[Long]) and types for each initialization
-        // TODO (Fei Wang): problem: this function is assuming that the data type is Float, will break if not!!!
-        val initializer_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = extract_inits(initializer)
-        // collect all tensor and tensorR from the initialzer_map
-        val initializer_map_tensor: Map[String, Tensor] = initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
-        val initializer_map_tensorR: Map[String, TensorR] = initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
+          // extract the initialization tensor values (as array[Float]) and dims (as Vector[Long]) and types for each initialization
+          // TODO (Fei Wang): problem: this function is assuming that the data type is Float, will break if not!!!
+          val initializer_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = extract_inits(initializer)
+          // collect all tensor and tensorR from the initialzer_map
+          val initializer_map_tensor: Map[String, Tensor] = initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
+          val initializer_map_tensorR: Map[String, TensorR] = initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
-        // extract the inputs values (as dims and types)
-        val input_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = extract_values(inputs)
-        val output_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = extract_values(outputs)
+          // extract the inputs values (as dims and types)
+          val input_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = extract_values(inputs)
+          val output_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = extract_values(outputs)
 
-        // extract the nodes (as Functors)
-        val (func, x_dims) = map_function(nodes, initializer_map_tensor, input_map, output_map)
-        (func, x_dims)
-      }
-
-      def extract_inits(inits: Seq[onnx_ml.TensorProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = {
-        val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = Map()
-        // TODO: (Fei Wang) use immutable map instead!!
-        inits.foreach { init =>
-          map += extract_init(init)
+          // extract the nodes (as Functors)
+          val (func, x_dims) = map_function(nodes, initializer_map_tensor, input_map, output_map)
+          (func, x_dims)
         }
-        map
-      }
 
-      def extract_init(init: onnx_ml.TensorProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])) = {
-        val dims: Seq[Int] = init.dims.map(x => x.toInt)
-        val name: String = init.getName
-        val datatype: onnx_ml.TensorProto.DataType = init.getDataType
-        if (datatype.name != "FLOAT") throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
-        val rawdata: com.google.protobuf.ByteString = init.getRawData
-        val bytearray: Array[Byte] = rawdata.toByteArray
-        val bytebuffer: ByteBuffer = ByteBuffer.wrap(bytearray)
-        val floatbuffer: FloatBuffer = bytebuffer.asFloatBuffer()
-        val floatarray: Array[Float] = new Array[Float](rawdata.size / 4)
-        floatbuffer.get(floatarray)
-        // make sure that the initialization values correspond with the dims
-        assert (floatarray.length == dims.fold(1)(_ * _))
-        (name -> (dims, datatype, floatarray))
-      }
-
-      def extract_values(puts: Seq[onnx_ml.ValueInfoProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = {
-        val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = Map()
-        // TODO: (Fei Wang) use immutable map instead!!
-        puts.foreach { put =>
-          val (name, dims, elem_type) = extract_value(put)
-          map += (name -> (dims, elem_type))
+        def extract_inits(inits: Seq[onnx_ml.TensorProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = {
+          val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = Map()
+          // TODO: (Fei Wang) use immutable map instead!!
+          inits.foreach { init =>
+            val (name, dims, datatype, floatarray) = extract_init(init)
+            map += (name -> (dims, datatype, floatarray))
+          }
+          map
         }
-        map
-      }
 
-      def extract_value(put: onnx_ml.ValueInfoProto): (String, Seq[Int], onnx_ml.TensorProto.DataType) = {
-        val name: String = put.getName
-        val ty: onnx_ml.TypeProto = put.getType
-        val tensor: onnx_ml.TypeProto.Tensor = ty.getTensorType
-        val elem_type: onnx_ml.TensorProto.DataType = tensor.getElemType
-        val shape: onnx_ml.TensorShapeProto = tensor.getShape
-        val dim: Seq[onnx_ml.TensorShapeProto.Dimension] = shape.dim
-        val dims: Seq[Int] = (dim.map(x => x.getDimValue)).map(x => x.toInt)
-        (name, dims, elem_type)
-      }
+        def extract_init(init: onnx_ml.TensorProto): (String, Seq[Int], onnx_ml.TensorProto.DataType, Array[Float]) = {
+          val dims: Seq[Int] = init.dims.map(x => x.toInt)
+          val name: String = init.getName
+          val datatype: onnx_ml.TensorProto.DataType = init.getDataType
+          if (datatype.name != "FLOAT") throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
+          val rawdata: com.google.protobuf.ByteString = init.getRawData
+          val bytearray: Array[Byte] = rawdata.toByteArray
+          val bytebuffer: ByteBuffer = ByteBuffer.wrap(bytearray)
+          val floatbuffer: FloatBuffer = bytebuffer.asFloatBuffer()
+          val floatarray: Array[Float] = new Array[Float](rawdata.size / 4)
+          floatbuffer.get(floatarray)
+          // make sure that the initialization values correspond with the dims
+          assert (floatarray.length == dims.fold(1)(_ * _))
+          (name, dims, datatype, floatarray)
+        }
 
-      def map_function(nodes: Seq[onnx_ml.NodeProto], initializer_map_tensor: Map[String, Tensor],
-        input_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)],
-        output_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)]): ((Rep[Array[Float]] => Tensor), Seq[Int]) = {
+        def extract_values(puts: Seq[onnx_ml.ValueInfoProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = {
+          val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = Map()
+          // TODO: (Fei Wang) use immutable map instead!!
+          puts.foreach { put =>
+            val (name, dims, elem_type) = extract_value(put)
+            map += (name -> (dims, elem_type))
+          }
+          map
+        }
 
-        // collect the parameter tensor in initializer_map_tensor
-        val all_inputs = input_map.keys
-        val non_initialized_inputs = all_inputs.filter(k => !initializer_map_tensor.contains(k))
-        assert(non_initialized_inputs.size == 1, "there should be one uninitialized input")
-        val x_name: String = non_initialized_inputs.head
-        val x_dims: Seq[Int] = input_map(x_name)._1.map(x => x.toInt)
+        def extract_value(put: onnx_ml.ValueInfoProto): (String, Seq[Int], onnx_ml.TensorProto.DataType) = {
+          val name: String = put.getName
+          val ty: onnx_ml.TypeProto = put.getType
+          val tensor: onnx_ml.TypeProto.Tensor = ty.getTensorType
+          val elem_type: onnx_ml.TensorProto.DataType = tensor.getElemType
+          val shape: onnx_ml.TensorShapeProto = tensor.getShape
+          val dim: Seq[onnx_ml.TensorShapeProto.Dimension] = shape.dim
+          val dims: Seq[Int] = (dim.map(x => x.getDimValue)).map(x => x.toInt)
+          (name, dims, elem_type)
+        }
 
-        val ret: (Rep[Array[Float]] => Tensor) = { x: Rep[Array[Float]] =>
+        def map_function(nodes: Seq[onnx_ml.NodeProto], initializer_map_tensor: Map[String, Tensor],
+          input_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)],
+          output_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)]): ((Rep[Array[Float]] => Tensor), Seq[Int]) = {
 
-          val x_tensor: Tensor = Tensor(x, x_dims: _*)
-          initializer_map_tensor += (x_name -> x_tensor)
+          // collect the parameter tensor in initializer_map_tensor
+          val all_inputs = input_map.keys
+          val non_initialized_inputs = all_inputs.filter(k => !initializer_map_tensor.contains(k))
+          assert(non_initialized_inputs.size == 1, "there should be one uninitialized input")
+          val x_name: String = non_initialized_inputs.head
+          val x_dims: Seq[Int] = input_map(x_name)._1.map(x => x.toInt)
 
-          // generate Tensors (or TensorRs) of intermediate steps
-          val intermediate_map_tensor: Map[String, Tensor] = Map()
+          val ret: (Rep[Array[Float]] => Tensor) = { x: Rep[Array[Float]] =>
 
-          def get_from_two_maps(key: String) = {
-            initializer_map_tensor.get(key) match {
-              case Some(v) => v
-              case None => intermediate_map_tensor.get(key) match {
+            val x_tensor: Tensor = Tensor(x, x_dims: _*)
+            initializer_map_tensor += (x_name -> x_tensor)
+
+            // generate Tensors (or TensorRs) of intermediate steps
+            val intermediate_map_tensor: Map[String, Tensor] = Map()
+
+            def get_from_two_maps(key: String) = {
+              initializer_map_tensor.get(key) match {
                 case Some(v) => v
-                case None => throw new RuntimeException(key + " is not found in either maps")
+                case None => intermediate_map_tensor.get(key) match {
+                  case Some(v) => v
+                  case None => throw new RuntimeException(key + " is not found in either maps")
+                }
               }
             }
-          }
 
-          def handle_conv(node: onnx_ml.NodeProto) = {
+            def handle_conv(node: onnx_ml.NodeProto) = {
 
-            val inputs: Seq[String] = node.input
-            assert (inputs.size == 3, "number of inputs of a conv node should always be 3")
-            val input1 = get_from_two_maps(inputs.head)
-            val input2 = get_from_two_maps(inputs.tail.head)
-            val input3 = get_from_two_maps(inputs.last)
+              val inputs: Seq[String] = node.input
+              assert (inputs.size == 3, "number of inputs of a conv node should always be 3")
+              val input1 = get_from_two_maps(inputs.head)
+              val input2 = get_from_two_maps(inputs.tail.head)
+              val input3 = get_from_two_maps(inputs.last)
 
-            val outputs: Seq[String] = node.output
-            assert (outputs.size == 1, "number of output of a conv node should always be 1")
+              val outputs: Seq[String] = node.output
+              assert (outputs.size == 1, "number of output of a conv node should always be 1")
 
-            val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-            assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
-            val atts: Map[String, Seq[Int]] = Map()
-            attributes.foreach { att => atts += (att.getName -> att.ints.map(x => x.toInt)) }
-            assert (atts.contains("strides"), "attributes of a conv node should have strides")
-            assert (atts.contains("pads"), "attributes of a conv node should have pads")
-            assert (atts.contains("kernel_shape"), "attributes of a conv node should have kernel_shape")
-            val strides = atts("strides")
-            val pads = atts("pads")
-            val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
+              val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+              assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
+              val atts: Map[String, Seq[Int]] = Map()
+              attributes.foreach { att => atts += (att.getName -> att.ints.map(x => x.toInt)) }
+              assert (atts.contains("strides"), "attributes of a conv node should have strides")
+              assert (atts.contains("pads"), "attributes of a conv node should have pads")
+              assert (atts.contains("kernel_shape"), "attributes of a conv node should have kernel_shape")
+              val strides = atts("strides")
+              val pads = atts("pads")
+              val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
-            val out = input1.conv2D_batch(input2, input3, strides, pads)
-            intermediate_map_tensor += (outputs.head -> out)
-          }
-
-          def handle_relu(node: onnx_ml.NodeProto) = {
-
-            val inputs: Seq[String] = node.input
-            assert (inputs.size == 1, "number of inputs of a relu node should always be 1")
-            val input1 = get_from_two_maps(inputs.head)
-
-            val outputs: Seq[String] = node.output
-            assert (outputs.size == 1, "number of outputs of a relu node should always be 1")
-
-            val out = input1.relu()
-            intermediate_map_tensor += (outputs.head -> out)
-          }
-
-          def handle_maxpool(node: onnx_ml.NodeProto) = {
-
-            val inputs: Seq[String] = node.input
-            assert (inputs.size == 1, "number of inputs of a maxpool node should always be 1")
-            val input1 = get_from_two_maps(inputs.head)
-
-            val outputs: Seq[String] = node.output
-            assert (outputs.size == 1, "number of outputs of a maxpool node should always be 1")
-
-            val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-            assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
-            val atts: Map[String, Seq[Int]] = Map()
-            attributes.foreach { att => atts += (att.getName -> att.ints.map(x => x.toInt)) }
-            assert (atts.contains("strides"), "attributes of a conv node should have strides")
-            assert (atts.contains("pads"), "attributes of a conv node should have pads")
-            assert (atts.contains("kernel_shape"), "attributes of a conv node should have kernel_shape")
-            val strides = atts("strides")
-            val pads = atts("pads")
-            val kernel_shape = atts("kernel_shape")
-            assert(strides.size == 2, "strides should be length 2")
-            assert(kernel_shape.size == 2, "kernel_shape should be length 2")
-
-            // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-            val (out, dummy) = input1.maxPool_k_batch(kernel_shape, strides)
-            intermediate_map_tensor += (outputs.head -> out)
-          }
-
-          def handle_concat(node: onnx_ml.NodeProto) = {
-
-            val inputs: Seq[String] = node.input
-            assert (inputs.size > 1, "number of inputs for concat node should be larger than 1")
-            val input_s = inputs.map(x => get_from_two_maps(x))
-
-            val outputs: Seq[String] = node.output
-            assert (outputs.size == 1, "number of outputs for concat node should be 1")
-
-            val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-            assert (attributes.size == 1, "number of attributes of a concat node should be 1")
-            val axis: Int = attributes.head.getI.toInt
-
-            val out = input_s.head.concat(axis, input_s.tail: _*)
-            intermediate_map_tensor += (outputs.head -> out)
-          }
-
-          def handle_dropout(node: onnx_ml.NodeProto) = {
-
-            val inputs: Seq[String] = node.input
-            assert (inputs.size == 1, "number of inputs for dropout node should always be 1")
-            val input1 = get_from_two_maps(inputs.head)
-
-            val outputs: Seq[String] = node.output
-            assert (outputs.size == 2, "number of outputs for dropout node should always be 2")
-
-            val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-            assert (attributes.size == 1, "number of attributes for dropout node should be 1")
-            val ratio: Float = if (attributes.head.name == "ratio") attributes.head.getF else attributes.last.getF
-            val is_test: Int = (if (attributes.last.name == "is_test") attributes.last.getI else attributes.head.getI).toInt
-
-            // TODO: (Fei Wang) warning - the is_test is not considered by the implementation
-            val (out1, out2) = input1.dropout(ratio)
-            // val (out1, out2) = dropout_fun(input1, ratio, is_test)
-            intermediate_map_tensor += (outputs.head -> out1)
-            intermediate_map_tensor += (outputs.last -> out2)
-          }
-
-          def handle_global_average_pool(node: onnx_ml.NodeProto) = {
-
-            val inputs: Seq[String] = node.input
-            assert (inputs.size == 1, "number of inputs for global_average_pool should be 1")
-            val input1 = get_from_two_maps(inputs.head)
-
-            val outputs: Seq[String] = node.output
-            assert (outputs.size == 1, "number of outputs for global_average_pool should be 1")
-
-            val out = input1.global_ave_batch()
-            intermediate_map_tensor += (outputs.head -> out)
-          }
-
-          def handle_softmax(node: onnx_ml.NodeProto) = {
-
-            val inputs: Seq[String] = node.input
-            assert (inputs.size == 1, "number of inputs for softmax node should 1")
-            val input1 = get_from_two_maps(inputs.head)
-
-            val outputs: Seq[String] = node.output
-            assert (outputs.size == 1, "number of outputs for softmax node should be 1")
-
-            val out = input1.softmax_batch()
-            intermediate_map_tensor += (outputs.head -> out)
-          }
-
-          // System.out.println("handle each node respectively")
-          nodes.foreach { node =>
-            node.getOpType match {
-              case "Conv" => {handle_conv(node)}
-              case "Relu" => {handle_relu(node)}
-              case "MaxPool" => {handle_maxpool(node)}
-              case "Concat" => {handle_concat(node)}
-              case "Dropout" => {handle_dropout(node)}
-              case "GlobalAveragePool" => {handle_global_average_pool(node)}
-              case "Softmax" => {handle_softmax(node)}
+              val out = input1.conv2D_batch(input2, input3, strides, pads)
+              intermediate_map_tensor += (outputs.head -> out)
             }
+
+            def handle_relu(node: onnx_ml.NodeProto) = {
+
+              val inputs: Seq[String] = node.input
+              assert (inputs.size == 1, "number of inputs of a relu node should always be 1")
+              val input1 = get_from_two_maps(inputs.head)
+
+              val outputs: Seq[String] = node.output
+              assert (outputs.size == 1, "number of outputs of a relu node should always be 1")
+
+              val out = input1.relu()
+              intermediate_map_tensor += (outputs.head -> out)
+            }
+
+            def handle_maxpool(node: onnx_ml.NodeProto) = {
+
+              val inputs: Seq[String] = node.input
+              assert (inputs.size == 1, "number of inputs of a maxpool node should always be 1")
+              val input1 = get_from_two_maps(inputs.head)
+
+              val outputs: Seq[String] = node.output
+              assert (outputs.size == 1, "number of outputs of a maxpool node should always be 1")
+
+              val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+              assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
+              val atts: Map[String, Seq[Int]] = Map()
+              attributes.foreach { att => atts += (att.getName -> att.ints.map(x => x.toInt)) }
+              assert (atts.contains("strides"), "attributes of a conv node should have strides")
+              assert (atts.contains("pads"), "attributes of a conv node should have pads")
+              assert (atts.contains("kernel_shape"), "attributes of a conv node should have kernel_shape")
+              val strides = atts("strides")
+              val pads = atts("pads")
+              val kernel_shape = atts("kernel_shape")
+              assert(strides.size == 2, "strides should be length 2")
+              assert(kernel_shape.size == 2, "kernel_shape should be length 2")
+
+              // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
+              val (out, dummy) = input1.maxPool_k_batch(kernel_shape, strides)
+              intermediate_map_tensor += (outputs.head -> out)
+            }
+
+            def handle_concat(node: onnx_ml.NodeProto) = {
+
+              val inputs: Seq[String] = node.input
+              assert (inputs.size > 1, "number of inputs for concat node should be larger than 1")
+              val input_s = inputs.map(x => get_from_two_maps(x))
+
+              val outputs: Seq[String] = node.output
+              assert (outputs.size == 1, "number of outputs for concat node should be 1")
+
+              val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+              assert (attributes.size == 1, "number of attributes of a concat node should be 1")
+              val axis: Int = attributes.head.getI.toInt
+
+              val out = input_s.head.concat(axis, input_s.tail: _*)
+              intermediate_map_tensor += (outputs.head -> out)
+            }
+
+            def handle_dropout(node: onnx_ml.NodeProto) = {
+
+              val inputs: Seq[String] = node.input
+              assert (inputs.size == 1, "number of inputs for dropout node should always be 1")
+              val input1 = get_from_two_maps(inputs.head)
+
+              val outputs: Seq[String] = node.output
+              assert (outputs.size == 2, "number of outputs for dropout node should always be 2")
+
+              val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+              assert (attributes.size == 1, "number of attributes for dropout node should be 1")
+              val ratio: Float = attributes.head.getF
+              // val is_test: Int = (if (attributes.last.name == "is_test") attributes.last.getI else attributes.head.getI).toInt
+
+              // TODO: (Fei Wang) warning - the is_test is not considered by the implementation
+              val (out1, out2) = input1.dropout(ratio)
+              // val (out1, out2) = dropout_fun(input1, ratio, is_test)
+              intermediate_map_tensor += (outputs.head -> out1)
+              intermediate_map_tensor += (outputs.last -> out2)
+            }
+
+            def handle_global_average_pool(node: onnx_ml.NodeProto) = {
+
+              val inputs: Seq[String] = node.input
+              assert (inputs.size == 1, "number of inputs for global_average_pool should be 1")
+              val input1 = get_from_two_maps(inputs.head)
+
+              val outputs: Seq[String] = node.output
+              assert (outputs.size == 1, "number of outputs for global_average_pool should be 1")
+
+              val out = input1.global_ave_batch()
+              intermediate_map_tensor += (outputs.head -> out)
+            }
+
+            def handle_softmax(node: onnx_ml.NodeProto) = {
+
+              val inputs: Seq[String] = node.input
+              assert (inputs.size == 1, "number of inputs for softmax node should 1")
+              val input1 = get_from_two_maps(inputs.head)
+
+              val outputs: Seq[String] = node.output
+              assert (outputs.size == 1, "number of outputs for softmax node should be 1")
+
+              val out = input1.softmax_batch()
+              intermediate_map_tensor += (outputs.head -> out)
+            }
+
+            // System.out.println("handle each node respectively")
+            nodes.foreach { node =>
+              node.getOpType match {
+                case "Conv" => {handle_conv(node)}
+                case "Relu" => {handle_relu(node)}
+                case "MaxPool" => {handle_maxpool(node)}
+                case "Concat" => {handle_concat(node)}
+                case "Dropout" => {handle_dropout(node)}
+                case "GlobalAveragePool" => {handle_global_average_pool(node)}
+                case "Softmax" => {handle_softmax(node)}
+              }
+            }
+
+            val out_keys = output_map.keys
+            assert (out_keys.size == 1, "we hope that there is only one output for the model")
+            val out_key: String = out_keys.head
+            // return this tensor / tensorR / tensorR@diff for this function
+            intermediate_map_tensor(out_key)
           }
 
-          val out_keys = output_map.keys
-          assert (out_keys.size == 1, "we hope that there is only one output for the model")
-          val out_key: String = out_keys.head
-          // return this tensor / tensorR / tensorR@diff for this function
-          intermediate_map_tensor(out_key)
+          (ret, x_dims)
         }
 
-        (ret, x_dims)
-      }
+        val (func, x_dims) = graphBuilder(graph)
 
-      val (func, x_dims) = graphBuilder(graph)
-
-      def func_dummy(b: Rep[Boolean]) = {
-        if (b) println("fooled you")
-        else {
-          val input = Tensor.zeros(x_dims: _*)
-          val output = func(input.data)
-          println(output.data(0))
+        def func_dummy(b: Rep[Boolean]) = {
+          if (b) println("fooled you")
+          else {
+            val input = Tensor.zeros(x_dims: _*)
+            val output = func(input.data)
+            println(output.data(0))
+          }
         }
-      }
 
-      func_dummy(a > "a")
+        func_dummy(a > "a")
+      }
     }
-  }
-
-  test("build_from_onnx") {
 
     println(s"testing reading ONNX models from $model_file")
 
@@ -505,12 +504,19 @@ class ONNXTest extends FunSuite {
         val model = readONNX(model_file)
         val (func, x_dims) = (model.inference_func, model.x_dims)
 
-        // must use the function in order to generate it
-        if (a == "run") {
-          val input = Tensor.zeros(x_dims: _*)
-          val output = func(input)
-          println(output.data(0))
-        }
+        //model.initializer_map_tensor("conv1_w_0").printHead(msg = "conv1_w_0")
+        model.initializer_map_tensor("conv10_b_0").printHead(msg = "conv10_b_0")
+
+        // get test data as TensorProto
+        val input_file =  model_dir + "test_data_set_0/input_0.pb"
+        val output_file = model_dir + "test_data_set_0/output_0.pb"
+        val input = readTensor(input_file).tensor
+        val output = readTensor(output_file).tensor
+
+        input.printHead(msg = "input")
+        val output1 = func(input)
+        output.printHead(count = 100, msg = "true_out")
+        output1.printHead(msg = "my_output")
       }
     }
 
@@ -518,6 +524,57 @@ class ONNXTest extends FunSuite {
     squeezenet_file.println(inference_func.code)
     squeezenet_file.flush()
 
+  }
+
+  test("debug") {
+    System.out.println("debugging")
+
+    val deb = new DslDriverC[String, Unit] with ONNXLib {
+      import scala.collection.Seq;
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.ones(1, 3, 8, 8)
+        input.print("input")
+        val kernel = Tensor.ones(1, 3, 3, 3)
+        kernel.print("kernel")
+        val bias = Tensor.ones(1)
+        bias.print("bias")
+        val strides: Seq[Int] = List(2, 2).toSeq
+        val pads: Seq[Int] = List(0,0,0,0).toSeq
+        val output = input.conv2D_batch(kernel, bias, strides, pads)
+        output.print("output")
+      }
+    }
+
+    val debug_file = new PrintWriter(new File(gene_dir + "debug.cpp"))
+    debug_file.println(deb.code)
+    debug_file.flush()
+  }
+
+  test("debug_conv_pad") {
+    System.out.println("debugging")
+    val deb = new DslDriverC[String, Unit] with ONNXLib {
+      import scala.collection.Seq;
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.ones(1, 1, 4, 4)
+        input.print("input")
+        val kernel = Tensor.ones(1, 1, 3, 3)
+        kernel.print("kernel")
+        val bias = Tensor.zeros(1)
+        bias.print("bias")
+        val strides: Seq[Int] = List(3, 3).toSeq
+        val pads: Seq[Int] = List(1, 1, 1, 1).toSeq
+        val output = input.conv2D_batch(kernel, bias, strides, pads)
+        output.print("output")
+      }
+    }
+
+    val debug_file = new PrintWriter(new File(gene_dir + "debug.cpp"))
+    debug_file.println(deb.code)
+    debug_file.flush()
   }
 
   test("training") {

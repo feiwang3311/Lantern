@@ -367,6 +367,25 @@ class AdLMSTest extends FunSuite {
     }
   }
 
+  /*
+  test("recursive") {
+    val gr112 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+
+        def model: NumR => NumR @diff = { (y: NumR) =>
+          val fun = FUN(if (y.x == 0.0) new NumR(1.0, 0.0) else y * model(y - 1))
+          fun(y)
+        }
+
+        val res = gradR(fun(model(5)))(x)
+        res
+      }
+    }
+
+    System.out.println(gr112.code)
+  }*/
+
   test("tree") {
     val gr12 = new DslDriver[Double, Double] with DiffApi {
 
@@ -395,6 +414,65 @@ class AdLMSTest extends FunSuite {
       }
     }
 
+    System.out.println(gr12.code)
+/*
+// generating Scala code
+class Snippet() extends (Double=>Double) {
+
+  def apply(tree: Tree, base: Double): Double = {
+
+    val rec: scala.Function3[Tree, scala.Function1[Double, Double], Double, Double] = {
+      (tree: Tree, cont: scala.Function1[Double, Double], x9: Double) =>
+
+      var x13: Double = 0.0
+
+      if (!tree.isEmpty) {
+        val new_cont_l = { x17: (Double) =>
+          var x18: Double = 0.0
+          val new_cont_r = { x21: (Double) =>
+            val x25: Double = tree.value
+            var x24: Double = x25 * cont(x17 * x21 * x25)
+            x18 += x21 * x24
+            x17 * x24
+          }
+          x13 += rec(tree.right, new_cont_r, x9)
+          x18
+        }
+        x13 += rec(tree.left, new_cont_l, x9)
+      } else {
+        x13 += cont(x9)
+      }
+      x13
+    }
+    rec(tree, {x: (Double) => 1.0}, base)
+  }
+}
+
+// generating C++ code
+double Snippet(double base, Tree tree) {
+  function<double(Tree, function<double(double)>, double)> rec = [&](Tree tree, function<double(double)> cont, double base) {
+    double x13 = 0.0;
+    if (!tree.isEmpty) {
+      function<double(double)> cont_l = [&](double x17) {
+        double x18 = 0.0;
+        function<double(double)> cont_r = [&](double x21) {
+          double x25 = tree.value;
+          double x24 = x25 * cont(x17 * x21 * x25);;
+          x18 += x21 * x24;
+          return x17 * x24;
+        };
+        x13 += rec(tree.right, cont_r, base);
+        return x18;
+      };
+      x13 += rec(tree.left, cont_l, base);
+    } else {
+      x13 += cont(base);
+    }
+    return x13;
+  };
+  return rec(tree, [&](double x){return 1.0;}, base);
+}
+*/
     def grad(x: Double) = 3 * 4 * 5 * 4 * x * x * x
     for (x <- (-5 until 5)) {
       assert (gr12.eval(x) == grad(x))

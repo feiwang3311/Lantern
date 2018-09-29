@@ -21,44 +21,79 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.io.ByteArrayInputStream;
+import java.util.Scanner;
 
 import onnx.onnx_ml;
 
+import java.nio._
+import java.io._
+import scala.annotation.tailrec
+import scala.util.{Try, Success, Failure}
+
 trait ONNXLib extends TensorExp {
 
-  case class readONNX(val model_file: String) {
-    val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
-    val graph = model.getGraph
-    val initializer: Seq[onnx_ml.TensorProto] = graph.initializer
-    val inputs: Seq[onnx_ml.ValueInfoProto] = graph.input
-    val outputs: Seq[onnx_ml.ValueInfoProto] = graph.output
-    val nodes: Seq[onnx_ml.NodeProto] = graph.node
+  object ParseHelper {
+
+    def toFloats(ba: Array[Byte]): Seq[Float] = {
+      val bs = new ByteArrayInputStream(ba)
+      val ds = new DataInputStream(bs)
+      val floats = toBigEndians(ds)
+      bs.close()
+      ds.close()
+      floats
+    }
+
+    def toBigEndians(stream: DataInputStream): Seq[Float] = {
+
+      val bf = streamToByteBuffer(stream); bf.rewind()
+
+      // when we read, we want to get it in BIG_ENDIAN
+      val floatBuffer = bf.order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
+      val n = floatBuffer.remaining
+
+      @tailrec
+      def floatBufferToArray_(idx: Int, floats: Array[Float]):  Array[Float] = {
+          if (floatBuffer.hasRemaining) {
+              // floatBuffer.get returns current an increments position
+              floats(idx) = floatBuffer.get
+              floatBufferToArray_(idx + 1, floats)
+          }
+          else floats
+      }
+      // allocate result float array
+      val floatArray = scala.Array.ofDim[Float](n)
+      floatBufferToArray_(0, floatArray)
+    }
+
+    def streamToByteBuffer(stream: DataInputStream): ByteBuffer = {
+      @tailrec
+      def streamToByteBuffer_(stream: DataInputStream,
+                             bf: ByteBuffer): ByteBuffer = {
+          Try(bf.put(stream.readByte())) match {
+              case Success(_) => streamToByteBuffer_(stream, bf)
+              case Failure(ex) if ex.isInstanceOf[EOFException] => bf
+              case Failure(ex) => throw ex
+          }
+      }
+      // pre-allocate with the size of buffer
+      val bf = ByteBuffer.allocateDirect(stream.available)
+        streamToByteBuffer_(stream, bf)
+    }
 
     // TODO (Fei Wang): problem: this function is assuming that the data type is Float, will break if not!!!
-    // extract information from TensorProto
     def extract_init(init: onnx_ml.TensorProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])) = {
+      //System.out.println(init.toProtoString)
       val dims: Seq[Int] = init.dims.map(x => x.toInt)
       val name: String = init.getName
       val datatype: onnx_ml.TensorProto.DataType = init.getDataType
       if (datatype.name != "FLOAT") throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
       val rawdata: com.google.protobuf.ByteString = init.getRawData
-      val bytearray: Array[Byte] = rawdata.toByteArray
-      val bytebuffer: ByteBuffer = ByteBuffer.wrap(bytearray)
-      val floatbuffer: FloatBuffer = bytebuffer.asFloatBuffer()
-      val floatarray: Array[Float] = new Array[Float](rawdata.size / 4)
-      floatbuffer.get(floatarray)
+      val floatarray: Array[Float] = toFloats(rawdata.toByteArray).toArray
       // make sure that the initialization values correspond with the dims
       assert(floatarray.length == dims.fold(1)(_ * _), s"${floatarray.length} != $dims.fold(1)")
       (name -> (dims, datatype, floatarray))
     }
-
-    val initializer_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] =
-      initializer.map(init => extract_init(init)).toMap
-
-    val initializer_map_tensor: Map[String, Tensor] =
-      initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
-    val initializer_map_tensorR: Map[String, TensorR] =
-      initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
     // extract information from ValueInfoProto
     def extract_value(put: onnx_ml.ValueInfoProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType)) = {
@@ -72,8 +107,33 @@ trait ONNXLib extends TensorExp {
       (name -> (dims, elem_type))
     }
 
-    val input_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = inputs.map(i => extract_value(i)).toMap
-    val output_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = outputs.map(o => extract_value(o)).toMap
+  }
+
+  case class readTensor(val tensor_file: String) {
+    val tensorInput = onnx_ml.TensorProto.parseFrom(new FileInputStream(tensor_file))
+    val (_, (dims, _, floatarray)) = ParseHelper.extract_init(tensorInput)
+    val tensor: Tensor = Tensor(Array((floatarray.map(x=>unit(x)).toSeq: _*)), dims: _*)
+  }
+
+  case class readONNX(val model_file: String) {
+    val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
+    val graph = model.getGraph
+    val initializer: Seq[onnx_ml.TensorProto] = graph.initializer
+    val inputs: Seq[onnx_ml.ValueInfoProto] = graph.input
+    val outputs: Seq[onnx_ml.ValueInfoProto] = graph.output
+    val nodes: Seq[onnx_ml.NodeProto] = graph.node
+
+    val initializer_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] =
+      initializer.map(init => ParseHelper.extract_init(init)).toMap
+
+    val initializer_map_tensor: Map[String, Tensor] =
+      initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
+      // initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor.rand(dims: _*)) }
+    val initializer_map_tensorR: Map[String, TensorR] =
+      initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
+
+    val input_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = inputs.map(i => ParseHelper.extract_value(i)).toMap
+    val output_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = outputs.map(o => ParseHelper.extract_value(o)).toMap
 
     // find out the real input (a entry of input_map that is not in initializer)
     def real_input(): (String, Seq[Int]) = {
@@ -102,7 +162,7 @@ trait ONNXLib extends TensorExp {
     case class reluNode(input: String, output: String) extends Node
     case class maxpoolNode(input: String, output: String, attributes: Map[String, Seq[Int]]) extends Node
     case class concatNode(inputs: Seq[String], output: String, axis: Int) extends Node
-    case class dropoutNode(input: String, outputs: Seq[String], ratio: Float, is_test: Int) extends Node
+    case class dropoutNode(input: String, outputs: Seq[String], ratio: Float) extends Node
     case class globalAveragePoolNode(input: String, output: String) extends Node
     case class softmaxNode(input: String, output: String) extends Node
 
@@ -184,13 +244,11 @@ trait ONNXLib extends TensorExp {
           assert (outputs.size == 2, "number of outputs for dropout node should always be 2")
 
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-          assert (attributes.size == 1, "number of attributes for dropout node should be 1")
-          val ratio: Float = if (attributes.head.name == "ratio") attributes.head.getF else attributes.last.getF
-          val is_test: Int = (if (attributes.last.name == "is_test") attributes.last.getI else attributes.head.getI).toInt
-          // TODO: (Fei Wang) warning - the is_test is not considered by the implementation (Don't know what it means!!)
+          assert (attributes.size == 1, "number of attributes for drop out node should be 1")
+          val ratio: Float = attributes.head.getF
           // TODO: (Fei Wang) for inference, should dropout be ignored??
 
-          dropoutNode(inputs.head, outputs, ratio, is_test)
+          dropoutNode(inputs.head, outputs, ratio)
         }
 
         case "GlobalAveragePool" => {
@@ -269,6 +327,7 @@ trait ONNXLib extends TensorExp {
             val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
             val out = input1.conv2D_batch(input2, input3, strides, pads)
+            out.printHead(msg = "conv")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -276,6 +335,7 @@ trait ONNXLib extends TensorExp {
 
             val in = get_from_two_maps(input)
             val out = in.relu()
+            out.printHead(msg = "relu")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -289,6 +349,7 @@ trait ONNXLib extends TensorExp {
 
             // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
             val (out, _) = in.maxPool_k_batch(kernel_shape, strides)
+            out.printHead(msg = "maxpool")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -296,21 +357,26 @@ trait ONNXLib extends TensorExp {
 
             val input_s = inputs.map(x => get_from_two_maps(x))
             val out = input_s.head.concat(axis, input_s.tail: _*)
+            out.printHead(msg = "concat")
             intermediate_map_tensor += (output -> out)
           }
 
-          case dropoutNode(input, outputs, ratio, is_test) => {
+          case dropoutNode(input, outputs, ratio) => {
 
+            // dropoutNode in inference function should act as identity function
             val in = get_from_two_maps(input)
-            val (out1, out2) = in.dropout(ratio)
-            intermediate_map_tensor += (outputs.head -> out1)
-            intermediate_map_tensor += (outputs.last -> out2)
+            // val (out1, out2) = in.dropout(ratio)
+            in.printHead(msg = "dropout")
+            intermediate_map_tensor += (outputs.head -> in)
+            // intermediate_map_tensor += (outputs.head -> out1)
+            // intermediate_map_tensor += (outputs.last -> out2)
           }
 
           case globalAveragePoolNode(input, output) => {
 
             val in = get_from_two_maps(input)
             val out = in.global_ave_batch()
+            out.printHead(count = 100, msg = "gav")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -318,6 +384,7 @@ trait ONNXLib extends TensorExp {
 
             val in = get_from_two_maps(input)
             val out = in.softmax_batch()
+            out.printHead(count = 100, msg = "softmax")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -387,7 +454,7 @@ trait ONNXLib extends TensorExp {
           intermediate_map_tensorR.update(output, out)
         } else if (node.isInstanceOf[dropoutNode]) {
 
-          val dropoutNode(input, outputs, ratio, is_test) = node
+          val dropoutNode(input, outputs, ratio) = node
           val in = get_from_two_maps(input)
           val out = in.dropout(ratio)
           intermediate_map_tensorR.update(outputs.head, out)
