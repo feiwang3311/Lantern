@@ -2341,9 +2341,9 @@ trait TensorExp extends Dsl with Diff {
 
       lazy val tree: Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit = FUNlm { (i: Rep[Int]) => (k: ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
 
-        def sh_tree: (Rep[Int] => ArrayBuffer[TensorR] @diff) = (i: Rep[Int]) => shift{(k: ArrayBuffer[TensorR] => Unit) => tree(i)(k)(x)}
+        def sh_tree: (Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff) = (i: Rep[Int]) => (x: ArrayBuffer[TensorR]) => shift{(k: ArrayBuffer[TensorR] => Unit) => tree(i)(k)(x)}
 
-        RST(k( IFm (i >= 0) { b(sh_tree(lch(i)), sh_tree(rch(i)), i) } { init } ))
+        RST(k( IFm (i >= 0) { b(sh_tree(lch(i))(init), sh_tree(rch(i))(init), i) } { init } ))
         //if (i >= 0) { tree(lch(i))((l: ArrayBuffer[TensorR]) => tree(rch(i))((r: ArrayBuffer[TensorR]) => RST(k(b(l, r, i))))(x))(x) }
         //else { RST(k(x)) }
       }
