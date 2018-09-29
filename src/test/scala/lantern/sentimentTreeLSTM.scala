@@ -38,7 +38,7 @@ class SentimentTreeLSTM extends FunSuite {
       val word_embedding_length = readingSlot1(0)
 
       val word_embedding_data = NewArray[Array[Float]](word_embedding_length)
-      
+
       for (i <- (0 until word_embedding_length): Rep[Range]) {
         word_embedding_data(i) = NewArray[Float](word_embedding_size)
         for (j <- (0 until word_embedding_size): Rep[Range]) getFloat(fp, word_embedding_data(i), j)
@@ -49,7 +49,7 @@ class SentimentTreeLSTM extends FunSuite {
       val readingSlot2 = NewArray[Int](1) // need a new readingSlot, other wise have error
       val fp1 = openf("array_tree.txt", "r")
       getInt(fp1, readingSlot2, 0)
-      val tree_number = readingSlot2(0) 
+      val tree_number = readingSlot2(0)
       val tree_data = NewArray[Array[Int]](tree_number * 4) // each tree data has 4 lines (score, word, lch, rch)
 
       val readingSlot3 = NewArray[Int](1) // yet another readingSlot, not sure if this one can be reused
@@ -130,7 +130,7 @@ class SentimentTreeLSTM extends FunSuite {
         val inBuffer     = new ArrayBuffer[TensorR]()
         inBuffer.append(initial_loss); inBuffer.append(initial_hidd); inBuffer.append(initial_cell)
 
-        val outBuffer = LOOPTM(inBuffer)(lchs, rchs) { (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
+        val outBuffer = LOOPTM(0)(inBuffer)(lchs, rchs) { (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
 
           val lossl = l(0); val hiddenl = l(1); val celll = l(2)
           val lossr = r(0); val hiddenr = r(1); val cellr = r(2)
@@ -256,7 +256,7 @@ class SentimentTreeLSTM extends FunSuite {
         loss_save(epoc) = average_loss
         val tempTime = get_time()
         printf("epoc %d, average_loss %f, time %lf\\n", epoc, average_loss, (tempTime - loopStart))
-        
+
       }
 
       val loopEnd = get_time()
@@ -275,13 +275,13 @@ class SentimentTreeLSTM extends FunSuite {
 
     }
   }
-  
+
   test("generate_code_for_sentiment_tree_lstm"){
     //println("generate code for Sentiment Tree LSTM")
     val sentit_file = new PrintWriter(new File(root_dir + file_dir))
     sentit_file.println(sentimental_lstm.code)
     sentit_file.flush()
-    //println(s"now your code at $root_dir/$file_dir is generated.")  
+    //println(s"now your code at $root_dir/$file_dir is generated.")
   }
- 
+
 }

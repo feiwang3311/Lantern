@@ -10,6 +10,11 @@ cache:
   directories:
     - $HOME/.ivy2/cache
     - $HOME/.sbt/boot
+    - $HOME/tmp
+    - $HOME/onnx_models
+
+before_script:
+  - scripts/download_squeezenet.sh
 
 script:
   - sbt test

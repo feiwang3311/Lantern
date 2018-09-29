@@ -20,7 +20,7 @@ import java.io.File;
 class SentimentTreeRNN extends FunSuite {
 
   val file_dir = "src/out/untested/sentiment_tree_rnn.cpp/"
-	
+
 	val sentimental_rnn = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
     @virtualize
@@ -97,7 +97,7 @@ class SentimentTreeRNN extends FunSuite {
        val inBuffer     = new ArrayBuffer[TensorR]()
        inBuffer.append(initial_loss); inBuffer.append(initial_hidd) // construct the input to LOOPTM
 
-       val outBuffer = LOOPTM(inBuffer)(lchs, rchs) { (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
+       val outBuffer = LOOPTM(0)(inBuffer)(lchs, rchs) { (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
 
          val targ = Tensor.zeros(output_size); targ.data(scores(i)) = 1; val targ1 = TensorR(targ)
          val lossl = l(0); val hiddenl = l(1)

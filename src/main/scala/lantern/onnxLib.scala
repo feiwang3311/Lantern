@@ -184,7 +184,7 @@ trait ONNXLib extends TensorExp {
           assert (outputs.size == 2, "number of outputs for dropout node should always be 2")
 
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-          assert (attributes.size == 2, "number of attributes for dropout node should be 2")
+          assert (attributes.size == 1, "number of attributes for dropout node should be 1")
           val ratio: Float = if (attributes.head.name == "ratio") attributes.head.getF else attributes.last.getF
           val is_test: Int = (if (attributes.last.name == "is_test") attributes.last.getI else attributes.head.getI).toInt
           // TODO: (Fei Wang) warning - the is_test is not considered by the implementation (Don't know what it means!!)

@@ -22,14 +22,14 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 
 class ONNXTest extends FunSuite {
+  val model_file = s"""${sys.env("HOME")}/onnx_models/squeezenet/model.onnx"""
 
   test("onnx_reading_basic") {
 
-    val filename = "src/test/onnxModel/squeezenet/model.onnx"
-    println(s"testing reading onnx models from $filename")
+    println(s"testing reading onnx models from $model_file")
 
     // model information
-    val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(filename))
+    val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
     // println("irversion is " + model.getIrVersion)
     // println("producer name is " + model.getProducerName)
     // println("producer version is " + model.getProducerVersion)
@@ -208,13 +208,8 @@ class ONNXTest extends FunSuite {
     }
   }
 
-  val model_file = "src/test/onnxModel/squeezenet/model.onnx"
   val gene_dir = "src/out/untested/"
-<<<<<<< 05a321f05e18897098c660d0e574843ba3563039
 
-=======
-  
->>>>>>> ONNXLib for model reading, generating inference func, and training func
   val squeezenet = new DslDriverC[String, Unit] with TensorExp {
 
     @virtualize
@@ -248,18 +243,13 @@ class ONNXTest extends FunSuite {
       def extract_inits(inits: Seq[onnx_ml.TensorProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = {
         val map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] = Map()
         // TODO: (Fei Wang) use immutable map instead!!
-<<<<<<< 05a321f05e18897098c660d0e574843ba3563039
         inits.foreach { init =>
-=======
-        inits.foreach { init => 
->>>>>>> ONNXLib for model reading, generating inference func, and training func
-          val (name, dims, datatype, floatarray) = extract_init(init)
-          map += (name -> (dims, datatype, floatarray))
+          map += extract_init(init)
         }
         map
       }
 
-      def extract_init(init: onnx_ml.TensorProto): (String, Seq[Int], onnx_ml.TensorProto.DataType, Array[Float]) = {
+      def extract_init(init: onnx_ml.TensorProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])) = {
         val dims: Seq[Int] = init.dims.map(x => x.toInt)
         val name: String = init.getName
         val datatype: onnx_ml.TensorProto.DataType = init.getDataType
@@ -272,7 +262,7 @@ class ONNXTest extends FunSuite {
         floatbuffer.get(floatarray)
         // make sure that the initialization values correspond with the dims
         assert (floatarray.length == dims.fold(1)(_ * _))
-        (name, dims, datatype, floatarray)
+        (name -> (dims, datatype, floatarray))
       }
 
       def extract_values(puts: Seq[onnx_ml.ValueInfoProto]): Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = {
@@ -418,7 +408,7 @@ class ONNXTest extends FunSuite {
             assert (outputs.size == 2, "number of outputs for dropout node should always be 2")
 
             val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-            assert (attributes.size == 2, "number of attributes for dropout node should be 2")
+            assert (attributes.size == 1, "number of attributes for dropout node should be 1")
             val ratio: Float = if (attributes.head.name == "ratio") attributes.head.getF else attributes.last.getF
             val is_test: Int = (if (attributes.last.name == "is_test") attributes.last.getI else attributes.head.getI).toInt
 
@@ -511,6 +501,7 @@ class ONNXTest extends FunSuite {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
+
         val model = readONNX(model_file)
         val (func, x_dims) = (model.inference_func, model.x_dims)
 
