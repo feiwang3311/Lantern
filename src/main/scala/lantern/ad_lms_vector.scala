@@ -1173,8 +1173,9 @@ trait TensorExp extends Dsl with Diff {
       assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
       assert(this.dims(2) >= kernelRow && this.dims(3) >= kernelCol, "Image too small for maxPool_k: " + this.dims + "|" + (kernelRow, kernelCol))
 
-      val resWidth = convSize(this.dims(1), kernelRow, strideRow)
-      val resHeight = convSize(this.dims(2), kernelCol, strideCol)
+      val resWidth = convSize(this.dims(2), kernelRow, strideRow)
+      val resHeight = convSize(this.dims(3), kernelCol, strideCol)
+      assert(resWidth == resHeight, "in general, the processed image is still square: " + resWidth + "|" + resHeight)
       val res = Tensor.fill(scala.Float.MinValue, this.dims(0), this.dims(1), resWidth, resHeight)
       val savedIdx = NewArray[Int](res.nbElem)
 
