@@ -1367,5 +1367,146 @@ class AdLMSVectorTest extends FunSuite {
     //test_cnn_full1.eval("abc")
   }
 
+  val gene_dir = "src/out/untested/"
+  def testByRun(snippet: DslDriverC[String, Unit]) = {
+    val test = new PrintWriter(new File("/tmp/snippet.cpp"))
+    test.println(snippet.code)
+    test.flush()
+    (new java.io.File("/tmp/snippet")).delete
+    import scala.sys.process._
+    System.out.println("Compile C++ code")
+    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println _)
+    System.out.println("Run C++ code")
+    (s"/tmp/snippet a": ProcessBuilder).lines.foreach(System.out.println _)
+  }
 
+  test("op_conv") {
+    System.out.println("debugging")
+
+    val deb = new DslDriverC[String, Unit] with TensorExp {
+      import scala.collection.Seq;
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.ones(1, 3, 8, 8)
+        val kernel = Tensor.ones(1, 3, 3, 3)
+        val bias = Tensor.ones(1)
+        val strides: Seq[Int] = List(2, 2).toSeq
+        val pads: Seq[Int] = List(0,0,0,0).toSeq
+        val output = input.conv2D_batch(kernel, bias, strides, pads)
+
+        // assert equal
+        val expect = Tensor.fromData(scala.collection.Seq(1,1,3,3), 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f)
+        Tensor.assertEqual(expect, output, "expect and output are")
+      }
+    }
+
+    val debug_file = new PrintWriter(new File(gene_dir + "conv.cpp"))
+    debug_file.println(deb.code)
+    debug_file.flush()
+
+    // test runtime assertion of the generated file
+    testByRun(deb)
+  }
+
+  test("op_conv_pad") {
+    System.out.println("debugging")
+    val deb = new DslDriverC[String, Unit] with TensorExp {
+      import scala.collection.Seq;
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.ones(1, 1, 4, 4)
+        val kernel = Tensor.ones(1, 1, 3, 3)
+        val bias = Tensor.zeros(1)
+        val strides: Seq[Int] = List(3, 3).toSeq
+        val pads: Seq[Int] = List(1, 1, 1, 1).toSeq
+        val output = input.conv2D_batch(kernel, bias, strides, pads)
+
+        // assert equal
+        val expect = Tensor.fromData(scala.collection.Seq(1,1,2,2), 4.0f, 4.0f, 4.0f, 4.0f)
+        Tensor.assertEqual(expect, output, "expect and output are")
+      }
+    }
+
+    val debug_file = new PrintWriter(new File(gene_dir + "conv_pad.cpp"))
+    debug_file.println(deb.code)
+    debug_file.flush()
+
+    testByRun(deb)
+  }
+
+  test("backprop_op_conv") {
+    System.out.println("debugging")
+    val deb = new DslDriverC[String, Unit] with TensorExp {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = TensorR(Tensor.ones(1,1,4,4))
+        val kernel = TensorR(Tensor.ones(1,1,3,3))
+        val bias = TensorR(Tensor.zeros(1))
+        val strides: scala.collection.Seq[Int] = List(1,1).toSeq
+        val pads: scala.collection.Seq[Int] = List(0,0,0,0).toSeq
+
+        def lossFun(x: TensorR) = {
+          val output = input.convBBP(kernel, bias, strides, pads)
+          output.sum()
+        }
+        val loss = gradR_loss(lossFun)(Tensor.zeros(1))
+
+        // assert equal
+        val expect_input_grad = Tensor.fromData(scala.collection.Seq(1,1,4,4),
+          1.0f, 2.0f, 2.0f, 1.0f, 2.0f, 4.0f, 4.0f, 2.0f, 2.0f, 4.0f, 4.0f, 2.0f, 1.0f, 2.0f, 2.0f, 1.0f)
+        val expect_kernel_grad = Tensor.fromData(scala.collection.Seq(1,1,3,3),
+          4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f)
+        val expect_bias_grad = Tensor.fromData(scala.collection.Seq(1), 4.0f)
+        Tensor.assertEqual(expect_input_grad, input.d, "expect and input.gradient are")
+        Tensor.assertEqual(expect_kernel_grad, kernel.d, "expect and kernel.gradient are")
+        Tensor.assertEqual(expect_bias_grad, bias.d, "expect and bias.gradient are")
+      }
+    }
+    val debug_file = new PrintWriter(new File(gene_dir + "backprop_conv.cpp"))
+    debug_file.println(deb.code)
+    debug_file.flush()
+
+    testByRun(deb)
+  }
+
+  test("backprop_op_conv_pad") {
+    System.out.println("debugging")
+    val deb = new DslDriverC[String, Unit] with TensorExp {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = TensorR(Tensor.ones(1,1,4,4))
+        val kernel = TensorR(Tensor.ones(1,1,3,3))
+        val bias = TensorR(Tensor.zeros(1))
+        val strides: scala.collection.Seq[Int] = List(3,3).toSeq
+        val pads: scala.collection.Seq[Int] = List(1,1,1,1).toSeq
+
+        def lossFun(x: TensorR) = {
+          val output = input.convBBP(kernel, bias, strides, pads)
+          output.sum()
+        }
+        val loss = gradR_loss(lossFun)(Tensor.zeros(1))
+
+        input.d.print("input_grad")
+        kernel.d.print("kernel_grad")
+        bias.d.print("bias_grad")
+
+        // assert equal
+        val expect_input_grad = Tensor.fromData(scala.collection.Seq(1,1,4,4),
+          1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f)
+        val expect_kernel_grad = Tensor.fromData(scala.collection.Seq(1,1,3,3),
+          1.0f, 2.0f, 1.0f, 2.0f, 4.0f, 2.0f, 1.0f, 2.0f, 1.0f)
+        val expect_bias_grad = Tensor.fromData(scala.collection.Seq(1), 4.0f)
+        Tensor.assertEqual(expect_input_grad, input.d, "expect and input.gradient are")
+        Tensor.assertEqual(expect_kernel_grad, kernel.d, "expect and kernel.gradient are")
+        Tensor.assertEqual(expect_bias_grad, bias.d, "expect and bias.gradient are")
+      }
+    }
+    val debug_file = new PrintWriter(new File(gene_dir + "backprop_conv_pad.cpp"))
+    debug_file.println(deb.code)
+    debug_file.flush()
+
+    testByRun(deb)
+  }
 }

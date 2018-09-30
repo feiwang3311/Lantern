@@ -504,19 +504,12 @@ class ONNXTest extends FunSuite {
         val model = readONNX(model_file)
         val (func, x_dims) = (model.inference_func, model.x_dims)
 
-        //model.initializer_map_tensor("conv1_w_0").printHead(msg = "conv1_w_0")
-        model.initializer_map_tensor("conv10_b_0").printHead(msg = "conv10_b_0")
-
         // get test data as TensorProto
         val input_file =  model_dir + "test_data_set_0/input_0.pb"
         val output_file = model_dir + "test_data_set_0/output_0.pb"
         val input = readTensor(input_file).tensor
         val output = readTensor(output_file).tensor
-
-        input.printHead(msg = "input")
         val output1 = func(input)
-        output.printHead(count = 100, msg = "true_out")
-        output1.printHead(msg = "my_output")
       }
     }
 
@@ -524,57 +517,6 @@ class ONNXTest extends FunSuite {
     squeezenet_file.println(inference_func.code)
     squeezenet_file.flush()
 
-  }
-
-  test("debug") {
-    System.out.println("debugging")
-
-    val deb = new DslDriverC[String, Unit] with ONNXLib {
-      import scala.collection.Seq;
-
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val input = Tensor.ones(1, 3, 8, 8)
-        input.print("input")
-        val kernel = Tensor.ones(1, 3, 3, 3)
-        kernel.print("kernel")
-        val bias = Tensor.ones(1)
-        bias.print("bias")
-        val strides: Seq[Int] = List(2, 2).toSeq
-        val pads: Seq[Int] = List(0,0,0,0).toSeq
-        val output = input.conv2D_batch(kernel, bias, strides, pads)
-        output.print("output")
-      }
-    }
-
-    val debug_file = new PrintWriter(new File(gene_dir + "debug.cpp"))
-    debug_file.println(deb.code)
-    debug_file.flush()
-  }
-
-  test("debug_conv_pad") {
-    System.out.println("debugging")
-    val deb = new DslDriverC[String, Unit] with ONNXLib {
-      import scala.collection.Seq;
-
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val input = Tensor.ones(1, 1, 4, 4)
-        input.print("input")
-        val kernel = Tensor.ones(1, 1, 3, 3)
-        kernel.print("kernel")
-        val bias = Tensor.zeros(1)
-        bias.print("bias")
-        val strides: Seq[Int] = List(3, 3).toSeq
-        val pads: Seq[Int] = List(1, 1, 1, 1).toSeq
-        val output = input.conv2D_batch(kernel, bias, strides, pads)
-        output.print("output")
-      }
-    }
-
-    val debug_file = new PrintWriter(new File(gene_dir + "debug.cpp"))
-    debug_file.println(deb.code)
-    debug_file.flush()
   }
 
   test("training") {
@@ -588,15 +530,17 @@ class ONNXTest extends FunSuite {
 
         // reading ONNX model
         val model = readONNX(model_file)
-        val func = model.training_func
-        val x_dims = model.x_dims
-        val y_dims = model.y_dims
+        val (func, x_dims, y_dims) = (model.training_func, model.x_dims, model.y_dims)
 
         // fake input and target
-        val input = TensorR(Tensor.zeros(x_dims: _*))
+        val input_file = model_dir + "test_data_set_0/input_0.pb"
+        val output_file = model_dir + "test_data_set_0/output_0.pb"
+        val input = readTensor(input_file).tensor
+        val output = readTensor(output_file).tensor
+
         val target = NewArray[Int](x_dims(0))
         for (i <- DataLoop(x_dims(0))) target(i) = 1
-        def lossFun(dummy: TensorR) = func(input).nllLossB(target).sum()
+        def lossFun(dummy: TensorR) = func(TensorR(input)).nllLossB(target).sum()
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
         println(loss.data(0))

@@ -115,6 +115,11 @@ trait TensorExp extends Dsl with Diff {
     if(!cond) { printf(msg, args : _*); exit() }
   }
 
+  @virtualize
+  def assertAlertTest(cond: Rep[Boolean], msg: String): Unit = {
+    if(!cond) { error(msg); }
+  }
+
   def slice(arr: Rep[Array[Float]], off: Rep[Int]) = uncheckedPure[Array[Float]](arr, "+", off)
   def sliceI(arr: Rep[Array[Int]], off: Rep[Int]) = uncheckedPure[Array[Int]](arr, "+", off)
 
@@ -1175,7 +1180,6 @@ trait TensorExp extends Dsl with Diff {
 
       val resWidth = convSize(this.dims(2), kernelRow, strideRow)
       val resHeight = convSize(this.dims(3), kernelCol, strideCol)
-      assert(resWidth == resHeight, "in general, the processed image is still square: " + resWidth + "|" + resHeight)
       val res = Tensor.fill(scala.Float.MinValue, this.dims(0), this.dims(1), resWidth, resHeight)
       val savedIdx = NewArray[Int](res.nbElem)
 
@@ -1562,6 +1566,13 @@ trait TensorExp extends Dsl with Diff {
       Tensor(res, y.length)
     }
 
+    def fromData(dims: Seq[Int], x: Float*) = {
+      val y = x.toArray
+      val res = NewArray[Float](y.length)
+      for (i <- 0 until y.length: Range) res(i) = y(i)
+      Tensor(res, dims: _*)
+    }
+
 
     // def conv(that: Tensor, stride: (Int, Int) = (1, 1))
 
@@ -1573,8 +1584,10 @@ trait TensorExp extends Dsl with Diff {
       while (i < a.nbElem && { val diff = a.data(i) - b.data(i); diff > -tal && diff < tal }) {
         i += 1
       }
-      if (i < a.nbElem)
+      if (i < a.nbElem) {
         printf("ERROR: %s not equal in some data - %.4f != %.4f (%d)\\n", mark, a.data(i), b.data(i), i)
+        error("")
+      }
     }
   }
 
@@ -1757,8 +1770,8 @@ trait TensorExp extends Dsl with Diff {
                 val offKernelR = var_new(offKernel)            // offset of kernel, based on offKernel, step by 1
                 for (pane <- DataLoop(kernel.d.dims(1))) {
                   val offInputKR = var_new(offInputP)          // offset of input, step by input.strides(3) -- row
-                  for (kR <- 0 until kernel.d.dims(2): Rep[Range]) {
-                    for (kC <- 0 until kernel.d.dims(3): Rep[Range]) {
+                  for (kR <- DataLoop(kernel.d.dims(2))) {
+                    for (kC <- DataLoop(kernel.d.dims(3))) {
                       if (!this.isInput) this.d.data(offInputKR + kC) = this.d.data(offInputKR + kC) + dCurr * kernel.x.data(offKernelR)
                       kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
                       offKernelR += 1
@@ -1805,8 +1818,8 @@ trait TensorExp extends Dsl with Diff {
                         val InputI = InputI_kR + kC
                         if (!this.isInput) this.d.data(InputI) = this.d.data(InputI) + dCurr * kernel.x.data(offKernelR)
                         kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(InputI)
-                        offKernelR += 1
                       }
+                      offKernelR += 1
                     }
                     InputI_kR += this.x.strides(3)
                   }
