@@ -19,7 +19,7 @@ import java.io.File;
 
 class SentimentLSTM extends FunSuite {
 
-  val file_dir = "src/out/untested/sentiment_lstm.cpp/"
+  val file_dir = "/tmp/sentiment_lstm.cpp"
 
   val senti_seq_lstm = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 

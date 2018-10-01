@@ -1367,7 +1367,7 @@ class AdLMSVectorTest extends FunSuite {
     //test_cnn_full1.eval("abc")
   }
 
-  val gene_dir = "src/out/untested/"
+  val gene_dir = "/tmp/"
   def testByRun(snippet: DslDriverC[String, Unit]) = {
     val test = new PrintWriter(new File("/tmp/snippet.cpp"))
     test.println(snippet.code)

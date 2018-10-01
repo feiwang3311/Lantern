@@ -19,7 +19,7 @@ import java.io.File;
 
 class VanillaRNNList extends FunSuite {
 
-  val file_dir = "src/out/untested/vanilla_rnn_list.cpp/"
+  val file_dir = "/tmp/vanilla_rnn_list.cpp/"
 
   val min_char_list = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
