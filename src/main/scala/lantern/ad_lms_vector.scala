@@ -74,12 +74,12 @@ trait TensorExp extends Dsl with Diff {
       def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
       def mmap[T:Typ](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",remap(typ[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
 
-      val fd = open(s"data/bin/${name}_${if (train) "train" else "test"}.bin")
+      val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
       val len = filelen(fd)
       val data = mmap[Float](fd, len)
       val dLength = (len/4L).toInt
 
-      val tfd = open(s"data/bin/${name}_${if (train) "train" else "test"}_target.bin")
+      val tfd = open(s"../data/bin/${name}_${if (train) "train" else "test"}_target.bin")
       val tlen = filelen(tfd)
       val target = mmap[Int](tfd, tlen)
       val length = (tlen/4L).toInt
@@ -113,11 +113,6 @@ trait TensorExp extends Dsl with Diff {
   @virtualize
   def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = {
     if(!cond) { printf(msg, args : _*); exit() }
-  }
-
-  @virtualize
-  def assertAlertTest(cond: Rep[Boolean], msg: String): Unit = {
-    if(!cond) { error(msg); }
   }
 
   def slice(arr: Rep[Array[Float]], off: Rep[Int]) = uncheckedPure[Array[Float]](arr, "+", off)
@@ -211,22 +206,20 @@ trait TensorExp extends Dsl with Diff {
     */
   trait BackendNative extends Backend {
     override def dot(x: Tensor, y: Tensor): Tensor = {
-      // TODO: remove loop if not needed
+      // TODO: (Fei Wang): only support 2D dot 1D and 1D dot 1D
+      assert (x.dims.size <= 2 && y.dims.size == 1, "TODO: (Fei Wang): only support 2D dot 1D and 1D dot 1D")
       val off = var_new(0)
       val up = if (x.nbDims > 1) x.dims(0) else 1
       val res = NewArray[Float](up)
       for (j <- DataLoop(up)) {
-        //for (j <- (0 until up): Rep[Range]) {
         val value = var_new(0.0f)
         for (i <- DataLoop(x.dims.last)) {
-          //for (i <- (0 until x.dims.last): Rep[Range]) {
           value += x.data(off) * y.data(i)
           off += 1
         }
         res(j) = readVar(value)
       }
-      val dim = if (x.nbDims == 1) 1 else x.dims(0)
-      Tensor(res, dim)
+      Tensor(res, up)
     }
   }
 
@@ -623,7 +616,7 @@ trait TensorExp extends Dsl with Diff {
     }
 
     def resize(dims: Int*) = {
-      assert(dims.product == this.nbElem)
+      assert(dims.product == this.nbElem, s"dims: $dims != nbElem: $nbElem")
 
       Tensor(this.data, dims : _*)
     }
@@ -1418,7 +1411,6 @@ trait TensorExp extends Dsl with Diff {
     // the current mean is m and the current std is s
     @virtualize
     def normalize(m: Float, s: Float, inPlace: Boolean = false) = {
-      assert(this.nbDims == 3 && this.dims(0) == 1) // FIXME
       if (inPlace) {
         this.mapInPlace(x => (x - m)/s)
         this
@@ -1572,9 +1564,6 @@ trait TensorExp extends Dsl with Diff {
       for (i <- 0 until y.length: Range) res(i) = y(i)
       Tensor(res, dims: _*)
     }
-
-
-    // def conv(that: Tensor, stride: (Int, Int) = (1, 1))
 
     @virtualize
     def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.000001f) = {
@@ -1740,16 +1729,16 @@ trait TensorExp extends Dsl with Diff {
 
     @virtualize
     // conv with batch, bias, and pads
-    def convBBP(kernel: TensorR, bias: TensorR, strides: NSeq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
+    def convBBP(kernel: TensorR, bias: TensorR, stride: NSeq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
       assert(this.isInput || this.d.nbElem == this.x.nbElem, "For convBBP, THIS is either input or intermediate stage")
       assert(this.x.nbDims == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
       assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
-      val y = TensorR(x conv2D_batch(kernel.x, bias.x, strides, pads))
+      val y = TensorR(x conv2D_batch(kernel.x, bias.x, stride, pads))
       k(y)
 
       // back propagate
-      val strideRow = strides.head
-      val strideCol = strides.last
+      val strideRow = stride.head
+      val strideCol = stride.last
 
       if (pads.sum == 0) {
         for (batch <- DataLoop(this.x.dims(0))) {
@@ -1757,7 +1746,7 @@ trait TensorExp extends Dsl with Diff {
           val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
           // looping for the output
           for (kOut <- DataLoop(y.d.dims(1))) {
-            val offInputR = var_new(batch * this.d.strides(1)) // offset of input, based on batch, step by input.strides(3) * strideRow
+            val offInputR = var_new(batch * this.x.strides(1)) // offset of input, based on batch, step by input.strides(3) * strideRow
             val sum = var_new(0.0f)                            // collector of bias gradient
             for (row <- DataLoop(y.d.dims(2))) {
               val offInputC = var_new(offInputR)               // offset of input, based on offInputR, step by strideCol
