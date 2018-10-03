@@ -155,7 +155,7 @@ class AdLMSTest extends FunSuite {
   }
 
 
-  test("foward_forward") {
+  test("forward_forward") {
     val gff1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradFF(x => x + x*x*x)(x)
@@ -167,14 +167,14 @@ class AdLMSTest extends FunSuite {
     }
   }
 
-  //println("demonstrate the problem of purturbation confusion")
-  test("purturbation confusion") {
+  // println("demonstrate the problem of perturbation confusion")
+  test("perturbation_confusion") {
     val grr = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradR{ (x: NumR) =>
           val temp = new NumR(gradR(y => x + y)(1), var_new(0.0))
           x * temp
-          } (x)
+        } (x)
       }
     }
     def grad_confusion = 2
