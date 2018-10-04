@@ -1499,6 +1499,6 @@ class AdLMSVectorTest extends FunSuite {
     debug_file.println(deb.code)
     debug_file.flush()
 
-    testByRun(deb)
+    runTest(deb)
   }
 }
