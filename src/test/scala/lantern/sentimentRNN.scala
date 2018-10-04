@@ -19,7 +19,7 @@ import java.io.File;
 
 class SentimentTreeRNN extends FunSuite {
 
-  val file_dir = "src/out/untested/sentiment_tree_rnn.cpp/"
+  val file_dir = "/tmp/sentiment_tree_rnn.cpp"
 
 	val sentimental_rnn = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 

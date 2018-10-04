@@ -25,7 +25,7 @@ class ONNXTest extends FunSuite {
 
   val model_file = s"""${sys.env("HOME")}/onnx_models/squeezenet/model.onnx"""
   val model_dir = s"""${sys.env("HOME")}/onnx_models/squeezenet/"""
-  val gene_dir = "src/out/untested/"
+  val gene_dir = "/tmp/"
 
   test("onnx_reading_basic") {
 

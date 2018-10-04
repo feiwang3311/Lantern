@@ -155,7 +155,7 @@ class AdLMSTest extends FunSuite {
   }
 
 
-  test("foward_forward") {
+  test("forward_forward") {
     val gff1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradFF(x => x + x*x*x)(x)
@@ -167,14 +167,14 @@ class AdLMSTest extends FunSuite {
     }
   }
 
-  //println("demonstrate the problem of purturbation confusion")
-  test("purturbation confusion") {
+  // println("demonstrate the problem of perturbation confusion")
+  test("perturbation_confusion") {
     val grr = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradR{ (x: NumR) =>
           val temp = new NumR(gradR(y => x + y)(1), var_new(0.0))
           x * temp
-          } (x)
+        } (x)
       }
     }
     def grad_confusion = 2
@@ -355,7 +355,7 @@ class AdLMSTest extends FunSuite {
 
         // create a model that recursively use the data in arr (originated from list)
         def model: NumR => NumR @diff = { (x: NumR) =>
-          LOOPL5(x)(arra.length)(i => x1 => new NumR(arra(i), var_new(0.0)) * x1)
+          LOOPL5(0)(x)(arra.length)(i => x1 => new NumR(arra(i), var_new(0.0)) * x1)
         }
         val res = gradR(model)(x)
         res
@@ -385,6 +385,87 @@ class AdLMSTest extends FunSuite {
 
     System.out.println(gr112.code)
   }*/
+
+  test("tranverse_array5") {
+    val gr11 = new DslDriver[Double, Double] with DiffApi {
+
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val array = mutableStaticData(scala.Array(4.0, 3.0, 1.5, 2.0))
+
+        // create a model that recursively use the data in arr (originated from list)
+        def model: NumR => NumR @diff = { (x: NumR) =>
+          LOOPL6(0)(x)(array)(i => x1 => new NumR(array(i), var_new(0.0)) * x1)
+        }
+        val res = gradR(model)(x)
+        res
+      }
+    }
+    System.out.println(gr11.code)
+    def grad(x: Double): Double = 1.5 * 2.0 * 3.0 * 4.0
+    for (x <- (-5 until 5)) {
+      assert (gr11.eval(x) == grad(x))
+    }
+  }
+  /** code is correct!
+  double Snippet(double  x0) {
+    double x1[4] = {4.0,3.0,1.5,2.0};
+    function<double(int32_t,function<double(double)>,double)> x3 = [&](int32_t x7,function<double(double)> x8,double x9) {
+      double x10 = 0.0;
+      if (x7 < 4) {
+        function<double(double)> x13 = [&](double x14) {
+          double x16 = x1[x7];
+          return x16 * x8(x16 * x14);
+        };
+        x10 += x3(x7 + 1, x13, x9);
+      } else {
+        x10 += x8(x9);
+      }
+      return x10;
+    };
+    return x3(0, [&](double x47) { return 1.0; }, x0);
+  }
+  **/
+
+  test("tranverse_array6") {
+    val gr11 = new DslDriverC[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val array = Array(4.0, 3.0, 1.5, 2.0)
+        def model: Rep[Array[Double]] => NumR => NumR @diff = { (array: Rep[Array[Double]]) => (x: NumR) =>
+
+          val F = (start: Rep[Int]) => (y: NumR) => shift { k: (NumR => Unit) =>
+            lazy val loop: (Rep[Int] => (NumR => Unit) => NumR => Unit) = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
+              def sh_loop = (i: Rep[Int]) => (x: NumR) => shift { (k: NumR => Unit) => loop(i)(k)(x) }
+              RST(k( IF(i < array.length) { new NumR(array(i), var_new(0.0)) * sh_loop(i+1)(x) } {x} ))
+            }
+            loop(start)(k)(y)
+          }
+          F(0)(x)
+        }
+        gradR(model(array))(x)
+      }
+    }
+    System.out.println(gr11.code)
+  }
+
+  /* still correct
+  double Snippet(double  x0) {
+    double x1[4] = {4.0,3.0,1.5,2.0};
+    function<double(int32_t,function<double(double)>,double)> x3 = [&](int32_t x7,function<double(double)> x5,double x6) {
+      double x10 = 0.0;
+      if (x7 < 4) {
+        function<double(double)> x13 = [&](double x14) {
+          double x16 = x1[x7];
+          return x16 * x5(x16 * x14);
+        };
+        x10 += x3(x7 + 1,x13, x6);
+      } else {
+        x10 += x5(x6);
+      }
+      return x10;
+    };
+    return x3(0, [&](double x47) {return 1.0;}, x0);
+  }
+  */
 
   test("tree") {
     val gr12 = new DslDriver[Double, Double] with DiffApi {

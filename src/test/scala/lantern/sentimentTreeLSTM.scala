@@ -137,57 +137,42 @@ class SentimentTreeLSTM extends FunSuite {
 
           val targ = Tensor.zeros(output_size); targ.data(scores(i)) = 1; val targ1 = TensorR(targ)
 
-          val embedding_tensor = IF (lchs(i) < 0) {
-            TensorR(Tensor(word_embedding_data(words(i)), word_embedding_size))
-          } {dummy_word_embedding}
+          IFm (lchs(i) < 0) {
+            val embedding_tensor = TensorR(Tensor(word_embedding_data(words(i)), word_embedding_size))
+            val i_gate = (tWi.dot(embedding_tensor) + tbi).sigmoid()
+            val o_gate = (tWo.dot(embedding_tensor) + tbo).sigmoid()
+            val u_value = (tWu.dot(embedding_tensor) + tbu).tanh()
+            val cell = i_gate * u_value
 
-          val i_gate = IF (lchs(i) < 0) {
-          (tWi.dot(embedding_tensor) + tbi).sigmoid()
+            val hidden = o_gate * cell.tanh()
+            val pred1 = (tWhy.dot(hidden) + tby).exp()
+            val pred2 = pred1 / pred1.sum()
+            val loss = lossl + lossr - (pred2 dot targ1).log()
+
+            val out = ArrayBuffer[TensorR]()
+            out.append(loss)
+            out.append(hidden)
+            out.append(cell)
+            out
           } {
-            (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
+            val i_gate = (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
+            val fl_gate = (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).sigmoid()
+            val fr_gate = (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).sigmoid()
+            val o_gate = (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).sigmoid()
+            val u_value = (tU0u.dot(hiddenl) + tU1u.dot(hiddenr) + tbbu).tanh()
+            val cell = i_gate * u_value + fl_gate * celll + fr_gate * cellr
+
+            val hidden = o_gate * cell.tanh()
+            val pred1 = (tWhy.dot(hidden) + tby).exp()
+            val pred2 = pred1 / pred1.sum()
+            val loss = lossl + lossr - (pred2 dot targ1).log()
+
+            val out = ArrayBuffer[TensorR]()
+            out.append(loss)
+            out.append(hidden)
+            out.append(cell)
+            out
           }
-
-          val fl_gate = IF (lchs(i) < 0) {
-            dummy_forget_gate
-          } {
-            (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).sigmoid()
-          }
-
-          val fr_gate = IF (lchs(i) < 0) {
-            dummy_forget_gate
-          } {
-            (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).sigmoid()
-          }
-
-          val o_gate = IF (lchs(i) < 0) {
-            (tWo.dot(embedding_tensor) + tbo).sigmoid()
-          } {
-            (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).sigmoid()
-          }
-
-          val u_value = IF (lchs(i) < 0) {
-            (tWu.dot(embedding_tensor) + tbu).tanh()
-          } {
-            (tU0u.dot(hiddenl) + tU1u.dot(hiddenr) + tbbu).tanh()
-          }
-
-          val cell = IF (lchs(i) < 0) {
-            i_gate * u_value
-          } {
-            i_gate * u_value + fl_gate * celll + fr_gate * cellr
-          }
-
-          val hidden = o_gate * cell.tanh()
-
-          val pred1 = (tWhy.dot(hidden) + tby).exp()
-          val pred2 = pred1 / pred1.sum()
-          val loss = lossl + lossr - (pred2 dot targ1).log()
-
-          val out = ArrayBuffer[TensorR]()
-          out.append(loss)
-          out.append(hidden)
-          out.append(cell)
-          out
         }
         outBuffer(0)
       }

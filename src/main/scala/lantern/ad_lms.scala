@@ -41,6 +41,9 @@ trait DiffApi extends Dsl with Diff {
       // is it worth optimizing x*x --> 2*x (this == that)?
       val y = new NumR(x * that.x, var_new(0.0)); k(y)
       this.d += that.x * y.d; that.d += this.x * y.d }
+    def -(that: NumR): NumR @diff = shift{ (k: NumR => Unit) =>
+      val y = new NumR(x - that.x, var_new(0.0)); k(y)
+      this.d += y.d; that.d -= y.d}
     def print() = {
       printf("the value is %f\n", x)
       printf("the gradient is %f\n", d)
@@ -184,22 +187,23 @@ trait DiffApi extends Dsl with Diff {
   // In that sense, an array is traversed in the opposite order.
   // this loop is important for traversing functional list, or any recursive data structures.
   @virtualize
-  def LOOPL5(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
+  def LOOPL5(start: Rep[Int])(init: NumR)(c: Rep[Int])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
     lazy val loop: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (gc: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
-      if (gc < c) { loop(gc+1)((x: NumR) => RST(k(b(gc)(x))))(x)  } else { RST(k(x)) }
+      def sh_loop: Rep[Int] => NumR => NumR @diff = (i: Rep[Int]) => (x: NumR) => shift{(k: NumR => Unit) => loop(i)(k)(x)}
+      RST(k(IF(gc < c) {b(gc)(sh_loop(gc+1)(x))}{x} ))
     }
-    loop(0)(k)(init)
+    loop(start)(k)(init)
   }
 
   // iterate an array in reverse order by stacking continuations.
   // this is the same as LOOPL5, but using an array as input.
   @virtualize
-  def LOOPL6(init: NumR)(a: Rep[Array[Double]])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
-    val bound = a.length
+  def LOOPL6(start: Rep[Int])(init: NumR)(a: Rep[Array[Double]])(b: Rep[Int] => NumR => NumR @diff): NumR @diff = shift { k: (NumR => Unit) =>
     lazy val loop: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (gc: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
-      if (gc < bound) { loop(gc+1)((x: NumR) => RST(k(b(gc)(x))))(x) } else RST(k(x))
+      def sh_loop: Rep[Int] => NumR => NumR @diff = (i: Rep[Int]) => (x: NumR) => shift{(k: NumR => Unit) => loop(i)(k)(x)}
+      RST(k(IF(gc < a.length) {b(gc)(sh_loop(gc+1)(x))}{x}))
     }
-    loop(0)(k)(init)
+    loop(start)(k)(init)
   }
 
   /*
@@ -258,7 +262,8 @@ trait DiffApi extends Dsl with Diff {
     val encode: (Rep[Int] => NumR) = {x: Rep[Int] => new NumR(data(x), var_new(0.0))}
 
     lazy val tree: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
-      if (i < bound) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, encode(i)))))(x))(x) } else { RST(k(x)) }
+      def sh_tree = (i: Rep[Int]) => shift{k: (NumR => Unit) => tree(i)(k)(x)}
+      RST(k( IF(i < bound) {b(sh_tree(lch(i)), sh_tree(rch(i)), encode(i))}{x}))
     }
     tree(0)(k)(init)
   }
@@ -268,7 +273,8 @@ trait DiffApi extends Dsl with Diff {
     k: (NumR => Unit) =>
 
     lazy val tree: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
-      if (i < bound) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
+      def sh_tree = (i: Rep[Int]) => shift{k: (NumR => Unit) => tree(i)(k)(x)}
+      RST(k( IF(i < bound) {b(sh_tree(lch(i)), sh_tree(rch(i)), i)}{x} ))
     }
     tree(0)(k)(init)
   }
@@ -278,16 +284,14 @@ trait DiffApi extends Dsl with Diff {
     k: (NumR => Unit) =>
 
     lazy val tree: Rep[Int] => (NumR => Unit) => NumR => Unit = FUNL1 { (i: Rep[Int]) => (k: NumR => Unit) => (x: NumR) =>
-      //if (i >= 0) { tree(lch(i))((l: NumR) => tree(rch(i))((r: NumR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
-      def tt(i: Rep[Int]) = shift{ k: (NumR => Unit) => tree(i)(k)(x) }
-      if (i >= 0) { RST { k(b(tt(lch(i)), tt(rch(i)), i)) } } else { RST(k(x)) }
+      def sh_tree = (i: Rep[Int]) => shift{ k: (NumR => Unit) => tree(i)(k)(x) }
+      RST(k( IF(i >= 0){ b(sh_tree(lch(i)), sh_tree(rch(i)), i) } { x } ))
     }
     tree(0)(k)(init)
   }
 
   @virtualize
   def Rec(init: NumR)(b: NumR => NumR @diff): NumR @diff = shift { (k: NumR => Unit) =>
-
     lazy val rec: (NumR => Unit) => NumR => Unit = FUNL { (k: NumR => Unit) => (x: NumR) =>
       RST{k(b(x))}
     }
@@ -303,7 +307,6 @@ trait DiffApi extends Dsl with Diff {
     val x1 = new NumR(x, var_new(0.0))
     reset {
       val r = f(x1)
-      //printf("result of model is %f\n", r.x)
       var_assign(r.d, 1.0); ()
     }
     x1.d

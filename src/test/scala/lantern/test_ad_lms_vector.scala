@@ -1154,7 +1154,7 @@ class AdLMSVectorTest extends FunSuite {
         val (res, idx) = input.maxPool(sR, sC)
 
         Tensor.assertEqual(res, Tensor.ones(iPane, iRow/sR, iCol/sC), "MAXPOOL 1")
-        for (i <- 0 until res.nbElem: Rep[Range]) {
+        for (i <- 0 until res.scalarCount: Rep[Range]) {
           // assertC(idx(i) ==  (i / res.strides(2)) * sR * input.strides(2) + sC * (i % res.strides(2)), s"Maxpool index invalid %d != %d (%d - %d)\\n", idx(i), (i / res.strides(2)) * sR * input.strides(2) + sC * (i % res.strides(2)), i / res.strides(2), i % res.strides(2))
         }
 
@@ -1213,7 +1213,7 @@ class AdLMSVectorTest extends FunSuite {
         Tensor.assertEqual(resAll, input, "DROPOUT 1")
         Tensor.assertEqual(resNone, Tensor.zeros(input), "DROPOUT 2")
 
-        for (i <- 0 until input.nbElem: Rep[Range]) {
+        for (i <- 0 until input.scalarCount: Rep[Range]) {
           assertC(idxAll(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll(i))
           assertC(idxNone(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone(i))
         }
@@ -1367,7 +1367,7 @@ class AdLMSVectorTest extends FunSuite {
     //test_cnn_full1.eval("abc")
   }
 
-  val gene_dir = "src/out/untested/"
+  val gene_dir = "/tmp/"
   def testByRun(snippet: DslDriverC[String, Unit]) = {
     val test = new PrintWriter(new File("/tmp/snippet.cpp"))
     test.println(snippet.code)
