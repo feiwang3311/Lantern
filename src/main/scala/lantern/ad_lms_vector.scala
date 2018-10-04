@@ -292,17 +292,41 @@ trait TensorExp extends Dsl with Diff {
       res
     }
 
-    def +(that: Rep[Float]): Tensor = this.map(x => x + that)
-    def +(that: Tensor): Tensor = {
-      if (scalarCount == 1) that + this.data(0)
-      else if (that.scalarCount == 1) this + that.data(0)
-      else if (that.shape == this.shape) {
-        val res = NewArray[Float](scalarCount)
-        for (i <- DataLoop(scalarCount)) res(i) = this.data(i) + that.data(i)
-        new Tensor(res, shape)
+    def elementWiseOPwithBroadCast(that: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
+      Tensor.dimBroadcast(shape, that.shape) match {
+        case None => throw new IllegalArgumentException(s"dimensions of vector do not match +! ${this.shape.seq} != ${that.shape.seq}")
+        case Some((thisShape, thatShape, resShape)) => {
+          val resData = NewArray[Float](resShape.product)
+          val res = new Tensor(resData, resShape)
+
+          def inplace(offThis: Rep[Int], offThat: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
+            val offres = var_new[Int](offRes)
+            val offthis = var_new[Int](offThis)
+            val offthat = var_new[Int](offThat)
+            if (dim == resShape.size - 1) {
+              for (i <- DataLoop(resShape(dim))) {
+                resData(offres) = op(this.data(offthis), that.data(offthat))
+                offres += 1
+                if (thisShape(dim) > 1) offthis += 1
+                if (thatShape(dim) > 1) offthat += 1
+              }
+            } else {
+              for (i <- DataLoop(resShape(dim))) {
+                inplace(offthis, offthat, offres, dim + 1)
+                offres += res.strides(dim + 1)
+                if (thisShape(dim) > 1) offthis += this.strides(dim + 1)
+                if (thatShape(dim) > 1) offthat += that.strides(dim + 1)
+              }
+            }
+          }
+          inplace(0, 0, 0, 0)
+          res
+        }
       }
-      else throw new IllegalArgumentException(s"dimensions of vector do not match +! ${this.shape.seq} != ${that.shape.seq}")
     }
+
+    def +(that: Rep[Float]): Tensor = this.map(x => x + that)
+    def +(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ + _)
 
     // this operator updates the values of this, unlike the + operator
     def +=(that: Rep[Float]): Unit = this.mapInPlace(x => x + that)
@@ -318,16 +342,7 @@ trait TensorExp extends Dsl with Diff {
     }
 
     def -(that: Rep[Float]): Tensor = this.map(x => x - that)
-    def -(that: Tensor): Tensor = {
-      if (scalarCount == 1) that.map(x => this.data(0) - x)
-      else if (that.scalarCount == 1) this - that.data(0)
-      else if (that.shape == this.shape) {
-        val res = NewArray[Float](scalarCount)
-        for (i <- DataLoop(scalarCount)) res(i) = this.data(i) - that.data(i)
-        new Tensor(res, shape)
-      }
-      else throw new IllegalArgumentException("dimensions of vector do not match +!")
-    }
+    def -(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ - _)
 
     // this operator updates the values of this, unlike the - operator
     def -=(that: Rep[Float]): Unit = this.mapInPlace(x => x - that)
@@ -344,16 +359,7 @@ trait TensorExp extends Dsl with Diff {
 
     // Element wise multiplication
     def *(that: Rep[Float]): Tensor = this.map(x => x * that)
-    def *(that: Tensor): Tensor = {
-      if (scalarCount == 1) that * this.data(0)
-      else if (that.scalarCount == 1) this * that.data(0)
-      else if (that.shape == this.shape) {
-        val res = NewArray[Float](scalarCount)
-        for (i <- DataLoop(scalarCount)) res(i) = this.data(i) * that.data(i)
-        new Tensor(res, shape)
-      }
-      else throw new IllegalArgumentException(s"dimensions of vector do not match * ${this.shape.seq} != ${that.shape.seq}")
-    }
+    def *(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ * _)
 
     // this operator updates the values of this, unlike the * operator
     def *=(that: Rep[Float]): Unit = this.mapInPlace(x => x * that)
@@ -370,16 +376,7 @@ trait TensorExp extends Dsl with Diff {
 
     // element wise division
     def /(that: Rep[Float]): Tensor = this.map(x => x / that)
-    def /(that: Tensor): Tensor = {
-      if (scalarCount == 1) that.map(x => this.data(0) / x)
-      else if (that.scalarCount == 1) this / that.data(0)
-      else if (that.shape == this.shape) {
-        val res = NewArray[Float](scalarCount)
-        for (i <- DataLoop(scalarCount)) res(i) = this.data(i) / that.data(i)
-        new Tensor(res, shape)
-      }
-      else throw new IllegalArgumentException("dimensions of vector do not match +!")
-    }
+    def /(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ / _)
 
     // this operator updates the values of this, unlike the / operator
     def /=(that: Rep[Float]): Unit = this.mapInPlace(x => x / that)
@@ -758,17 +755,11 @@ trait TensorExp extends Dsl with Diff {
       var offThatR = var_new(0)
       var offYC = var_new(0)
       for (i <- DataLoop(this.shape(0))) {
-      //for (i <- 0 until this.dims(0): Rep[Range]) {
         val offYR = var_new(offYC)
         for (j <- DataLoop(this.shape(1))) {
-        //for (j <- 0 until this.dims(1): Rep[Range]) {
           val offY = var_new(offYR)
           val offThat = var_new(offThatR)
           for (k <- DataLoop(that.shape(1))) {
-          //for (k <- 0 until that.dims(1): Rep[Range]) {
-            // assertC(unit(0) <= offThis && offThis < this.nbElem, s"Index error this %d > ${this.nbElem}", offThis)
-            // assertC(unit(0) <= offThat && offThat < that.nbElem, s"Index error that %d > ${that.nbElem}", offThat)
-            // assertC(unit(0) <= offY && offY < y.nbElem, s"Index error this %d > ${y.nbElem}", offY)
             this.data(offThis) = this.data(offThis) + that.data(offThat) * y.data(offY)
             offThat += 1
             offY += y.strides(1)
@@ -1420,6 +1411,25 @@ trait TensorExp extends Dsl with Diff {
 
     def dimCompatible(a: Tensor, b: Tensor) = {
       (a.shape == b.shape) || a.isScalar || b.isScalar
+    }
+
+    def dimBroadcast(a: NSeq[Int], b: NSeq[Int]): Option[(NSeq[Int], NSeq[Int], NSeq[Int])] = {
+      def bc(a: NSeq[Int], b: NSeq[Int], trail: List[Int]): List[Int] = {
+        if (a.size == 0) b.toList ++ trail
+        else if (b.size == 0) a.toList ++ trail
+        else if (a.last == 1) bc(a.init, b.init, b.last :: trail)
+        else if (b.last == 1) bc(a.init, b.init, a.last :: trail)
+        else if (a.last == b.last) bc(a.init, b.init, a.last :: trail)
+        else List(-1) // indicate dim not Compatible by broadcast
+      }
+      val res = bc(a, b, List())
+      if (res == List(-1)) None
+      else {
+        // add dimensions of 1 to tensors with less rank
+        if (a.size > b.size) Some((a, NSeq.fill(a.size - b.size)(1) ++ b, res.toSeq))
+        else if (a.size < b.size) Some((NSeq.fill(b.size - a.size)(1) ++ a, b, res.toSeq))
+        else Some((a, b, res.toSeq))
+      }
     }
 
     def randseed(seed: Int) = unchecked[Unit]("srand(", seed, ")")
