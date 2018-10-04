@@ -1360,7 +1360,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   val gene_dir = "/tmp/"
-  def testByRun(snippet: DslDriverC[String, Unit]) = {
+  def runTest(snippet: DslDriverC[String, Unit]) = {
     val test = new PrintWriter(new File("/tmp/snippet.cpp"))
     test.println(snippet.code)
     test.flush()
@@ -1398,7 +1398,7 @@ class AdLMSVectorTest extends FunSuite {
     debug_file.flush()
 
     // test runtime assertion of the generated file
-    testByRun(deb)
+    runTest(deb)
   }
 
   test("op_conv_pad") {
@@ -1425,7 +1425,7 @@ class AdLMSVectorTest extends FunSuite {
     debug_file.println(deb.code)
     debug_file.flush()
 
-    testByRun(deb)
+    runTest(deb)
   }
 
   test("backprop_op_conv") {
@@ -1460,7 +1460,7 @@ class AdLMSVectorTest extends FunSuite {
     debug_file.println(deb.code)
     debug_file.flush()
 
-    testByRun(deb)
+    runTest(deb)
   }
 
   test("backprop_op_conv_pad") {

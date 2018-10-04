@@ -1556,14 +1556,15 @@ trait TensorExp extends Dsl with Diff {
 
     @virtualize
     def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.000001f) = {
-      assert(a.shape == b.shape, s"ERROR: $mark not equal in dimensionsi ${a.shape.seq} != ${b.shape.seq}\\n")
+      val errorPrefix = if (mark.nonEmpty) s"ERROR ($mark)" else "ERROR"
+      assert(a.shape == b.shape, s"$errorPrefix: tensor shapes are not equal, ${a.shape.seq} != ${b.shape.seq}\\n")
 
       val i = var_new(0)
       while (i < a.scalarCount && { val diff = a.data(i) - b.data(i); diff > -tal && diff < tal }) {
         i += 1
       }
       if (i < a.scalarCount) {
-        printf("ERROR: %s not equal in some data - %.4f != %.4f (%d)\\n", mark, a.data(i), b.data(i), i)
+        printf("%s: tensor data are not equal at index %d, %.4f != %.4f\\n", errorPrefix, i, a.data(i), b.data(i))
         error("")
       }
     }
