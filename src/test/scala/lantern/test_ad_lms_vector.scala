@@ -3,10 +3,9 @@ package lantern
 import scala.util.continuations._
 import scala.util.continuations
 
+import scala.virtualization.lms._
 import org.scala_lang.virtualized.virtualize
 import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
@@ -14,13 +13,12 @@ import scala.math._
 
 import org.scalatest.FunSuite
 
-import java.io.PrintWriter;
-import java.io.File;
+import java.io.PrintWriter
+import java.io.File
 
 class AdLMSVectorTest extends FunSuite {
 
   test("array0") {
-
     val array0 = new DslDriverC[String, Unit] with TensorExp {
 
       @virtualize
@@ -45,7 +43,6 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array1") {
-
     val array1 = new DslDriverC[String, Unit] with TensorExp {
 
       @virtualize
@@ -88,7 +85,6 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array2") {
-
     val array2 = new DslDriverC[String, Unit] with TensorExp {
 
       @virtualize
@@ -316,7 +312,6 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array2_4"){
-
     val array2_4 = new DslDriverC[String, Unit] with TensorExp {
 
       @virtualize
@@ -635,7 +630,6 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array9") {
-
     val array9 = new DslDriverC[String, Unit] with TensorExp {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -741,7 +735,6 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array11_1") {
-
     val array11_1 = new DslDriverC[String, Unit] with TensorExp {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -879,7 +872,6 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_back_test1") {
-
     val cnn_back_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
 
       @virtualize
@@ -1372,12 +1364,12 @@ class AdLMSVectorTest extends FunSuite {
     val test = new PrintWriter(new File("/tmp/snippet.cpp"))
     test.println(snippet.code)
     test.flush()
-    (new java.io.File("/tmp/snippet")).delete
+    new java.io.File("/tmp/snippet").delete
     import scala.sys.process._
     System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println _)
+    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println)
     System.out.println("Run C++ code")
-    (s"/tmp/snippet a": ProcessBuilder).lines.foreach(System.out.println _)
+    (s"/tmp/snippet a": ProcessBuilder).lines.foreach(System.out.println)
   }
 
   test("op_conv") {

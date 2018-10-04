@@ -3,15 +3,14 @@ package lantern
 import scala.util.continuations._
 import scala.util.continuations
 
+import scala.virtualization.lms._
 import org.scala_lang.virtualized.virtualize
 import org.scala_lang.virtualized.SourceContext
 
-import scala.virtualization.lms._
-
 import org.scalatest.FunSuite
 
-import java.io.PrintWriter;
-import java.io.File;
+import java.io.PrintWriter
+import java.io.File
 
 class AdLMSTest extends FunSuite {
 
