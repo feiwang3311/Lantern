@@ -263,7 +263,7 @@ class MnistCNN extends FunSuite {
         }
       }
       val net = MNIST("model")
-      val opt = Adagrad(net, learning_rate = 0.0005f)
+      val opt = SGD(net, learning_rate = 0.0005f, gradClip = 1000.0f)
 
       def lossFun(input: TensorR, target: Rep[Int]) = { (dummy: TensorR) =>
         val res = net(input).logSoftmax()

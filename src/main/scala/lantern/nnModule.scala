@@ -41,7 +41,7 @@ trait NNModule extends TensorExp {
   }
 
   case class Linear1D(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
-    val scale: Float = 1.0f / inSize
+    val scale: Float = 1.0f / sqrt(inSize).toFloat
     val weight = regTensorWithName("w")(TensorR(Tensor.rand(scale, outSize, inSize)))
     val bias = regTensorWithName("b")(TensorR(Tensor.zeros(outSize)))
     def apply(in: TensorR): TensorR @diff = weight.dot(in) + bias
@@ -50,7 +50,7 @@ trait NNModule extends TensorExp {
   case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: NSeq[Int], val stride: NSeq[Int] = NSeq(1, 1), val pad: Int = 0, val name: String = "conv2d") extends Module {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
-    val scale: Float = 1.0f / (inChannel * kernelSize.head * kernelSize.last)
+    val scale: Float = 1.0f / sqrt(inChannel * kernelSize.head * kernelSize.last).toFloat
     val kernel = regTensorWithName("k")(TensorR(Tensor.rand(scale, outChannel, inChannel, kernelSize.head, kernelSize.last)))
     val bias = regTensorWithName("b")(TensorR(Tensor.zeros(outChannel)))
     def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, NSeq(pad, pad, pad, pad))
@@ -68,7 +68,7 @@ trait NNModule extends TensorExp {
       if (descent)
         tr.x -= tr.d * learning_rate
       else
-        tr.x -= tr.d * learning_rate
+        tr.x += tr.d * learning_rate
       tr.clear_grad()
     }
   }

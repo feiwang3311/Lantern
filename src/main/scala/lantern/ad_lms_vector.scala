@@ -205,7 +205,6 @@ trait TensorExp extends Dsl with Diff {
   trait BackendNative extends Backend {
     override def dot(x: Tensor, y: Tensor): Tensor = {
       // TODO: (Fei Wang): only support 2D dot 1D and 1D dot 1D
-      assert (x.dims.size <= 2 && y.dims.size == 1, "TODO: (Fei Wang): only support 2D dot 1D and 1D dot 1D")
       val off = var_new(0)
       val up = if (x.rank > 1) x.shape(0) else 1
       val res = NewArray[Float](up)
