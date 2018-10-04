@@ -60,7 +60,7 @@ class MnistCNN extends FunSuite {
           val dataPtr = slice(data, off)
           val t = Tensor(dataPtr, dims : _*)
           f(t, target(img))
-          off += t.nbElem
+          off += t.scalarCount
         }
         assertC(off == dLength, "Data length doesn't match\\n")
       }

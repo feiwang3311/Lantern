@@ -295,7 +295,7 @@ trait ONNXLib extends TensorExp {
 
     // read the nodes and build the function for inference
     lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
-      assert(x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
+      assert(x.dimensions == x_dims, "input tensor is not of the correct dimensions")
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
       val intermediate_map_tensor: MMap[String, Tensor] = MMap()
@@ -398,7 +398,7 @@ trait ONNXLib extends TensorExp {
     // read the nodes and build the function for training
     lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
 
-      assert(x.x.dimsSeq == x_dims, "input tensor is not of the correct dimensions")
+      assert(x.x.dimensions == x_dims, "input tensor is not of the correct dimensions")
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
       val intermediate_map_tensorR: MMap[String, TensorR] = MMap()
