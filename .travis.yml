@@ -15,6 +15,7 @@ cache:
 
 before_script:
   - scripts/download_squeezenet.sh
+  - scripts/download_resnet.sh
 
 script:
   - sbt test

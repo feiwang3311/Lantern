@@ -10,4 +10,3 @@ then
 	tar xzf $HOME/tmp/squeezenet.tar.gz -C $HOME/onnx_models
 	rm -f $HOME/tmp/squeezenet.tar.gz
 fi
-
