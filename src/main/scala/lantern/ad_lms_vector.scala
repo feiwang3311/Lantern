@@ -448,8 +448,8 @@ trait TensorExp extends Dsl with Diff {
       generate_comment(s"dot: ${this.shape.seq}, ${that.shape.seq}")
       (this.rank, that.rank) match {
         case (1, 1) => assert(this.shape(0) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
-        case (2, 1) => assert(this.shape(1) == that.shape(0), s"Incompatible shapes: (${this.shape}, ${that.shape}")
-        case (2, 2) => assert(this.shape(0) == that.shape(1), s"Incompatible shapes: (${this.shape}, ${that.shape}")
+        case (2, 1) => assert(this.shape(1) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
+        case (2, 2) => assert(this.shape(0) == that.shape(1), s"Incompatible shapes: ${this.shape}, ${that.shape}")
         case _ => throw new IllegalArgumentException(
           s"Only vector-vector, matrix-vector, and matrix-matrix multiplication are allowed (actual shapes: ${this.shape}, ${that.shape})")
       }
