@@ -42,46 +42,45 @@ class AdLMSVectorTest extends FunSuite {
     array0.eval("abc")
   }
 
-  test("array1") {
-    val array1 = new DslDriverC[String, Unit] with TensorExp {
-
+  test("vector-vector-dot") {
+    val vvdot = new DslDriverC[String, Unit] with TensorExp {
       @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
+      def snippet(x: Rep[String]): Rep[Unit] = {
         val length = 2
-        val res = Tensor.randinit(length)
-        val res2 = Tensor.randinit(length, seed = Some(5))
-
-        val result = res dot res2
-
-        // assertions
-        if (res.data(0) * res2.data(0) + res.data(1) * res2.data(1) != result.data(0))
-          println("ERROR: the dot product of two vectors is not correct")
+        val v1 = Tensor.fromData(NSeq(4), 1, 2, 3, 4)
+        val v2 = Tensor.fromData(NSeq(4), -1, -2, -3, -4)
+        val expected = Tensor.fromData(NSeq(1), -30)
+        Tensor.assertEqual(v1.dot(v2), expected)
       }
     }
-    array1.eval("abc")
+    runTest(vvdot)
   }
 
-  test("array1_1") {
-    val array1_1 = new DslDriverC[String, Unit] with TensorExp {
-
+  test("matrix-vector-dot") {
+    val mvdot = new DslDriverC[String, Unit] with TensorExp {
       @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val dim0 = 2
-        val dim1 = 3
-        val matrix = Tensor.rand(dim0, dim1)
-        val vector = Tensor.randinit(dim1, seed = Some(4))
-
-        //println("the result is:")
-        val result = matrix dot vector
-        //result.print()
-
-        if (matrix(0, 0) * vector(0) + matrix(0, 1) * vector(1) + matrix(0, 2) * vector(2) != result(0))
-          printf("ERROR: the matrix vector dot product is wrong on the first element of result, %.3f != %.3f\\n", matrix(0, 0) * vector(0) + matrix(0, 1) * vector(1) + matrix(0, 2) * vector(2), result(0))
-        if (matrix(1, 0) * vector(0) + matrix(1, 1) * vector(1) + matrix(1, 2) * vector(2) != result(1))
-          printf("ERROR: the matrix vector dot product is wrong on the second element of result, %.3f != %.3f\\n", matrix(1, 0) * vector(0) + matrix(1, 1) * vector(1) + matrix(1, 2) * vector(2), result(1))
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m = Tensor.fromData(NSeq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
+        val v = Tensor.fromData(NSeq(4), -1, -2, -3, -4)
+        val expected = Tensor.fromData(NSeq(2), -30, -70)
+        Tensor.assertEqual(m.dot(v), expected)
       }
     }
-    array1_1.eval("abc")
+    runTest(mvdot)
+  }
+
+  test("matrix-matrix-dot") {
+    val mmdot = new DslDriverC[String, Unit] with TensorExp {
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        // Note: it's better to test with non-square matrices.
+        val m1 = Tensor.fromData(NSeq(2, 3), 1, 2, 3, 4, 5, 6)
+        val m2 = Tensor.fromData(NSeq(3, 2), 2, 3, 4, 5, 6, 7)
+        val expected = Tensor.fromData(NSeq(2, 2), 28, 34, 64, 79)
+        Tensor.assertEqual(m1.dot(m2), expected)
+      }
+    }
+    runTest(mmdot)
   }
 
   test("array2") {
