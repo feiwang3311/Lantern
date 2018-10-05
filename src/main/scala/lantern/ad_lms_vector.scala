@@ -204,7 +204,7 @@ trait TensorExp extends Dsl with Diff {
     */
   trait BackendNative extends Backend {
     // Compute vector-vector dot product, i.e. inner product.
-    // [V1] dot [V2] => [1] (scalar)
+    // [V] dot [V] => [1] (scalar)
     private def vvdot(x: Tensor, y: Tensor): Tensor = {
       assert(x.shape(0) == y.shape(0))
       val value = var_new(0.0f)
@@ -439,7 +439,7 @@ trait TensorExp extends Dsl with Diff {
 
     // `dot` represents the following:
     // - vector-vector dot product.
-    //   [V1] dot [V2] => [1] (scalar)
+    //   [V] dot [V] => [1] (scalar)
     // - matrix-vector multiplication.
     //   [M1 x M2] dot [M2] => [M1]
     // - matrix-matrix multiplication.
@@ -1678,7 +1678,7 @@ trait TensorExp extends Dsl with Diff {
 
     // `dot` represents the following:
     // - vector-vector dot product.
-    //   [V1] dot [V2] => [1] (scalar)
+    //   [V] dot [V] => [1] (scalar)
     // - matrix-vector multiplication.
     //   [M1 x M2] dot [M2] => [M1]
     // - matrix-matrix multiplication.
