@@ -203,22 +203,63 @@ trait TensorExp extends Dsl with Diff {
     * Tensor ops are defined in terms of primitive operations.
     */
   trait BackendNative extends Backend {
-    override def dot(x: Tensor, y: Tensor): Tensor = {
-      // TODO: (Fei Wang): only support 2D dot 1D and 1D dot 1D
-      val off = var_new(0)
-      val up = if (x.rank > 1) x.shape(0) else 1
-      val res = NewArray[Float](up)
-      for (j <- DataLoop(up)) {
-        val value = var_new(0.0f)
-        for (i <- DataLoop(x.shape.last)) {
-          value += x.data(off) * y.data(i)
-          off += 1
-        }
-        res(j) = readVar(value)
+    // Compute vector-vector dot product, i.e. inner product.
+    // [V1] dot [V2] => [1] (scalar)
+    private def vvdot(x: Tensor, y: Tensor): Tensor = {
+      assert(x.shape(0) == y.shape(0))
+      val value = var_new(0.0f)
+      for (i <- DataLoop(x.shape.last)) {
+        value += x.data(i) * y.data(i)
       }
-      val dim = if (x.rank == 1) 1 else x.shape(0)
-      Tensor(res, dim)
+      val res = NewArray[Float](1)
+      res(0) = readVar(value)
+      Tensor(res, 1)
     }
+
+    // Compute matrix-vector dot product.
+    // [M1 x M2] dot [M2] => [M1]
+    private def mvdot(x: Tensor, y: Tensor): Tensor = {
+      assert(x.shape(1) == y.shape(0))
+      val dim1 = x.shape(0)
+      val dim2 = x.shape(1)
+      val res = NewArray[Float](dim1)
+      for (i <- DataLoop(dim1)) {
+        val value = var_new(0.0f)
+        for (j <- DataLoop(dim2)) {
+          value += x.data(i * dim2 + j) * y.data(j)
+        }
+        res(i) = readVar(value)
+      }
+      Tensor(res, dim1)
+    }
+
+    // Compute matrix-matrix dot product.
+    // [M1 x M2] dot [M2 x M3] => [M1 x M3]
+    private def mmdot(x: Tensor, y: Tensor): Tensor = {
+      assert(x.shape(1) == y.shape(0))
+      val dim1 = x.shape(0)
+      val dim2 = x.shape(1)
+      val dim3 = y.shape(1)
+      val res = NewArray[Float](dim1 * dim3)
+      for (i <- DataLoop(dim1)) {
+        for (j <- DataLoop(dim3)) {
+          val value = var_new(0.0f)
+          for (k <- DataLoop(dim2)) {
+            value += x.data(i * dim2 + k) * y.data(k * dim3 + j)
+          }
+          res(i * dim3 + j) = readVar(value)
+        }
+      }
+      Tensor(res, dim1, dim3)
+    }
+
+    override def dot(x: Tensor, y: Tensor): Tensor =
+      (x.rank, y.rank) match {
+        case (1, 1) => vvdot(x, y)
+        case (2, 1) => mvdot(x, y)
+        case (2, 2) => mmdot(x, y)
+        case _ => throw new IllegalArgumentException(s"Incompatible shapes: ${x.shape}, ${y.shape}")
+      }
   }
 
   /**
@@ -396,12 +437,22 @@ trait TensorExp extends Dsl with Diff {
       for (i <- DataLoop(scalarCount)) this.data(i) = that.data(i)
     }
 
-    // NOTE: only handles (Matrix dot Vector) and (Vector dot Vector)
+    // `dot` represents the following:
+    // - vector-vector dot product.
+    //   [V1] dot [V2] => [1] (scalar)
+    // - matrix-vector multiplication.
+    //   [M1 x M2] dot [M2] => [M1]
+    // - matrix-matrix multiplication.
+    //   [M1 x M2] dot [M2 x M3] => [M1 x M3]
     def dot(that: Tensor) = {
-      // assert that and this have the same dimension
-      generate_comment(s"dot ${this.shape.seq} - ${that.shape.seq}")
-      assert(this.rank <= 2 && that.rank == 1, s"Only M x V or V x V allowed ${this.shape} - ${that.shape}")
-      assert(this.shape.last == that.shape(0), s"dimensions of vector do not match dot! ${this.shape.seq} - ${that.shape.seq}")
+      generate_comment(s"dot: ${this.shape.seq}, ${that.shape.seq}")
+      (this.rank, that.rank) match {
+        case (1, 1) => assert(this.shape(0) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
+        case (2, 1) => assert(this.shape(1) == that.shape(0), s"Incompatible shapes: (${this.shape}, ${that.shape}")
+        case (2, 2) => assert(this.shape(0) == that.shape(1), s"Incompatible shapes: (${this.shape}, ${that.shape}")
+        case _ => throw new IllegalArgumentException(
+          s"Only vector-vector, matrix-vector, and matrix-matrix multiplication are allowed (actual shapes: ${this.shape}, ${that.shape})")
+      }
       backend.dot(this, that)
     }
 
@@ -1625,7 +1676,13 @@ trait TensorExp extends Dsl with Diff {
       that.d.minus_mult_div_square(this.x, y.d, that.x)
     }
 
-    // vector dot product or Matrix vector dot (viewed as multiple vector dot product) (not the common view)
+    // `dot` represents the following:
+    // - vector-vector dot product.
+    //   [V1] dot [V2] => [1] (scalar)
+    // - matrix-vector multiplication.
+    //   [M1 x M2] dot [M2] => [M1]
+    // - matrix-matrix multiplication.
+    //   [M1 x M2] dot [M2 x M3] => [M1 x M3]
     def dot(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val res = x dot that.x
       val y = TensorR(res); k(y)
