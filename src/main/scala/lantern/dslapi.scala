@@ -221,7 +221,7 @@ trait DslImpl extends DslExp { q =>
 
 // TODO: currently part of this is specific to the query tests. generalize? move?
 @virtualize
-trait DslGenC extends CGenNumericOpsExtra
+trait DslGenBase extends CGenNumericOpsExtra
     with CGenPrimitiveOps with CGenBooleanOps with CGenIfThenElse
     with CGenEqual with CGenRangeOps with CGenOrderingOps
     with CGenMiscOps with CGenArrayOps with CGenStringOps
@@ -336,6 +336,7 @@ trait DslGenC extends CGenNumericOpsExtra
     case Const(0)    if x.tp == typ[Char] => "'\\0'"
     case _ => super.quote(x)
   }
+
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case Error(s) => stream.println("assert(false && " + quote(s) + ");")
     case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
@@ -345,6 +346,7 @@ trait DslGenC extends CGenNumericOpsExtra
       val arrType = remap(a.m)
       //stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
       stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocStringArena(quote(n), arrType))
+
       //stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
       //stream.println("shared_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
     case ArrayApply(x,n) => emitValDef(sym, quote(x) + "[" + quote(n) + "]")
@@ -364,6 +366,13 @@ trait DslGenC extends CGenNumericOpsExtra
     case MathTanh(x) => emitValDef(sym, src"tanh($x)")
     case _ => super.emitNode(sym,rhs)
   }
+}
+
+trait DslGenC extends DslGenBase {
+  val IR: DslExp
+  import IR._
+
+  // TODO: Reduce code duplication in `emitSource` functions.
   override def emitSource[A:Typ](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
     withStream(out) {
       stream.println("""#include <assert.h>
@@ -442,13 +451,261 @@ int main(int argc, char *argv[]) {
   }
   Snippet(argv[1]);
   return 0;
-}""")
+}
+""")
     }
     super.emitSource[A](args, body, functionName, out)
   }
 }
 
+@virtualize
+trait DslGenCublas extends DslGenBase {
+  val IR: DslExp
+  import IR._
 
+  // Allocate GPU memory.
+  def getCudaMallocString(buffer: String, count: String, memType: String): String = {
+    "CUDA_CALL(cudaMalloc(&" + buffer + ", " + count + " * sizeof(" + memType + ")));"
+  }
+
+  // Allocate unified memory, accessible by CPU and GPU.
+  // FIXME: I encountered "bus error" when performing CPU ops on managed memory:
+  //     Thread 1 "snippet" received signal SIGBUS, Bus error.
+  //     Snippet (x0=<optimized out>) at snippet.cpp:144
+  //     144	float x32 = x30 - x31;
+  // I wonder if others can replicate this issue.
+  def getCudaMallocManagedString(buffer: String, count: String, memType: String): String = {
+    "CUDA_CALL(cudaMallocManaged(&" + buffer + ", " + count + " * sizeof(" + memType + ")));"
+  }
+
+  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case a@ArrayNew(n) =>
+      // Unified CPU/GPU memory via `cudaMallocManaged` is more convenient than `cudaMalloc`, but less performant.
+      // We can use a similar memory pool technique with `cudaMallocManaged`.
+      val arrType = remap(a.m)
+      stream.println(arrType + "* " + quote(sym) + "; " + getCudaMallocManagedString(quote(sym), quote(n), arrType))
+      // stream.println(arrType + "* " + quote(sym) + "; " + getCudaMallocString(quote(sym), quote(n), arrType))
+    case _ => super.emitNode(sym,rhs)
+  }
+
+  override def emitSource[A:Typ](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
+    withStream(out) {
+      stream.println("""#include <assert.h>
+#include <err.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <functional>
+#include <iostream>
+#include <math.h>
+#include <memory>
+#include <random>
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <cuda_runtime.h>
+#include "cublas_v2.h"
+
+using namespace std;
+
+#ifndef MAP_FILE
+#define MAP_FILE MAP_SHARED
+#endif
+
+#define CUDA_CALL(f) { \
+  cudaError_t err = (f); \
+  if (err != cudaSuccess) { \
+    std::cerr << "Error occurred: " << err << std::endl; \
+    std::exit(1); \
+  } \
+}
+
+#define CUBLAS_CALL(f) { \
+  cublasStatus_t stat = (f); \
+  if (stat != CUBLAS_STATUS_SUCCESS) { \
+    std::cerr << "Error occurred: " << err << std::endl; \
+    exit(1); \
+  } \
+}
+
+int fsize(int fd) {
+  struct stat stat;
+  int res = fstat(fd, &stat);
+  return stat.st_size;
+}
+
+int printll(char *s) {
+  while (*s != '\n' && *s != ',' && *s != '\t') {
+    putchar(*s++);
+  }
+  return 0;
+}
+
+long hash(char *str0, int len) {
+  unsigned char *str = (unsigned char *)str0;
+  unsigned long hash = 5381;
+  int c;
+
+  while ((c = *str++) && len--)
+    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+  return hash;
+}
+
+int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
+void *mallocBase = malloc(HEAP_SIZE);
+void *mallocAddr = mallocBase;
+void *waterMark = mallocBase;
+void *myMalloc(size_t bytes) {
+  void *res = mallocAddr;
+  mallocAddr = (void *)((char *)mallocAddr + bytes);
+  return res;
+}
+
+int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
+  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
+  result->tv_sec = diff / 1000000;
+  result->tv_usec = diff % 1000000;
+  return (diff < 0);
+}
+
+void Snippet(char *);
+
+std::random_device rd{};
+std::mt19937 gen{rd()};
+std::normal_distribution<> d{0, 1};
+cublasHandle_t handle;
+
+int main(int argc, char *argv[]) {
+  CUBLAS_CALL(cublasCreate(&handle));
+  if (argc != 2) {
+    printf("usage: query <filename>\n");
+    return 0;
+  }
+  Snippet(argv[1]);
+  CUBLAS_CALL(cublasDestroy(handle));
+  return 0;
+}
+""")
+    }
+    super.emitSource[A](args, body, functionName, out)
+  }
+}
+
+@virtualize
+trait DslGenCudnn extends DslGenBase {
+  val IR: DslExp
+  import IR._
+
+  override def emitSource[A:Typ](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
+    withStream(out) {
+      stream.println("""#include <assert.h>
+#include <err.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <functional>
+#include <iostream>
+#include <math.h>
+#include <memory>
+#include <random>
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <cuda.h>
+#include <cudnn.h>
+
+using namespace std;
+
+#ifndef MAP_FILE
+#define MAP_FILE MAP_SHARED
+#endif
+
+#define CUDA_CALL(f) { \
+  cudaError_t err = (f); \
+  if (err != cudaSuccess) { \
+    std::cerr << "Error occurred: " << err << std::endl; \
+    std::exit(1); \
+  } \
+}
+
+#define CUDNN_CALL(f) { \
+  cudnnStatus_t err = (f); \
+  if (err != CUDNN_STATUS_SUCCESS) { \
+    std::cerr << "Error occurred: " << err << std::endl; \
+    std::exit(1); \
+  } \
+}
+
+int fsize(int fd) {
+  struct stat stat;
+  int res = fstat(fd, &stat);
+  return stat.st_size;
+}
+
+int printll(char *s) {
+  while (*s != '\n' && *s != ',' && *s != '\t') {
+    putchar(*s++);
+  }
+  return 0;
+}
+
+long hash(char *str0, int len) {
+  unsigned char *str = (unsigned char *)str0;
+  unsigned long hash = 5381;
+  int c;
+
+  while ((c = *str++) && len--)
+    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+  return hash;
+}
+
+int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
+void *mallocBase = malloc(HEAP_SIZE);
+void *mallocAddr = mallocBase;
+void *waterMark = mallocBase;
+void *myMalloc(size_t bytes) {
+  void *res = mallocAddr;
+  mallocAddr = (void *)((char *)mallocAddr + bytes);
+  return res;
+}
+
+int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
+  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
+  result->tv_sec = diff / 1000000;
+  result->tv_usec = diff % 1000000;
+  return (diff < 0);
+}
+
+void Snippet(char *);
+
+std::random_device rd{};
+std::mt19937 gen{rd()};
+std::normal_distribution<> d{0, 1};
+void Snippet(char*);
+
+int main(int argc, char *argv[]) {
+  if (argc != 2) {
+    printf("usage: query <filename>\n");
+    return 0;
+  }
+  Snippet(argv[1]);
+  return 0;
+}
+""")
+    }
+    super.emitSource[A](args, body, functionName, out)
+  }
+}
 
 @virtualize
 abstract class DslSnippet[A:Manifest, B:Manifest] extends Dsl {
@@ -460,7 +717,7 @@ abstract class DslDriver[A:Manifest,B:Manifest] extends DslSnippet[A,B] with Dsl
   lazy val f = compile(snippet)(manifestTyp[A],manifestTyp[B])
   def precompile: Unit = f
 
-  //def precompileSilently: Unit = utils.devnull(f)
+  // def precompileSilently: Unit = utils.devnull(f)
 
   def eval(x: A): B = f(x)
 
@@ -472,30 +729,82 @@ abstract class DslDriver[A:Manifest,B:Manifest] extends DslSnippet[A,B] with Dsl
 }
 
 @virtualize
-abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] with DslExp {
-  q =>
+abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] with DslExp { self =>
   val codegen = new DslGenC {
-    val IR: q.type = q
+    val IR: self.type = self
   }
+
   lazy val code: String = {
-    //implicit val mA = manifestTyp[A]
-    //implicit val mB = manifestTyp[B]
     val source = new java.io.StringWriter()
     codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))
     source.toString
   }
 
   def eval(a: A): Unit = {
-    // TBD: should read result of type B?
     val out = new java.io.PrintWriter("/tmp/snippet.cpp")
     out.println(code)
-    out.close
-    //TODO: use precompile
-    (new java.io.File("/tmp/snippet")).delete
+    out.close()
+
+    // TODO: Use precompile
+    new java.io.File("/tmp/snippet").delete
     import scala.sys.process._
     System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println _) //-std=c99
+    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ code")
-    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println _)
+    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println)
+  }
+}
+
+@virtualize
+abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslSnippet[A, B] with DslExp { self =>
+  val codegen = new DslGenCublas {
+    val IR: self.type = self
+  }
+
+  lazy val code: String = {
+    val source = new java.io.StringWriter()
+    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))
+    source.toString
+  }
+
+  def eval(a: A): Unit = {
+    val out = new java.io.PrintWriter("/tmp/snippet.cpp")
+    out.println(code)
+    out.close()
+
+    // TODO: Use precompile
+    new java.io.File("/tmp/snippet").delete
+    import scala.sys.process._
+    System.out.println("Compile C++ (cuBLAS) code")
+    (s"nvcc -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet -lcublas": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    System.out.println("Run C++ code")
+    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println)
+  }
+}
+
+@virtualize
+abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslSnippet[A, B] with DslExp { self =>
+  val codegen = new DslGenCudnn {
+    val IR: self.type = self
+  }
+
+  lazy val code: String = {
+    val source = new java.io.StringWriter()
+    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))
+    source.toString
+  }
+
+  def eval(a: A): Unit = {
+    val out = new java.io.PrintWriter("/tmp/snippet.cpp")
+    out.println(code)
+    out.close()
+
+    // TODO: Use precompile
+    new java.io.File("/tmp/snippet").delete
+    import scala.sys.process._
+    System.out.println("Compile C++ (cuDNN) code")
+    (s"nvcc -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet -lcudnn": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    System.out.println("Run C++ code")
+    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println)
   }
 }
