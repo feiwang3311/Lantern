@@ -333,9 +333,9 @@ trait TensorExp extends Dsl with Diff {
       res
     }
 
-    def elementWiseOPwithBroadCast(that: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
+    def elementWiseOpWithBroadCast(that: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
       Tensor.dimBroadcast(shape, that.shape) match {
-        case None => throw new IllegalArgumentException(s"dimensions of vector do not match +! ${this.shape.seq} != ${that.shape.seq}")
+        case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${this.shape.seq} != ${that.shape.seq}")
         case Some((thisShape, thatShape, resShape)) => {
           val resData = NewArray[Float](resShape.product)
           val res = new Tensor(resData, resShape)
@@ -367,7 +367,7 @@ trait TensorExp extends Dsl with Diff {
     }
 
     def +(that: Rep[Float]): Tensor = this.map(x => x + that)
-    def +(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ + _)
+    def +(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ + _)
 
     // this operator updates the values of this, unlike the + operator
     def +=(that: Rep[Float]): Unit = this.mapInPlace(x => x + that)
@@ -383,7 +383,7 @@ trait TensorExp extends Dsl with Diff {
     }
 
     def -(that: Rep[Float]): Tensor = this.map(x => x - that)
-    def -(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ - _)
+    def -(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ - _)
 
     // this operator updates the values of this, unlike the - operator
     def -=(that: Rep[Float]): Unit = this.mapInPlace(x => x - that)
@@ -400,7 +400,7 @@ trait TensorExp extends Dsl with Diff {
 
     // Element wise multiplication
     def *(that: Rep[Float]): Tensor = this.map(x => x * that)
-    def *(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ * _)
+    def *(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ * _)
 
     // this operator updates the values of this, unlike the * operator
     def *=(that: Rep[Float]): Unit = this.mapInPlace(x => x * that)
@@ -417,7 +417,7 @@ trait TensorExp extends Dsl with Diff {
 
     // element wise division
     def /(that: Rep[Float]): Tensor = this.map(x => x / that)
-    def /(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ / _)
+    def /(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ / _)
 
     // this operator updates the values of this, unlike the / operator
     def /=(that: Rep[Float]): Unit = this.mapInPlace(x => x / that)
@@ -1645,35 +1645,72 @@ trait TensorExp extends Dsl with Diff {
       d.clipAt(bound)
     }
 
+    def backpropElementWiseOpWithBroadCast(that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
+      // assume y.x = elementWiseOpWithBroadCast(this.x, that.x, someOp)
+      // assume that opThis returns the increment of this.d; opThat returns the increment of that.d
+      // both opThis and opThat takes this.x, that.x, and y.d as parameters
+      // TODO (Fei Wang): in some cases (if this, or that are inputs (x, y), there gradients are not initialized/useless)
+      Tensor.dimBroadcast(this.x.shape, that.x.shape) match {
+        case None => throw new IllegalArgumentException(s"dimensions of tensors do not match! ${this.x.shape.seq} != ${that.x.shape.seq}")
+        case Some((thisShape, thatShape, yShape)) => {
+          def inplace(offThis: Rep[Int], offThat: Rep[Int], offY: Rep[Int], dim: Int): Unit = {
+            val offthis = var_new[Int](offThis)
+            val offthat = var_new[Int](offThat)
+            val offy = var_new[Int](offY)
+            if (dim == yShape.size - 1) {
+              for (i <- DataLoop(yShape(dim))) {
+                this.d.data(offthis) += opThis(this.x.data(offthis), that.x.data(offthat), y.d.data(offy))
+                that.d.data(offthat) += opThat(this.x.data(offthis), that.x.data(offthat), y.d.data(offy))
+                offy += 1
+                if (thisShape(dim) > 1) offthis += 1
+                if (thatShape(dim) > 1) offthat += 1
+              }
+            } else {
+              for (i <- DataLoop(yShape(dim))) {
+                inplace(offthis, offthat, offy, dim + 1)
+                offy += y.x.strides(dim + 1)
+                if (thisShape(dim) > 1) offthis += this.x.strides(dim + 1)
+                if (thatShape(dim) > 1) offthat += that.x.strides(dim + 1)
+              }
+            }
+          }
+          inplace(0, 0, 0, 0)
+        }
+      }
+    }
+
     def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x + that.x);
-      k(y)
-      generate_comment("backpropagate +")
-      this.d += y.d; that.d += y.d
+      val y = TensorR(x + that.x); k(y)
+      // this.d += y.d; that.d += y.d
+      val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     def - (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x - that.x); k(y)
-      //y.d.print("dot")
-      this.d += y.d; that.d -= y.d
+      // this.d += y.d; that.d -= y.d
+      val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => -1.0f * c
+      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     // this is element wise multiplication
     def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that.x); k(y)
-      // intermediate Tensors donot need to be substatiated, can optimize!
-      //this.d += that.x * y.d; that.d += this.x * y.d;
-      this.d.add_mult(that.x, y.d); that.d.add_mult(this.x, y.d)
+      // this.d.add_mult(that.x, y.d); that.d.add_mult(this.x, y.d)
+      val opThis = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c * b
+      val opThat = (a: Rep[Float], _: Rep[Float], c: Rep[Float]) => c * a
+      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     // element wise division
     def / (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x / that.x); k(y)
-      // intermediate Tensors donot need to be substatiated, can optimize!
-      //this.d += y.d / that.x
-      this.d.add_div(y.d, that.x)
-      //that.d -= this.x * y.d / (that.x * that.x)
-      that.d.minus_mult_div_square(this.x, y.d, that.x)
+      // this.d.add_div(y.d, that.x); that.d.minus_mult_div_square(this.x, y.d, that.x)
+      val opThis = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c / b
+      val opThat = (a: Rep[Float], b: Rep[Float], c: Rep[Float]) => -1.0f * a * c / (b * b)
+      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     // `dot` represents the following:

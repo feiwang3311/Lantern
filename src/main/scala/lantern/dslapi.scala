@@ -366,40 +366,43 @@ trait DslGenC extends CGenNumericOpsExtra
   }
   override def emitSource[A:Typ](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
     withStream(out) {
-      stream.println("""#include <fcntl.h>
-#include <errno.h>
+      stream.println("""#include <assert.h>
 #include <err.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <functional>
+#include <math.h>
+#include <memory>
+#include <random>
+#include <stdint.h>
+#include <stdio.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <unistd.h>
 #include <time.h>
-#include <functional>
-#include <memory>
-#include <math.h>
-#include <random>
-#include <assert.h>
+#include <unistd.h>
 
 using namespace std;
+
 #ifndef MAP_FILE
 #define MAP_FILE MAP_SHARED
 #endif
+
 int fsize(int fd) {
   struct stat stat;
-  int res = fstat(fd,&stat);
+  int res = fstat(fd, &stat);
   return stat.st_size;
 }
-int printll(char* s) {
+
+int printll(char *s) {
   while (*s != '\n' && *s != ',' && *s != '\t') {
     putchar(*s++);
   }
   return 0;
 }
-long hash(char *str0, int len)
-{
-  unsigned char* str = (unsigned char*)str0;
+
+long hash(char *str0, int len) {
+  unsigned char *str = (unsigned char *)str0;
   unsigned long hash = 5381;
   int c;
 
@@ -408,12 +411,13 @@ long hash(char *str0, int len)
 
   return hash;
 }
-int HEAP_SIZE = 1073741826; // 1048576;  //2147483652; //536870912; // 268435456; //2097152;
+
+int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
 void *mallocBase = malloc(HEAP_SIZE);
 void *mallocAddr = mallocBase;
-void *waterMark  = mallocBase;
-void* myMalloc(size_t bytes) {
-  void* res = mallocAddr;
+void *waterMark = mallocBase;
+void *myMalloc(size_t bytes) {
+  void *res = mallocAddr;
   mallocAddr = (void *)((char *)mallocAddr + bytes);
   return res;
 }
@@ -422,29 +426,23 @@ int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval 
   long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
   result->tv_sec = diff / 1000000;
   result->tv_usec = diff % 1000000;
-  return (diff<0);
+  return (diff < 0);
 }
 
-
-
-void Snippet(char*);
+void Snippet(char *);
 
 std::random_device rd{};
 std::mt19937 gen{rd()};
-std::normal_distribution<> d{0,1};
+std::normal_distribution<> d{0, 1};
 
-int main(int argc, char *argv[])
-{
-
+int main(int argc, char *argv[]) {
   if (argc != 2) {
     printf("usage: query <filename>\n");
     return 0;
   }
   Snippet(argv[1]);
   return 0;
-}
-
-      """)
+}""")
     }
     super.emitSource[A](args, body, functionName, out)
   }
