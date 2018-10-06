@@ -352,7 +352,8 @@ trait TensorExp extends Dsl with Diff {
     * @tparam T   Type of the data.
     */
   def transfer[T](from: Backend, to: Backend)(data: T) {
-    // TODO: Implement logic. It will involve `cudaMemcpy`.
+    // TODO: Implement logic. `cudaMemcpy` will be involved.
+    // Consider what to do when unified memory is used (i.e. `cudaMallocMananged`).
     (from, to) match {
       case (cpu: BackendNative, gpu: BackendCudnn) => ???
       case (gpu: BackendCudnn, cpu: BackendNative) => ???
@@ -373,7 +374,6 @@ trait TensorExp extends Dsl with Diff {
     val originalBackend = backend
 
     // Transfer input to the new backend.
-    // TODO: Consider using CPU-GPU shared memory?
     transfer(originalBackend, b)(input)
 
     // Change the backend (i.e. codegen target), then call `f`.
