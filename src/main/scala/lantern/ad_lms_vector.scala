@@ -281,11 +281,6 @@ trait TensorExp extends Dsl with Diff {
   class BackendCublas extends Backend {
     // Reference:
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
-    //
-    // cublasStatus_t cublasSdot(cublasHandle_t handle, int n,
-    //                           const float           *x, int incx,
-    //                           const float           *y, int incy,
-    //                           float           *result)
     def sdot(a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) =
       unchecked[Unit]("CUBLAS_CALL(cublasSdot(handle, ", a.length, ",", a, ",1,", b, ",1,", result, "))")
 
@@ -297,14 +292,6 @@ trait TensorExp extends Dsl with Diff {
 
     // Reference:
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
-    //
-    // cublasStatus_t cublasSgemv(cublasHandle_t handle, cublasOperation_t trans,
-    //                            int m, int n,
-    //                            const float           *alpha,
-    //                            const float           *A, int lda,
-    //                            const float           *x, int incx,
-    //                            const float           *beta,
-    //                            float           *y, int incy)
     def sgemv(m: Int, n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
@@ -324,15 +311,6 @@ trait TensorExp extends Dsl with Diff {
 
     // Reference:
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
-    //
-    // cublasStatus_t cublasSgemm(cublasHandle_t handle,
-    //                            cublasOperation_t transa, cublasOperation_t transb,
-    //                            int m, int n, int k,
-    //                            const float           *alpha,
-    //                            const float           *A, int lda,
-    //                            const float           *B, int ldb,
-    //                            const float           *beta,
-    //                            float           *C, int ldc)
     def sgemm(m: Int, n: Int, k: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
