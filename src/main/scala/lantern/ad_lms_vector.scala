@@ -113,8 +113,7 @@ trait TensorExp extends Dsl with Diff {
     if(!cond) { printf(msg, args : _*); exit() }
   }
 
-  def slice(arr: Rep[Array[Float]], off: Rep[Int]) = uncheckedPure[Array[Float]](arr, "+", off)
-  def sliceI(arr: Rep[Array[Int]], off: Rep[Int]) = uncheckedPure[Array[Int]](arr, "+", off)
+  def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
 
   object Encoding {
     val ix_a = 96  // index starts from 1
@@ -1213,7 +1212,7 @@ trait TensorExp extends Dsl with Diff {
       for (i <- DataLoop(this.shape(0))) {
         val ptrInput  = slice(this.data, i * this.strides(1))
         val ptrOutput = slice(res.data, i * res.strides(1))
-        val ptrIdx    = sliceI(savedIdx, i * res.strides(1))
+        val ptrIdx    = slice(savedIdx, i * res.strides(1))
         Tensor(ptrInput, this.shape.drop(1): _*).maxPool_k_inplace(
           kernelRow, kernelCol, strideRow, strideCol, Tensor(ptrOutput, res.shape.drop(1): _*), ptrIdx)
       }
