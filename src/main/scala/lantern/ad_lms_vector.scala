@@ -344,59 +344,6 @@ trait TensorExp extends Dsl with Diff {
   // in your DSL program.
   var backend: Backend = new BackendNative
 
-  /**
-    * Transfer data between backends.
-    * @param from The current backend.
-    * @param to   The new backend.
-    * @param data The data to transfer.
-    * @tparam T   Type of the data.
-    */
-  def transfer[T](from: Backend, to: Backend)(data: T) {
-    // TODO: Implement logic. `cudaMemcpy` will be involved.
-    // Consider what to do when unified memory is used (i.e. `cudaMallocMananged`).
-    (from, to) match {
-      case (cpu: BackendNative, gpu: BackendCudnn) => ???
-      case (gpu: BackendCudnn, cpu: BackendNative) => ???
-      case _ => ???
-    }
-  }
-
-  /**
-    * Call a function with given inputs, generating code for the specified backend.
-    * The inputs and result will be transferred between backends automatically.
-    * @param b     The new backend.
-    * @param input The input to the function.
-    * @param f     The function to call, whose code will be generated on the new backend.
-    * @tparam T    The function input type.
-    * @tparam U    The function output type.
-    */
-  def withBackend[T, U](b: Backend, input: T)(f: T => U) = {
-    val originalBackend = backend
-
-    // Transfer input to the new backend.
-    transfer(originalBackend, b)(input)
-
-    // Change the backend (i.e. codegen target), then call `f`.
-    backend = b
-    val result = f(input)
-
-    // Transfer `result` to the old backend, then reset the backend.
-    transfer(originalBackend, b)(result)
-    backend = originalBackend
-  }
-
-  /**
-    * Call a function with given inputs, generating code for CPU.
-    * The inputs and result will be transferred between backends automatically.
-    */
-  def withCPU[T, U](input: T)(f: T => U) = withBackend(new BackendNative, input)(f)
-
-  /**
-    * Call a function with given inputs, generating code for GPU (via `BackendCudnn`).
-    * The inputs and result will be transferred between backends automatically.
-    */
-  def withGPU[T, U](input: T)(f: T => U) = withBackend(new BackendCudnn, input)(f)
-
   class Tensor(val data: Rep[Array[Float]], val dimensions: NSeq[Int]) extends Serializable {
 
     val MAX_DOUBLE = 1e10f // FIXME
