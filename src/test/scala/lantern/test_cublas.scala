@@ -18,7 +18,7 @@ class CublasTest extends FunSuite {
   def isGPUAvailable = false
 
   testGPU("vector-vector-dot") {
-    val vvdot = new DslDriverCublas[String, Unit] with TensorExp {
+    val vvdot = new LanternDriverCublas[String, Unit] {
       backend = new BackendCublas
 
       @virtualize
@@ -34,7 +34,7 @@ class CublasTest extends FunSuite {
   }
 
   testGPU("matrix-vector-dot") {
-    val mvdot = new DslDriverCublas[String, Unit] with TensorExp {
+    val mvdot = new LanternDriverCublas[String, Unit] {
       backend = new BackendCublas
 
       @virtualize
@@ -49,7 +49,7 @@ class CublasTest extends FunSuite {
   }
 
   testGPU("matrix-matrix-dot") {
-    val mmdot = new DslDriverCublas[String, Unit] with TensorExp {
+    val mmdot = new LanternDriverCublas[String, Unit] {
       backend = new BackendCublas
 
       @virtualize

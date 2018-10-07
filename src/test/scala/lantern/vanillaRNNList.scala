@@ -21,7 +21,7 @@ class VanillaRNNList extends FunSuite {
 
   val file_dir = "/tmp/vanilla_rnn_list.cpp/"
 
-  val min_char_list = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+  val min_char_list = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)

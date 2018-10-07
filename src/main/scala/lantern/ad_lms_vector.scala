@@ -204,6 +204,12 @@ trait TensorExp extends Dsl with Diff {
     * transformations such as operator fusion and matrix chain multiplication optimization.
     */
   trait Backend {
+    // Setup the backend. This is the first function that will be called in DSL programs.
+    def setup(): Unit
+
+    // Cleanup the backend. This is the last function that will be called in DSL programs.
+    def cleanup(): Unit
+
     // Compute vector-vector dot product, i.e. inner product.
     // [V] dot [V] => [1] (scalar)
     def vectorVectorDot(x: Tensor, y: Tensor): Tensor
@@ -238,6 +244,9 @@ trait TensorExp extends Dsl with Diff {
     * Tensor ops are defined in terms of primitive operations.
     */
   class BackendNative extends Backend {
+    override def setup() {}
+    override def cleanup() {}
+
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       assert(x.shape(0) == y.shape(0))
       val value = var_new(0.0f)
@@ -287,6 +296,9 @@ trait TensorExp extends Dsl with Diff {
     * cuBLAS tensor operation backend. WIP.
     */
   class BackendCublas extends Backend {
+    override def setup(): Unit = unchecked[Unit]("cublasHandle_t handle;\nCUBLAS_CALL(cublasCreate(&handle));")
+    override def cleanup(): Unit = unchecked[Unit]("CUBLAS_CALL(cublasDestroy(handle));")
+
     // Reference:
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
     def sdot(a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) =
@@ -342,6 +354,9 @@ trait TensorExp extends Dsl with Diff {
     * cuDNN tensor operation backend. WIP.
     */
   class BackendCudnn extends Backend {
+    override def setup(): Unit = unchecked[Unit]("cudnnHandle_t handle;\nCUDNN_CALL(cudnnCreate(&handle));")
+    override def cleanup(): Unit = unchecked[Unit]("CUDNN_CALL(cudnnDestroy(handle));")
+
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = ???
     override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = ???
     override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = ???

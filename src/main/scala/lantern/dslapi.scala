@@ -571,16 +571,13 @@ void Snippet(char *);
 std::random_device rd{};
 std::mt19937 gen{rd()};
 std::normal_distribution<> d{0, 1};
-cublasHandle_t handle;
 
 int main(int argc, char *argv[]) {
-  CUBLAS_CALL(cublasCreate(&handle));
   if (argc != 2) {
     printf("usage: query <filename>\n");
     return 0;
   }
   Snippet(argv[1]);
-  CUBLAS_CALL(cublasDestroy(handle));
   return 0;
 }
 """)
@@ -684,7 +681,6 @@ void Snippet(char *);
 std::random_device rd{};
 std::mt19937 gen{rd()};
 std::normal_distribution<> d{0, 1};
-void Snippet(char*);
 
 int main(int argc, char *argv[]) {
   if (argc != 2) {
@@ -718,10 +714,12 @@ abstract class DslDriverScala[A: Manifest, B: Manifest] extends Dsl with DslExp 
 
 @virtualize
 abstract class DslDriverBase[A: Manifest, B: Manifest] extends Dsl with DslExp { self =>
+  // The C-like code generator.
   val codegen: DslGenBase {
     val IR: self.type
   }
 
+  // The code snippet to compile.
   def snippet(x: Rep[A]): Rep[B]
 
   def eval(a: A)
@@ -730,7 +728,7 @@ abstract class DslDriverBase[A: Manifest, B: Manifest] extends Dsl with DslExp {
 
   lazy val code: String = {
     val source = new java.io.StringWriter()
-    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))(manifestTyp[A],manifestTyp[B])
+    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))(manifestTyp[A], manifestTyp[B])
     source.toString
   }
 }
@@ -799,4 +797,42 @@ abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A,
     System.out.println("Run C++ code")
     (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
+}
+
+/**
+  * A wrapper around `DslDriverBase` that provides a `wrapper` function that performs backend setup/cleanup.
+  * Extend this instead of `DslDriverBase` for correct backend management.
+  */
+trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorExp {
+  // Hacky workaround to support trait type parameters with context bounds.
+  // `trait LanternDriver[A: Manifest, B: Manifest]` doesn't work.
+  // These must be overridden in subclasses.
+  implicit def manifestA: Manifest[A]
+  implicit def manifestB: Manifest[B]
+
+  def wrapper(x: Rep[A]): Rep[B] = {
+    backend.setup()
+    val result = snippet(x)
+    backend.cleanup()
+    result
+  }
+
+  override lazy val code: String = {
+    val source = new java.io.StringWriter()
+    codegen.emitSource(wrapper, "Snippet", new java.io.PrintWriter(source))(manifestTyp[A], manifestTyp[B])
+    source.toString
+  }
+}
+
+abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with TensorExp {
+  override def manifestA: Manifest[A] = manifest[A]
+  override def manifestB: Manifest[B] = manifest[B]
+}
+abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCublas[A, B] with LanternDriver[A, B] with TensorExp {
+  override def manifestA: Manifest[A] = manifest[A]
+  override def manifestB: Manifest[B] = manifest[B]
+}
+abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] with TensorExp {
+  override def manifestA: Manifest[A] = manifest[A]
+  override def manifestB: Manifest[B] = manifest[B]
 }

@@ -22,7 +22,7 @@ class MnistCNN extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationCNN/Lantern/Lantern.cpp"
 
-  val mnist  = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+  val mnist  = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
     // From the MNIST pytorch example
     val mean = 0.1307f
