@@ -1769,49 +1769,33 @@ trait TensorExp extends Dsl with Diff {
     def dot(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val res = x dot that.x
       val y = TensorR(res); k(y)
-      // FIXME: intermediate Tensors donot need to be substatiated, can optimize!
-      //y.d.print("dot")
       if (this.d.rank == 1) {
         assert(y.d.isScalar)
         this.d.addMul(y.d.data(0), that.x)
         that.d.addMul(y.d.data(0), this.x)
       } else {
-        // FIXME: need optimization using addMul and dataloop!!
         this.d.add_cartesian(that.x, y.d)
         that.d.add_composion(this.x, y.d)
-        //this.d.addMul(y.d.resize(y.d.dims(0), 1), that.x.resize(1, that.x.dims(0)))
-        //that.d.resize(1, that.d.dims(0)).addMul(y.d.resize(1, y.d.dims(0)), this.x)
       }
-      // this.d += that.x * y.d // broadcasting
-      // that.d += this.x * y.d // broadcasting
     }
 
     def tanh(): TensorR @diff = shift { (k : TensorR => Unit) =>
       val y = TensorR(x.tanh()); k(y)
-      // FIXME: intermediate Tensors donot need to be substatiated, can optimize!
-      //this.d += (Tensor.ones(1) - y.x * y.x) * y.d // broadcasting
-      generate_comment("backpropagate tanh")
       this.d.add_oneMinusSquare_mult(y.x, y.d)
     }
 
     def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.exp()); k(y)
-      // Fix
-      //this.d += y.x * y.d
-      generate_comment("backpropage exp")
       this.d.add_mult(y.x, y.d)
     }
 
     def log(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.log()); k(y)
-      // Fix
-      //this.d += y.d / x
       this.d.add_div(y.d, x)
     }
 
     def sigmoid(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.sigmoid()); k(y)
-      //this.d += (Tensor.ones(1) - y.x) * y.x * y.d
       this.d.add_oneMinusThenMult_mult(y.x, y.d)
     }
 
