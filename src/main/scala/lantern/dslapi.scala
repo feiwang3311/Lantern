@@ -158,7 +158,7 @@ with CastingOpsExp {
 }
 
 @virtualize
-trait DslGen extends ScalaGenNumericOps
+trait DslGenScala extends ScalaGenNumericOps
     with ScalaGenPrimitiveOps with ScalaGenBooleanOps with ScalaGenIfThenElse
     with ScalaGenEqual with ScalaGenRangeOps with ScalaGenOrderingOps
     with ScalaGenMiscOps with ScalaGenArrayOps with ScalaGenStringOps
@@ -209,13 +209,6 @@ trait DslGen extends ScalaGenNumericOps
   override def getFreeDataExp[A](sym: Sym[A], rhs: Def[A]): List[(Sym[Any],Any)] = rhs match {
     case Reflect(StaticData(x), _, _) => List((sym,x))
     case _ => super.getFreeDataExp(sym, rhs)
-  }
-}
-
-@virtualize
-trait DslImpl extends DslExp { q =>
-  val codegen = new DslGen {
-    val IR: q.type = q
   }
 }
 
@@ -708,18 +701,28 @@ int main(int argc, char *argv[]) {
 }
 
 @virtualize
-abstract class DslSnippet[A:Manifest, B:Manifest] extends Dsl {
-  def snippet(x: Rep[A]): Rep[B]
-}
+abstract class DslDriverScala[A: Manifest, B: Manifest] extends Dsl with DslExp with CompileScala { self =>
+  val codegen = new DslGenScala {
+    val IR: self.type = self
+  }
 
-@virtualize
-abstract class DslDriver[A:Manifest,B:Manifest] extends DslSnippet[A,B] with DslImpl with CompileScala {
-  lazy val f = compile(snippet)(manifestTyp[A],manifestTyp[B])
+  def snippet(x: Rep[A]): Rep[B]
+
+  lazy val f = compile(snippet)(manifestTyp[A], manifestTyp[B])
   def precompile: Unit = f
 
   // def precompileSilently: Unit = utils.devnull(f)
 
   def eval(x: A): B = f(x)
+}
+
+@virtualize
+abstract class DslDriverBase[A: Manifest, B: Manifest] extends Dsl with DslExp { self =>
+  val codegen: DslGenBase {
+    val IR: self.type
+  }
+
+  def snippet(x: Rep[A]): Rep[B]
 
   lazy val code: String = {
     val source = new java.io.StringWriter()
@@ -729,82 +732,67 @@ abstract class DslDriver[A:Manifest,B:Manifest] extends DslSnippet[A,B] with Dsl
 }
 
 @virtualize
-abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] with DslExp { self =>
+abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
   val codegen = new DslGenC {
     val IR: self.type = self
   }
 
-  lazy val code: String = {
-    val source = new java.io.StringWriter()
-    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))
-    source.toString
-  }
-
-  def eval(a: A): Unit = {
-    val out = new java.io.PrintWriter("/tmp/snippet.cpp")
+  def eval(a: A) {
+    val cppFileName = "/tmp/lantern-snippet.cpp"
+    val binaryFileName = "/tmp/lantern-snippet"
+    val out = new java.io.PrintWriter(cppFileName)
     out.println(code)
     out.close()
 
-    // TODO: Use precompile
-    new java.io.File("/tmp/snippet").delete
+    new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    (s"g++ -std=c++11 -O1 $cppFileName -o $binaryFileName": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ code")
-    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println)
+    (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
 }
 
 @virtualize
-abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslSnippet[A, B] with DslExp { self =>
+abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
   val codegen = new DslGenCublas {
     val IR: self.type = self
   }
 
-  lazy val code: String = {
-    val source = new java.io.StringWriter()
-    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))
-    source.toString
-  }
-
-  def eval(a: A): Unit = {
-    val out = new java.io.PrintWriter("/tmp/snippet.cpp")
+  def eval(a: A) {
+    val cppFileName = "/tmp/lantern-snippet.cpp"
+    val binaryFileName = "/tmp/lantern-snippet"
+    val out = new java.io.PrintWriter(cppFileName)
     out.println(code)
     out.close()
 
-    // TODO: Use precompile
-    new java.io.File("/tmp/snippet").delete
+    new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ (cuBLAS) code")
-    (s"nvcc -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet -lcublas": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    (s"nvcc -std=c++11 -O1 $cppFileName -o $binaryFileName -lcublas": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ code")
-    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println)
+    (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
 }
 
 @virtualize
-abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslSnippet[A, B] with DslExp { self =>
+abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslExp { self =>
   val codegen = new DslGenCudnn {
     val IR: self.type = self
   }
 
-  lazy val code: String = {
-    val source = new java.io.StringWriter()
-    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))
-    source.toString
-  }
-
-  def eval(a: A): Unit = {
-    val out = new java.io.PrintWriter("/tmp/snippet.cpp")
+  def eval(a: A) {
+    val cppFileName = "/tmp/lantern-snippet.cpp"
+    val binaryFileName = "/tmp/lantern-snippet"
+    val out = new java.io.PrintWriter(cppFileName)
     out.println(code)
     out.close()
 
-    // TODO: Use precompile
-    new java.io.File("/tmp/snippet").delete
+    new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ (cuDNN) code")
-    (s"nvcc -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet -lcudnn": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    (s"nvcc -std=c++11 -O1 $cppFileName -o $binaryFileName -lcudnn": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ code")
-    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println)
+    (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
 }
