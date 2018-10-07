@@ -36,7 +36,7 @@ class AdLMSTest extends FunSuite {
         gradR(f)(x)
       }
     }
-    System.out.println(g1.code)
+    // System.out.println(g1.code)
   }
 
   test("reccc") {
@@ -51,7 +51,7 @@ class AdLMSTest extends FunSuite {
         gradR(f)(x)
       }
     }
-    System.out.println(g1.code)
+    // System.out.println(g1.code)
   }
 
   test("rec") {
@@ -61,7 +61,7 @@ class AdLMSTest extends FunSuite {
         gradR(f)(x)
       }
     }
-    System.out.println(g1.code)
+    // System.out.println(g1.code)
   }
   /*
   class Snippet extends ((Double)=>(Double)) {
@@ -204,7 +204,7 @@ class AdLMSTest extends FunSuite {
       }
     }
 
-    System.out.println(gr3.code)
+    // System.out.println(gr3.code)
     /*****************************************
       Emitting Generated Code
     *******************************************
@@ -399,7 +399,7 @@ class AdLMSTest extends FunSuite {
         res
       }
     }
-    System.out.println(gr11.code)
+    // System.out.println(gr11.code)
     def grad(x: Double): Double = 1.5 * 2.0 * 3.0 * 4.0
     for (x <- (-5 until 5)) {
       assert (gr11.eval(x) == grad(x))
@@ -443,7 +443,7 @@ class AdLMSTest extends FunSuite {
         gradR(model(array))(x)
       }
     }
-    System.out.println(gr11.code)
+    // System.out.println(gr11.code)
   }
 
   /* still correct
@@ -494,7 +494,7 @@ class AdLMSTest extends FunSuite {
       }
     }
 
-    System.out.println(gr12.code)
+    // System.out.println(gr12.code)
 /*
 // generating Scala code
 class Snippet() extends (Double=>Double) {

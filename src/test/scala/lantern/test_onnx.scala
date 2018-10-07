@@ -62,23 +62,9 @@ class ONNXTest extends FunSuite {
 
     // initialize information: initialization values of all inputs except the data
     val init = graph.initializer
-    // println("number of initializer is " + init.length)
-    // val inithead: onnx_ml.TensorProto = init.head
-    // System.out.println(inithead.toProtoString)
-    // InitInfo(inithead)
-
-    //val initEnd = init.last
-    //System.out.println(initEnd.toProtoString)
-    //InitInfo(initEnd)
-
-    //val init2head = init.tail.head
-    //println(init2head.toProtoString)
-    //InitInfo(init2head)
 
     // input information: Type of data and dimension information
     val input = graph.input
-    //println("number of input is " + input.length)
-    input.foreach {in => System.out.println(in.toProtoString)}
 
     def ValueInfo(in: onnx_ml.ValueInfoProto) = {
       val name = in.getName
@@ -95,35 +81,8 @@ class ONNXTest extends FunSuite {
       println(dims)
     }
 
-    // output information: Type of data and dimension information
-    // val output = graph.output
-    // println("number of output is " + output.length)
-    // output.foreach { out =>
-    //  ValueInfo(out)
-    // }
-
-
     // node information
     val nodes = graph.node
-    println("number of node is " + nodes.length)
-
-    nodes.foreach { node =>
-      println(node.toProtoString)
-    }
-
-    /*
-    nodes.foreach { node =>
-      node.getOpType match {
-        case "Conv" => ConvNode(node)
-        case "Relu" => ReluNode(node)
-        case "MaxPool" => MaxPoolNode(node)
-        case "Concat" => ConcatNode(node)
-        case "Dropout" => DropoutNode(node)
-        case "GlobalAveragePool" => GlobalAveragePoolNode(node)
-        case "Softmax" => SoftmaxNode(node)
-        case _ => println("ERROR: node getOpType is " + node.getOpType)
-      }
-    } */
 
     // conv should have three inputs, one output, a op_type as Conv, and three attributes (strides, pads, and kernel_shape (type ints))
     def ConvNode(node: onnx_ml.NodeProto) = {
@@ -446,7 +405,6 @@ class ONNXTest extends FunSuite {
               intermediate_map_tensor += (outputs.head -> out)
             }
 
-            // System.out.println("handle each node respectively")
             nodes.foreach { node =>
               node.getOpType match {
                 case "Conv" => {handle_conv(node)}
@@ -470,17 +428,9 @@ class ONNXTest extends FunSuite {
         }
 
         val (func, x_dims) = graphBuilder(graph)
-
-        def func_dummy(b: Rep[Boolean]) = {
-          if (b) println("fooled you")
-          else {
-            val input = Tensor.zeros(x_dims: _*)
-            val output = func(input.data)
-            println(output.data(0))
-          }
-        }
-
-        func_dummy(a > "a")
+        val input = Tensor.zeros(x_dims: _*)
+        val output = func(input.data)
+        println(output.data(0))
       }
     }
 

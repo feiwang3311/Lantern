@@ -234,7 +234,7 @@ class LSTMTest extends FunSuite {
     val min_char_lstm_file = new PrintWriter(new File(root_dir + file_dir))
     min_char_lstm_file.println(min_char_lstm.code)
     min_char_lstm_file.flush()
-    //println(s"now your code at $root_dir/$file_dir is generated.")  
+    //println(s"now your code at $root_dir/$file_dir is generated.")
   }
-  
+
 }

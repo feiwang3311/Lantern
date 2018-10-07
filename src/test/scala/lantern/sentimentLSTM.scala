@@ -180,11 +180,9 @@ class SentimentLSTM extends FunSuite {
   }
 
   test("generate_code_for_sentiment_lstm") {
-    //println("generate code for SentimentLSTM")
     val min_char_rnn_file = new PrintWriter(new File(file_dir))
     min_char_rnn_file.println(senti_seq_lstm.code)
     min_char_rnn_file.flush()
-    //println("now your code at $file_dir is generated.")
   }
-  
+
 }

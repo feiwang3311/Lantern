@@ -16,7 +16,7 @@ import org.scalatest.FunSuite
 import java.io.PrintWriter
 import java.io.File
 
-class AdLMSVectorTest extends FunSuite {
+class AdLMSVectorTest extends LanternFunSuite {
 
   test("array0") {
     val array0 = new DslDriverC[String, Unit] with TensorExp {
@@ -24,15 +24,11 @@ class AdLMSVectorTest extends FunSuite {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val addr = getMallocAddr()
-        //printf("address is at %ld \\n", addr)
         resetMallocAddr(addr)
-        //printf("now lets use some memory\\n")
         val mem = Tensor.zeros(100)
         val addr1 = getMallocAddr()
-        //printf("Now address is at %ld \\n", addr1)
         resetMallocAddr(addr)
         val addr2 = getMallocAddr()
-        //printf("after reset, the address is back to %ld\\n", addr2)
 
         //assertions
         if (addr + 400 != addr1) printf("ERROR: addr did not increase by 800")
@@ -243,8 +239,6 @@ class AdLMSVectorTest extends FunSuite {
          outputs(0)                          // return the final loss
        }
        val loss1 = gradR_loss(lossFun)(Tensor.zeros(1))
-       //printf("bh1\\n")
-       //bh1.d.printRaw(hidden_size)
 
        generate_comment("Compute real value")
 
@@ -371,7 +365,6 @@ class AdLMSVectorTest extends FunSuite {
         // use random array as input
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         // calcuate gradient
         val grad = gradR(t => {val y = IF(t.x.data(0) > 0.0f) {t + t}{t * t}
@@ -384,7 +377,6 @@ class AdLMSVectorTest extends FunSuite {
         else Tensor.assertEqual(grad, grad2)
       }
     }
-    //println(array3.code)
     array3.eval("abc")
   }
 
@@ -397,7 +389,6 @@ class AdLMSVectorTest extends FunSuite {
         val length = 2
         Tensor.randseed()
         val v = Tensor.randinit(length)
-        v.print()
 
         val halfv = Tensor.halves(length)
         val half = (new TensorR(halfv, Tensor.zeros(length)))
@@ -405,9 +396,6 @@ class AdLMSVectorTest extends FunSuite {
         val grad = gradR(t => {val y = LOOP(t)(t => t.x.data(0) > 0.1f)(t => t * half)
         y.sum() })(v)
         // show gradient
-        grad.print()
-        //println("Tensor in closure can also accumulate gradient, which is important")
-        half.d.print()
 
         // FIXME: Implement the correct gradient and assertEqual
       }
@@ -422,7 +410,6 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        // v.print()
 
         val half = new TensorR(Tensor.halves(length), Tensor.zeros(length))
         val grad = gradR(t => {
@@ -456,7 +443,6 @@ class AdLMSVectorTest extends FunSuite {
         // random initialization
         val length = 3
         val v = Tensor.randinit(length)
-        // v.print()
 
         // get data from "file" (more like generate static data and lift it to Rep type)
         val ddim0 = 2
@@ -499,9 +485,7 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
         val u = Tensor.randinit(length, seed = Some(5))
-        //u.print()
 
         val half = new TensorR(Tensor.halves(length), Tensor.zeros(length))
         val vv = TensorR(v)
@@ -542,16 +526,13 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         val grad = gradR(t => (t * t).sum())(v)
-        //grad.print()
 
         Tensor.assertEqual(grad, v * 2.0f)
       }
     }
 
-    println("run test case in array5")
     array5.eval("abc")
   }
 
@@ -561,10 +542,8 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         val grad = gradR(t => (t / t).sum())(v)
-        //grad.print()
 
         Tensor.assertEqual(grad, Tensor.zeros(length))
       }
@@ -578,10 +557,8 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         val grad = gradR(t => (t.tanh()).sum())(v)
-        //grad.print()
 
         val e1 = v.tanh();
         val ee = Tensor.ones(length) - e1 * e1
@@ -615,10 +592,8 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        // v.print()
 
         val grad = gradR(t => (t.exp()).sum())(v)
-        //grad.print()
 
         Tensor.assertEqual(grad, v.exp())
       }
@@ -634,10 +609,8 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randPositive(length)
-        //v.print()
 
         val grad = gradR(t => (t.log()).sum())(v)
-        //grad.print()
 
         Tensor.assertEqual(grad, Tensor.ones(length) / v)
       }
@@ -652,7 +625,6 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         val arra = NewArray[Array[Float]](2)
         arra(0) = NewArray[Float](2)
@@ -667,7 +639,6 @@ class AdLMSVectorTest extends FunSuite {
           LOOPL(x)(arra.length)(i => x1 => new TensorR(Tensor(arra(i), length), Tensor.zeros(length)) * x1)
         }
         val grad = gradR(t => (model(t)).sum())(v)
-        //grad.print()
 
         val grad1 = gradR(t =>
             (t * TensorR(Tensor(arra(0), length)) * TensorR(Tensor(arra(1), length))).sum()
@@ -686,7 +657,6 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         /*
         5.0f, 4.0f
@@ -715,7 +685,6 @@ class AdLMSVectorTest extends FunSuite {
        }
 
        val grad = gradR(t => model(t).sum())(v)
-       //grad.print()
 
        def model1: TensorR => TensorR @diff = { (x: TensorR) =>
          val leftchild  = x * TensorR(Tensor(arra(1), length)) * x
@@ -739,7 +708,6 @@ class AdLMSVectorTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         /*
         5.0f, 4.0f
@@ -775,7 +743,6 @@ class AdLMSVectorTest extends FunSuite {
        }
 
        val grad = gradR(t => model(t))(v)
-       //grad.print()
        // save gradient of add
        val save_grad_add = Tensor.zeros(length); save_grad_add.copy_data(add.d); add.clear_grad()
 
@@ -1320,59 +1287,33 @@ class AdLMSVectorTest extends FunSuite {
 
         val tot = NewArray[Long](2)
         def lossFun = { (dummy: TensorR) =>
-          varInput.print("Input")
           val resConv = varInput.conv(varConv1, sRow1, sCol1, tot)
-          resConv.print("First conv")
           val resMax = resConv.maxPool(smRow1, smCol1)
-          resMax.print("MaxPool")
           val resRL = resMax.relu()
-          resRL.print("ReLu 2")
           val resConv2 = resRL.conv(varConv2, sRow1, sCol1, tot)
-          resConv2.print("Second conv")
           val resRL2 = resConv2.relu()
-          resRL2.print("ReLu 2")
           val resMMul = varA1 dot resRL2.resize(in3)
-          resMMul.print("Matrix Multiplication")
           val resVAdd = resMMul + varB1
-          resVAdd.print("Vector Addition")
           val resLSM = resVAdd.logSoftmax()
-          resLSM.print("LogSoftMax")
           resLSM.nllLoss(2)
         }
 
         for (x <- 0 until 1000: Rep[Range]) {
           val loss = gradR_loss(lossFun)(Tensor.scalar(0.0f))
-          loss.print("Loss")
 
           // Update weight
           for ((weight, idx) <- NSeq(varConv1, varConv2, varA1, varB1).zipWithIndex) {
-            //weight.print(s"Before ${idx + 1}", derivative = true)
             weight.x.addMul(-0.5f, weight.d)
-            //weight.print(s"After ${idx + 1}")
             weight.clear_grad()
-            //printf("\\n")
           }
         }
       }
     }
-    //test_cnn_full1.eval("abc")
   }
 
   val gene_dir = "/tmp/"
-  def runTest(snippet: DslDriverC[String, Unit]) = {
-    val test = new PrintWriter(new File("/tmp/snippet.cpp"))
-    test.println(snippet.code)
-    test.flush()
-    new java.io.File("/tmp/snippet").delete
-    import scala.sys.process._
-    System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println)
-    System.out.println("Run C++ code")
-    (s"/tmp/snippet a": ProcessBuilder).lines.foreach(System.out.println)
-  }
 
   test("op_conv") {
-    System.out.println("debugging")
 
     val deb = new DslDriverC[String, Unit] with TensorExp {
       import scala.collection.Seq;
@@ -1401,7 +1342,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("op_conv_pad") {
-    System.out.println("debugging")
+
     val deb = new DslDriverC[String, Unit] with TensorExp {
       import scala.collection.Seq;
 
@@ -1428,7 +1369,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("backprop_op_conv") {
-    System.out.println("debugging")
+
     val deb = new DslDriverC[String, Unit] with TensorExp {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1463,7 +1404,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("backprop_op_conv_pad") {
-    System.out.println("debugging")
+
     val deb = new DslDriverC[String, Unit] with TensorExp {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1478,10 +1419,6 @@ class AdLMSVectorTest extends FunSuite {
           output.sum()
         }
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-
-        input.d.print("input_grad")
-        kernel.d.print("kernel_grad")
-        bias.d.print("bias_grad")
 
         // assert equal
         val expect_input_grad = Tensor.fromData(scala.collection.Seq(1,1,4,4),

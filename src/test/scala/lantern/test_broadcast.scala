@@ -22,17 +22,21 @@ class BroadCastingTest extends FunSuite {
     val test1 = new DslDriverC[String, Unit] with TensorExp {
       def snippet(a: Rep[String]) = {}
       def test() = {
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 3)) == Some((NSeq(2, 3), NSeq(2, 3), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(3), NSeq(2, 3)) == Some((NSeq(1, 3), NSeq(2, 3), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(3)) == Some((NSeq(2, 3), NSeq(1, 3), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(1, 3), NSeq(2, 3)) == Some((NSeq(1, 3), NSeq(2, 3), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(1, 3)) == Some((NSeq(2, 3), NSeq(1, 3), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 1)) == Some((NSeq(2, 3), NSeq(2, 1), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(2, 1), NSeq(2, 3)) == Some((NSeq(2, 1), NSeq(2, 3), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(), NSeq(2, 3)) == Some((NSeq(1, 1), NSeq(2, 3), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq()) == Some((NSeq(2, 3), NSeq(1, 1), NSeq(2, 3))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(3, 3)) == None)
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 3, 3)) == None)
+        def dimfy(x: Option[(NSeq[Int], NSeq[Int], NSeq[Int])]) = x match {
+          case None => None
+          case Some((x1, x2, x3)) => Some((new Dimensions(x1), new Dimensions(x2), new Dimensions(x3)))
+        }
+        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 3)) == dimfy(Some((NSeq(2, 3), NSeq(2, 3), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(3), NSeq(2, 3)) == dimfy(Some((NSeq(1, 3), NSeq(2, 3), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(3)) == dimfy(Some((NSeq(2, 3), NSeq(1, 3), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(1, 3), NSeq(2, 3)) == dimfy(Some((NSeq(1, 3), NSeq(2, 3), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(1, 3)) == dimfy(Some((NSeq(2, 3), NSeq(1, 3), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 1)) == dimfy(Some((NSeq(2, 3), NSeq(2, 1), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(2, 1), NSeq(2, 3)) == dimfy(Some((NSeq(2, 1), NSeq(2, 3), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(), NSeq(2, 3)) == dimfy(Some((NSeq(1, 1), NSeq(2, 3), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq()) == dimfy(Some((NSeq(2, 3), NSeq(1, 1), NSeq(2, 3)))))
+        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(3, 3)) == dimfy(None))
+        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 3, 3)) == dimfy(None))
       }
     }
     test1.test()
@@ -138,7 +142,7 @@ class BroadCastingTest extends FunSuite {
       }
     }
     test5.eval("a")
-    System.out.println(test5.code)
+    // System.out.println(test5.code)
   }
 
   test("minus_broadcast5") {
