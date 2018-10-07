@@ -71,6 +71,7 @@ with CastingOps {
 //  override def boolean_and(lhs: Rep[Boolean], rhs: Rep[Boolean])(implicit pos: SourceContext): Rep[Boolean] = __ifThenElse(lhs, rhs, unit(false))
   def generate_comment(l: String): Rep[Unit]
   def comment[A:Typ](l: String, verbose: Boolean = true)(b: => Rep[A]): Rep[A]
+  def generateRawCode(s: String): Rep[Unit]
 
   // added by Fei
   def mutableStaticData[T:Manifest](x: T): Rep[T]
@@ -92,6 +93,7 @@ with CastingOpsExp {
 
   case class GenerateComment(l: String) extends Def[Unit]
   def generate_comment(l: String) = reflectEffect(GenerateComment(l))
+
   case class Comment[A:Typ](l: String, verbose: Boolean, b: Block[A]) extends Def[A]
   def comment[A:Typ](l: String, verbose: Boolean)(b: => Rep[A]): Rep[A] = {
     //b
@@ -100,11 +102,14 @@ with CastingOpsExp {
     super.reflectEffect[A](Comment(l, verbose, br), be)
   }
 
+  // A raw snippet of code, to be code generated literally.
+  case class RawCode(s: String) extends Def[Unit]
+  def generateRawCode(s: String) = reflectEffect(RawCode(s))
+
   override def boundSyms(e: Any): List[Sym[Any]] = e match {
     case Comment(_, _, b) => effectSyms(b)
     case _ => super.boundSyms(e)
   }
-
 
   override def array_apply[T:Typ](x: Exp[Array[T]], n: Exp[Int])(implicit pos: SourceContext): Exp[T] = (x,n) match {
     case (Def(StaticData(x:Array[T])), Const(n)) =>
@@ -188,6 +193,8 @@ trait DslGenScala extends ScalaGenNumericOps
       emitValDef(sym, src"printf(${Const(f)::xs})")
     case GenerateComment(s) =>
       stream.println("// "+s)
+    case RawCode(s) =>
+      stream.println(s)
     case Comment(s, verbose, b) =>
       stream.println("val " + quote(sym) + " = {")
       stream.println("//#" + s)
@@ -335,6 +342,8 @@ trait DslGenBase extends CGenNumericOpsExtra
     case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
     case GenerateComment(s) =>
       stream.println("// "+s)
+    case RawCode(s) =>
+      stream.println(s)
     case a@ArrayNew(n) =>
       val arrType = remap(a.m)
       //stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
@@ -811,8 +820,11 @@ trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorExp {
   implicit def manifestB: Manifest[B]
 
   def wrapper(x: Rep[A]): Rep[B] = {
+    generate_comment("Backend setup.")
     backend.setup()
     val result = snippet(x)
+
+    generate_comment("Backend cleanup.")
     backend.cleanup()
     result
   }

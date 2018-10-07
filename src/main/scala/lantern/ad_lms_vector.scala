@@ -296,8 +296,8 @@ trait TensorExp extends Dsl with Diff {
     * cuBLAS tensor operation backend. WIP.
     */
   class BackendCublas extends Backend {
-    override def setup(): Unit = unchecked[Unit]("cublasHandle_t handle;\nCUBLAS_CALL(cublasCreate(&handle));")
-    override def cleanup(): Unit = unchecked[Unit]("CUBLAS_CALL(cublasDestroy(handle));")
+    override def setup(): Unit = generateRawCode("cublasHandle_t handle;\nCUBLAS_CALL(cublasCreate(&handle));")
+    override def cleanup(): Unit = generateRawCode("CUBLAS_CALL(cublasDestroy(handle));")
 
     // Reference:
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
@@ -354,8 +354,8 @@ trait TensorExp extends Dsl with Diff {
     * cuDNN tensor operation backend. WIP.
     */
   class BackendCudnn extends Backend {
-    override def setup(): Unit = unchecked[Unit]("cudnnHandle_t handle;\nCUDNN_CALL(cudnnCreate(&handle));")
-    override def cleanup(): Unit = unchecked[Unit]("CUDNN_CALL(cudnnDestroy(handle));")
+    override def setup(): Unit = generateRawCode("cudnnHandle_t handle;\nCUDNN_CALL(cudnnCreate(&handle));")
+    override def cleanup(): Unit = generateRawCode("CUDNN_CALL(cudnnDestroy(handle));")
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = ???
     override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = ???
