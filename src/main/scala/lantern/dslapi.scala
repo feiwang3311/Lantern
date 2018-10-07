@@ -5,6 +5,8 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms.common._
 
+import scala.collection.{Seq => NSeq}
+
 // TODO: clean up at least, maybe add to LMS?
 //@virtualize
 trait UtilOps extends Base { this: Dsl =>
@@ -368,33 +370,21 @@ trait DslGenBase extends CGenNumericOpsExtra
     case MathTanh(x) => emitValDef(sym, src"tanh($x)")
     case _ => super.emitNode(sym,rhs)
   }
-}
 
-trait DslGenC extends DslGenBase {
-  val IR: DslExp
-  import IR._
+  // List of header files, to be imported in the code template.
+  def templateHeaders: NSeq[String] = NSeq(
+    "<assert.h>", "<err.h>", "<errno.h>", "<fcntl.h>", "<functional>",
+    "<math.h>", "<memory>", "<random>", "<stdint.h>", "<stdio.h>",
+    "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>")
 
-  // TODO: Reduce code duplication in `emitSource` functions.
+  // Raw code, to be included in the code template at file scope, before the main function.
+  def templateRawCode: String = ""
+
   override def emitSource[A:Typ](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
     withStream(out) {
-      stream.println("""#include <assert.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <functional>
-#include <math.h>
-#include <memory>
-#include <random>
-#include <stdint.h>
-#include <stdio.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <time.h>
-#include <unistd.h>
-
+      stream.println(templateHeaders.map(x => s"#include $x").mkString("\n"))
+      stream.println(raw"""
 using namespace std;
-
 #ifndef MAP_FILE
 #define MAP_FILE MAP_SHARED
 #endif
@@ -440,6 +430,8 @@ int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval 
   return (diff < 0);
 }
 
+$templateRawCode
+
 void Snippet(char *);
 
 std::random_device rd{};
@@ -460,7 +452,11 @@ int main(int argc, char *argv[]) {
   }
 }
 
-@virtualize
+trait DslGenC extends DslGenBase {
+  val IR: DslExp
+  import IR._
+}
+
 trait DslGenCublas extends DslGenBase {
   val IR: DslExp
   import IR._
@@ -490,34 +486,8 @@ trait DslGenCublas extends DslGenBase {
     case _ => super.emitNode(sym,rhs)
   }
 
-  override def emitSource[A:Typ](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
-    withStream(out) {
-      stream.println("""#include <assert.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <functional>
-#include <iostream>
-#include <math.h>
-#include <memory>
-#include <random>
-#include <stdint.h>
-#include <stdio.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <time.h>
-#include <unistd.h>
-
-#include <cuda_runtime.h>
-#include "cublas_v2.h"
-
-using namespace std;
-
-#ifndef MAP_FILE
-#define MAP_FILE MAP_SHARED
-#endif
-
+  override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cuda_runtime.h>", "\"cublas_v2.h\"")
+  override def templateRawCode: String = super.templateRawCode + """
 #define CUDA_CALL(f) { \
   cudaError_t err = (f); \
   if (err != cudaSuccess) { \
@@ -533,66 +503,7 @@ using namespace std;
     exit(1); \
   } \
 }
-
-int fsize(int fd) {
-  struct stat stat;
-  int res = fstat(fd, &stat);
-  return stat.st_size;
-}
-
-int printll(char *s) {
-  while (*s != '\n' && *s != ',' && *s != '\t') {
-    putchar(*s++);
-  }
-  return 0;
-}
-
-long hash(char *str0, int len) {
-  unsigned char *str = (unsigned char *)str0;
-  unsigned long hash = 5381;
-  int c;
-
-  while ((c = *str++) && len--)
-    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-  return hash;
-}
-
-int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
-void *mallocBase = malloc(HEAP_SIZE);
-void *mallocAddr = mallocBase;
-void *waterMark = mallocBase;
-void *myMalloc(size_t bytes) {
-  void *res = mallocAddr;
-  mallocAddr = (void *)((char *)mallocAddr + bytes);
-  return res;
-}
-
-int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
-  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
-  result->tv_sec = diff / 1000000;
-  result->tv_usec = diff % 1000000;
-  return (diff < 0);
-}
-
-void Snippet(char *);
-
-std::random_device rd{};
-std::mt19937 gen{rd()};
-std::normal_distribution<> d{0, 1};
-
-int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    printf("usage: query <filename>\n");
-    return 0;
-  }
-  Snippet(argv[1]);
-  return 0;
-}
-""")
-    }
-    super.emitSource[A](args, body, functionName, out)
-  }
+"""
 }
 
 @virtualize
@@ -600,34 +511,8 @@ trait DslGenCudnn extends DslGenBase {
   val IR: DslExp
   import IR._
 
-  override def emitSource[A:Typ](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
-    withStream(out) {
-      stream.println("""#include <assert.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <functional>
-#include <iostream>
-#include <math.h>
-#include <memory>
-#include <random>
-#include <stdint.h>
-#include <stdio.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <time.h>
-#include <unistd.h>
-
-#include <cuda.h>
-#include <cudnn.h>
-
-using namespace std;
-
-#ifndef MAP_FILE
-#define MAP_FILE MAP_SHARED
-#endif
-
+  override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cuda.h>", "<cudnn.h>")
+  override def templateRawCode: String = super.templateRawCode + """
 #define CUDA_CALL(f) { \
   cudaError_t err = (f); \
   if (err != cudaSuccess) { \
@@ -643,66 +528,7 @@ using namespace std;
     std::exit(1); \
   } \
 }
-
-int fsize(int fd) {
-  struct stat stat;
-  int res = fstat(fd, &stat);
-  return stat.st_size;
-}
-
-int printll(char *s) {
-  while (*s != '\n' && *s != ',' && *s != '\t') {
-    putchar(*s++);
-  }
-  return 0;
-}
-
-long hash(char *str0, int len) {
-  unsigned char *str = (unsigned char *)str0;
-  unsigned long hash = 5381;
-  int c;
-
-  while ((c = *str++) && len--)
-    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-  return hash;
-}
-
-int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
-void *mallocBase = malloc(HEAP_SIZE);
-void *mallocAddr = mallocBase;
-void *waterMark = mallocBase;
-void *myMalloc(size_t bytes) {
-  void *res = mallocAddr;
-  mallocAddr = (void *)((char *)mallocAddr + bytes);
-  return res;
-}
-
-int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
-  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
-  result->tv_sec = diff / 1000000;
-  result->tv_usec = diff % 1000000;
-  return (diff < 0);
-}
-
-void Snippet(char *);
-
-std::random_device rd{};
-std::mt19937 gen{rd()};
-std::normal_distribution<> d{0, 1};
-
-int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    printf("usage: query <filename>\n");
-    return 0;
-  }
-  Snippet(argv[1]);
-  return 0;
-}
-""")
-    }
-    super.emitSource[A](args, body, functionName, out)
-  }
+"""
 }
 
 @virtualize
