@@ -10,7 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
 import java.io.{File, PrintWriter}
 
-class CublasTest extends FunSuite {
+class CublasTest extends LanternFunSuite {
   // TODO: Edit this function to actually detect whether GPU codegen is possible.
   // One idea: check for:
   // - The existence of cuBLAS header files (<cuda_runtime.h>, "cublas_v2.h").
@@ -45,7 +45,7 @@ class CublasTest extends FunSuite {
         Tensor.assertEqual(m.dot(v), expected)
       }
     }
-    runTest(mvdot, debug = true)
+    runTest(mvdot)
   }
 
   testGPU("matrix-matrix-dot") {
@@ -61,7 +61,7 @@ class CublasTest extends FunSuite {
         Tensor.assertEqual(m1.dot(m2), expected)
       }
     }
-    runTest(mmdot, debug = true)
+    runTest(mmdot)
   }
 
   // Utility function wrapping `test` that checks whether GPU is available.
@@ -70,21 +70,5 @@ class CublasTest extends FunSuite {
       test(testName, testTags: _*)(testFun)(pos)
     else
       ignore(testName, testTags: _*)(testFun)(pos)
-  }
-
-  // TODO: Refactor `runTest` into a "LanternTestSuite" base class.
-  def runTest(snippet: DslDriverCublas[String, Unit], debug: Boolean = false) {
-    val test = new PrintWriter(new File("/tmp/snippet.cpp"))
-    if (debug) {
-      System.err.println(snippet.code)
-    }
-    test.println(snippet.code)
-    test.flush()
-    new java.io.File("/tmp/snippet").delete
-    import scala.sys.process._
-    System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println)
-    System.out.println("Run C++ code")
-    (s"/tmp/snippet a": ProcessBuilder).lines.foreach(System.out.println)
   }
 }
