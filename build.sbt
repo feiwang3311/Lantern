@@ -60,3 +60,10 @@ PB.targets in Compile := Seq(
 // (optional) If you need scalapb/scalapb.proto or anything from
 // google/protobuf/*.proto
 libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
+
+// Testing.
+
+// Parallel execution is disabled because it causes non-deterministic failures:
+// https://github.com/feiwang3311/Lantern/issues/19
+
+parallelExecution in Test := false
