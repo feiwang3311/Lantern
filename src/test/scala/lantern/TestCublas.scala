@@ -3,20 +3,9 @@ package lantern
 import org.scala_lang.virtualized.virtualize
 import org.scala_lang.virtualized.SourceContext
 
-import org.scalactic.source
-import org.scalatest.{FunSuite, Tag}
-
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
-import java.io.{File, PrintWriter}
 
-class CublasTest extends LanternFunSuite {
-  // TODO: Edit this function to actually detect whether GPU codegen is possible.
-  // One idea: check for:
-  // - The existence of cuBLAS header files (<cuda_runtime.h>, "cublas_v2.h").
-  // - The existence of a GPU (perhaps run `nvidia-smi`).
-  def isGPUAvailable = false
-
+class TestCublas extends LanternFunSuite {
   testGPU("vector-vector-dot") {
     val vvdot = new LanternDriverCublas[String, Unit] {
       backend = new BackendCublas
@@ -64,11 +53,4 @@ class CublasTest extends LanternFunSuite {
     runTest(mmdot)
   }
 
-  // Utility function wrapping `test` that checks whether GPU is available.
-  def testGPU(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */)(implicit pos: source.Position) {
-    if (isGPUAvailable)
-      test(testName, testTags: _*)(testFun)(pos)
-    else
-      ignore(testName, testTags: _*)(testFun)(pos)
-  }
 }

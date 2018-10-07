@@ -296,13 +296,13 @@ trait TensorExp extends Dsl with Diff {
     * cuBLAS tensor operation backend. WIP.
     */
   class BackendCublas extends Backend {
-    override def setup(): Unit = generateRawCode("cublasHandle_t handle;\nCUBLAS_CALL(cublasCreate(&handle));")
-    override def cleanup(): Unit = generateRawCode("CUBLAS_CALL(cublasDestroy(handle));")
+    override def setup(): Unit = generateRawCode("cublasHandle_t cublasHandle;\nCUBLAS_CALL(cublasCreate(&cublasHandle));")
+    override def cleanup(): Unit = generateRawCode("CUBLAS_CALL(cublasDestroy(cublasHandle));")
 
     // Reference:
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
     def sdot(a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) =
-      unchecked[Unit]("CUBLAS_CALL(cublasSdot(handle, ", a.length, ",", a, ",1,", b, ",1,", result, "))")
+      unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", a.length, ",", a, ",1,", b, ",1,", result, "))")
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       val res = NewArray[Float](1)
@@ -316,7 +316,7 @@ trait TensorExp extends Dsl with Diff {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemv(handle, CUBLAS_OP_N, ",
+        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
         m, ",", n, ",", one, ",",
         a, ",", m, ",", b, ",", zero, ",", result, ",", one, "))")
     }
@@ -335,7 +335,7 @@ trait TensorExp extends Dsl with Diff {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
         m, ",", n, ",", k, ",", one, ",",
         a, ",", m, ",", b, ",", k, ",", zero, ",", result, ",", m, "))")
     }
@@ -352,14 +352,18 @@ trait TensorExp extends Dsl with Diff {
 
   /**
     * cuDNN tensor operation backend. WIP.
+    * Extends `BackendCublas` to leverage cuBLAS primitives.
     */
-  class BackendCudnn extends Backend {
-    override def setup(): Unit = generateRawCode("cudnnHandle_t handle;\nCUDNN_CALL(cudnnCreate(&handle));")
-    override def cleanup(): Unit = generateRawCode("CUDNN_CALL(cudnnDestroy(handle));")
+  class BackendCudnn extends BackendCublas {
+    override def setup(): Unit = {
+      super.setup()
+      generateRawCode("cudnnHandle_t cudnnHandle;\nCUDNN_CALL(cudnnCreate(&cudnnHandle));")
+    }
 
-    override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = ???
-    override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = ???
-    override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = ???
+    override def cleanup(): Unit = {
+      super.cleanup()
+      generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
+    }
   }
 
   // The current backend for code generation.

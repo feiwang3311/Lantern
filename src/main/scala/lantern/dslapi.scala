@@ -486,46 +486,43 @@ trait DslGenCublas extends DslGenBase {
     case _ => super.emitNode(sym,rhs)
   }
 
-  override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cuda_runtime.h>", "\"cublas_v2.h\"")
+  override def templateHeaders: NSeq[String] =
+    super.templateHeaders ++ NSeq("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
+
   override def templateRawCode: String = super.templateRawCode + """
 #define CUDA_CALL(f) { \
   cudaError_t err = (f); \
   if (err != cudaSuccess) { \
-    std::cerr << "Error occurred: " << err << std::endl; \
-    std::exit(1); \
+    fprintf(stderr, "CUDA error occurred: %s (%s:%d)\n", \
+            cudaGetErrorString(err), __FILE__, __LINE__); \
+    exit(err); \
   } \
 }
 
 #define CUBLAS_CALL(f) { \
   cublasStatus_t stat = (f); \
   if (stat != CUBLAS_STATUS_SUCCESS) { \
-    std::cerr << "Error occurred: " << err << std::endl; \
-    exit(1); \
+    fprintf(stderr, "cuBLAS error occurred: %d (%s:%d)\n", \
+            stat, __FILE__, __LINE__); \
+    exit(stat); \
   } \
 }
 """
 }
 
 @virtualize
-trait DslGenCudnn extends DslGenBase {
+trait DslGenCudnn extends DslGenCublas {
   val IR: DslExp
   import IR._
 
   override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cuda.h>", "<cudnn.h>")
   override def templateRawCode: String = super.templateRawCode + """
-#define CUDA_CALL(f) { \
-  cudaError_t err = (f); \
-  if (err != cudaSuccess) { \
-    std::cerr << "Error occurred: " << err << std::endl; \
-    std::exit(1); \
-  } \
-}
-
 #define CUDNN_CALL(f) { \
-  cudnnStatus_t err = (f); \
-  if (err != CUDNN_STATUS_SUCCESS) { \
-    std::cerr << "Error occurred: " << err << std::endl; \
-    std::exit(1); \
+  cudnnStatus_t stat = (f); \
+  if (stat != CUDNN_STATUS_SUCCESS) { \
+    fprintf(stderr, "cuDNN error occurred: %d (%s:%d)\n", \
+            stat, __FILE__, __LINE__); \
+    exit(stat); \
   } \
 }
 """
@@ -627,8 +624,8 @@ abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A,
 
     new java.io.File(binaryFileName).delete
     import scala.sys.process._
-    System.out.println("Compile C++ (cuDNN) code")
-    (s"nvcc -std=c++11 -O1 $cppFileName -o $binaryFileName -lcudnn": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    System.out.println("Compile C++ (cuBLAS & cuDNN) code")
+    (s"nvcc -std=c++11 -O1 $cppFileName -o $binaryFileName -lcublas -lcudnn": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ code")
     (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
