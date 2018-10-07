@@ -373,7 +373,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         // another way of implementing it
         val grad1 = gradR(t => (t + t).sum())(v)
         val grad2 = gradR(t => (t * t).sum())(v)
-        if (v(0) > 0) Tensor.assertEqual(grad, grad1)
+        if (v.data(0) > 0) Tensor.assertEqual(grad, grad1)
         else Tensor.assertEqual(grad, grad2)
       }
     }
@@ -1172,8 +1172,8 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(resNone, Tensor.zeros(input), "DROPOUT 2")
 
         for (i <- 0 until input.scalarCount: Rep[Range]) {
-          assertC(idxAll(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll(i))
-          assertC(idxNone(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone(i))
+          assertC(idxAll.data(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll.data(i))
+          assertC(idxNone.data(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone.data(i))
         }
       }
     }

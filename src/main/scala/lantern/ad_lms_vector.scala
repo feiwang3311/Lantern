@@ -147,24 +147,6 @@ trait TensorExp extends Dsl with Diff {
     def apply(x: Int*) = new Dimensions(x)
   }
 
-  /*
-  case class TTT(seq: NSeq[Int]) {
-    def apply(x: Int) = {
-      if (x >= seq.length) ???
-      seq(x)
-    }
-
-    def last = seq.last
-    def reverse = TTT(seq.reverse)
-
-    def equal(that: TTT) = {
-      that.seq == seq
-    }
-  }
-
-  implicit def ttttoSeq(x: TTT) = x.seq
-  */
-
   object Random {
     def rand() = unchecked[Float]("(float)rand()/RAND_MAX")
     def srand(seed: Option[Int] = None) = unchecked[Unit]("srand(",seed.map(_.toString).getOrElse("time(NULL)"),")")
@@ -380,8 +362,8 @@ trait TensorExp extends Dsl with Diff {
     assert(shape.strides.length >= 1)
     assert(scalarCount != 0, "Empty Tensor!!!")
 
-    def apply(i: Rep[Int]) = data(i)
-    def apply(i: Rep[Int], j: Rep[Int]) = data(i * shape(1) + j) // FIXME the index of matrix is not the normal way
+    def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
+    // def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i + 1) +: shape.tail)
 
     @virtualize
     def clipAt(bound: Float) = {
@@ -1310,7 +1292,7 @@ trait TensorExp extends Dsl with Diff {
             for (dummy1 <- DataLoop(kernelRow)) {
               val this_index_2 = var_new[Int](this_index_1)     // offset of this (input), built on this_index_1, by col of kernel size
               for (dummy <- DataLoop(kernelCol)) {
-                if (this.data(this_index_2) > res(offout_2)) {
+                if (this.data(this_index_2) > res.data(offout_2)) {
                   res.data(offout_2) = this.data(this_index_2)
                   savedIdx(offout_2) = this_index_2
                 } else ()
@@ -1361,7 +1343,7 @@ trait TensorExp extends Dsl with Diff {
             for (dummy1 <- DataLoop(kernelRow)) {
               val this_index_2 = var_new[Int](this_index_1)     // offset of this (input), built on this_index_1, by col of kernel size
               for (dummy <- DataLoop(kernelCol)) {
-                if (this.data(this_index_2) > res(offout_2)) {
+                if (this.data(this_index_2) > res.data(offout_2)) {
                   res.data(offout_2) = this.data(this_index_2)
                   savedIdx(offout_2) = this_index_2
                 } else ()
@@ -1412,7 +1394,7 @@ trait TensorExp extends Dsl with Diff {
 
       val res = NewArray[Float](this.scalarCount)
       for (i <- 0 until this.scalarCount: Rep[Range]) {
-        if (this(i) < 0.0f)
+        if (this.data(i) < 0.0f)
           res(i) = 0.0f
         else
           res(i) = this.data(i)
@@ -1523,10 +1505,10 @@ trait TensorExp extends Dsl with Diff {
   }
 
   object Tensor {
-    def apply(dims: Int*) = {
-      val size = dims.product
-      new Tensor(NewArray[Float](size), dims)
-    }
+    // def apply(dims: Int*) = {
+    //   val size = dims.product
+    //   new Tensor(NewArray[Float](size), dims)
+    // }
     def apply(data: Rep[Array[Float]], dims: Int*) = new Tensor(data, dims)
 
     def dimCompatible(a: Tensor, b: Tensor) = {
@@ -2216,7 +2198,7 @@ trait TensorExp extends Dsl with Diff {
           val offset_a = var_new(offset)           // offset of this, should step by this.x.strides(3)
           for (i <- DataLoop(this.x.shape(2))) {
             for (j <- DataLoop(this.x.shape(3))) {
-              this.d.data(offset_a + j) += ty.d(res_offset) * scale
+              this.d.data(offset_a + j) += ty.d.data(res_offset) * scale
             }
             offset_a += this.x.shape.strides(2)
           }
@@ -2278,9 +2260,9 @@ trait TensorExp extends Dsl with Diff {
       new TensorR(Tensor(a, dim0, dim1), Tensor.zeros(dim0, dim1))
     }
 
-    def apply(dim0: Int, dim1: Int): TensorR = {
-      new TensorR(Tensor.zeros(dim0, dim1), Tensor.zeros(dim0, dim1))
-    }
+    // def apply(dim0: Int, dim1: Int): TensorR = {
+    //   new TensorR(Tensor.zeros(dim0, dim1), Tensor.zeros(dim0, dim1))
+    // }
 
   }
 
