@@ -1533,6 +1533,8 @@ trait TensorExp extends Dsl with Diff {
   object Tensor {
     // def apply(dims: Int*) = {
     //   new Tensor(NewArray[Float](scalarCount), dims)
+    //   val size = dims.product
+    //   new Tensor(NewArray[Float](size), dims)
     // }
     def apply(data: Rep[Array[Float]], dims: Int*) = new Tensor(data, dims)
 
