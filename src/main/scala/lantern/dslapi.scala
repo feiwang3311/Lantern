@@ -724,6 +724,10 @@ abstract class DslDriverBase[A: Manifest, B: Manifest] extends Dsl with DslExp {
 
   def snippet(x: Rep[A]): Rep[B]
 
+  def eval(a: A)
+  // Note: is it possible to implement `eval` returning `B`?
+  // def eval(a: A): B
+
   lazy val code: String = {
     val source = new java.io.StringWriter()
     codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))(manifestTyp[A],manifestTyp[B])
@@ -733,11 +737,11 @@ abstract class DslDriverBase[A: Manifest, B: Manifest] extends Dsl with DslExp {
 
 @virtualize
 abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
-  val codegen = new DslGenC {
+  override val codegen = new DslGenC {
     val IR: self.type = self
   }
 
-  def eval(a: A) {
+  override def eval(a: A) {
     val cppFileName = "/tmp/lantern-snippet.cpp"
     val binaryFileName = "/tmp/lantern-snippet"
     val out = new java.io.PrintWriter(cppFileName)
@@ -755,11 +759,11 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
 
 @virtualize
 abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
-  val codegen = new DslGenCublas {
+  override val codegen = new DslGenCublas {
     val IR: self.type = self
   }
 
-  def eval(a: A) {
+  override def eval(a: A) {
     val cppFileName = "/tmp/lantern-snippet.cpp"
     val binaryFileName = "/tmp/lantern-snippet"
     val out = new java.io.PrintWriter(cppFileName)
@@ -777,11 +781,11 @@ abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A
 
 @virtualize
 abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslExp { self =>
-  val codegen = new DslGenCudnn {
+  override val codegen = new DslGenCudnn {
     val IR: self.type = self
   }
 
-  def eval(a: A) {
+  override def eval(a: A) {
     val cppFileName = "/tmp/lantern-snippet.cpp"
     val binaryFileName = "/tmp/lantern-snippet"
     val out = new java.io.PrintWriter(cppFileName)
