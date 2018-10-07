@@ -21,7 +21,7 @@ class SentimentLSTM extends FunSuite {
 
   val file_dir = "/tmp/sentiment_lstm.cpp"
 
-  val senti_seq_lstm = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+  val senti_seq_lstm = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {

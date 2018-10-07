@@ -19,7 +19,7 @@ import java.io.File;
 
 class BroadCastingTest extends FunSuite {
   test("broadcasting") {
-    val test1 = new DslDriverC[String, Unit] with TensorExp {
+    val test1 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]) = {}
       def test() = {
         def dimfy(x: Option[(NSeq[Int], NSeq[Int], NSeq[Int])]) = x match {
@@ -43,7 +43,7 @@ class BroadCastingTest extends FunSuite {
   }
 
   test("add_broadcast1") {
-    val test1 = new DslDriverC[String, Unit] with TensorExp {
+    val test1 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f), 2, 3)
         val tensor2 = Tensor(Array[Float](6,5,4,3,2,1), 2, 3)
@@ -63,7 +63,7 @@ class BroadCastingTest extends FunSuite {
   }
 
   test("add_broadcast2") {
-    val test2 = new DslDriverC[String, Unit] with TensorExp {
+    val test2 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6), 2, 3)
         val tensor2 = Tensor(Array[Float](1,2), 2, 1)
@@ -83,7 +83,7 @@ class BroadCastingTest extends FunSuite {
   }
 
   test("add_broadcast3") {
-    val test3 = new DslDriverC[String, Unit] with TensorExp {
+    val test3 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6), 2, 3)
         val tensor2 = Tensor(Array[Float](3,4,5), 1, 3)
@@ -103,7 +103,7 @@ class BroadCastingTest extends FunSuite {
   }
 
   test("add_broadcast4") {
-    val test4 = new DslDriverC[String, Unit] with TensorExp {
+    val test4 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2,2,2)
         val tensor2 = Tensor(Array[Float](1,2), 2)
@@ -123,7 +123,7 @@ class BroadCastingTest extends FunSuite {
   }
 
   test("add_broadcast5") {
-    val test5 = new DslDriverC[String, Unit] with TensorExp {
+    val test5 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,3,4), 2, 1, 2)
@@ -146,7 +146,7 @@ class BroadCastingTest extends FunSuite {
   }
 
   test("minus_broadcast5") {
-    val test5 = new DslDriverC[String, Unit] with TensorExp {
+    val test5 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,3,4), 2, 1, 2)
@@ -165,7 +165,7 @@ class BroadCastingTest extends FunSuite {
   }
 
   test("mult_broadcast5") {
-    val test5 = new DslDriverC[String, Unit] with TensorExp {
+    val test5 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,3,4), 2, 1, 2)
@@ -185,7 +185,7 @@ class BroadCastingTest extends FunSuite {
   }
 
   test("div_broadcast5") {
-    val test5 = new DslDriverC[String, Unit] with TensorExp {
+    val test5 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,2,4), 2, 1, 2)

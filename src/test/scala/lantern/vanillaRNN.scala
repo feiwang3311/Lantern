@@ -22,7 +22,7 @@ class VanillaRNN extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationRNN/Lantern.cpp"
 
-  val min_char_rnn = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+  val min_char_rnn = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)

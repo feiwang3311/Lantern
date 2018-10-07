@@ -169,7 +169,7 @@ class ONNXTest extends FunSuite {
 
   test("build_from_onnx") {
 
-    val squeezenet = new DslDriverC[String, Unit] with TensorExp {
+    val squeezenet = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
