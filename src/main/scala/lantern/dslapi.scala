@@ -596,17 +596,17 @@ abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A
   }
 
   override def eval(a: A) {
-    val cppFileName = "/tmp/lantern-snippet.cpp"
+    val cudaFileName = "/tmp/lantern-snippet.cu"
     val binaryFileName = "/tmp/lantern-snippet"
-    val out = new java.io.PrintWriter(cppFileName)
+    val out = new java.io.PrintWriter(cudaFileName)
     out.println(code)
     out.close()
 
     new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ (cuBLAS) code")
-    (s"nvcc -std=c++11 -O1 $cppFileName -o $binaryFileName -lcublas": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
-    System.out.println("Run C++ code")
+    (s"nvcc -std=c++11 -O1 $cudaFileName -o $binaryFileName -lcublas": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    System.out.println("Run C++ (cuBLAS) code")
     (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
 }
@@ -618,17 +618,17 @@ abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A,
   }
 
   override def eval(a: A) {
-    val cppFileName = "/tmp/lantern-snippet.cpp"
+    val cudaFileName = "/tmp/lantern-snippet.cu"
     val binaryFileName = "/tmp/lantern-snippet"
-    val out = new java.io.PrintWriter(cppFileName)
+    val out = new java.io.PrintWriter(cudaFileName)
     out.println(code)
     out.close()
 
     new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ (cuBLAS & cuDNN) code")
-    (s"nvcc -std=c++11 -O1 $cppFileName -o $binaryFileName -lcublas -lcudnn": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
-    System.out.println("Run C++ code")
+    (s"nvcc -std=c++11 -O1 $cudaFileName -o $binaryFileName -lcublas -lcudnn": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    System.out.println("Run C++ (cuBLAS & cuDNN) code")
     (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
 }
