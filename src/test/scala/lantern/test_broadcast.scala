@@ -128,7 +128,7 @@ class BroadCastingTest extends FunSuite {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,3,4), 2, 1, 2)
         val res = tensor1 + tensor2
-        generate_comment("ignore the rest for code inspection")
+        generateRawComment("ignore the rest for code inspection")
         Tensor.assertEqual(res, Tensor(Array[Float](2,4,4,6,8,10,10,12), 2,2,2))
         Tensor.assertEqual(tensor2 + tensor1, Tensor(Array[Float](2,4,4,6,8,10,10,12), 2,2,2))
 

@@ -8,25 +8,24 @@ import scala.virtualization.lms.common._
 import scala.collection.{Seq => NSeq}
 
 // TODO: clean up at least, maybe add to LMS?
-//@virtualize
 trait UtilOps extends Base { this: Dsl =>
   type Typ[T] = Manifest[T]
   def typ[T:Typ] = manifest[T]
   def manifestTyp[T:Typ] = manifest[T]
+
   implicit class HashCls[T: Typ](o: Rep[T]) {
-    def HashCode(implicit pos: SourceContext):Rep[Long] = infix_HashCode(o)
-    def HashCode(len: Rep[Int])(implicit pos: SourceContext):Rep[Long] = o match {
-      case s:Rep[String] => infix_HashCodeS(s, len)
-      //case _ => infix_HashCode(o) //FIXME is this an ok dispatch?
+    def HashCode(implicit pos: SourceContext): Rep[Long] = infix_HashCode(o)
+    def HashCode(len: Rep[Int])(implicit pos: SourceContext): Rep[Long] = o match {
+      case s: Rep[String] => infix_HashCodeS(s, len)
+      // case _ => infix_HashCode(o) // FIXME: is this an ok dispatch?
     }
   }
+
   def infix_HashCode[T:Typ](a: Rep[T])(implicit pos: SourceContext): Rep[Long]
   def infix_HashCodeS(s: Rep[String], len: Rep[Int])(implicit v: Overloaded1, pos: SourceContext): Rep[Long]
 }
 
-//@virtualize
 trait UtilOpsExp extends UtilOps with BaseExp { this: DslExp =>
-
   case class ObjHashCode[T:Typ](o: Rep[T])(implicit pos: SourceContext) extends Def[Long] { def m = typ[T] }
   case class StrSubHashCode(o: Rep[String], len: Rep[Int])(implicit pos: SourceContext) extends Def[Long]
   def infix_HashCode[T:Typ](o: Rep[T])(implicit pos: SourceContext) = ObjHashCode(o)
@@ -39,7 +38,6 @@ trait UtilOpsExp extends UtilOps with BaseExp { this: DslExp =>
   }).asInstanceOf[Exp[A]]
 }
 
-@virtualize
 trait ScalaGenUtilOps extends ScalaGenBase {
   val IR: UtilOpsExp
   import IR._
@@ -50,7 +48,6 @@ trait ScalaGenUtilOps extends ScalaGenBase {
   }
 }
 
-@virtualize
 trait CGenUtilOps extends CGenBase {
   val IR: UtilOpsExp
   import IR._
@@ -61,18 +58,20 @@ trait CGenUtilOps extends CGenBase {
   }
 }
 
-@virtualize
-trait Dsl extends PrimitiveOps with NumericOpsExtra with BooleanOps with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps
-with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables with ObjectOps with UtilOps
-with UncheckedOps with MathOps with TupleOps with TupledFunctions
-with CastingOps {
+trait Dsl extends PrimitiveOps with NumericOpsExtra with BooleanOps
+    with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean
+    with IfThenElse with Equal with RangeOps with OrderingOps with MiscOps with ArrayOps with StringOps
+    with SeqOps with Functions with While with StaticData
+    with Variables with LiftVariables with ObjectOps with UtilOps with UncheckedOps
+    with MathOps with TupleOps with TupledFunctions with CastingOps {
+
   implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
   implicit class BooleanOps2(lhs: Rep[Boolean]) {
-    def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) =
-      __ifThenElse(lhs, rhs, unit(false))
+    def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) = __ifThenElse(lhs, rhs, unit(false))
   }
   // override def boolean_and(lhs: Rep[Boolean], rhs: Rep[Boolean])(implicit pos: SourceContext): Rep[Boolean] = __ifThenElse(lhs, rhs, unit(false))
 
+  // Tensor data operations.
   implicit def repArrayToTensorOps[T: Manifest](a: Rep[Array[T]]) = new TensorOpsCls(a)
   object NewTensor {
     // Allocate a new tensor with the specified scalar count.
@@ -86,19 +85,23 @@ with CastingOps {
   def tensor_data_apply[T: Manifest](x: Rep[Array[T]], index: Rep[Int])(implicit pos: SourceContext): Rep[T]
   def tensor_data_update[T: Manifest](x: Rep[Array[T]], index: Rep[Int], y: Rep[T])(implicit pos: SourceContext): Rep[Unit]
 
-  def generate_comment(l: String): Rep[Unit]
-  def comment[A:Typ](l: String, verbose: Boolean = true)(b: => Rep[A]): Rep[A]
+  // Raw code/comment operations.
   def generateRawCode(s: String): Rep[Unit]
+  def generateRawComment(s: String): Rep[Unit]
+  def comment[A:Typ](s: String, verbose: Boolean = true)(b: => Rep[A]): Rep[A]
 
   // added by Fei
   def mutableStaticData[T:Manifest](x: T): Rep[T]
 }
 
-@virtualize
-trait DslExp extends Dsl with PrimitiveOpsExpOpt with NumericOpsExpOpt with NumericOpsExtraExp with BooleanOpsExp with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp
-with OrderingOpsExp with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt with UtilOpsExp
-with UncheckedOpsExp with MathOpsExp with TupleOps with TupledFunctionsExp
-with CastingOpsExp {
+trait DslExp extends Dsl
+    with PrimitiveOpsExpOpt with NumericOpsExpOpt with NumericOpsExtraExp with BooleanOpsExp
+    with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp with OrderingOpsExp
+    with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp
+    with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt
+    with UtilOpsExp with UncheckedOpsExp with MathOpsExp
+    with TupleOps with TupledFunctionsExp with CastingOpsExp {
+
   case class TensorNew[T: Manifest](scalarCount: Rep[Int]) extends Def[Array[T]] {
     val m = manifest[T]
   }
@@ -118,7 +121,7 @@ with CastingOpsExp {
       // FIXME: `TensorApply` should not be effectful.
       case _ => reflectEffect(TensorApply(x, index))
     }
-  // Copied from `tensor_apply` below.
+  // Copied from `array_update` below.
   def tensor_data_update[T: Manifest](x: Exp[Array[T]], index: Exp[Int], y: Exp[T])(implicit pos: SourceContext) =
     reflectEffect(TensorUpdate(x, index, y))
 
@@ -131,20 +134,19 @@ with CastingOpsExp {
     case _ => super.boolean_and(lhs, rhs)
   }
 
-  case class GenerateComment(l: String) extends Def[Unit]
-  def generate_comment(l: String) = reflectEffect(GenerateComment(l))
-
-  case class Comment[A:Typ](l: String, verbose: Boolean, b: Block[A]) extends Def[A]
-  def comment[A:Typ](l: String, verbose: Boolean)(b: => Rep[A]): Rep[A] = {
-    //b
-    val br = reifyEffects(b)
-    val be = summarizeEffects(br)
-    super.reflectEffect[A](Comment(l, verbose, br), be)
-  }
-
   // A raw snippet of code, to be code generated literally.
   case class RawCode(s: String) extends Def[Unit]
   def generateRawCode(s: String) = reflectEffect(RawCode(s))
+
+  case class RawComment(s: String) extends Def[Unit]
+  def generateRawComment(s: String) = reflectEffect(RawComment(s))
+
+  case class Comment[A:Typ](s: String, verbose: Boolean, b: Block[A]) extends Def[A]
+  def comment[A:Typ](s: String, verbose: Boolean)(b: => Rep[A]): Rep[A] = {
+    val br = reifyEffects(b)
+    val be = summarizeEffects(br)
+    super.reflectEffect[A](Comment(s, verbose, br), be)
+  }
 
   override def boundSyms(e: Any): List[Sym[Any]] = e match {
     case Comment(_, _, b) => effectSyms(b)
@@ -159,10 +161,11 @@ with CastingOpsExp {
     // FIXME!!!
     case _ => reflectEffect(ArrayApply(x, n))
   }
-
   // override def array_apply[T:Typ](x: Exp[Array[T]], n: Exp[Int])(implicit pos: SourceContext): Exp[T] = reflectEffect(ArrayApply(x, n))
+
   override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = reflectEffect(ArrayUpdate(x,n,y))
-/*  override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = {
+  /*
+  override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = {
     if (context ne null) {
       // find the last modification of array x
       // if it is an assigment at index n with the same value, just do nothing
@@ -179,7 +182,8 @@ with CastingOpsExp {
       reflectEffect(ArrayUpdate(x,n,y))
     }
   }
-*/
+  */
+
   // TODO: should this be in LMS?
   override def isPrimitiveType[T](m: Typ[T]) = (m == manifest[String]) || super.isPrimitiveType(m)
 
@@ -202,7 +206,6 @@ with CastingOpsExp {
   }
 }
 
-@virtualize
 trait DslGenScala extends ScalaGenNumericOps
     with ScalaGenPrimitiveOps with ScalaGenBooleanOps with ScalaGenIfThenElse
     with ScalaGenEqual with ScalaGenRangeOps with ScalaGenOrderingOps
@@ -237,10 +240,10 @@ trait DslGenScala extends ScalaGenNumericOps
       emitValDef(sym, quote(c))
     case PrintF(f:String,xs) =>
       emitValDef(sym, src"printf(${Const(f)::xs})")
-    case GenerateComment(s) =>
-      stream.println("// "+s)
     case RawCode(s) =>
       stream.println(s)
+    case RawComment(s) =>
+      stream.println("// "+s)
     case Comment(s, verbose, b) =>
       stream.println("val " + quote(sym) + " = {")
       stream.println("//#" + s)
@@ -253,9 +256,9 @@ trait DslGenScala extends ScalaGenNumericOps
       stream.println(quote(getBlockResult(b)))
       stream.println("//#" + s)
       stream.println("}")
-    //case FieldApply() => super.emitNode(sym, rhs)
-    //case FieldApply(a, "_1") => emitValDef(sym, quote(a) + "._1")
-    //case FieldApply(a, "_2") => emitValDef(sym, quote(a) + "._2")
+    // case FieldApply() => super.emitNode(sym, rhs)
+    // case FieldApply(a, "_1") => emitValDef(sym, quote(a) + "._1")
+    // case FieldApply(a, "_2") => emitValDef(sym, quote(a) + "._2")
     case _ => super.emitNode(sym, rhs)
   }
 
@@ -266,7 +269,6 @@ trait DslGenScala extends ScalaGenNumericOps
 }
 
 // TODO: currently part of this is specific to the query tests. generalize? move?
-@virtualize
 trait DslGenBase extends CGenNumericOpsExtra
     with CGenPrimitiveOps with CGenBooleanOps with CGenIfThenElse
     with CGenEqual with CGenRangeOps with CGenOrderingOps
@@ -279,16 +281,12 @@ trait DslGenBase extends CGenNumericOpsExtra
   val IR: DslExp
   import IR._
 
-  def getMemoryAllocString(count: String, memType: String): String = {
-      "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "));"
+  def getMallocString(count: String, dataType: String): String = {
+      "(" + dataType + "*)malloc(" + count + " * sizeof(" + dataType + "));"
   }
 
-  def getMemoryAllocStringArena(count: String, memType: String): String = {
-      "(" + memType + "*)myMalloc(" + count + " * sizeof(" + memType + "));"
-  }
-
-  def getMemoryAllocStringNoS(count: String, memType: String): String = {
-      "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "))"
+  def getMallocArenaString(count: String, dataType: String): String = {
+      "(" + dataType + "*)myMalloc(" + count + " * sizeof(" + dataType + "));"
   }
 
   // In LMS code, it was "remap(m) + addRef(m)" which would put an extra "*"
@@ -327,6 +325,7 @@ trait DslGenBase extends CGenNumericOpsExtra
     case "Array[Array[Double]]" => "shared_ptr<double*[]>"
     case "Array[Array[Fload]]"  => "shared_ptr<float*[]>"
     */
+
     case f if f.startsWith("scala.Function") =>
       val targs = m.typeArguments.dropRight(1)
       val res = remap(m.typeArguments.last)
@@ -334,7 +333,7 @@ trait DslGenBase extends CGenNumericOpsExtra
       val sep = if (targsUnboxed.length > 0) "," else ""
       "function<" + res + "(" + targsUnboxed.mkString(",") + ")>"
 
-    //scala.Function1[Array[Double], Array[Double]] --> function<double*(double*)>
+    // scala.Function1[Array[Double], Array[Double]] --> function<double*(double*)>
     case _ => super.remap(m)
   }
   override def format(s: Exp[Any]): String = {
@@ -391,22 +390,22 @@ trait DslGenBase extends CGenNumericOpsExtra
     case t@TensorUpdate(x, index, y) =>
       emitNode(sym, ArrayUpdate(x, index, y)(t.m))
     case Error(s) => stream.println("assert(false && " + quote(s) + ");")
-    case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
-    case GenerateComment(s) =>
-      stream.println("// "+s)
-    case RawCode(s) =>
-      stream.println(s)
+    case afs@ArrayFromSeq(xs) =>
+      stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
     case a@ArrayNew(n) =>
       val arrType = remap(a.m)
-      // stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
-      stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocStringArena(quote(n), arrType))
-
+      // stream.println(arrType + "* " + quote(sym) + " = " + getMallocString(quote(n), arrType))
+      stream.println(arrType + "* " + quote(sym) + " = " + getMallocArenaString(quote(n), arrType))
       // stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
       // stream.println("shared_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
     case ArrayApply(x,n) => emitValDef(sym, quote(x) + "[" + quote(n) + "]")
     case ArrayUpdate(x,n,y) => stream.println(quote(x) + "[" + quote(n) + "] = " + quote(y) + ";")
     case PrintLn(s) => stream.println("printf(\"" + format(s) + "\\n\"," + quoteRawString(s) + ");")
     case StringCharAt(s,i) => emitValDef(sym, "%s[%s]".format(quote(s), quote(i)))
+    case RawCode(s) =>
+      stream.println(s)
+    case RawComment(s) =>
+      stream.println("// "+s)
     case Comment(s, verbose, b) =>
       stream.println("//#" + s)
       if (verbose) {
@@ -512,13 +511,13 @@ trait DslGenCublas extends DslGenBase {
   import IR._
 
   // Allocate GPU memory.
-  def getCudaMallocString(buffer: String, count: String, memType: String): String = {
-    "CUDA_CALL(cudaMalloc(&" + buffer + ", " + count + " * sizeof(" + memType + ")));"
+  def getCudaMallocString(buffer: String, count: String, dataType: String): String = {
+    "CUDA_CALL(cudaMalloc(&" + buffer + ", " + count + " * sizeof(" + dataType + ")));"
   }
 
   // Allocate GPU memory from memory arena.
-  def getCudaMallocArenaString(scalarCount: String, memType: String): String = {
-    "(" + memType + "*)myGpuMalloc(" + scalarCount + " * sizeof(" + memType + "));"
+  def getCudaMallocArenaString(count: String, dataType: String): String = {
+    "(" + dataType + "*)myGpuMalloc(" + count + " * sizeof(" + dataType + "));"
   }
 
   // Allocate unified memory, accessible by CPU and GPU.
@@ -527,8 +526,8 @@ trait DslGenCublas extends DslGenBase {
   //     Snippet (x0=<optimized out>) at snippet.cpp:144
   //     144	float x32 = x30 - x31;
   // I wonder if others can replicate this issue.
-  def getCudaMallocManagedString(buffer: String, count: String, memType: String): String = {
-    "CUDA_CALL(cudaMallocManaged(&" + buffer + ", " + count + " * sizeof(" + memType + ")));"
+  def getCudaMallocManagedString(buffer: String, count: String, dataType: String): String = {
+    "CUDA_CALL(cudaMallocManaged(&" + buffer + ", " + count + " * sizeof(" + dataType + ")));"
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
@@ -584,7 +583,6 @@ trait DslGenCublas extends DslGenBase {
     """.stripMargin
 }
 
-@virtualize
 trait DslGenCudnn extends DslGenCublas {
   val IR: DslExp
   import IR._
@@ -603,7 +601,6 @@ trait DslGenCudnn extends DslGenCublas {
     """.stripMargin
 }
 
-@virtualize
 abstract class DslDriverScala[A: Manifest, B: Manifest] extends Dsl with DslExp with CompileScala { self =>
   val codegen = new DslGenScala {
     val IR: self.type = self
@@ -619,7 +616,6 @@ abstract class DslDriverScala[A: Manifest, B: Manifest] extends Dsl with DslExp 
   def eval(x: A): B = f(x)
 }
 
-@virtualize
 abstract class DslDriverBase[A: Manifest, B: Manifest] extends Dsl with DslExp { self =>
   // The C-like code generator.
   val codegen: DslGenBase {
@@ -640,7 +636,6 @@ abstract class DslDriverBase[A: Manifest, B: Manifest] extends Dsl with DslExp {
   }
 }
 
-@virtualize
 abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
   override val codegen = new DslGenC {
     val IR: self.type = self
@@ -662,7 +657,6 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
   }
 }
 
-@virtualize
 abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
   override val codegen = new DslGenCublas {
     val IR: self.type = self
@@ -684,7 +678,6 @@ abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A
   }
 }
 
-@virtualize
 abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslExp { self =>
   override val codegen = new DslGenCudnn {
     val IR: self.type = self
@@ -718,11 +711,11 @@ trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorExp {
   implicit def manifestB: Manifest[B]
 
   def wrapper(x: Rep[A]): Rep[B] = {
-    generate_comment("Backend setup.")
+    generateRawComment("Backend setup.")
     backend.setup()
     val result = snippet(x)
 
-    generate_comment("Backend cleanup.")
+    generateRawComment("Backend cleanup.")
     backend.cleanup()
     result
   }

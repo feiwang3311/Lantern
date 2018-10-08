@@ -451,7 +451,7 @@ trait TensorExp extends Dsl with Diff {
     def +=(that: Rep[Float]): Unit = this.mapInPlace(x => x + that)
     def += (that: Tensor): Unit = {
       if (that.scalarCount == 1) {
-        generate_comment("+= tensor of dim 0")
+        generateRawComment("+= tensor of dim 0")
         this += that.data(0) // broadcast
       }
       else if (this.scalarCount == 1) ??? // this.data(0) = that.fold(this.data(0))((agg, x) => agg + x)
@@ -523,7 +523,7 @@ trait TensorExp extends Dsl with Diff {
     // - matrix-matrix multiplication.
     //   [M1 x M2] dot [M2 x M3] => [M1 x M3]
     def dot(that: Tensor) = {
-      generate_comment(s"dot: ${this.shape.seq}, ${that.shape.seq}")
+      generateRawComment(s"dot: ${this.shape.seq}, ${that.shape.seq}")
       (this.rank, that.rank) match {
         case (1, 1) => assert(this.shape(0) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
         case (2, 1) | (2, 2) => assert(this.shape(1) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
@@ -832,7 +832,7 @@ trait TensorExp extends Dsl with Diff {
     // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
     // the result is to update this so that this += that * y, where * is cartesian product
     def add_cartesian(that: Tensor, y: Tensor) = {
-      generate_comment("add_cartesian")
+      generateRawComment("add_cartesian")
       assert(this.rank == 2 && that.shape == Dimensions(this.shape(1)) && y.shape == Dimensions(this.shape(0)) ||
         this.rank == 1 && that.shape == this.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
       val off = var_new(0)
@@ -926,7 +926,7 @@ trait TensorExp extends Dsl with Diff {
     def addMul(a: Rep[Float], b: Tensor) = {
       assert(this.shape == b.shape)
 
-      generate_comment("Generate code for addMul")
+      generateRawComment("Generate code for addMul")
       for (i <- DataLoop(this.scalarCount)) {
       //for (i <- 0 until this.nbElem: Rep[Range]) {
         this.data(i) = this.data(i) + a * b.data(i)

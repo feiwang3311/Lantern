@@ -1,3 +1,4 @@
+/*
 package lantern
 
 import org.scala_lang.virtualized.virtualize
@@ -6,7 +7,6 @@ import org.scala_lang.virtualized.SourceContext
 import scala.virtualization.lms._
 import org.scalatest.FunSuite
 
-/*
 object Hessian_MuWang_1 {
   
   def main(args: Array[String]): Unit = {

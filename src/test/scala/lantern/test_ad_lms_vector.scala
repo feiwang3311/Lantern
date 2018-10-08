@@ -226,9 +226,9 @@ class AdLMSVectorTest extends LanternFunSuite {
            val h1 = (tmp + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
            val e1 = (Why1.dot(h1) + by1).exp()                       // use new hidden state to compute unnormalized prob
            val p1 = e1 / e1.sum()                            // use unnormalized prob to compute normalize prob
-           generate_comment("Compute new loss")
+           generateRawComment("Compute new loss")
            val newloss = t(0) - (p1 dot y1).log()            // loss is updated by original loss t(0) and additional loss
-           generate_comment("Done computing loss")
+           generateRawComment("Done computing loss")
            val out = ArrayBuffer[TensorR]()
 
            out.append(newloss)
@@ -240,7 +240,7 @@ class AdLMSVectorTest extends LanternFunSuite {
        }
        val loss1 = gradR_loss(lossFun)(Tensor.zeros(1))
 
-       generate_comment("Compute real value")
+       generateRawComment("Compute real value")
 
 
        // correct method of loss and gradient calculation, adapting from Numpy
