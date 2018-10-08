@@ -43,10 +43,10 @@ class TestCublas extends LanternFunSuite {
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
-        // Note: it's better to test with non-square matrices.
+        // Note: it's better to test with matrices [M1 x M2] and [M2 x M3] where M1 != M3.
         val m1 = Tensor.fromData(NSeq(2, 3), 1, 2, 3, 4, 5, 6)
-        val m2 = Tensor.fromData(NSeq(3, 2), 2, 3, 4, 5, 6, 7)
-        val expected = Tensor.fromData(NSeq(2, 2), 28, 34, 64, 79)
+        val m2 = Tensor.fromData(NSeq(3, 1), 2, 3, 4)
+        val expected = Tensor.fromData(NSeq(2, 1), 20, 47)
         Tensor.assertEqual(m1.dot(m2), expected)
       }
     }
