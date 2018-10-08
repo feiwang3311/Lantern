@@ -8,8 +8,6 @@ import scala.collection.{Seq => NSeq}
 class TestCublas extends LanternFunSuite {
   testGPU("vector-vector-dot") {
     val vvdot = new LanternDriverCublas[String, Unit] {
-      backend = new BackendCublas
-
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -24,8 +22,6 @@ class TestCublas extends LanternFunSuite {
 
   testGPU("matrix-vector-dot") {
     val mvdot = new LanternDriverCublas[String, Unit] {
-      backend = new BackendCublas
-
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val m = Tensor.fromData(NSeq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
@@ -39,8 +35,6 @@ class TestCublas extends LanternFunSuite {
 
   testGPU("matrix-matrix-dot") {
     val mmdot = new LanternDriverCublas[String, Unit] {
-      backend = new BackendCublas
-
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         // Note: it's better to test with matrices [M1 x M2] and [M2 x M3] where M1 != M3.

@@ -732,10 +732,12 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B]
   override def manifestB: Manifest[B] = manifest[B]
 }
 abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCublas[A, B] with LanternDriver[A, B] with TensorExp {
+  backend = new BackendCublas
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
 }
 abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] with TensorExp {
+  backend = new BackendCudnn
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
 }
