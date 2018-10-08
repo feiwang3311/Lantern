@@ -69,8 +69,23 @@ with CastingOps {
   implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
   implicit class BooleanOps2(lhs: Rep[Boolean]) {
     def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) =
-    __ifThenElse(lhs, rhs, unit(false)) }
-//  override def boolean_and(lhs: Rep[Boolean], rhs: Rep[Boolean])(implicit pos: SourceContext): Rep[Boolean] = __ifThenElse(lhs, rhs, unit(false))
+      __ifThenElse(lhs, rhs, unit(false))
+  }
+  // override def boolean_and(lhs: Rep[Boolean], rhs: Rep[Boolean])(implicit pos: SourceContext): Rep[Boolean] = __ifThenElse(lhs, rhs, unit(false))
+
+  implicit def repArrayToTensorOps[T: Manifest](a: Rep[Array[T]]) = new TensorOpsCls(a)
+  object NewTensor {
+    // Allocate a new tensor with the specified scalar count.
+    def apply[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]] = tensor_data_new(scalarCount)
+  }
+  class TensorOpsCls[T: Manifest](a: Rep[Array[T]]) {
+    def apply(index: Rep[Int])(implicit pos: SourceContext) = tensor_data_apply(a, index)
+    def update(index: Rep[Int], y: Rep[T])(implicit pos: SourceContext) = tensor_data_update(a, index, y)
+  }
+  def tensor_data_new[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]]
+  def tensor_data_apply[T: Manifest](x: Rep[Array[T]], index: Rep[Int])(implicit pos: SourceContext): Rep[T]
+  def tensor_data_update[T: Manifest](x: Rep[Array[T]], index: Rep[Int], y: Rep[T])(implicit pos: SourceContext): Rep[Unit]
+
   def generate_comment(l: String): Rep[Unit]
   def comment[A:Typ](l: String, verbose: Boolean = true)(b: => Rep[A]): Rep[A]
   def generateRawCode(s: String): Rep[Unit]
@@ -84,6 +99,29 @@ trait DslExp extends Dsl with PrimitiveOpsExpOpt with NumericOpsExpOpt with Nume
 with OrderingOpsExp with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt with UtilOpsExp
 with UncheckedOpsExp with MathOpsExp with TupleOps with TupledFunctionsExp
 with CastingOpsExp {
+  case class TensorNew[T: Manifest](scalarCount: Rep[Int]) extends Def[Array[T]] {
+    val m = manifest[T]
+  }
+  case class TensorApply[T: Manifest](a: Exp[Array[T]], index: Exp[Int]) extends Def[T] {
+    val m = manifest[T]
+  }
+  case class TensorUpdate[T: Manifest](a: Exp[Array[T]], index: Exp[Int], y: Exp[T]) extends Def[Unit] {
+    val m = manifest[T]
+  }
+  def tensor_data_new[T: Manifest](scalarCount: Exp[Int]) = reflectMutable(TensorNew(scalarCount))
+  // Copied from `array_apply` below.
+  def tensor_data_apply[T: Manifest](x: Exp[Array[T]], index: Exp[Int])(implicit pos: SourceContext): Exp[T] =
+    (x, index) match {
+      case (Def(StaticData(x: Array[T])), Const(index)) =>
+        val y = x(index)
+        if (y.isInstanceOf[Int]) unit(y) else staticData(y)
+      // FIXME: `TensorApply` should not be effectful.
+      case _ => reflectEffect(TensorApply(x, index))
+    }
+  // Copied from `tensor_apply` below.
+  def tensor_data_update[T: Manifest](x: Exp[Array[T]], index: Exp[Int], y: Exp[T])(implicit pos: SourceContext) =
+    reflectEffect(TensorUpdate(x, index, y))
+
   override def boolean_or(lhs: Exp[Boolean], rhs: Exp[Boolean])(implicit pos: SourceContext) : Exp[Boolean] = lhs match {
     case Const(false) => rhs
     case _ => super.boolean_or(lhs, rhs)
@@ -186,6 +224,12 @@ trait DslGenScala extends ScalaGenNumericOps
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case t@TensorNew(scalarCount) =>
+      emitNode(sym, ArrayNew(scalarCount)(t.m))
+    case t@TensorApply(x, index) =>
+      emitNode(sym, ArrayApply(x, index)(t.m))
+    case t@TensorUpdate(x, index, y) =>
+      emitNode(sym, ArrayUpdate(x, index, y)(t.m))
     case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs mkString ",") + "}; // ;)")
     case Assign(Variable(a), b) =>
       emitAssignment(a.asInstanceOf[Sym[Variable[Any]]], quote(b))
@@ -340,6 +384,12 @@ trait DslGenBase extends CGenNumericOpsExtra
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case t@TensorNew(scalarCount) =>
+      emitNode(sym, ArrayNew(scalarCount)(t.m))
+    case t@TensorApply(x, index) =>
+      emitNode(sym, ArrayApply(x, index)(t.m))
+    case t@TensorUpdate(x, index, y) =>
+      emitNode(sym, ArrayUpdate(x, index, y)(t.m))
     case Error(s) => stream.println("assert(false && " + quote(s) + ");")
     case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
     case GenerateComment(s) =>
@@ -348,11 +398,11 @@ trait DslGenBase extends CGenNumericOpsExtra
       stream.println(s)
     case a@ArrayNew(n) =>
       val arrType = remap(a.m)
-      //stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
+      // stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
       stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocStringArena(quote(n), arrType))
 
-      //stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
-      //stream.println("shared_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
+      // stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
+      // stream.println("shared_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
     case ArrayApply(x,n) => emitValDef(sym, quote(x) + "[" + quote(n) + "]")
     case ArrayUpdate(x,n,y) => stream.println(quote(x) + "[" + quote(n) + "] = " + quote(y) + ";")
     case PrintLn(s) => stream.println("printf(\"" + format(s) + "\\n\"," + quoteRawString(s) + ");")
@@ -466,6 +516,11 @@ trait DslGenCublas extends DslGenBase {
     "CUDA_CALL(cudaMalloc(&" + buffer + ", " + count + " * sizeof(" + memType + ")));"
   }
 
+  // Allocate GPU memory from memory arena.
+  def getCudaMallocArenaString(scalarCount: String, memType: String): String = {
+    "(" + memType + "*)myGpuMalloc(" + scalarCount + " * sizeof(" + memType + "));"
+  }
+
   // Allocate unified memory, accessible by CPU and GPU.
   // FIXME: I encountered "bus error" when performing CPU ops on managed memory:
   //     Thread 1 "snippet" received signal SIGBUS, Bus error.
@@ -477,13 +532,19 @@ trait DslGenCublas extends DslGenBase {
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-    case a@ArrayNew(n) =>
-      // Unified CPU/GPU memory via `cudaMallocManaged` is more convenient than `cudaMalloc`, but less performant.
-      // We can use a similar memory pool technique with `cudaMallocManaged`.
-      val arrType = remap(a.m)
-      stream.println(arrType + "* " + quote(sym) + "; " + getCudaMallocManagedString(quote(sym), quote(n), arrType))
-      // stream.println(arrType + "* " + quote(sym) + "; " + getCudaMallocString(quote(sym), quote(n), arrType))
-    case _ => super.emitNode(sym,rhs)
+    case t@TensorNew(scalarCount) =>
+      val scalarType = remap(t.m)
+      stream.println(scalarType + "* " + quote(sym) + " = " + getCudaMallocArenaString(quote(scalarCount), scalarType))
+    case t@TensorApply(x, index) =>
+      // FIXME: Indexing GPU data doesn't work, need another approach.
+      stream.println("// Note: tensor data indexing below doesn't work.")
+      emitValDef(sym, quote(x) + "[" + quote(index) + "]")
+      // I tried creating a `arrayApply` kernel, but `__global__` kernels can only return void.
+      // emitValDef(sym, "arrayApply<<<1, 1>>>(" + quote(x) + ", " + quote(index) + ")")
+    case t@TensorUpdate(x, index, y) =>
+      stream.println("arrayUpdate<<<1, 1>>>(" + quote(x) + ", " + quote(index) + ", " + quote(y) + ");")
+    case _ =>
+      super.emitNode(sym, rhs)
   }
 
   override def templateHeaders: NSeq[String] =
@@ -508,6 +569,18 @@ trait DslGenCublas extends DslGenBase {
       |    exit(stat); \
       |  } \
       |}
+      |
+      |void *gpuMallocAddr;
+      |void *myGpuMalloc(size_t bytes) {
+      |  void *res = gpuMallocAddr;
+      |  gpuMallocAddr = (void *)((char *)gpuMallocAddr + bytes);
+      |  return res;
+      |}
+      |
+      |template <typename T>
+      |__global__ void arrayUpdate(T *data, int index, T value) {
+      |  data[index] = value;
+      |}
     """.stripMargin
 }
 
@@ -516,7 +589,7 @@ trait DslGenCudnn extends DslGenCublas {
   val IR: DslExp
   import IR._
 
-  override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cuda.h>", "<cudnn.h>")
+  override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cudnn.h>")
   override def templateRawCode: String = super.templateRawCode +
     """
       |#define CUDNN_CALL(f) { \
