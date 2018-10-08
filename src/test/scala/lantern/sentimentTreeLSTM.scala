@@ -22,7 +22,7 @@ class SentimentTreeLSTM extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationTreeLSTM/Lantern/Lantern.cpp"
 
-  val sentimental_lstm = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+  val sentimental_lstm = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {

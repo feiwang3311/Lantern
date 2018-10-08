@@ -23,7 +23,7 @@ class LSTMTest extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationLSTM/Lantern.cpp"
 
-  val min_char_lstm = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+  val min_char_lstm = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
@@ -234,7 +234,7 @@ class LSTMTest extends FunSuite {
     val min_char_lstm_file = new PrintWriter(new File(root_dir + file_dir))
     min_char_lstm_file.println(min_char_lstm.code)
     min_char_lstm_file.flush()
-    //println(s"now your code at $root_dir/$file_dir is generated.")  
+    //println(s"now your code at $root_dir/$file_dir is generated.")
   }
-  
+
 }

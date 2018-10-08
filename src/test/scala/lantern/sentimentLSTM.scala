@@ -21,7 +21,7 @@ class SentimentLSTM extends FunSuite {
 
   val file_dir = "/tmp/sentiment_lstm.cpp"
 
-  val senti_seq_lstm = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+  val senti_seq_lstm = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -180,11 +180,9 @@ class SentimentLSTM extends FunSuite {
   }
 
   test("generate_code_for_sentiment_lstm") {
-    //println("generate code for SentimentLSTM")
     val min_char_rnn_file = new PrintWriter(new File(file_dir))
     min_char_rnn_file.println(senti_seq_lstm.code)
     min_char_rnn_file.flush()
-    //println("now your code at $file_dir is generated.")
   }
-  
+
 }

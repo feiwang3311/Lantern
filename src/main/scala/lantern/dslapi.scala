@@ -5,26 +5,27 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms.common._
 
+import scala.collection.{Seq => NSeq}
+
 // TODO: clean up at least, maybe add to LMS?
-//@virtualize
 trait UtilOps extends Base { this: Dsl =>
   type Typ[T] = Manifest[T]
   def typ[T:Typ] = manifest[T]
   def manifestTyp[T:Typ] = manifest[T]
+
   implicit class HashCls[T: Typ](o: Rep[T]) {
-    def HashCode(implicit pos: SourceContext):Rep[Long] = infix_HashCode(o)
-    def HashCode(len: Rep[Int])(implicit pos: SourceContext):Rep[Long] = o match {
-      case s:Rep[String] => infix_HashCodeS(s, len)
-      //case _ => infix_HashCode(o) //FIXME is this an ok dispatch?
+    def HashCode(implicit pos: SourceContext): Rep[Long] = infix_HashCode(o)
+    def HashCode(len: Rep[Int])(implicit pos: SourceContext): Rep[Long] = o match {
+      case s: Rep[String] => infix_HashCodeS(s, len)
+      // case _ => infix_HashCode(o) // FIXME: is this an ok dispatch?
     }
   }
+
   def infix_HashCode[T:Typ](a: Rep[T])(implicit pos: SourceContext): Rep[Long]
   def infix_HashCodeS(s: Rep[String], len: Rep[Int])(implicit v: Overloaded1, pos: SourceContext): Rep[Long]
 }
 
-//@virtualize
 trait UtilOpsExp extends UtilOps with BaseExp { this: DslExp =>
-
   case class ObjHashCode[T:Typ](o: Rep[T])(implicit pos: SourceContext) extends Def[Long] { def m = typ[T] }
   case class StrSubHashCode(o: Rep[String], len: Rep[Int])(implicit pos: SourceContext) extends Def[Long]
   def infix_HashCode[T:Typ](o: Rep[T])(implicit pos: SourceContext) = ObjHashCode(o)
@@ -37,7 +38,6 @@ trait UtilOpsExp extends UtilOps with BaseExp { this: DslExp =>
   }).asInstanceOf[Exp[A]]
 }
 
-@virtualize
 trait ScalaGenUtilOps extends ScalaGenBase {
   val IR: UtilOpsExp
   import IR._
@@ -48,7 +48,6 @@ trait ScalaGenUtilOps extends ScalaGenBase {
   }
 }
 
-@virtualize
 trait CGenUtilOps extends CGenBase {
   val IR: UtilOpsExp
   import IR._
@@ -59,28 +58,73 @@ trait CGenUtilOps extends CGenBase {
   }
 }
 
-@virtualize
-trait Dsl extends PrimitiveOps with NumericOpsExtra with BooleanOps with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps
-with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables with ObjectOps with UtilOps
-with UncheckedOps with MathOps with TupleOps with TupledFunctions
-with CastingOps {
+trait Dsl extends PrimitiveOps with NumericOpsExtra with BooleanOps
+    with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean
+    with IfThenElse with Equal with RangeOps with OrderingOps with MiscOps with ArrayOps with StringOps
+    with SeqOps with Functions with While with StaticData
+    with Variables with LiftVariables with ObjectOps with UtilOps with UncheckedOps
+    with MathOps with TupleOps with TupledFunctions with CastingOps {
+
   implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
   implicit class BooleanOps2(lhs: Rep[Boolean]) {
-    def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) =
-    __ifThenElse(lhs, rhs, unit(false)) }
-//  override def boolean_and(lhs: Rep[Boolean], rhs: Rep[Boolean])(implicit pos: SourceContext): Rep[Boolean] = __ifThenElse(lhs, rhs, unit(false))
-  def generate_comment(l: String): Rep[Unit]
-  def comment[A:Typ](l: String, verbose: Boolean = true)(b: => Rep[A]): Rep[A]
+    def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) = __ifThenElse(lhs, rhs, unit(false))
+  }
+  // override def boolean_and(lhs: Rep[Boolean], rhs: Rep[Boolean])(implicit pos: SourceContext): Rep[Boolean] = __ifThenElse(lhs, rhs, unit(false))
+
+  // Tensor data operations.
+  implicit def repArrayToTensorOps[T: Manifest](a: Rep[Array[T]]) = new TensorOpsCls(a)
+  object NewTensor {
+    // Allocate a new tensor with the specified scalar count.
+    def apply[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]] = tensor_data_new(scalarCount)
+  }
+  class TensorOpsCls[T: Manifest](a: Rep[Array[T]]) {
+    def apply(index: Rep[Int])(implicit pos: SourceContext) = tensor_data_apply(a, index)
+    def update(index: Rep[Int], y: Rep[T])(implicit pos: SourceContext) = tensor_data_update(a, index, y)
+  }
+  def tensor_data_new[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]]
+  def tensor_data_apply[T: Manifest](x: Rep[Array[T]], index: Rep[Int])(implicit pos: SourceContext): Rep[T]
+  def tensor_data_update[T: Manifest](x: Rep[Array[T]], index: Rep[Int], y: Rep[T])(implicit pos: SourceContext): Rep[Unit]
+
+  // Raw code/comment operations.
+  def generateRawCode(s: String): Rep[Unit]
+  def generateRawComment(s: String): Rep[Unit]
+  def comment[A:Typ](s: String, verbose: Boolean = true)(b: => Rep[A]): Rep[A]
 
   // added by Fei
   def mutableStaticData[T:Manifest](x: T): Rep[T]
 }
 
-@virtualize
-trait DslExp extends Dsl with PrimitiveOpsExpOpt with NumericOpsExpOpt with NumericOpsExtraExp with BooleanOpsExp with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp
-with OrderingOpsExp with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt with UtilOpsExp
-with UncheckedOpsExp with MathOpsExp with TupleOps with TupledFunctionsExp
-with CastingOpsExp {
+trait DslExp extends Dsl
+    with PrimitiveOpsExpOpt with NumericOpsExpOpt with NumericOpsExtraExp with BooleanOpsExp
+    with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp with OrderingOpsExp
+    with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp
+    with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt
+    with UtilOpsExp with UncheckedOpsExp with MathOpsExp
+    with TupleOps with TupledFunctionsExp with CastingOpsExp {
+
+  case class TensorNew[T: Manifest](scalarCount: Rep[Int]) extends Def[Array[T]] {
+    val m = manifest[T]
+  }
+  case class TensorApply[T: Manifest](a: Exp[Array[T]], index: Exp[Int]) extends Def[T] {
+    val m = manifest[T]
+  }
+  case class TensorUpdate[T: Manifest](a: Exp[Array[T]], index: Exp[Int], y: Exp[T]) extends Def[Unit] {
+    val m = manifest[T]
+  }
+  def tensor_data_new[T: Manifest](scalarCount: Exp[Int]) = reflectMutable(TensorNew(scalarCount))
+  // Copied from `array_apply` below.
+  def tensor_data_apply[T: Manifest](x: Exp[Array[T]], index: Exp[Int])(implicit pos: SourceContext): Exp[T] =
+    (x, index) match {
+      case (Def(StaticData(x: Array[T])), Const(index)) =>
+        val y = x(index)
+        if (y.isInstanceOf[Int]) unit(y) else staticData(y)
+      // FIXME: `TensorApply` should not be effectful.
+      case _ => reflectEffect(TensorApply(x, index))
+    }
+  // Copied from `array_update` below.
+  def tensor_data_update[T: Manifest](x: Exp[Array[T]], index: Exp[Int], y: Exp[T])(implicit pos: SourceContext) =
+    reflectEffect(TensorUpdate(x, index, y))
+
   override def boolean_or(lhs: Exp[Boolean], rhs: Exp[Boolean])(implicit pos: SourceContext) : Exp[Boolean] = lhs match {
     case Const(false) => rhs
     case _ => super.boolean_or(lhs, rhs)
@@ -90,21 +134,24 @@ with CastingOpsExp {
     case _ => super.boolean_and(lhs, rhs)
   }
 
-  case class GenerateComment(l: String) extends Def[Unit]
-  def generate_comment(l: String) = reflectEffect(GenerateComment(l))
-  case class Comment[A:Typ](l: String, verbose: Boolean, b: Block[A]) extends Def[A]
-  def comment[A:Typ](l: String, verbose: Boolean)(b: => Rep[A]): Rep[A] = {
-    //b
+  // A raw snippet of code, to be code generated literally.
+  case class RawCode(s: String) extends Def[Unit]
+  def generateRawCode(s: String) = reflectEffect(RawCode(s))
+
+  case class RawComment(s: String) extends Def[Unit]
+  def generateRawComment(s: String) = reflectEffect(RawComment(s))
+
+  case class Comment[A:Typ](s: String, verbose: Boolean, b: Block[A]) extends Def[A]
+  def comment[A:Typ](s: String, verbose: Boolean)(b: => Rep[A]): Rep[A] = {
     val br = reifyEffects(b)
     val be = summarizeEffects(br)
-    super.reflectEffect[A](Comment(l, verbose, br), be)
+    super.reflectEffect[A](Comment(s, verbose, br), be)
   }
 
   override def boundSyms(e: Any): List[Sym[Any]] = e match {
     case Comment(_, _, b) => effectSyms(b)
     case _ => super.boundSyms(e)
   }
-
 
   override def array_apply[T:Typ](x: Exp[Array[T]], n: Exp[Int])(implicit pos: SourceContext): Exp[T] = (x,n) match {
     case (Def(StaticData(x:Array[T])), Const(n)) =>
@@ -114,10 +161,11 @@ with CastingOpsExp {
     // FIXME!!!
     case _ => reflectEffect(ArrayApply(x, n))
   }
-
   // override def array_apply[T:Typ](x: Exp[Array[T]], n: Exp[Int])(implicit pos: SourceContext): Exp[T] = reflectEffect(ArrayApply(x, n))
+
   override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = reflectEffect(ArrayUpdate(x,n,y))
-/*  override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = {
+  /*
+  override def array_update[T:Typ](x: Exp[Array[T]], n: Exp[Int], y: Exp[T])(implicit pos: SourceContext) = {
     if (context ne null) {
       // find the last modification of array x
       // if it is an assigment at index n with the same value, just do nothing
@@ -134,7 +182,8 @@ with CastingOpsExp {
       reflectEffect(ArrayUpdate(x,n,y))
     }
   }
-*/
+  */
+
   // TODO: should this be in LMS?
   override def isPrimitiveType[T](m: Typ[T]) = (m == manifest[String]) || super.isPrimitiveType(m)
 
@@ -157,8 +206,7 @@ with CastingOpsExp {
   }
 }
 
-@virtualize
-trait DslGen extends ScalaGenNumericOps
+trait DslGenScala extends ScalaGenNumericOps
     with ScalaGenPrimitiveOps with ScalaGenBooleanOps with ScalaGenIfThenElse
     with ScalaGenEqual with ScalaGenRangeOps with ScalaGenOrderingOps
     with ScalaGenMiscOps with ScalaGenArrayOps with ScalaGenStringOps
@@ -179,6 +227,12 @@ trait DslGen extends ScalaGenNumericOps
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case t@TensorNew(scalarCount) =>
+      emitNode(sym, ArrayNew(scalarCount)(t.m))
+    case t@TensorApply(x, index) =>
+      emitNode(sym, ArrayApply(x, index)(t.m))
+    case t@TensorUpdate(x, index, y) =>
+      emitNode(sym, ArrayUpdate(x, index, y)(t.m))
     case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs mkString ",") + "}; // ;)")
     case Assign(Variable(a), b) =>
       emitAssignment(a.asInstanceOf[Sym[Variable[Any]]], quote(b))
@@ -186,7 +240,9 @@ trait DslGen extends ScalaGenNumericOps
       emitValDef(sym, quote(c))
     case PrintF(f:String,xs) =>
       emitValDef(sym, src"printf(${Const(f)::xs})")
-    case GenerateComment(s) =>
+    case RawCode(s) =>
+      stream.println(s)
+    case RawComment(s) =>
       stream.println("// "+s)
     case Comment(s, verbose, b) =>
       stream.println("val " + quote(sym) + " = {")
@@ -200,9 +256,9 @@ trait DslGen extends ScalaGenNumericOps
       stream.println(quote(getBlockResult(b)))
       stream.println("//#" + s)
       stream.println("}")
-    //case FieldApply() => super.emitNode(sym, rhs)
-    //case FieldApply(a, "_1") => emitValDef(sym, quote(a) + "._1")
-    //case FieldApply(a, "_2") => emitValDef(sym, quote(a) + "._2")
+    // case FieldApply() => super.emitNode(sym, rhs)
+    // case FieldApply(a, "_1") => emitValDef(sym, quote(a) + "._1")
+    // case FieldApply(a, "_2") => emitValDef(sym, quote(a) + "._2")
     case _ => super.emitNode(sym, rhs)
   }
 
@@ -212,16 +268,8 @@ trait DslGen extends ScalaGenNumericOps
   }
 }
 
-@virtualize
-trait DslImpl extends DslExp { q =>
-  val codegen = new DslGen {
-    val IR: q.type = q
-  }
-}
-
 // TODO: currently part of this is specific to the query tests. generalize? move?
-@virtualize
-trait DslGenC extends CGenNumericOpsExtra
+trait DslGenBase extends CGenNumericOpsExtra
     with CGenPrimitiveOps with CGenBooleanOps with CGenIfThenElse
     with CGenEqual with CGenRangeOps with CGenOrderingOps
     with CGenMiscOps with CGenArrayOps with CGenStringOps
@@ -233,16 +281,12 @@ trait DslGenC extends CGenNumericOpsExtra
   val IR: DslExp
   import IR._
 
-  def getMemoryAllocString(count: String, memType: String): String = {
-      "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "));"
+  def getMallocString(count: String, dataType: String): String = {
+      "(" + dataType + "*)malloc(" + count + " * sizeof(" + dataType + "));"
   }
 
-  def getMemoryAllocStringArena(count: String, memType: String): String = {
-      "(" + memType + "*)myMalloc(" + count + " * sizeof(" + memType + "));"
-  }
-
-  def getMemoryAllocStringNoS(count: String, memType: String): String = {
-      "(" + memType + "*)malloc(" + count + " * sizeof(" + memType + "))"
+  def getMallocArenaString(count: String, dataType: String): String = {
+      "(" + dataType + "*)myMalloc(" + count + " * sizeof(" + dataType + "));"
   }
 
   // In LMS code, it was "remap(m) + addRef(m)" which would put an extra "*"
@@ -281,6 +325,7 @@ trait DslGenC extends CGenNumericOpsExtra
     case "Array[Array[Double]]" => "shared_ptr<double*[]>"
     case "Array[Array[Fload]]"  => "shared_ptr<float*[]>"
     */
+
     case f if f.startsWith("scala.Function") =>
       val targs = m.typeArguments.dropRight(1)
       val res = remap(m.typeArguments.last)
@@ -288,7 +333,7 @@ trait DslGenC extends CGenNumericOpsExtra
       val sep = if (targsUnboxed.length > 0) "," else ""
       "function<" + res + "(" + targsUnboxed.mkString(",") + ")>"
 
-    //scala.Function1[Array[Double], Array[Double]] --> function<double*(double*)>
+    // scala.Function1[Array[Double], Array[Double]] --> function<double*(double*)>
     case _ => super.remap(m)
   }
   override def format(s: Exp[Any]): String = {
@@ -336,21 +381,31 @@ trait DslGenC extends CGenNumericOpsExtra
     case Const(0)    if x.tp == typ[Char] => "'\\0'"
     case _ => super.quote(x)
   }
+
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case t@TensorNew(scalarCount) =>
+      emitNode(sym, ArrayNew(scalarCount)(t.m))
+    case t@TensorApply(x, index) =>
+      emitNode(sym, ArrayApply(x, index)(t.m))
+    case t@TensorUpdate(x, index, y) =>
+      emitNode(sym, ArrayUpdate(x, index, y)(t.m))
     case Error(s) => stream.println("assert(false && " + quote(s) + ");")
-    case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
-    case GenerateComment(s) =>
-      stream.println("// "+s)
+    case afs@ArrayFromSeq(xs) =>
+      stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
     case a@ArrayNew(n) =>
       val arrType = remap(a.m)
-      //stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocString(quote(n), arrType))
-      stream.println(arrType + "* " + quote(sym) + " = " + getMemoryAllocStringArena(quote(n), arrType))
-      //stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
-      //stream.println("shared_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
+      // stream.println(arrType + "* " + quote(sym) + " = " + getMallocString(quote(n), arrType))
+      stream.println(arrType + "* " + quote(sym) + " = " + getMallocArenaString(quote(n), arrType))
+      // stream.println("unique_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
+      // stream.println("shared_ptr<" + arrType + "[]> " + quote(sym) + "(new " + arrType + "[" + quote(n) + "]);")
     case ArrayApply(x,n) => emitValDef(sym, quote(x) + "[" + quote(n) + "]")
     case ArrayUpdate(x,n,y) => stream.println(quote(x) + "[" + quote(n) + "] = " + quote(y) + ";")
     case PrintLn(s) => stream.println("printf(\"" + format(s) + "\\n\"," + quoteRawString(s) + ");")
     case StringCharAt(s,i) => emitValDef(sym, "%s[%s]".format(quote(s), quote(i)))
+    case RawCode(s) =>
+      stream.println(s)
+    case RawComment(s) =>
+      stream.println("// "+s)
     case Comment(s, verbose, b) =>
       stream.println("//#" + s)
       if (verbose) {
@@ -364,140 +419,325 @@ trait DslGenC extends CGenNumericOpsExtra
     case MathTanh(x) => emitValDef(sym, src"tanh($x)")
     case _ => super.emitNode(sym,rhs)
   }
+
+  // List of header files, to be imported in the code template.
+  def templateHeaders: NSeq[String] = NSeq(
+    "<assert.h>", "<err.h>", "<errno.h>", "<fcntl.h>", "<functional>",
+    "<math.h>", "<memory>", "<random>", "<stdint.h>", "<stdio.h>",
+    "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>")
+
+  // Raw code, to be included in the code template at file scope, before the main function.
+  def templateRawCode: String = ""
+
   override def emitSource[A:Typ](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
     withStream(out) {
-      stream.println("""#include <fcntl.h>
-#include <errno.h>
-#include <err.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <unistd.h>
-#include <time.h>
-#include <functional>
-#include <memory>
-#include <math.h>
-#include <random>
-#include <assert.h>
-
-using namespace std;
-#ifndef MAP_FILE
-#define MAP_FILE MAP_SHARED
-#endif
-int fsize(int fd) {
-  struct stat stat;
-  int res = fstat(fd,&stat);
-  return stat.st_size;
-}
-int printll(char* s) {
-  while (*s != '\n' && *s != ',' && *s != '\t') {
-    putchar(*s++);
-  }
-  return 0;
-}
-long hash(char *str0, int len)
-{
-  unsigned char* str = (unsigned char*)str0;
-  unsigned long hash = 5381;
-  int c;
-
-  while ((c = *str++) && len--)
-    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-  return hash;
-}
-int HEAP_SIZE = 1073741826; // 1048576;  //2147483652; //536870912; // 268435456; //2097152;
-void *mallocBase = malloc(HEAP_SIZE);
-void *mallocAddr = mallocBase;
-void *waterMark  = mallocBase;
-void* myMalloc(size_t bytes) {
-  void* res = mallocAddr;
-  mallocAddr = (void *)((char *)mallocAddr + bytes);
-  return res;
-}
-
-int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
-  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
-  result->tv_sec = diff / 1000000;
-  result->tv_usec = diff % 1000000;
-  return (diff<0);
-}
-
-
-
-void Snippet(char*);
-
-std::random_device rd{};
-std::mt19937 gen{rd()};
-std::normal_distribution<> d{0,1};
-
-int main(int argc, char *argv[])
-{
-
-  if (argc != 2) {
-    printf("usage: query <filename>\n");
-    return 0;
-  }
-  Snippet(argv[1]);
-  return 0;
-}
-
-      """)
+      stream.println(templateHeaders.map(x => s"#include $x").mkString("\n"))
+      stream.println(raw"""
+        |using namespace std;
+        |#ifndef MAP_FILE
+        |#define MAP_FILE MAP_SHARED
+        |#endif
+        |
+        |int fsize(int fd) {
+        |  struct stat stat;
+        |  int res = fstat(fd, &stat);
+        |  return stat.st_size;
+        |}
+        |
+        |int printll(char *s) {
+        |  while (*s != '\n' && *s != ',' && *s != '\t') {
+        |    putchar(*s++);
+        |  }
+        |  return 0;
+        |}
+        |
+        |long hash(char *str0, int len) {
+        |  unsigned char *str = (unsigned char *)str0;
+        |  unsigned long hash = 5381;
+        |  int c;
+        |
+        |  while ((c = *str++) && len--)
+        |    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        |
+        |  return hash;
+        |}
+        |
+        |int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
+        |void *mallocBase = malloc(HEAP_SIZE);
+        |void *mallocAddr = mallocBase;
+        |void *waterMark = mallocBase;
+        |void *myMalloc(size_t bytes) {
+        |  void *res = mallocAddr;
+        |  mallocAddr = (void *)((char *)mallocAddr + bytes);
+        |  return res;
+        |}
+        |
+        |int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
+        |  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
+        |  result->tv_sec = diff / 1000000;
+        |  result->tv_usec = diff % 1000000;
+        |  return (diff < 0);
+        |}
+        |
+        |$templateRawCode
+        |
+        |void Snippet(char *);
+        |
+        |std::random_device rd{};
+        |std::mt19937 gen{rd()};
+        |std::normal_distribution<> d{0, 1};
+        |
+        |int main(int argc, char *argv[]) {
+        |  if (argc != 2) {
+        |    printf("usage: query <filename>\n");
+        |    return 0;
+        |  }
+        |  Snippet(argv[1]);
+        |  return 0;
+        |}
+      """.stripMargin)
     }
     super.emitSource[A](args, body, functionName, out)
   }
 }
 
-
-
-@virtualize
-abstract class DslSnippet[A:Manifest, B:Manifest] extends Dsl {
-  def snippet(x: Rep[A]): Rep[B]
+trait DslGenC extends DslGenBase {
+  val IR: DslExp
+  import IR._
 }
 
-@virtualize
-abstract class DslDriver[A:Manifest,B:Manifest] extends DslSnippet[A,B] with DslImpl with CompileScala {
-  lazy val f = compile(snippet)(manifestTyp[A],manifestTyp[B])
+trait DslGenCublas extends DslGenBase {
+  val IR: DslExp
+  import IR._
+
+  // Allocate GPU memory.
+  def getCudaMallocString(buffer: String, count: String, dataType: String): String = {
+    "CUDA_CALL(cudaMalloc(&" + buffer + ", " + count + " * sizeof(" + dataType + ")));"
+  }
+
+  // Allocate GPU memory from memory arena.
+  def getCudaMallocArenaString(count: String, dataType: String): String = {
+    "(" + dataType + "*)myGpuMalloc(" + count + " * sizeof(" + dataType + "));"
+  }
+
+  // Allocate unified memory, accessible by CPU and GPU.
+  // FIXME: I encountered "bus error" when performing CPU ops on managed memory:
+  //     Thread 1 "snippet" received signal SIGBUS, Bus error.
+  //     Snippet (x0=<optimized out>) at snippet.cpp:144
+  //     144	float x32 = x30 - x31;
+  // I wonder if others can replicate this issue.
+  def getCudaMallocManagedString(buffer: String, count: String, dataType: String): String = {
+    "CUDA_CALL(cudaMallocManaged(&" + buffer + ", " + count + " * sizeof(" + dataType + ")));"
+  }
+
+  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case t@TensorNew(scalarCount) =>
+      val scalarType = remap(t.m)
+      stream.println(scalarType + "* " + quote(sym) + " = " + getCudaMallocArenaString(quote(scalarCount), scalarType))
+    case t@TensorApply(x, index) =>
+      // FIXME: Indexing GPU data doesn't work, need another approach.
+      stream.println("// Note: tensor data indexing below doesn't work.")
+      emitValDef(sym, quote(x) + "[" + quote(index) + "]")
+      // I tried creating a `arrayApply` kernel, but `__global__` kernels can only return void.
+      // emitValDef(sym, "arrayApply<<<1, 1>>>(" + quote(x) + ", " + quote(index) + ")")
+    case t@TensorUpdate(x, index, y) =>
+      stream.println("arrayUpdate<<<1, 1>>>(" + quote(x) + ", " + quote(index) + ", " + quote(y) + ");")
+    case _ =>
+      super.emitNode(sym, rhs)
+  }
+
+  override def templateHeaders: NSeq[String] =
+    super.templateHeaders ++ NSeq("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
+
+  override def templateRawCode: String = super.templateRawCode +
+    """
+      |#define CUDA_CALL(f) { \
+      |  cudaError_t err = (f); \
+      |  if (err != cudaSuccess) { \
+      |    fprintf(stderr, "CUDA error occurred: %s (%s:%d)\n", \
+      |            cudaGetErrorString(err), __FILE__, __LINE__); \
+      |    exit(err); \
+      |  } \
+      |}
+      |
+      |#define CUBLAS_CALL(f) { \
+      |  cublasStatus_t stat = (f); \
+      |  if (stat != CUBLAS_STATUS_SUCCESS) { \
+      |    fprintf(stderr, "cuBLAS error occurred: %d (%s:%d)\n", \
+      |            stat, __FILE__, __LINE__); \
+      |    exit(stat); \
+      |  } \
+      |}
+      |
+      |void *gpuMallocAddr;
+      |void *myGpuMalloc(size_t bytes) {
+      |  void *res = gpuMallocAddr;
+      |  gpuMallocAddr = (void *)((char *)gpuMallocAddr + bytes);
+      |  return res;
+      |}
+      |
+      |template <typename T>
+      |__global__ void arrayUpdate(T *data, int index, T value) {
+      |  data[index] = value;
+      |}
+    """.stripMargin
+}
+
+trait DslGenCudnn extends DslGenCublas {
+  val IR: DslExp
+  import IR._
+
+  override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cudnn.h>")
+  override def templateRawCode: String = super.templateRawCode +
+    """
+      |#define CUDNN_CALL(f) { \
+      |  cudnnStatus_t stat = (f); \
+      |  if (stat != CUDNN_STATUS_SUCCESS) { \
+      |    fprintf(stderr, "cuDNN error occurred: %d (%s:%d)\n", \
+      |            stat, __FILE__, __LINE__); \
+      |    exit(stat); \
+      |  } \
+      |}
+    """.stripMargin
+}
+
+abstract class DslDriverScala[A: Manifest, B: Manifest] extends Dsl with DslExp with CompileScala { self =>
+  val codegen = new DslGenScala {
+    val IR: self.type = self
+  }
+
+  def snippet(x: Rep[A]): Rep[B]
+
+  lazy val f = compile(snippet)(manifestTyp[A], manifestTyp[B])
   def precompile: Unit = f
 
-  //def precompileSilently: Unit = utils.devnull(f)
+  // def precompileSilently: Unit = utils.devnull(f)
 
   def eval(x: A): B = f(x)
+}
+
+abstract class DslDriverBase[A: Manifest, B: Manifest] extends Dsl with DslExp { self =>
+  // The C-like code generator.
+  val codegen: DslGenBase {
+    val IR: self.type
+  }
+
+  // The code snippet to compile.
+  def snippet(x: Rep[A]): Rep[B]
+
+  def eval(a: A)
+  // Note: is it possible to implement `eval` returning `B`?
+  // def eval(a: A): B
 
   lazy val code: String = {
     val source = new java.io.StringWriter()
-    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))(manifestTyp[A],manifestTyp[B])
+    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))(manifestTyp[A], manifestTyp[B])
     source.toString
   }
 }
 
-@virtualize
-abstract class DslDriverC[A: Manifest, B: Manifest] extends DslSnippet[A, B] with DslExp {
-  q =>
-  val codegen = new DslGenC {
-    val IR: q.type = q
-  }
-  lazy val code: String = {
-    //implicit val mA = manifestTyp[A]
-    //implicit val mB = manifestTyp[B]
-    val source = new java.io.StringWriter()
-    codegen.emitSource(snippet, "Snippet", new java.io.PrintWriter(source))
-    source.toString
+abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
+  override val codegen = new DslGenC {
+    val IR: self.type = self
   }
 
-  def eval(a: A): Unit = {
-    // TBD: should read result of type B?
-    val out = new java.io.PrintWriter("/tmp/snippet.cpp")
+  override def eval(a: A) {
+    val cppFileName = "/tmp/lantern-snippet.cpp"
+    val binaryFileName = "/tmp/lantern-snippet"
+    val out = new java.io.PrintWriter(cppFileName)
     out.println(code)
-    out.close
-    //TODO: use precompile
-    (new java.io.File("/tmp/snippet")).delete
+    out.close()
+
+    new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println _) //-std=c99
+    (s"g++ -std=c++11 -O1 $cppFileName -o $binaryFileName": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ code")
-    (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(System.out.println _)
+    (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
+}
+
+abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
+  override val codegen = new DslGenCublas {
+    val IR: self.type = self
+  }
+
+  override def eval(a: A) {
+    val cudaFileName = "/tmp/lantern-snippet.cu"
+    val binaryFileName = "/tmp/lantern-snippet"
+    val out = new java.io.PrintWriter(cudaFileName)
+    out.println(code)
+    out.close()
+
+    new java.io.File(binaryFileName).delete
+    import scala.sys.process._
+    System.out.println("Compile C++ (cuBLAS) code")
+    (s"nvcc -std=c++11 -O1 $cudaFileName -o $binaryFileName -lcublas": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    System.out.println("Run C++ (cuBLAS) code")
+    (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
+  }
+}
+
+abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslExp { self =>
+  override val codegen = new DslGenCudnn {
+    val IR: self.type = self
+  }
+
+  override def eval(a: A) {
+    val cudaFileName = "/tmp/lantern-snippet.cu"
+    val binaryFileName = "/tmp/lantern-snippet"
+    val out = new java.io.PrintWriter(cudaFileName)
+    out.println(code)
+    out.close()
+
+    new java.io.File(binaryFileName).delete
+    import scala.sys.process._
+    System.out.println("Compile C++ (cuBLAS & cuDNN) code")
+    (s"nvcc -std=c++11 -O1 $cudaFileName -o $binaryFileName -lcublas -lcudnn": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    System.out.println("Run C++ (cuBLAS & cuDNN) code")
+    (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
+  }
+}
+
+/**
+  * A wrapper around `DslDriverBase` that provides a `wrapper` function that performs backend setup/cleanup.
+  * Extend this instead of `DslDriverBase` for correct backend management.
+  */
+trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorExp {
+  // Hacky workaround to support trait type parameters with context bounds.
+  // `trait LanternDriver[A: Manifest, B: Manifest]` doesn't work.
+  // These must be overridden in subclasses.
+  implicit def manifestA: Manifest[A]
+  implicit def manifestB: Manifest[B]
+
+  def wrapper(x: Rep[A]): Rep[B] = {
+    generateRawComment("Backend setup.")
+    backend.setup()
+    val result = snippet(x)
+
+    generateRawComment("Backend cleanup.")
+    backend.cleanup()
+    result
+  }
+
+  override lazy val code: String = {
+    val source = new java.io.StringWriter()
+    codegen.emitSource(wrapper, "Snippet", new java.io.PrintWriter(source))(manifestTyp[A], manifestTyp[B])
+    source.toString
+  }
+}
+
+abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with TensorExp {
+  override def manifestA: Manifest[A] = manifest[A]
+  override def manifestB: Manifest[B] = manifest[B]
+}
+abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCublas[A, B] with LanternDriver[A, B] with TensorExp {
+  backend = new BackendCublas
+  override def manifestA: Manifest[A] = manifest[A]
+  override def manifestB: Manifest[B] = manifest[B]
+}
+abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] with TensorExp {
+  backend = new BackendCudnn
+  override def manifestA: Manifest[A] = manifest[A]
+  override def manifestB: Manifest[B] = manifest[B]
 }

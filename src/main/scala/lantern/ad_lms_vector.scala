@@ -113,8 +113,7 @@ trait TensorExp extends Dsl with Diff {
     if(!cond) { printf(msg, args : _*); exit() }
   }
 
-  def slice(arr: Rep[Array[Float]], off: Rep[Int]) = uncheckedPure[Array[Float]](arr, "+", off)
-  def sliceI(arr: Rep[Array[Int]], off: Rep[Int]) = uncheckedPure[Array[Int]](arr, "+", off)
+  def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
 
   object Encoding {
     val ix_a = 96  // index starts from 1
@@ -123,21 +122,26 @@ trait TensorExp extends Dsl with Diff {
     def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix + ix_a).AsInstanceOf[Char]
   }
 
-  case class TTT(seq: NSeq[Int]) {
-    def apply(x: Int) = {
-      if (x >= seq.length) ???
-      seq(x)
+  case class Dimensions(val dims: NSeq[Int]) {
+    def apply(idx: Int) = {
+      if (idx >= dims.length) ???
+      else dims(idx)
+    }
+    def last = dims.last
+    def reverse = Dimensions(dims.reverse)
+
+    val (nbElem +: strides) = (dims :\ NSeq[Int](1)) {
+      case (dim, seq@(t +: q)) => (dim * t) +: seq
     }
 
-    def last = seq.last
-    def reverse = TTT(seq.reverse)
-
-    def equal(that: TTT) = {
-      that.seq == seq
-    }
+    override def toString = dims mkString " x "
   }
 
-  implicit def ttttoSeq(x: TTT) = x.seq
+  implicit def Dimensions2Seq(x: Dimensions) = x.dims
+
+  // object Dimensions {
+  //   def apply(x: Int*) = new Dimensions(x)
+  // }
 
   object Random {
     def rand() = unchecked[Float]("(float)rand()/RAND_MAX")
@@ -190,83 +194,199 @@ trait TensorExp extends Dsl with Diff {
   } */
 
   /**
-    * Defines tensor-specific operations.
-    * Eventually, a tensor operation IR may be introduced to enable analyses/transformations.
+    * A code generation backend for tensor operations.
+    *
+    * Note: Eventually, a tensor operation IR may be introduced to enable analyses and
+    * transformations such as operator fusion and matrix chain multiplication optimization.
     */
   trait Backend {
-    def dot(x: Tensor, y: Tensor): Tensor
-    // TODO: Add more ops.
+    // Setup the backend. This is the first function that will be called in DSL programs.
+    def setup(): Unit
+
+    // Cleanup the backend. This is the last function that will be called in DSL programs.
+    def cleanup(): Unit
+
+    // Compute vector-vector dot product, i.e. inner product.
+    // [V] dot [V] => [1] (scalar)
+    def vectorVectorDot(x: Tensor, y: Tensor): Tensor
+
+    // Compute matrix-vector dot product.
+    // [M1 x M2] dot [M2] => [M1]
+    def matrixVectorDot(x: Tensor, y: Tensor): Tensor
+
+    // Compute matrix-matrix dot product.
+    // [M1 x M2] dot [M2 x M3] => [M1 x M3]
+    def matrixMatrixDot(x: Tensor, y: Tensor): Tensor
+
+    def dot(x: Tensor, y: Tensor): Tensor =
+      (x.rank, y.rank) match {
+        case (1, 1) => vectorVectorDot(x, y)
+        case (2, 1) => matrixVectorDot(x, y)
+        case (2, 2) => matrixMatrixDot(x, y)
+        case _ => throw new IllegalArgumentException(s"Incompatible shapes: ${x.shape}, ${y.shape}")
+      }
+
+    // TODO: Add more ops:
+    // - Elementwise binary ops (+, -, *, /).
+    //   - GPU backends need to address broadcasting.
+    //   - `BackendCublas` can define addition using `cublasSaxpy`.
+    // - Conv2d.
+    // - Activation functions (e.g. relu).
+    // - Fused multiply add operations?
   }
 
   /**
-    * Native tensor op backend.
+    * Native tensor operation backend. WIP.
     * Tensor ops are defined in terms of primitive operations.
     */
-  trait BackendNative extends Backend {
-    override def dot(x: Tensor, y: Tensor): Tensor = {
-      // TODO: (Fei Wang): only support 2D dot 1D and 1D dot 1D
-      val off = var_new(0)
-      val up = if (x.rank > 1) x.shape(0) else 1
-      val res = NewArray[Float](up)
-      for (j <- DataLoop(up)) {
-        val value = var_new(0.0f)
-        for (i <- DataLoop(x.shape.last)) {
-          value += x.data(off) * y.data(i)
-          off += 1
-        }
-        res(j) = readVar(value)
+  class BackendNative extends Backend {
+    override def setup() {}
+    override def cleanup() {}
+
+    override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
+      assert(x.shape(0) == y.shape(0))
+      val value = var_new(0.0f)
+      for (i <- DataLoop(x.shape.last)) {
+        value += x.data(i) * y.data(i)
       }
-      val dim = if (x.rank == 1) 1 else x.shape(0)
-      Tensor(res, dim)
+      val res = NewTensor[Float](1)
+      res(0) = readVar(value)
+      Tensor(res, 1)
+    }
+
+    override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
+      assert(x.shape(1) == y.shape(0))
+      val dim1 = x.shape(0)
+      val dim2 = x.shape(1)
+      val res = NewTensor[Float](dim1)
+      for (i <- DataLoop(dim1)) {
+        val value = var_new(0.0f)
+        for (j <- DataLoop(dim2)) {
+          value += x.data(i * dim2 + j) * y.data(j)
+        }
+        res(i) = readVar(value)
+      }
+      Tensor(res, dim1)
+    }
+
+    override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = {
+      assert(x.shape(1) == y.shape(0))
+      val dim1 = x.shape(0)
+      val dim2 = x.shape(1)
+      val dim3 = y.shape(1)
+      val res = NewTensor[Float](dim1 * dim3)
+      for (i <- DataLoop(dim1)) {
+        for (j <- DataLoop(dim3)) {
+          val value = var_new(0.0f)
+          for (k <- DataLoop(dim2)) {
+            value += x.data(i * dim2 + k) * y.data(k * dim3 + j)
+          }
+          res(i * dim3 + j) = readVar(value)
+        }
+      }
+      Tensor(res, dim1, dim3)
     }
   }
 
   /**
-    * cuBLAS tensor op backend. WIP.
+    * cuBLAS tensor operation backend. WIP.
     */
-  trait BackendCUBLAS extends Backend {
-    // GEMM reference:
-    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
-    //
-    // cublasStatus_t cublasSgemm(cublasHandle_t handle,
-    //                            cublasOperation_t transa, cublasOperation_t transb,
-    //                            int m, int n, int k,
-    //                            const float           *alpha,
-    //                            const float           *A, int lda,
-    //                            const float           *B, int ldb,
-    //                            const float           *beta,
-    //                            float           *C, int ldc)
-    def sgemm(a: Array[Float], b: Array[Float], c: Array[Float]) = unchecked[Array[Float]]("cublasSgemm(...)")
+  class BackendCublas extends Backend {
+    override def setup(): Unit = generateRawCode(
+      """cublasHandle_t cublasHandle;
+        |CUBLAS_CALL(cublasCreate(&cublasHandle));
+        |CUDA_CALL(cudaMalloc(&gpuMallocAddr, HEAP_SIZE));
+      """.stripMargin)
 
-    override def dot(x: Tensor, y: Tensor): Tensor = ???
+    override def cleanup(): Unit = generateRawCode(
+      """CUBLAS_CALL(cublasDestroy(cublasHandle));
+        |CUDA_CALL(cudaFree(gpuMallocAddr));
+      """.stripMargin)
+
+    // Reference:
+    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
+    def sdot(a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) =
+      unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", a.length, ",", a, ",1,", b, ",1,", result, "))")
+
+    override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
+      val res = NewTensor[Float](1)
+      sdot(x.data, y.data, res)
+      Tensor(res, 1)
+    }
+
+    // Reference:
+    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
+    def sgemv(m: Int, n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
+        m, ",", n, ",", one, ",",
+        a, ",", m, ",", b, ",", zero, ",", result, ",", one, "))")
+    }
+
+    override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
+      val m = x.shape(0)
+      val n = x.shape(1)
+      val res = NewTensor[Float](m)
+      sgemv(m, n, x.data, y.data, res)
+      Tensor(res, m)
+    }
+
+    // Reference:
+    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
+    def sgemm(m: Int, n: Int, k: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+        m, ",", n, ",", k, ",", one, ",",
+        a, ",", m, ",", b, ",", k, ",", zero, ",", result, ",", m, "))")
+    }
+
+    override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = {
+      val m = x.shape(0)
+      val n = y.shape(1)
+      val k = y.shape(0)
+      val res = NewTensor[Float](m * n)
+      sgemm(m, n, k, x.data, y.data, res)
+      Tensor(res, m, n)
+    }
   }
 
   /**
-    * Default tensor op backend, extending `BackendNative`.
+    * cuDNN tensor operation backend. WIP.
+    * Extends `BackendCublas` to leverage cuBLAS primitives.
     */
-  class BackendDefault extends BackendNative
-  val backend: Backend = new BackendDefault
+  class BackendCudnn extends BackendCublas {
+    override def setup(): Unit = {
+      super.setup()
+      generateRawCode("cudnnHandle_t cudnnHandle;\nCUDNN_CALL(cudnnCreate(&cudnnHandle));")
+    }
+
+    override def cleanup(): Unit = {
+      super.cleanup()
+      generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
+    }
+  }
+
+  // The current backend for code generation.
+  // To switch code generation to a different backend, simply change this value
+  // in your DSL program.
+  var backend: Backend = new BackendNative
 
   class Tensor(val data: Rep[Array[Float]], val dimensions: NSeq[Int]) extends Serializable {
 
-    val MAX_DOUBLE = 1e10f // FIXME
-
-    val strides = (dimensions :\ NSeq[Int]()) {
-      case (dimX, seq@(h +: t)) => (dimX * h) +: seq
-      case (dimX, _) => NSeq(dimX)
-    }
-
-    def shape = TTT(dimensions)
-
-    assert(strides.length >= 1)
-    assert(strides(0) != 0, "Empty Tensor!!!")
-
+    def shape = Dimensions(dimensions)
     val rank = dimensions.length
-    val scalarCount = strides(0)
+    val scalarCount = shape.nbElem
     val isScalar = scalarCount == 1
 
-    def apply(i: Rep[Int]) = data(i)
-    def apply(i: Rep[Int], j: Rep[Int]) = data(i * shape(1) + j) // FIXME the index of matrix is not the normal way
+    assert(shape.strides.length >= 1)
+    assert(scalarCount != 0, "Empty Tensor!!!")
+
+    def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
+    // def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i + 1) +: shape.tail)
 
     @virtualize
     def clipAt(bound: Float) = {
@@ -281,7 +401,7 @@ trait TensorExp extends Dsl with Diff {
     }
 
     def map(op: Rep[Float] => Rep[Float]) = {
-      val res = NewArray[Float](scalarCount)
+      val res = NewTensor[Float](scalarCount)
       for (i <- DataLoop(scalarCount)) res(i) = op(this.data(i))
       new Tensor(res, shape)
     }
@@ -292,31 +412,26 @@ trait TensorExp extends Dsl with Diff {
       res
     }
 
-    def elementWiseOPwithBroadCast(that: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
+    def elementWiseOpWithBroadCast(that: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
       Tensor.dimBroadcast(shape, that.shape) match {
-        case None => throw new IllegalArgumentException(s"dimensions of vector do not match +! ${this.shape.seq} != ${that.shape.seq}")
+        case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${this.shape.seq} != ${that.shape.seq}")
         case Some((thisShape, thatShape, resShape)) => {
-          val resData = NewArray[Float](resShape.product)
+          val resData = NewTensor[Float](resShape.nbElem)
           val res = new Tensor(resData, resShape)
 
           def inplace(offThis: Rep[Int], offThat: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
             val offres = var_new[Int](offRes)
             val offthis = var_new[Int](offThis)
             val offthat = var_new[Int](offThat)
-            if (dim == resShape.size - 1) {
-              for (i <- DataLoop(resShape(dim))) {
+            for (i <- DataLoop(resShape(dim))) {
+              if (dim == resShape.size - 1) {
                 resData(offres) = op(this.data(offthis), that.data(offthat))
-                offres += 1
-                if (thisShape(dim) > 1) offthis += 1
-                if (thatShape(dim) > 1) offthat += 1
-              }
-            } else {
-              for (i <- DataLoop(resShape(dim))) {
+              } else {
                 inplace(offthis, offthat, offres, dim + 1)
-                offres += res.strides(dim + 1)
-                if (thisShape(dim) > 1) offthis += this.strides(dim + 1)
-                if (thatShape(dim) > 1) offthat += that.strides(dim + 1)
               }
+              offres += resShape.strides(dim)
+              if (thisShape(dim) > 1) offthis += thisShape.strides(dim)
+              if (thatShape(dim) > 1) offthat += thatShape.strides(dim)
             }
           }
           inplace(0, 0, 0, 0)
@@ -326,13 +441,13 @@ trait TensorExp extends Dsl with Diff {
     }
 
     def +(that: Rep[Float]): Tensor = this.map(x => x + that)
-    def +(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ + _)
+    def +(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ + _)
 
     // this operator updates the values of this, unlike the + operator
     def +=(that: Rep[Float]): Unit = this.mapInPlace(x => x + that)
     def += (that: Tensor): Unit = {
       if (that.scalarCount == 1) {
-        generate_comment("+= tensor of dim 0")
+        generateRawComment("+= tensor of dim 0")
         this += that.data(0) // broadcast
       }
       else if (this.scalarCount == 1) ??? // this.data(0) = that.fold(this.data(0))((agg, x) => agg + x)
@@ -342,7 +457,7 @@ trait TensorExp extends Dsl with Diff {
     }
 
     def -(that: Rep[Float]): Tensor = this.map(x => x - that)
-    def -(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ - _)
+    def -(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ - _)
 
     // this operator updates the values of this, unlike the - operator
     def -=(that: Rep[Float]): Unit = this.mapInPlace(x => x - that)
@@ -359,7 +474,7 @@ trait TensorExp extends Dsl with Diff {
 
     // Element wise multiplication
     def *(that: Rep[Float]): Tensor = this.map(x => x * that)
-    def *(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ * _)
+    def *(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ * _)
 
     // this operator updates the values of this, unlike the * operator
     def *=(that: Rep[Float]): Unit = this.mapInPlace(x => x * that)
@@ -376,7 +491,7 @@ trait TensorExp extends Dsl with Diff {
 
     // element wise division
     def /(that: Rep[Float]): Tensor = this.map(x => x / that)
-    def /(that: Tensor): Tensor = this.elementWiseOPwithBroadCast(that, _ / _)
+    def /(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ / _)
 
     // this operator updates the values of this, unlike the / operator
     def /=(that: Rep[Float]): Unit = this.mapInPlace(x => x / that)
@@ -396,19 +511,28 @@ trait TensorExp extends Dsl with Diff {
       for (i <- DataLoop(scalarCount)) this.data(i) = that.data(i)
     }
 
-    // NOTE: only handles (Matrix dot Vector) and (Vector dot Vector)
+    // `dot` represents the following:
+    // - vector-vector dot product.
+    //   [V] dot [V] => [1] (scalar)
+    // - matrix-vector multiplication.
+    //   [M1 x M2] dot [M2] => [M1]
+    // - matrix-matrix multiplication.
+    //   [M1 x M2] dot [M2 x M3] => [M1 x M3]
     def dot(that: Tensor) = {
-      // assert that and this have the same dimension
-      generate_comment(s"dot ${this.shape.seq} - ${that.shape.seq}")
-      assert(this.rank <= 2 && that.rank == 1, s"Only M x V or V x V allowed ${this.shape} - ${that.shape}")
-      assert(this.shape.last == that.shape(0), s"dimensions of vector do not match dot! ${this.shape.seq} - ${that.shape.seq}")
+      generateRawComment(s"dot: ${this.shape.seq}, ${that.shape.seq}")
+      (this.rank, that.rank) match {
+        case (1, 1) => assert(this.shape(0) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
+        case (2, 1) | (2, 2) => assert(this.shape(1) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
+        case _ => throw new IllegalArgumentException(
+          s"Only vector-vector, matrix-vector, and matrix-matrix multiplication are allowed (actual shapes: ${this.shape}, ${that.shape})")
+      }
       backend.dot(this, that)
     }
 
     // NOTE: only handles (Vector cart Vector)
     def cart(that: Tensor) = {
       assert(this.rank == 1 && that.rank == 1, "cartesian product is only for 1d vectors")
-      val res = NewArray[Float](this.shape(0) * that.shape(0))
+      val res = NewTensor[Float](this.shape(0) * that.shape(0))
       val off = var_new(0)
       for (i <- DataLoop(this.shape(0))) {
       //for (i <- (0 until this.dims(0)): Rep[Range]) {
@@ -423,13 +547,11 @@ trait TensorExp extends Dsl with Diff {
 
     def trans() = {
       assert(this.rank == 2, "transpose is only for matrix. Tensor transpose is not supported here")
-      val res = NewArray[Float](this.scalarCount)
+      val res = NewTensor[Float](this.scalarCount)
       val offT = var_new(0)
       for (i <- DataLoop(this.shape(1))) {
-      //for (i <- (0 until this.dims(1)): Rep[Range]) {
         val off = var_new(0)
         for (j <- DataLoop(this.shape(0))) {
-        //for (j <- (0 until this.dims(0)): Rep[Range]) {
           res(offT + j) = data(off + i)
           off += this.shape(1)
         }
@@ -449,12 +571,12 @@ trait TensorExp extends Dsl with Diff {
 
     @virtualize
     def sum2D(dim: Int) = {
-      assert (this.rank == 2, "Only deal with 2D tensor")
-      assert (dim == 0 || dim == 1, "dim must be in range of this.nbDims")
+      assert(this.rank == 2, "Only deal with 2D tensor")
+      assert(dim == 0 || dim == 1, "dim must be in range of this.nbDims")
 
       if (dim == 0) ???
       else {
-        val res = NewArray[Float](this.shape(0))
+        val res = NewTensor[Float](this.shape(0))
         val offset = var_new(0)
         for (i <- DataLoop(this.shape(0))) {
           val sum = var_new(0.0f)
@@ -487,7 +609,7 @@ trait TensorExp extends Dsl with Diff {
 
       if (dim == 0) ???
       else {
-        val res = NewArray[Float](this.shape(0))
+        val res = NewTensor[Float](this.shape(0))
         val offset = var_new(0)
         for (i <- DataLoop(this.shape(0))) {
           val max = var_new(scala.Float.MinValue)
@@ -588,11 +710,11 @@ trait TensorExp extends Dsl with Diff {
     def nllLossB(target: Rep[Array[Int]]) = {
       assert(this.rank == 2, "For nllLossB, input should be 2D and target should be 1D")
 
-      val res = NewArray[Float](this.shape(0))
+      val res = NewTensor[Float](this.shape(0))
       val offset = var_new(0)
       for (batch <- DataLoop(this.shape(0))) {
         res(batch) = -1.0f * this.data(offset + target(batch))
-        offset += this.strides(1)
+        offset += this.shape.strides(0)
       }
       Tensor(res, this.shape(0))
     }
@@ -617,7 +739,7 @@ trait TensorExp extends Dsl with Diff {
       assert(this.rank <= 2)
       if (this.rank == 1) this
       else {
-        val res = NewArray[Float](this.shape(1))
+        val res = NewTensor[Float](this.shape(1))
         val off = var_new(0)
         for (j <- DataLoop(this.shape(1))) {
         //for (j <- (0 until this.dims(1)): Rep[Range]) {
@@ -664,7 +786,7 @@ trait TensorExp extends Dsl with Diff {
           printf(s"Pane #(%d, %d) - ${this.shape(2)} x ${this.shape(3)}\\n", idx, idx1)
           for (k <- 0 until this.shape(2): Rep[Range]) {
             for (l <- 0 until this.shape(3): Rep[Range]) {
-              printf(format, this.data(i * this.strides(1) + j * this.strides(2) + k * this.strides(3) + l))
+              printf(format, this.data(i * this.shape.strides(0) + j * this.shape.strides(1) + k * this.shape.strides(2) + l))
             }
             printf("\\n")
           }
@@ -681,7 +803,7 @@ trait TensorExp extends Dsl with Diff {
         printf(s"Pane #%d - ${this.shape(1)} x ${this.shape(2)}\\n", idx)
         for (k <- 0 until this.shape(1): Rep[Range]) {
           for (l <- 0 until this.shape(2): Rep[Range]) {
-            printf(format, this.data(i * this.strides(1) + k * this.strides(2) + l))
+            printf(format, this.data(i * this.shape.strides(0) + k * this.shape.strides(1) + l))
           }
           printf("\\n")
         }
@@ -704,8 +826,8 @@ trait TensorExp extends Dsl with Diff {
     // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
     // the result is to update this so that this += that * y, where * is cartesian product
     def add_cartesian(that: Tensor, y: Tensor) = {
-      generate_comment("add_cartesian")
-      assert(this.rank == 2 && that.shape == TTT(NSeq(this.shape(1))) && y.shape == TTT(NSeq(this.shape(0))) ||
+      generateRawComment("add_cartesian")
+      assert(this.rank == 2 && that.shape == Dimensions(NSeq(this.shape(1))) && y.shape == Dimensions(NSeq(this.shape(0))) ||
         this.rank == 1 && that.shape == this.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
       val off = var_new(0)
       // TODO remove loop if not used
@@ -762,12 +884,12 @@ trait TensorExp extends Dsl with Diff {
           for (k <- DataLoop(that.shape(1))) {
             this.data(offThis) = this.data(offThis) + that.data(offThat) * y.data(offY)
             offThat += 1
-            offY += y.strides(1)
+            offY += y.shape.strides(0)
           }
           offThis += 1
           offYR += 1
         }
-        offThatR += that.strides(1)
+        offThatR += that.shape.strides(0)
         offYC *= 0
       }
     }
@@ -798,7 +920,7 @@ trait TensorExp extends Dsl with Diff {
     def addMul(a: Rep[Float], b: Tensor) = {
       assert(this.shape == b.shape)
 
-      generate_comment("Generate code for addMul")
+      generateRawComment("Generate code for addMul")
       for (i <- DataLoop(this.scalarCount)) {
       //for (i <- 0 until this.nbElem: Rep[Range]) {
         this.data(i) = this.data(i) + a * b.data(i)
@@ -906,8 +1028,8 @@ trait TensorExp extends Dsl with Diff {
       val res = Tensor.fillWithBias(bias, 1, this.shape(0), kernel.shape(0), resWidth, resHeight)
 
       for (i <- DataLoop(this.shape(0))) {
-        val ptrInput = slice(this.data, i * this.strides(1))
-        val ptrOutput = slice(res.data, i * res.strides(1))
+        val ptrInput = slice(this.data, i * this.shape.strides(0))
+        val ptrOutput = slice(res.data, i * res.shape.strides(0))
         Tensor(ptrInput, this.shape.drop(1): _*).conv2D_inplace(kernel, strides, pads, Tensor(ptrOutput, res.shape.drop(1): _*))
       }
       res
@@ -940,11 +1062,11 @@ trait TensorExp extends Dsl with Diff {
             Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
             strideRow, strideCol, padUp, padDown, padLeft, padRight)
 
-          offWeight2 += kernel.strides(2)
-          offInput += this.strides(1)
+          offWeight2 += kernel.shape.strides(1)
+          offInput += this.shape.strides(0)
         }
-        offWeight1 += kernel.strides(1)
-        offOut += res.strides(1)
+        offWeight1 += kernel.shape.strides(0)
+        offOut += res.shape.strides(0)
       }
     }
 
@@ -988,11 +1110,11 @@ trait TensorExp extends Dsl with Diff {
             Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
             strideRow, strideCol, padUp, padDown, padLeft, padRight)
 
-          offWeight2 += kernel.strides(2)
-          offInput += this.strides(1)
+          offWeight2 += kernel.shape.strides(1)
+          offInput += this.shape.strides(0)
         }
-        offWeight1 += kernel.strides(1)
-        offOut += res.strides(1)
+        offWeight1 += kernel.shape.strides(0)
+        offOut += res.shape.strides(0)
       }
       res
     }
@@ -1021,7 +1143,7 @@ trait TensorExp extends Dsl with Diff {
               val iC = InputC + kernelCol
               if (iR < 0 || iC < 0 || iR >= input.shape(0) || iC >= input.shape(1)) ()
               else {
-                sum += kernel.data(offKernel) * input.data(iR * input.strides(1) + iC)
+                sum += kernel.data(offKernel) * input.data(iR * input.shape.strides(0) + iC)
               }
               offKernel += 1
             }
@@ -1064,11 +1186,11 @@ trait TensorExp extends Dsl with Diff {
           Tensor(ptrOutput, resHeight, resWidth).conv2D1(
             Tensor(ptrInput, this.shape(1), this.shape(2)), Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)), strideRow, strideCol)
 
-          offWeight2 += kernel.strides(2)
-          offInput += this.strides(1)
+          offWeight2 += kernel.shape.strides(1)
+          offInput += this.shape.strides(0)
         }
-        offWeight1 += kernel.strides(1)
-        offOut += res.strides(1)
+        offWeight1 += kernel.shape.strides(0)
+        offOut += res.shape.strides(0)
       }
       res
     }
@@ -1096,14 +1218,14 @@ trait TensorExp extends Dsl with Diff {
             for (kernelCol <- DataLoop(kernel.shape(1))) {
               sum +=  ptrInput(kernelCol) * ptrKernel(kernelCol)
             }
-            offKernel += kernel.strides(1)
-            offInput += input.strides(1)
+            offKernel += kernel.shape.strides(0)
+            offInput += input.shape.strides(0)
           }
           this.data(offOutput) = this.data(offOutput) + sum
           offOutput += 1
           offInputC += strideCol
         }
-        offInputR += strideRow * input.strides(1)
+        offInputR += strideRow * input.shape.strides(0)
       }
     }
 
@@ -1116,7 +1238,7 @@ trait TensorExp extends Dsl with Diff {
       val res = Tensor.fill(scala.Float.MinValue, this.shape(0), resHeight, resWidth)
 
       // FIXME adhoc transform tensor to be using generic type!
-      val savedIdx = NewArray[Int](res.scalarCount)
+      val savedIdx = NewTensor[Int](res.scalarCount)
 
       val oidxW = var_new(0)  // walks by channel in res
       val iidx = var_new(0)   // walks by 1 in input (this.data)
@@ -1136,9 +1258,9 @@ trait TensorExp extends Dsl with Diff {
               oidx2 += 1
             }
           }
-          oidx += res.strides(2)
+          oidx += res.shape.strides(1)
         }
-        oidxW += res.strides(1)
+        oidxW += res.shape.strides(0)
       }
 
       (res, savedIdx)
@@ -1157,12 +1279,12 @@ trait TensorExp extends Dsl with Diff {
       val resWidth = convSize(this.shape(2), kernelRow, strideRow)
       val resHeight = convSize(this.shape(3), kernelCol, strideCol)
       val res = Tensor.fill(scala.Float.MinValue, this.shape(0), this.shape(1), resWidth, resHeight)
-      val savedIdx = NewArray[Int](res.scalarCount)
+      val savedIdx = NewTensor[Int](res.scalarCount)
 
       for (i <- DataLoop(this.shape(0))) {
-        val ptrInput  = slice(this.data, i * this.strides(1))
-        val ptrOutput = slice(res.data, i * res.strides(1))
-        val ptrIdx    = sliceI(savedIdx, i * res.strides(1))
+        val ptrInput  = slice(this.data, i * this.shape.strides(0))
+        val ptrOutput = slice(res.data, i * res.shape.strides(0))
+        val ptrIdx    = slice(savedIdx, i * res.shape.strides(0))
         Tensor(ptrInput, this.shape.drop(1): _*).maxPool_k_inplace(
           kernelRow, kernelCol, strideRow, strideCol, Tensor(ptrOutput, res.shape.drop(1): _*), ptrIdx)
       }
@@ -1190,23 +1312,23 @@ trait TensorExp extends Dsl with Diff {
             for (dummy1 <- DataLoop(kernelRow)) {
               val this_index_2 = var_new[Int](this_index_1)     // offset of this (input), built on this_index_1, by col of kernel size
               for (dummy <- DataLoop(kernelCol)) {
-                if (this.data(this_index_2) > res(offout_2)) {
+                if (this.data(this_index_2) > res.data(offout_2)) {
                   res.data(offout_2) = this.data(this_index_2)
                   savedIdx(offout_2) = this_index_2
                 } else ()
                 this_index_2 += 1
               }
-              this_index_1 += this.strides(2)
+              this_index_1 += this.shape.strides(1)
             }
 
             offout_2 += 1
             offin_2  += strideCol
           }
-          offout_1 += res.strides(2)
-          offin_1  += strideRow * this.strides(2)
+          offout_1 += res.shape.strides(1)
+          offin_1  += strideRow * this.shape.strides(1)
         }
-        offout += res.strides(1)
-        offin  += this.strides(1)
+        offout += res.shape.strides(0)
+        offin  += this.shape.strides(0)
       }
     }
 
@@ -1223,7 +1345,7 @@ trait TensorExp extends Dsl with Diff {
       val resWidth = convSize(this.shape(1), kernelRow, strideRow)
       val resHeight = convSize(this.shape(2), kernelCol, strideCol)
       val res = Tensor.fill(scala.Float.MinValue, this.shape(0), resWidth, resHeight)
-      val savedIdx = NewArray[Int](res.scalarCount)
+      val savedIdx = NewTensor[Int](res.scalarCount)
 
       // looping for the output
       val offout = var_new[Int](0)                              // offset of res, by channel
@@ -1241,23 +1363,23 @@ trait TensorExp extends Dsl with Diff {
             for (dummy1 <- DataLoop(kernelRow)) {
               val this_index_2 = var_new[Int](this_index_1)     // offset of this (input), built on this_index_1, by col of kernel size
               for (dummy <- DataLoop(kernelCol)) {
-                if (this.data(this_index_2) > res(offout_2)) {
+                if (this.data(this_index_2) > res.data(offout_2)) {
                   res.data(offout_2) = this.data(this_index_2)
                   savedIdx(offout_2) = this_index_2
                 } else ()
                 this_index_2 += 1
               }
-              this_index_1 += this.strides(2)
+              this_index_1 += this.shape.strides(1)
             }
 
             offout_2 += 1
             offin_2  += strideCol
           }
-          offout_1 += res.strides(2)
-          offin_1  += strideRow * this.strides(2)
+          offout_1 += res.shape.strides(1)
+          offin_1  += strideRow * this.shape.strides(1)
         }
-        offout += res.strides(1)
-        offin  += this.strides(1)
+        offout += res.shape.strides(0)
+        offin  += this.shape.strides(0)
       }
       (res, savedIdx)
     }
@@ -1266,8 +1388,8 @@ trait TensorExp extends Dsl with Diff {
     def dropout(prob: Float = 0.5f) = {
       assert(0.0f <= prob && prob <= 1.0f)
 
-      val res = NewArray[Float](this.scalarCount)
-      val mask = NewArray[Float](this.scalarCount)
+      val res = NewTensor[Float](this.scalarCount)
+      val mask = NewTensor[Float](this.scalarCount)
 
       val scale = if (prob < 1.0f) 1.0f / (1.0f - prob) else 0.0f
 
@@ -1290,9 +1412,9 @@ trait TensorExp extends Dsl with Diff {
     def relu(inPlace: Boolean = false) = {
       assert(!inPlace)
 
-      val res = NewArray[Float](this.scalarCount)
+      val res = NewTensor[Float](this.scalarCount)
       for (i <- 0 until this.scalarCount: Rep[Range]) {
-        if (this(i) < 0.0f)
+        if (this.data(i) < 0.0f)
           res(i) = 0.0f
         else
           res(i) = this.data(i)
@@ -1316,7 +1438,7 @@ trait TensorExp extends Dsl with Diff {
         if (i != dim) this.shape(i)
         else others.map(x => x.shape(dim)).sum + this.shape(dim)}
       val totalnbElem = resDims.product
-      val res = NewArray[Float](totalnbElem)
+      val res = NewTensor[Float](totalnbElem)
 
       // prepare for looping/copying
       val totalFrom = this +: others        // put all tensors in one Seq for easy of handling
@@ -1326,8 +1448,9 @@ trait TensorExp extends Dsl with Diff {
         // looping over the concatenation dim
         for (whichTensor <- totalFrom) {
           // looping over the dimensions lower than or equal to dim, in the current tensor
-          val ptrIntput = slice(whichTensor.data, high * whichTensor.strides(dim))
-          for (lowOrEqual <- DataLoop(whichTensor.strides(dim))) {
+          val stride = if (dim == 0) whichTensor.shape.nbElem else whichTensor.shape.strides(dim-1)
+          val ptrIntput = slice(whichTensor.data, high * stride)
+          for (lowOrEqual <- DataLoop(stride)) {
             res(targetId) = ptrIntput(lowOrEqual)
             targetId += 1
           }
@@ -1341,7 +1464,7 @@ trait TensorExp extends Dsl with Diff {
       assert(this.rank == 4, "assume this is Tensor with 4D (batch * channel * width * height")
       val resTensor = Tensor.zeros(this.shape.take(2): _*)
 
-      val scale = this.strides(2)
+      val scale = this.shape.strides(1)
       val offset = var_new(0)                      // offset of this, should step by this.strides(2)
       val res_offset = var_new(0)                  // offset of res, should step by 1
       // looping over each batch
@@ -1355,10 +1478,10 @@ trait TensorExp extends Dsl with Diff {
             for (j <- DataLoop(this.shape(3))) {
               sum += this.data(offset_a + j)
             }
-            offset_a += this.strides(3)
+            offset_a += this.shape.strides(2)
           }
           resTensor.data(res_offset) = sum / scale
-          offset += this.strides(2)
+          offset += this.shape.strides(1)
           res_offset += 1
         }
       }
@@ -1370,18 +1493,18 @@ trait TensorExp extends Dsl with Diff {
       // the result should be 1D (channel), by averaging the numbers in (width * height)
       assert(this.rank == 3, "assume this is Tensor with 3D (channel * width * height)")
 
-      val res = NewArray[Float](this.shape(0))
+      val res = NewTensor[Float](this.shape(0))
       // looping over each channel
       for (channel <- DataLoop(this.shape(0))) {
-        val offset = var_new(this.strides(1) * channel)
+        val offset = var_new(this.shape.strides(0) * channel)
         val sum = var_new(0.0f)
         for (i <- DataLoop(this.shape(1))) {
           for (j <- DataLoop(this.shape(2))) {
             sum += this.data(offset + j)
           }
-          offset += this.strides(2)
+          offset += this.shape.strides(1)
         }
-        res(channel) = sum / (this.strides(1))
+        res(channel) = sum / (this.shape.strides(0))
       }
       Tensor(res, this.shape(0))
     }
@@ -1403,17 +1526,18 @@ trait TensorExp extends Dsl with Diff {
   }
 
   object Tensor {
-    def apply(dims: Int*) = {
-      val size = dims.product
-      new Tensor(NewArray[Float](size), dims)
-    }
+    // def apply(dims: Int*) = {
+    //   new Tensor(NewArray[Float](scalarCount), dims)
+    //   val size = dims.product
+    //   new Tensor(NewArray[Float](size), dims)
+    // }
     def apply(data: Rep[Array[Float]], dims: Int*) = new Tensor(data, dims)
 
     def dimCompatible(a: Tensor, b: Tensor) = {
       (a.shape == b.shape) || a.isScalar || b.isScalar
     }
 
-    def dimBroadcast(a: NSeq[Int], b: NSeq[Int]): Option[(NSeq[Int], NSeq[Int], NSeq[Int])] = {
+    def dimBroadcast(a: NSeq[Int], b: NSeq[Int]): Option[(Dimensions, Dimensions, Dimensions)] = {
       def bc(a: NSeq[Int], b: NSeq[Int], trail: List[Int]): List[Int] = {
         if (a.size == 0) b.toList ++ trail
         else if (b.size == 0) a.toList ++ trail
@@ -1425,10 +1549,10 @@ trait TensorExp extends Dsl with Diff {
       val res = bc(a, b, List())
       if (res == List(-1)) None
       else {
-        // add dimensions of 1 to tensors with less rank
-        if (a.size > b.size) Some((a, NSeq.fill(a.size - b.size)(1) ++ b, res.toSeq))
-        else if (a.size < b.size) Some((NSeq.fill(b.size - a.size)(1) ++ a, b, res.toSeq))
-        else Some((a, b, res.toSeq))
+        // add dimensions of 1 to tensors with smaller rank
+        if (a.size > b.size) Some((new Dimensions(a), new Dimensions(NSeq.fill(a.size - b.size)(1) ++ b), new Dimensions(res.toSeq)))
+        else if (a.size < b.size) Some((new Dimensions(NSeq.fill(b.size - a.size)(1) ++ a), new Dimensions(b), new Dimensions(res.toSeq)))
+        else Some((new Dimensions(a), new Dimensions(b), new Dimensions(res.toSeq)))
       }
     }
 
@@ -1440,35 +1564,35 @@ trait TensorExp extends Dsl with Diff {
     def randinit(dim0: Int, seed: Option[Int]): Tensor = randinit(NSeq(dim0), 1.0f, seed)
     def randinit(dim0: Int, dim1: Int, scale: Float): Tensor = randinit(NSeq(dim0, dim1), scale, None)
     def randinit(dims: NSeq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
-      val size = dims.product
-      val res = NewArray[Float](size)
-      for (i <- (0 until size): Rep[Range]) res(i) = (Random.rand() - 0.5f) * scale
+      val scalarCount = dims.product
+      val res = NewTensor[Float](scalarCount)
+      for (i <- (0 until scalarCount): Rep[Range]) res(i) = (Random.rand() - 0.5f) * scale
       new Tensor(res, dims)
     }
 
     def randn(dim0: Int, dim1: Int = 1, scale: Float = 1.0f, offset: Int = 0) = {
-      val res = NewArray[Float](dim0 * dim1)
+      val res = NewTensor[Float](dim0 * dim1)
       for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Float]("d(gen)") * scale
       Tensor(res, dim0, dim1)
     }
 
     def randPositive(dims: Int*) = {
-      val size = dims.product
-      val res = NewArray[Float](size)
-      for (i <- (0 until size): Rep[Range]) res(i) = Random.rand()
+      val scalarCount = dims.product
+      val res = NewTensor[Float](scalarCount)
+      for (i <- (0 until scalarCount): Rep[Range]) res(i) = Random.rand()
       new Tensor(res, dims)
     }
 
     def fill(value: Rep[Float], dims: Int*) = {
-      val size = dims.product
-      val res = NewArray[Float](size)
-      for (i <- (0 until size): Rep[Range]) res(i) = value
+      val scalarCount = dims.product
+      val res = NewTensor[Float](scalarCount)
+      for (i <- (0 until scalarCount): Rep[Range]) res(i) = value
       new Tensor(res, dims)
     }
 
     def fill(fFill: NSeq[Rep[Int]] => Rep[Float], dims: Int*) = {
-      val size = dims.product
-      val res = NewArray[Float](size)
+      val scalarCount = dims.product
+      val res = NewTensor[Float](scalarCount)
 
       var idx = var_new(0)
       def innerFill(args: NSeq[Rep[Int]]) = {
@@ -1491,8 +1615,8 @@ trait TensorExp extends Dsl with Diff {
     def fillWithBias(bias: Tensor, dim: Int, dims: Int*) = {
       assert(dim < dims.size && dim >= 0, s"target dimension ${dim} is out of range ${dims}")
       assert(bias.rank == 1 && bias.scalarCount == dims.drop(dim).head, s"bias should be 1D and have the same length as given dim")
-      val size = dims.product
-      val res = NewArray[Float](size)
+      val scalarCuont = dims.product
+      val res = NewTensor[Float](scalarCuont)
 
       // iterate for higherDims
       val offset = var_new(0)
@@ -1522,7 +1646,7 @@ trait TensorExp extends Dsl with Diff {
     }
 
     def scalar(value: Rep[Float]) = {
-      val res = NewArray[Float](1)
+      val res = NewTensor[Float](1)
       res(0) = value
       Tensor(res, 1)
     }
@@ -1533,7 +1657,7 @@ trait TensorExp extends Dsl with Diff {
 
     def expand(vector: Tensor, dim1: Int) = {
       assert(vector.rank == 1)
-      val res = NewArray[Float](vector.shape(0) * dim1)
+      val res = NewTensor[Float](vector.shape(0) * dim1)
       val off = var_new(0)
       for (j <- (0 until dim1): Rep[Range]){
         for (i <- (0 until vector.shape(0)): Rep[Range]) {
@@ -1544,22 +1668,22 @@ trait TensorExp extends Dsl with Diff {
       new Tensor(res, dim1 +: vector.shape)
     }
 
-    def copy(vector: Tensor) = {
-      val res = NewArray[Float](vector.scalarCount)
-      for (i <- (0 until vector.scalarCount): Rep[Range]) res(i) = vector.data(i)
-      new Tensor(res, vector.shape)
+    def copy(tensor: Tensor) = {
+      val res = NewTensor[Float](tensor.scalarCount)
+      for (i <- (0 until tensor.scalarCount): Rep[Range]) res(i) = tensor.data(i)
+      new Tensor(res, tensor.shape)
     }
 
     def fromData(x: Float*) = {
       val y = x.toArray
-      val res = NewArray[Float](y.length)
+      val res = NewTensor[Float](y.length)
       for (i <- 0 until y.length: Range) res(i) = y(i)
       Tensor(res, y.length)
     }
 
     def fromData(dims: Seq[Int], x: Float*) = {
       val y = x.toArray
-      val res = NewArray[Float](y.length)
+      val res = NewTensor[Float](y.length)
       for (i <- 0 until y.length: Range) res(i) = y(i)
       Tensor(res, dims: _*)
     }
@@ -1590,88 +1714,131 @@ trait TensorExp extends Dsl with Diff {
   class TensorR(val x: Tensor, val d: Tensor) extends Serializable {
     var isInput: Boolean = false // true if it is an input (no need to compute gradient)
 
+    def apply(i: Rep[Int]) = new TensorR(x(i), d(i))
+
     def clip_grad(bound: Float) = {
       d.clipAt(bound)
     }
 
+    def backpropElementWiseOpWithBroadCast(that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
+      // assume y.x = elementWiseOpWithBroadCast(this.x, that.x, someOp)
+      // assume that opThis returns the increment of this.d; opThat returns the increment of that.d
+      // both opThis and opThat takes this.x, that.x, and y.d as parameters
+      // TODO (Fei Wang): in some cases (if this, or that are inputs (x, y), there gradients are not initialized/useless)
+      Tensor.dimBroadcast(this.x.shape, that.x.shape) match {
+        case None => throw new IllegalArgumentException(s"dimensions of tensors do not match! ${this.x.shape.seq} != ${that.x.shape.seq}")
+        case Some((thisShape, thatShape, yShape)) => {
+          def inplace(offThis: Rep[Int], offThat: Rep[Int], offY: Rep[Int], dim: Int): Unit = {
+            val offthis = var_new[Int](offThis)
+            val offthat = var_new[Int](offThat)
+            val offy = var_new[Int](offY)
+            for (i <- DataLoop(yShape(dim))) {
+              if (dim == yShape.size - 1) {
+                this.d.data(offthis) += opThis(this.x.data(offthis), that.x.data(offthat), y.d.data(offy))
+                that.d.data(offthat) += opThat(this.x.data(offthis), that.x.data(offthat), y.d.data(offy))
+              } else {
+                inplace(offthis, offthat, offy, dim + 1)
+              }
+              offy += yShape.strides(dim)
+              if (thisShape(dim) > 1) offthis += thisShape.strides(dim)
+              if (thatShape(dim) > 1) offthat += thatShape.strides(dim)
+            }
+          }
+          inplace(0, 0, 0, 0)
+        }
+      }
+    }
+
     def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x + that.x);
-      k(y)
-      generate_comment("backpropagate +")
-      this.d += y.d; that.d += y.d
+      val y = TensorR(x + that.x); k(y)
+      // this.d += y.d; that.d += y.d
+      val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     def - (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x - that.x); k(y)
-      //y.d.print("dot")
-      this.d += y.d; that.d -= y.d
+      // this.d += y.d; that.d -= y.d
+      val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => -1.0f * c
+      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     // this is element wise multiplication
     def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that.x); k(y)
-      // intermediate Tensors donot need to be substatiated, can optimize!
-      //this.d += that.x * y.d; that.d += this.x * y.d;
-      this.d.add_mult(that.x, y.d); that.d.add_mult(this.x, y.d)
+      // this.d.add_mult(that.x, y.d); that.d.add_mult(this.x, y.d)
+      val opThis = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c * b
+      val opThat = (a: Rep[Float], _: Rep[Float], c: Rep[Float]) => c * a
+      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     // element wise division
     def / (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x / that.x); k(y)
-      // intermediate Tensors donot need to be substatiated, can optimize!
-      //this.d += y.d / that.x
-      this.d.add_div(y.d, that.x)
-      //that.d -= this.x * y.d / (that.x * that.x)
-      that.d.minus_mult_div_square(this.x, y.d, that.x)
+      // this.d.add_div(y.d, that.x); that.d.minus_mult_div_square(this.x, y.d, that.x)
+      val opThis = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c / b
+      val opThat = (a: Rep[Float], b: Rep[Float], c: Rep[Float]) => -1.0f * a * c / (b * b)
+      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
-    // vector dot product or Matrix vector dot (viewed as multiple vector dot product) (not the common view)
+    // `dot` represents the following:
+    // - vector-vector dot product.
+    //   [V] dot [V] => [1] (scalar)
+    // - matrix-vector multiplication.
+    //   [M1 x M2] dot [M2] => [M1]
+    // - matrix-matrix multiplication.
+    //   [M1 x M2] dot [M2 x M3] => [M1 x M3]
     def dot(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val res = x dot that.x
       val y = TensorR(res); k(y)
-      // FIXME: intermediate Tensors donot need to be substatiated, can optimize!
-      //y.d.print("dot")
-      if (this.d.rank == 1) {
-        assert(y.d.isScalar)
-        this.d.addMul(y.d.data(0), that.x)
-        that.d.addMul(y.d.data(0), this.x)
-      } else {
-        // FIXME: need optimization using addMul and dataloop!!
-        this.d.add_cartesian(that.x, y.d)
-        that.d.add_composion(this.x, y.d)
-        //this.d.addMul(y.d.resize(y.d.dims(0), 1), that.x.resize(1, that.x.dims(0)))
-        //that.d.resize(1, that.d.dims(0)).addMul(y.d.resize(1, y.d.dims(0)), this.x)
+      (this.x.rank, that.x.rank) match {
+        case (1, 1) => this.d.addMul(y.d.data(0), that.x); that.d.addMul(y.d.data(0), this.x)
+        case (2, 1) => this.d.add_cartesian(that.x, y.d);  that.d.add_composion(this.x, y.d)
+        case (2, 2) => val dim1 = this.x.shape(0); val dim2 = this.x.shape(1); val dim3 = that.x.shape(1)
+          for (i <- DataLoop(dim1)) {
+            for (j <- DataLoop(dim3)) {
+              for (k <- DataLoop(dim2)) {
+                this.d.data(i * dim2 + k) += that.x.data(k * dim3 + j) * y.d.data(i * dim3 + j)
+                that.d.data(k * dim3 + j) += this.x.data(i * dim2 + k) * y.d.data(i * dim3 + j)
+              }
+            }
+          }
       }
-      // this.d += that.x * y.d // broadcasting
-      // that.d += this.x * y.d // broadcasting
+    }
+
+    def trans(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(this.x.trans()); k(y)
+      // back-propagate
+      val offT = var_new(0)
+      for (i <- DataLoop(this.x.shape(1))) {
+        val off = var_new(0)
+        for (j <- DataLoop(this.x.shape(0))) {
+          this.d.data(off + i) = y.d.data(offT + j)
+          off += this.x.shape(1)
+        }
+        offT += this.x.shape(0)
+      }
     }
 
     def tanh(): TensorR @diff = shift { (k : TensorR => Unit) =>
       val y = TensorR(x.tanh()); k(y)
-      // FIXME: intermediate Tensors donot need to be substatiated, can optimize!
-      //this.d += (Tensor.ones(1) - y.x * y.x) * y.d // broadcasting
-      generate_comment("backpropagate tanh")
       this.d.add_oneMinusSquare_mult(y.x, y.d)
     }
 
     def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.exp()); k(y)
-      // Fix
-      //this.d += y.x * y.d
-      generate_comment("backpropage exp")
       this.d.add_mult(y.x, y.d)
     }
 
     def log(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.log()); k(y)
-      // Fix
-      //this.d += y.d / x
       this.d.add_div(y.d, x)
     }
 
     def sigmoid(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.sigmoid()); k(y)
-      //this.d += (Tensor.ones(1) - y.x) * y.x * y.d
       this.d.add_oneMinusThenMult_mult(y.x, y.d)
     }
 
@@ -1714,7 +1881,7 @@ trait TensorExp extends Dsl with Diff {
       val offset = var_new(0)
       for (batch <- DataLoop(this.x.shape(0))) {
         this.d.data(offset + target(batch)) += -1.0f * y.d.data(batch)
-        offset += this.x.strides(1)
+        offset += this.x.shape.strides(0)
       }
     }
 
@@ -1742,11 +1909,11 @@ trait TensorExp extends Dsl with Diff {
 
       if (pads.sum == 0) {
         for (batch <- DataLoop(this.x.shape(0))) {
-          val offOutputD = var_new(batch * y.d.strides(1))     // offset for the output, based on batch, step by 1
+          val offOutputD = var_new(batch * y.d.shape.strides(0))     // offset for the output, based on batch, step by 1
           val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
           // looping for the output
           for (kOut <- DataLoop(y.d.shape(1))) {
-            val offInputR = var_new(batch * this.x.strides(1)) // offset of input, based on batch, step by input.strides(3) * strideRow
+            val offInputR = var_new(batch * this.x.shape.strides(0)) // offset of input, based on batch, step by input.strides(3) * strideRow
             val sum = var_new(0.0f)                            // collector of bias gradient
             for (row <- DataLoop(y.d.shape(2))) {
               val offInputC = var_new(offInputR)               // offset of input, based on offInputR, step by strideCol
@@ -1765,25 +1932,25 @@ trait TensorExp extends Dsl with Diff {
                       kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
                       offKernelR += 1
                     }
-                    offInputKR += this.x.strides(3)
+                    offInputKR += this.x.shape.strides(2)
                   }
-                  offInputP += this.x.strides(2)
+                  offInputP += this.x.shape.strides(1)
                 }
 
                 offInputC += strideCol
                 offOutputD += 1
               }
-              offInputR += strideRow * this.x.strides(3)
+              offInputR += strideRow * this.x.shape.strides(2)
             }
             bias.d.data(kOut) = bias.d.data(kOut) + sum        // give value of collector to the bias gradient
-            offKernel += kernel.x.strides(1)
+            offKernel += kernel.x.shape.strides(0)
           }
         }
       } else {
         for (batch <- DataLoop(this.x.shape(0))) {
-          val offOutputD = var_new(batch * y.d.strides(1))     // offset for the output, based on batch, step by 1
+          val offOutputD = var_new(batch * y.d.shape.strides(0))     // offset for the output, based on batch, step by 1
           val offKernel  = var_new(0)                          // offset for the kernel, step by kernel strides(1) -- which kernel
-          val offInputD  = batch * this.x.strides(1)           // fixed offset for the input, based on batch
+          val offInputD  = batch * this.x.shape.strides(0)           // fixed offset for the input, based on batch
           // looping for the output
           for (kOut <- DataLoop(y.d.shape(1))) {
             val InputR = var_new(-pads.head)                   // Row of input, starting from -pads
@@ -1797,7 +1964,7 @@ trait TensorExp extends Dsl with Diff {
                 // looping for the kernel
                 val offKernelR = var_new(offKernel)            // offset if kernel, based on offKernel, step by 1
                 // offset of input based on batch, pane, and index of output
-                val InputI_pane = var_new[Int](offInputD + InputR * this.x.strides(3) + InputC)
+                val InputI_pane = var_new[Int](offInputD + InputR * this.x.shape.strides(2) + InputC)
                 for (pane <- DataLoop(kernel.d.shape(1))) {
                   val InputI_kR = var_new[Int](InputI_pane)    // offset of input based on InputI_pane and row
                   for (kR <- DataLoop(kernel.d.shape(2))) {
@@ -1810,9 +1977,9 @@ trait TensorExp extends Dsl with Diff {
                       }
                       offKernelR += 1
                     }
-                    InputI_kR += this.x.strides(3)
+                    InputI_kR += this.x.shape.strides(2)
                   }
-                  InputI_pane += this.x.strides(2)
+                  InputI_pane += this.x.shape.strides(1)
                 }
 
                 InputC += strideCol
@@ -1821,7 +1988,7 @@ trait TensorExp extends Dsl with Diff {
               InputR += strideRow
             }
             bias.d.data(kOut) = bias.d.data(kOut) + sum
-            offKernel += kernel.x.strides(1)
+            offKernel += kernel.x.shape.strides(0)
           }
         }
       }
@@ -1866,18 +2033,18 @@ trait TensorExp extends Dsl with Diff {
                     kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
                     offKernelR += 1
                   }
-                  offInputKR += this.x.strides(2)
+                  offInputKR += this.x.shape.strides(1)
                 }
-                offInputP += this.x.strides(1)
+                offInputP += this.x.shape.strides(0)
               }
 
               offInputC += strideCol
               offOutputD += 1
             }
-            offInputR += strideRow * this.x.strides(2)
+            offInputR += strideRow * this.x.shape.strides(1)
           }
           bias.d.data(kOut) = bias.d.data(kOut) + sum                            // give value of collector to the bias gradient
-          offKernel += kernel.x.strides(1)
+          offKernel += kernel.x.shape.strides(0)
         }
       } else {
         val offOutputD = var_new(0)                          // offset for the output, step by 1
@@ -1894,7 +2061,7 @@ trait TensorExp extends Dsl with Diff {
 
               // looping for the kernel
               val offKernelR = var_new(offKernel)            // offset of kernel, step by 1, based on offKernel
-              val InputI_pane = var_new[Int](InputR * this.x.strides(2) + InputC)  // offset of input based on pane and index of output
+              val InputI_pane = var_new[Int](InputR * this.x.shape.strides(1) + InputC)  // offset of input based on pane and index of output
               for (pane <- DataLoop(kernel.d.shape(1))) {
                 val InputI_kR = var_new[Int](InputI_pane)                          // offset of input based on InputI_pane and row
                 for (kR <- DataLoop(kernel.d.shape(2))) {
@@ -1907,9 +2074,9 @@ trait TensorExp extends Dsl with Diff {
                       offKernelR += 1
                     }
                   }
-                  InputI_kR += this.x.strides(2)
+                  InputI_kR += this.x.shape.strides(1)
                 }
-                InputI_pane += this.x.strides(1)
+                InputI_pane += this.x.shape.strides(0)
               }
 
               InputC += strideCol
@@ -1918,7 +2085,7 @@ trait TensorExp extends Dsl with Diff {
             InputR += strideRow
           }
           bias.d.data(kOut) = bias.d.data(kOut) + sum
-          offKernel += kernel.x.strides(1)
+          offKernel += kernel.x.shape.strides(0)
         }
       }
 
@@ -1961,17 +2128,17 @@ trait TensorExp extends Dsl with Diff {
                   kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
                   offKernelR += 1
                 }
-                offInputKR += this.x.strides(2)
+                offInputKR += this.x.shape.strides(1)
               }
-              offInputP += this.x.strides(1)
+              offInputP += this.x.shape.strides(0)
             }
 
             offInputC += strideCol
             offOutputD += 1
           }
-          offInputR += strideRow * this.x.strides(2)
+          offInputR += strideRow * this.x.shape.strides(1)
         }
-        offKernel += kernel.x.strides(1)
+        offKernel += kernel.x.shape.strides(0)
       }
       // tot(1) += timerBwd.getElapsedTime
       ()
@@ -2031,8 +2198,9 @@ trait TensorExp extends Dsl with Diff {
         // looping over the concatenation dim
         for (whichTensorR <- totalFrom) {
           // looping over the dimensions lower than or equal to dim (but within an input tensor)
-          val ptrInput = slice(whichTensorR.d.data, high * whichTensorR.x.strides(dim))
-          for (lowOrEqual <- DataLoop(whichTensorR.x.strides(dim))) {
+          val stride = if (dim == 0) whichTensorR.x.shape.nbElem else whichTensorR.x.shape.strides(dim-1)
+          val ptrInput = slice(whichTensorR.d.data, high * stride)
+          for (lowOrEqual <- DataLoop(stride)) {
             ptrInput(lowOrEqual) += ty.d.data(targetId)
             targetId += 1
           }
@@ -2047,7 +2215,7 @@ trait TensorExp extends Dsl with Diff {
       k(ty)
 
       // back propagate
-      val scale = 1.0f / this.x.strides(2)
+      val scale = 1.0f / this.x.shape.strides(1)
       val offset = var_new(0)                      // offset of this, should step by this.x.strides(2)
       val res_offset = var_new(0)                  // offset of res, should step by 1
       // looping over each batch
@@ -2058,11 +2226,11 @@ trait TensorExp extends Dsl with Diff {
           val offset_a = var_new(offset)           // offset of this, should step by this.x.strides(3)
           for (i <- DataLoop(this.x.shape(2))) {
             for (j <- DataLoop(this.x.shape(3))) {
-              this.d.data(offset_a + j) += ty.d(res_offset) * scale
+              this.d.data(offset_a + j) += ty.d.data(res_offset) * scale
             }
-            offset_a += this.x.strides(3)
+            offset_a += this.x.shape.strides(2)
           }
-          offset += this.x.strides(2)
+          offset += this.x.shape.strides(1)
           res_offset += 1
         }
       }
@@ -2120,9 +2288,9 @@ trait TensorExp extends Dsl with Diff {
       new TensorR(Tensor(a, dim0, dim1), Tensor.zeros(dim0, dim1))
     }
 
-    def apply(dim0: Int, dim1: Int): TensorR = {
-      new TensorR(Tensor.zeros(dim0, dim1), Tensor.zeros(dim0, dim1))
-    }
+    // def apply(dim0: Int, dim1: Int): TensorR = {
+    //   new TensorR(Tensor.zeros(dim0, dim1), Tensor.zeros(dim0, dim1))
+    // }
 
   }
 
@@ -2171,7 +2339,6 @@ trait TensorExp extends Dsl with Diff {
 
   @virtualize
   def LOOP(init: TensorR)(c: TensorR => Rep[Boolean])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
-    // val k1 = FUN(init.x.dims(0))(k)
 
     lazy val loop: TensorR => Unit = FUNc { (x: TensorR) =>
       if (c(x)) RST(loop(b(x))) else RST(k(x))
@@ -2226,33 +2393,6 @@ trait TensorExp extends Dsl with Diff {
     }
     loop(0)(init)
   }
-/*
-  def FUNl(dim0: Int)(f: (Rep[Int] => (TensorR => Unit) => (TensorR => Unit))): (Rep[Int] => (TensorR => Unit) => (TensorR => Unit)) = {
-
-    val f1 = fun { (i:  Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
-      val t2: (TensorR => Unit) = { (x:TensorR) =>
-        val temp = NewArray[Array[Float]](2)
-        temp(0) = x.x.data; temp(1) = x.d.data
-        t1(temp)
-      }
-      val t3: (TensorR => Unit) = f(i)(t2)
-      t3(new TensorR(Tensor(xx(0), dim0), Tensor(xx(1), dim0)))
-    }
-
-    {i: Rep[Int] => k1: (TensorR => Unit) =>
-      {
-        val k2: Rep[Array[Array[Float]] => Unit] = fun { (x: Rep[Array[Array[Float]]]) =>
-          k1(new TensorR(Tensor(x(0), dim0), Tensor(x(1), dim0)))
-        }
-        val k4: (TensorR => Unit) = {(x: TensorR) =>
-          val temp = NewArray[Array[Float]](2)
-          temp(0) = x.x.data; temp(1) = x.d.data
-          f1(i, k2, temp)
-        }
-        k4
-      }
-    }
-  }*/
 
   def FUN0(f: ((TensorR => Unit) => TensorR => Unit)): ((TensorR => Unit) => TensorR => Unit) = { k1: (TensorR => Unit) => (x: TensorR) =>
     val dims = x.x.shape.toSeq
@@ -2300,8 +2440,6 @@ trait TensorExp extends Dsl with Diff {
     lazy val loop: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNl{ (gc: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
       def sh_loop: (Rep[Int] => TensorR @diff) = (i: Rep[Int]) => shift{(k: TensorR => Unit) => loop(i)(k)(x)}
       RST(k (IF(gc < c) { b(gc)(sh_loop(gc+1)) } { init }) )
-      // if (gc < c) {RST(k(b(gc)(sh_loop(gc + 1))))} else {RST(k(x))}
-      // if (gc < c) { loop(gc+1)((x: TensorR) => RST(k(b(gc)(x))))(x) } else { RST(k(x)) }
     }
     loop(0)(k)(init)
   }
@@ -2313,8 +2451,6 @@ trait TensorExp extends Dsl with Diff {
       lazy val tree: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNl{ (i: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
         def sh_tree: (Rep[Int] => TensorR @diff) = (i: Rep[Int]) => shift{(k: TensorR => Unit) => tree(i)(k)(x)}
         RST(k( IF(i >= 0) { b(sh_tree(lch(i)), sh_tree(rch(i)), i) } { init } ))
-        // if (i >= 0) { RST(k(b(sh_tree(lch(i)), sh_tree(rch(i)), i))) } else { RST(k(x)) }
-        // if (i >= 0) { tree(lch(i))((l: TensorR) => tree(rch(i))((r: TensorR) => RST(k(b(l, r, i))))(x))(x) } else { RST(k(x)) }
       }
       tree(start)(k)(init)
   }
@@ -2362,8 +2498,6 @@ trait TensorExp extends Dsl with Diff {
       def sh_loop: (Rep[Int] => ArrayBuffer[TensorR] @diff) = (i: Rep[Int]) => shift{ (k: ArrayBuffer[TensorR] => Unit) => loop(i)(k)(x) }
 
       RST(k( IFm(i < c) { b(i)(sh_loop(i+1)) } { init } ))
-      //if (i < c) ( RST(k(b(i)(sh_loop(i+1)) ) else {RST(k(x))}
-      //if (i < c) { loop(i+1)((x: ArrayBuffer[TensorR]) => RST(k(b(i)(x))))(x) } else { RST(k(x)) }
     }
     loop(start)(k)(init)
   }
@@ -2377,8 +2511,6 @@ trait TensorExp extends Dsl with Diff {
         def sh_tree: (Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff) = (i: Rep[Int]) => (x: ArrayBuffer[TensorR]) => shift{(k: ArrayBuffer[TensorR] => Unit) => tree(i)(k)(x)}
 
         RST(k( IFm (i >= 0) { b(sh_tree(lch(i))(init), sh_tree(rch(i))(init), i) } { init } ))
-        //if (i >= 0) { tree(lch(i))((l: ArrayBuffer[TensorR]) => tree(rch(i))((r: ArrayBuffer[TensorR]) => RST(k(b(l, r, i))))(x))(x) }
-        //else { RST(k(x)) }
       }
       tree(start)(k)(init)
   }
@@ -2387,7 +2519,6 @@ trait TensorExp extends Dsl with Diff {
     val x1 = new TensorR(x, Tensor.zeros(x.shape(0)))
     reset { val y = f(x1)
       y.d.setAsOne()
-      // y.x.print() // this is the result of forward propagation (likely the loss)
     () }
     x1.d
   }
@@ -2402,7 +2533,6 @@ trait TensorExp extends Dsl with Diff {
       val y = f(x1)
       y.d.setAsOne()
       result.copy_data(y.x)
-      //y.x.print()
     () }
     result
   }

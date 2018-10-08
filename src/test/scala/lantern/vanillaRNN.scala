@@ -22,7 +22,7 @@ class VanillaRNN extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationRNN/Lantern.cpp"
 
-  val min_char_rnn = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+  val min_char_rnn = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
@@ -184,12 +184,122 @@ class VanillaRNN extends FunSuite {
     }
   }
 
-  test("generate_code_for_vanilla_rnn") {
+  test("generate_code_for_vanilla_rnn_original") {
     //println("generate code for vanilla RNN")
     val min_char_rnn_file = new PrintWriter(new File(root_dir + file_dir))
     min_char_rnn_file.println(min_char_rnn.code)
     min_char_rnn_file.flush()
-    //println(s"now your code at $root_dir/$file_dir is generated.")  
+    //println(s"now your code at $root_dir/$file_dir is generated.")
   }
- 
+
+  val min_char_rnn_module = new DslDriverC[String, Unit] with NNModule with ScannerLowerExp {
+
+    class Scanner(name: Rep[String]) {
+      val fd = open(name)
+      val fl = filelen(fd)
+      val data = mmap[Char](fd,fl)
+      var pos = 0
+
+      def nextChar: Rep[Char] = {
+        val ch = data(pos)
+        pos += 1
+        ch
+      }
+
+      def hasNextChar = pos < fl
+      def done = close(fd)
+    }
+
+    @virtualize
+    def snippet(a: Rep[String]): Rep[Unit] = {
+
+      val startTime = get_time()
+
+      val scanner = new Scanner("graham.txt")
+      val training_data = scanner.data
+      val data_size = scanner.fl
+
+      val translated_data = NewArray[Int](data_size)
+      for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
+      val seq_length = 20
+      val vocab_size = 26
+      val hiddenSize = 50
+
+      val RNN = DynamicRNNFix(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
+      // val RNN = DynamicRNN(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
+      val opt = Adagrad(RNN, learning_rate = 1e-1f, gradClip = 5.0f)
+
+      def oneHot(input: Rep[Array[Int]]): TensorR = {
+        val res = Tensor.zeros(seq_length, 1, vocab_size)
+        for (i <- 0 until seq_length: Rep[Range]) {
+          res.data(i * vocab_size + input(i)) = 1.0f
+        }
+        TensorR(res)
+      }
+
+      def lossFun(input: Rep[Array[Int]], target: Rep[Array[Int]]) = { (dummy: TensorR) =>
+        val res: ArrayBuffer[TensorR] = RNN(oneHot(input), target, lengths = None)  // returns an ArrayBuffer[TensorR]
+        res.head.sum()
+        // val resCon = res.head.concat(0, res.tail.toSeq: _*)
+        // //val resCon = res.init.head.concat(0, res.init.tail.toSeq: _*)
+        // resCon.logSoftmaxB().nllLossB(target).sum()
+      }
+
+      val loss_save = NewArray[Double](51)
+      val loopStartTime = get_time()
+
+      val addr = getMallocAddr() // remember current allocation pointer here
+
+      val startAt = var_new[Int](0)
+      startAt -= seq_length
+
+      var smooth_loss = 60.0f
+      for (n <- (0 until 5001): Rep[Range]) {
+
+        startAt += seq_length
+        if (startAt + seq_length + 1 >= data_size) {
+          startAt = 0
+        }
+
+        val inputs = NewArray[Int](seq_length)
+        val targets = NewArray[Int](seq_length)
+        for (i <- (0 until seq_length): Rep[Range]) {
+          inputs(i) = translated_data(startAt+i)
+          targets(i) = translated_data(startAt+i+1)
+        }
+
+        val loss = gradR_loss(lossFun(inputs, targets))(Tensor.zeros(1))
+        val loss_value = loss.data(0) // we suppose the loss is scala (Tensor of size 1)
+        smooth_loss = smooth_loss * 0.9f + loss_value * 0.1f
+        if (n % 100 == 0) {
+          printf("iter %d, loss %f\\n", n, smooth_loss)
+          loss_save(n / 100) = smooth_loss
+        }
+
+        opt.step()
+
+        resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
+      }
+
+      val loopEndTime = get_time()
+      val prepareTime = loopStartTime - startTime
+      val loopTime    = loopEndTime - loopStartTime
+
+      val fp = openf(a, "w")
+      fprintf(fp, "unit: %s\\n", "100 iteration")
+      for (i <- (0 until loss_save.length): Rep[Range]) {
+        fprintf(fp, "%lf\\n", loss_save(i))
+      }
+      fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
+      closef(fp)
+
+    }
+  }
+
+  test("generate_code_for_vanilla_rnn_module") {
+    val min_char_rnn_file = new PrintWriter(new File(root_dir + file_dir))
+    min_char_rnn_file.println(min_char_rnn_module.code)
+    min_char_rnn_file.flush()
+  }
+
 }

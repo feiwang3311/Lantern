@@ -1,3 +1,4 @@
+/*
 package lantern
 
 import org.scala_lang.virtualized.virtualize
@@ -6,7 +7,6 @@ import org.scala_lang.virtualized.SourceContext
 import scala.virtualization.lms._
 import org.scalatest.FunSuite
 
-/*
 object Hessian_MuWang_1 {
   
   def main(args: Array[String]): Unit = {
@@ -280,25 +280,25 @@ object Hessian_MuWang_LMS {
 
   def main(args: Array[String]): Unit = {
 
-    val gr1 = new DslDriver[Double, Unit] with DiffApi {
+    val gr1 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => x + x*x*x)(x)
       }
     }
 
-    val gr2 = new DslDriver[Double, Unit] with DiffApi {
+    val gr2 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => toNum(3)*x*x + x*x*x)(x)
       }
     }
 
-    val gr3 = new DslDriver[Double, Unit] with DiffApi {
+    val gr3 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => (x+x)*x)(x)
       }
     }
 
-    val gr4 = new DslDriver[Double, Unit] with DiffApi {
+    val gr4 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => (x+x)*x*x + (toNum(2)*x+toNum(2)*x)*x)(x)
       }
@@ -317,7 +317,7 @@ object Hessian_MuWang_LMS {
       gr4.eval(x)
     }
 
-    val gr5 = new DslDriver[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
+    val gr5 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
       override val codegen = new DslGen with ScalaGenTupleOps {
         val IR: q.type = q
       }
@@ -327,7 +327,7 @@ object Hessian_MuWang_LMS {
       }
     }
 
-    val gr6 = new DslDriver[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
+    val gr6 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
       override val codegen = new DslGen with ScalaGenTupleOps {
         val IR: q.type = q
       }
@@ -517,37 +517,37 @@ object Hessian_MuWang_LMS_IFLOOP {
 
   def main(args: Array[String]): Unit = {
 
-    val gr1 = new DslDriver[Double, Unit] with DiffApi {
+    val gr1 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => x*x*x)(x)
       }
     }
 
-    val gr2 = new DslDriver[Double, Unit] with DiffApi {
+    val gr2 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => toNum(3)*x*x + x*x*x)(x)
       }
     }  
 
-    val gr3 = new DslDriver[Double, Unit] with DiffApi {
+    val gr3 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => (x+x)*x)(x)
       } 
     }
 
-    val gr4 = new DslDriver[Double, Unit] with DiffApi {
+    val gr4 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => (x+x)*x*x + (toNum(2)*x+toNum(2)*x)*x)(x)
       }
     }
 
-    val grif1 = new DslDriver[Double, Unit] with DiffApi {
+    val grif1 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => IF (x.x > 0.0) {x*x*x} {toNum(-1)*x*x})(x)
       }
     }
 
-    val grif2 = new DslDriver[Double, Unit] with DiffApi {
+    val grif2 = new DslDriverScala[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1( x => {
             val y = IF(x.x > 0.0){x*x}{toNum(-1)*x}
@@ -573,7 +573,7 @@ object Hessian_MuWang_LMS_IFLOOP {
       grif2.eval(x)
     }
 
-    val gr5 = new DslDriver[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
+    val gr5 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
       override val codegen = new DslGen with ScalaGenTupleOps {
         val IR: q.type = q
       }
@@ -583,7 +583,7 @@ object Hessian_MuWang_LMS_IFLOOP {
       }
     }
 
-    val gr6 = new DslDriver[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
+    val gr6 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
       override val codegen = new DslGen with ScalaGenTupleOps {
         val IR: q.type = q
       }
@@ -593,8 +593,8 @@ object Hessian_MuWang_LMS_IFLOOP {
       }
     }
 
-    val gr7 = new DslDriver[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
-      override val codegen = new DslGen with ScalaGenTupleOps {
+    val gr7 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
+      override val codegen = new DslGenScala with ScalaGenTupleOps {
         val IR: q.type = q
       }
 

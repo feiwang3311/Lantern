@@ -16,23 +16,19 @@ import org.scalatest.FunSuite
 import java.io.PrintWriter
 import java.io.File
 
-class AdLMSVectorTest extends FunSuite {
+class AdLMSVectorTest extends LanternFunSuite {
 
   test("array0") {
-    val array0 = new DslDriverC[String, Unit] with TensorExp {
+    val array0 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val addr = getMallocAddr()
-        //printf("address is at %ld \\n", addr)
         resetMallocAddr(addr)
-        //printf("now lets use some memory\\n")
         val mem = Tensor.zeros(100)
         val addr1 = getMallocAddr()
-        //printf("Now address is at %ld \\n", addr1)
         resetMallocAddr(addr)
         val addr2 = getMallocAddr()
-        //printf("after reset, the address is back to %ld\\n", addr2)
 
         //assertions
         if (addr + 400 != addr1) printf("ERROR: addr did not increase by 800")
@@ -42,50 +38,49 @@ class AdLMSVectorTest extends FunSuite {
     array0.eval("abc")
   }
 
-  test("array1") {
-    val array1 = new DslDriverC[String, Unit] with TensorExp {
-
+  test("vector-vector-dot") {
+    val vvdot = new LanternDriverC[String, Unit] {
       @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
+      def snippet(x: Rep[String]): Rep[Unit] = {
         val length = 2
-        val res = Tensor.randinit(length)
-        val res2 = Tensor.randinit(length, seed = Some(5))
-
-        val result = res dot res2
-
-        // assertions
-        if (res.data(0) * res2.data(0) + res.data(1) * res2.data(1) != result.data(0))
-          println("ERROR: the dot product of two vectors is not correct")
+        val v1 = Tensor.fromData(NSeq(4), 1, 2, 3, 4)
+        val v2 = Tensor.fromData(NSeq(4), -1, -2, -3, -4)
+        val expected = Tensor.fromData(NSeq(1), -30)
+        Tensor.assertEqual(v1.dot(v2), expected)
       }
     }
-    array1.eval("abc")
+    runTest(vvdot)
   }
 
-  test("array1_1") {
-    val array1_1 = new DslDriverC[String, Unit] with TensorExp {
-
+  test("matrix-vector-dot") {
+    val mvdot = new LanternDriverC[String, Unit] {
       @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val dim0 = 2
-        val dim1 = 3
-        val matrix = Tensor.rand(dim0, dim1)
-        val vector = Tensor.randinit(dim1, seed = Some(4))
-
-        //println("the result is:")
-        val result = matrix dot vector
-        //result.print()
-
-        if (matrix(0, 0) * vector(0) + matrix(0, 1) * vector(1) + matrix(0, 2) * vector(2) != result(0))
-          printf("ERROR: the matrix vector dot product is wrong on the first element of result, %.3f != %.3f\\n", matrix(0, 0) * vector(0) + matrix(0, 1) * vector(1) + matrix(0, 2) * vector(2), result(0))
-        if (matrix(1, 0) * vector(0) + matrix(1, 1) * vector(1) + matrix(1, 2) * vector(2) != result(1))
-          printf("ERROR: the matrix vector dot product is wrong on the second element of result, %.3f != %.3f\\n", matrix(1, 0) * vector(0) + matrix(1, 1) * vector(1) + matrix(1, 2) * vector(2), result(1))
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m = Tensor.fromData(NSeq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
+        val v = Tensor.fromData(NSeq(4), -1, -2, -3, -4)
+        val expected = Tensor.fromData(NSeq(2), -30, -70)
+        Tensor.assertEqual(m.dot(v), expected)
       }
     }
-    array1_1.eval("abc")
+    runTest(mvdot)
+  }
+
+  test("matrix-matrix-dot") {
+    val mmdot = new LanternDriverC[String, Unit] {
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        // Note: it's better to test with matrices [M1 x M2] and [M2 x M3] where M1 != M3.
+        val m1 = Tensor.fromData(NSeq(2, 3), 1, 2, 3, 4, 5, 6)
+        val m2 = Tensor.fromData(NSeq(3, 1), 2, 3, 4)
+        val expected = Tensor.fromData(NSeq(2, 1), 20, 47)
+        Tensor.assertEqual(m1.dot(m2), expected)
+      }
+    }
+    runTest(mmdot)
   }
 
   test("array2") {
-    val array2 = new DslDriverC[String, Unit] with TensorExp {
+    val array2 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -109,7 +104,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array2_1"){
-    val array2_1 = new DslDriverC[String, Unit] with TensorExp {
+    val array2_1 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -136,7 +131,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array2_2") {
-    val array2_2 = new DslDriverC[String, Unit] with TensorExp {
+    val array2_2 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -166,7 +161,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("testTrans") {
-    val testTrans = new DslDriverC[String, Unit] with TensorExp {
+    val testTrans = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -180,7 +175,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array2_3") {
-    val array2_3 = new DslDriverC[String, Unit] with TensorExp {
+    val array2_3 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -231,9 +226,9 @@ class AdLMSVectorTest extends FunSuite {
            val h1 = (tmp + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
            val e1 = (Why1.dot(h1) + by1).exp()                       // use new hidden state to compute unnormalized prob
            val p1 = e1 / e1.sum()                            // use unnormalized prob to compute normalize prob
-           generate_comment("Compute new loss")
+           generateRawComment("Compute new loss")
            val newloss = t(0) - (p1 dot y1).log()            // loss is updated by original loss t(0) and additional loss
-           generate_comment("Done computing loss")
+           generateRawComment("Done computing loss")
            val out = ArrayBuffer[TensorR]()
 
            out.append(newloss)
@@ -244,10 +239,8 @@ class AdLMSVectorTest extends FunSuite {
          outputs(0)                          // return the final loss
        }
        val loss1 = gradR_loss(lossFun)(Tensor.zeros(1))
-       //printf("bh1\\n")
-       //bh1.d.printRaw(hidden_size)
 
-       generate_comment("Compute real value")
+       generateRawComment("Compute real value")
 
 
        // correct method of loss and gradient calculation, adapting from Numpy
@@ -312,7 +305,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array2_4"){
-    val array2_4 = new DslDriverC[String, Unit] with TensorExp {
+    val array2_4 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet (a: Rep[String]): Rep[Unit] = {
@@ -338,7 +331,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array2_5") {
-    val array2_5 = new DslDriverC[String, Unit] with TensorExp {
+    val array2_5 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet (a: Rep[String]): Rep[Unit] = {
@@ -365,14 +358,13 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array3") {
-    val array3 = new DslDriverC[String, Unit] with TensorExp {
+    val array3 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         // use random array as input
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         // calcuate gradient
         val grad = gradR(t => {val y = IF(t.x.data(0) > 0.0f) {t + t}{t * t}
@@ -381,16 +373,15 @@ class AdLMSVectorTest extends FunSuite {
         // another way of implementing it
         val grad1 = gradR(t => (t + t).sum())(v)
         val grad2 = gradR(t => (t * t).sum())(v)
-        if (v(0) > 0) Tensor.assertEqual(grad, grad1)
+        if (v.data(0) > 0) Tensor.assertEqual(grad, grad1)
         else Tensor.assertEqual(grad, grad2)
       }
     }
-    //println(array3.code)
     array3.eval("abc")
   }
 
   test("array4") {
-    val array4 = new DslDriverC[String, Unit] with TensorExp {
+    val array4 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -398,7 +389,6 @@ class AdLMSVectorTest extends FunSuite {
         val length = 2
         Tensor.randseed()
         val v = Tensor.randinit(length)
-        v.print()
 
         val halfv = Tensor.halves(length)
         val half = (new TensorR(halfv, Tensor.zeros(length)))
@@ -406,9 +396,6 @@ class AdLMSVectorTest extends FunSuite {
         val grad = gradR(t => {val y = LOOP(t)(t => t.x.data(0) > 0.1f)(t => t * half)
         y.sum() })(v)
         // show gradient
-        grad.print()
-        //println("Tensor in closure can also accumulate gradient, which is important")
-        half.d.print()
 
         // FIXME: Implement the correct gradient and assertEqual
       }
@@ -417,13 +404,12 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array4_1") {
-    val array4_1 = new DslDriverC[String, Unit] with TensorExp {
+    val array4_1 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        // v.print()
 
         val half = new TensorR(Tensor.halves(length), Tensor.zeros(length))
         val grad = gradR(t => {
@@ -450,14 +436,13 @@ class AdLMSVectorTest extends FunSuite {
 
   test("array4_2") {
     // test using array data by closure
-    val array4_2 = new DslDriverC[String, Unit] with TensorExp {
+    val array4_2 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
 
         // random initialization
         val length = 3
         val v = Tensor.randinit(length)
-        // v.print()
 
         // get data from "file" (more like generate static data and lift it to Rep type)
         val ddim0 = 2
@@ -495,14 +480,12 @@ class AdLMSVectorTest extends FunSuite {
 
 
   test("array4_4") {
-    val array4_4 = new DslDriverC[String, Unit] with TensorExp {
+    val array4_4 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
         val u = Tensor.randinit(length, seed = Some(5))
-        //u.print()
 
         val half = new TensorR(Tensor.halves(length), Tensor.zeros(length))
         val vv = TensorR(v)
@@ -538,34 +521,29 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array5") {
-    val array5 = new DslDriverC[String, Unit] with TensorExp {
+    val array5 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         val grad = gradR(t => (t * t).sum())(v)
-        //grad.print()
 
         Tensor.assertEqual(grad, v * 2.0f)
       }
     }
 
-    println("run test case in array5")
     array5.eval("abc")
   }
 
   test("array6") {
-    val array6 = new DslDriverC[String, Unit] with TensorExp {
+    val array6 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         val grad = gradR(t => (t / t).sum())(v)
-        //grad.print()
 
         Tensor.assertEqual(grad, Tensor.zeros(length))
       }
@@ -574,15 +552,13 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array7") {
-    val array7 = new DslDriverC[String, Unit] with TensorExp {
+    val array7 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         val grad = gradR(t => (t.tanh()).sum())(v)
-        //grad.print()
 
         val e1 = v.tanh();
         val ee = Tensor.ones(length) - e1 * e1
@@ -593,7 +569,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array7_1") {
-    val array7_1 = new DslDriverC[String, Unit] with TensorExp {
+    val array7_1 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -611,15 +587,13 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array8"){
-    val array8 = new DslDriverC[String, Unit] with TensorExp {
+    val array8 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        // v.print()
 
         val grad = gradR(t => (t.exp()).sum())(v)
-        //grad.print()
 
         Tensor.assertEqual(grad, v.exp())
       }
@@ -630,15 +604,13 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array9") {
-    val array9 = new DslDriverC[String, Unit] with TensorExp {
+    val array9 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randPositive(length)
-        //v.print()
 
         val grad = gradR(t => (t.log()).sum())(v)
-        //grad.print()
 
         Tensor.assertEqual(grad, Tensor.ones(length) / v)
       }
@@ -648,12 +620,11 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array10") {
-    val array10 = new DslDriverC[String, Unit] with TensorExp {
+    val array10 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         val arra = NewArray[Array[Float]](2)
         arra(0) = NewArray[Float](2)
@@ -668,7 +639,6 @@ class AdLMSVectorTest extends FunSuite {
           LOOPL(x)(arra.length)(i => x1 => new TensorR(Tensor(arra(i), length), Tensor.zeros(length)) * x1)
         }
         val grad = gradR(t => (model(t)).sum())(v)
-        //grad.print()
 
         val grad1 = gradR(t =>
             (t * TensorR(Tensor(arra(0), length)) * TensorR(Tensor(arra(1), length))).sum()
@@ -682,12 +652,11 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array11") {
-    val array11 = new DslDriverC[String, Unit] with TensorExp {
+    val array11 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         /*
         5.0f, 4.0f
@@ -716,7 +685,6 @@ class AdLMSVectorTest extends FunSuite {
        }
 
        val grad = gradR(t => model(t).sum())(v)
-       //grad.print()
 
        def model1: TensorR => TensorR @diff = { (x: TensorR) =>
          val leftchild  = x * TensorR(Tensor(arra(1), length)) * x
@@ -735,12 +703,11 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("array11_1") {
-    val array11_1 = new DslDriverC[String, Unit] with TensorExp {
+    val array11_1 = new LanternDriverC[String, Unit] {
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
         val v = Tensor.randinit(length)
-        //v.print()
 
         /*
         5.0f, 4.0f
@@ -776,7 +743,6 @@ class AdLMSVectorTest extends FunSuite {
        }
 
        val grad = gradR(t => model(t))(v)
-       //grad.print()
        // save gradient of add
        val save_grad_add = Tensor.zeros(length); save_grad_add.copy_data(add.d); add.clear_grad()
 
@@ -800,7 +766,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_test1") {
-    val cnn_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -823,7 +789,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_test2") {
-    val cnn_test2 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_test2 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -848,7 +814,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_test3") {
-    val cnn_test3 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_test3 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -872,7 +838,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_back_test1") {
-    val cnn_back_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_back_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -914,7 +880,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_back_test2") {
-    val cnn_back_test2 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_back_test2 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -956,7 +922,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_back_test3") {
-    val cnn_back_test3 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_back_test3 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -997,7 +963,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_test4") {
-    val cnn_test4 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_test4 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1023,7 +989,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_back_test4") {
-    val cnn_back_test4 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_back_test4 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1065,7 +1031,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_test5") {
-    val cnn_test5 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_test5 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1091,7 +1057,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("cnn_back_test5") {
-    val cnn_back_test5 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val cnn_back_test5 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1132,7 +1098,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("maxpool_test1") {
-    val maxpool_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val maxpool_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1157,7 +1123,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("maxpool_back_test1") {
-    val maxpool_back_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val maxpool_back_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1190,7 +1156,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("dropout_test1") {
-    val dropout_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val dropout_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1206,8 +1172,8 @@ class AdLMSVectorTest extends FunSuite {
         Tensor.assertEqual(resNone, Tensor.zeros(input), "DROPOUT 2")
 
         for (i <- 0 until input.scalarCount: Rep[Range]) {
-          assertC(idxAll(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll(i))
-          assertC(idxNone(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone(i))
+          assertC(idxAll.data(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll.data(i))
+          assertC(idxNone.data(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone.data(i))
         }
       }
     }
@@ -1216,7 +1182,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("dropout_back_test1") {
-    val dropout_back_test1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val dropout_back_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1242,7 +1208,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("dropout_back_test2") {
-    val dropout_back_test2 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val dropout_back_test2 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1268,7 +1234,7 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("test_cnn_full1") {
-    val test_cnn_full1 = new DslDriverC[String, Unit] with TensorExp with ScannerLowerExp {
+    val test_cnn_full1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
 
       // FIXME: add proper check for result. see adworkplace/pytorch/cnn_test.py
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1321,61 +1287,35 @@ class AdLMSVectorTest extends FunSuite {
 
         val tot = NewArray[Long](2)
         def lossFun = { (dummy: TensorR) =>
-          varInput.print("Input")
           val resConv = varInput.conv(varConv1, sRow1, sCol1, tot)
-          resConv.print("First conv")
           val resMax = resConv.maxPool(smRow1, smCol1)
-          resMax.print("MaxPool")
           val resRL = resMax.relu()
-          resRL.print("ReLu 2")
           val resConv2 = resRL.conv(varConv2, sRow1, sCol1, tot)
-          resConv2.print("Second conv")
           val resRL2 = resConv2.relu()
-          resRL2.print("ReLu 2")
           val resMMul = varA1 dot resRL2.resize(in3)
-          resMMul.print("Matrix Multiplication")
           val resVAdd = resMMul + varB1
-          resVAdd.print("Vector Addition")
           val resLSM = resVAdd.logSoftmax()
-          resLSM.print("LogSoftMax")
           resLSM.nllLoss(2)
         }
 
         for (x <- 0 until 1000: Rep[Range]) {
           val loss = gradR_loss(lossFun)(Tensor.scalar(0.0f))
-          loss.print("Loss")
 
           // Update weight
           for ((weight, idx) <- NSeq(varConv1, varConv2, varA1, varB1).zipWithIndex) {
-            //weight.print(s"Before ${idx + 1}", derivative = true)
             weight.x.addMul(-0.5f, weight.d)
-            //weight.print(s"After ${idx + 1}")
             weight.clear_grad()
-            //printf("\\n")
           }
         }
       }
     }
-    //test_cnn_full1.eval("abc")
   }
 
   val gene_dir = "/tmp/"
-  def runTest(snippet: DslDriverC[String, Unit]) = {
-    val test = new PrintWriter(new File("/tmp/snippet.cpp"))
-    test.println(snippet.code)
-    test.flush()
-    new java.io.File("/tmp/snippet").delete
-    import scala.sys.process._
-    System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println)
-    System.out.println("Run C++ code")
-    (s"/tmp/snippet a": ProcessBuilder).lines.foreach(System.out.println)
-  }
 
   test("op_conv") {
-    System.out.println("debugging")
 
-    val deb = new DslDriverC[String, Unit] with TensorExp {
+    val deb = new LanternDriverC[String, Unit] {
       import scala.collection.Seq;
 
       @virtualize
@@ -1402,8 +1342,8 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("op_conv_pad") {
-    System.out.println("debugging")
-    val deb = new DslDriverC[String, Unit] with TensorExp {
+
+    val deb = new LanternDriverC[String, Unit] {
       import scala.collection.Seq;
 
       @virtualize
@@ -1429,8 +1369,8 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("backprop_op_conv") {
-    System.out.println("debugging")
-    val deb = new DslDriverC[String, Unit] with TensorExp {
+
+    val deb = new LanternDriverC[String, Unit] {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = TensorR(Tensor.ones(1,1,4,4))
@@ -1464,8 +1404,8 @@ class AdLMSVectorTest extends FunSuite {
   }
 
   test("backprop_op_conv_pad") {
-    System.out.println("debugging")
-    val deb = new DslDriverC[String, Unit] with TensorExp {
+
+    val deb = new LanternDriverC[String, Unit] {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = TensorR(Tensor.ones(1,1,4,4))
@@ -1479,10 +1419,6 @@ class AdLMSVectorTest extends FunSuite {
           output.sum()
         }
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-
-        input.d.print("input_grad")
-        kernel.d.print("kernel_grad")
-        bias.d.print("bias_grad")
 
         // assert equal
         val expect_input_grad = Tensor.fromData(scala.collection.Seq(1,1,4,4),
