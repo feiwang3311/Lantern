@@ -384,69 +384,69 @@ trait DslGenBase extends CGenNumericOpsExtra
     withStream(out) {
       stream.println(templateHeaders.map(x => s"#include $x").mkString("\n"))
       stream.println(raw"""
-using namespace std;
-#ifndef MAP_FILE
-#define MAP_FILE MAP_SHARED
-#endif
-
-int fsize(int fd) {
-  struct stat stat;
-  int res = fstat(fd, &stat);
-  return stat.st_size;
-}
-
-int printll(char *s) {
-  while (*s != '\n' && *s != ',' && *s != '\t') {
-    putchar(*s++);
-  }
-  return 0;
-}
-
-long hash(char *str0, int len) {
-  unsigned char *str = (unsigned char *)str0;
-  unsigned long hash = 5381;
-  int c;
-
-  while ((c = *str++) && len--)
-    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-  return hash;
-}
-
-int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
-void *mallocBase = malloc(HEAP_SIZE);
-void *mallocAddr = mallocBase;
-void *waterMark = mallocBase;
-void *myMalloc(size_t bytes) {
-  void *res = mallocAddr;
-  mallocAddr = (void *)((char *)mallocAddr + bytes);
-  return res;
-}
-
-int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
-  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
-  result->tv_sec = diff / 1000000;
-  result->tv_usec = diff % 1000000;
-  return (diff < 0);
-}
-
-$templateRawCode
-
-void Snippet(char *);
-
-std::random_device rd{};
-std::mt19937 gen{rd()};
-std::normal_distribution<> d{0, 1};
-
-int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    printf("usage: query <filename>\n");
-    return 0;
-  }
-  Snippet(argv[1]);
-  return 0;
-}
-""")
+        |using namespace std;
+        |#ifndef MAP_FILE
+        |#define MAP_FILE MAP_SHARED
+        |#endif
+        |
+        |int fsize(int fd) {
+        |  struct stat stat;
+        |  int res = fstat(fd, &stat);
+        |  return stat.st_size;
+        |}
+        |
+        |int printll(char *s) {
+        |  while (*s != '\n' && *s != ',' && *s != '\t') {
+        |    putchar(*s++);
+        |  }
+        |  return 0;
+        |}
+        |
+        |long hash(char *str0, int len) {
+        |  unsigned char *str = (unsigned char *)str0;
+        |  unsigned long hash = 5381;
+        |  int c;
+        |
+        |  while ((c = *str++) && len--)
+        |    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        |
+        |  return hash;
+        |}
+        |
+        |int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
+        |void *mallocBase = malloc(HEAP_SIZE);
+        |void *mallocAddr = mallocBase;
+        |void *waterMark = mallocBase;
+        |void *myMalloc(size_t bytes) {
+        |  void *res = mallocAddr;
+        |  mallocAddr = (void *)((char *)mallocAddr + bytes);
+        |  return res;
+        |}
+        |
+        |int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
+        |  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
+        |  result->tv_sec = diff / 1000000;
+        |  result->tv_usec = diff % 1000000;
+        |  return (diff < 0);
+        |}
+        |
+        |$templateRawCode
+        |
+        |void Snippet(char *);
+        |
+        |std::random_device rd{};
+        |std::mt19937 gen{rd()};
+        |std::normal_distribution<> d{0, 1};
+        |
+        |int main(int argc, char *argv[]) {
+        |  if (argc != 2) {
+        |    printf("usage: query <filename>\n");
+        |    return 0;
+        |  }
+        |  Snippet(argv[1]);
+        |  return 0;
+        |}
+      """.stripMargin)
     }
     super.emitSource[A](args, body, functionName, out)
   }
@@ -489,25 +489,26 @@ trait DslGenCublas extends DslGenBase {
   override def templateHeaders: NSeq[String] =
     super.templateHeaders ++ NSeq("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
 
-  override def templateRawCode: String = super.templateRawCode + """
-#define CUDA_CALL(f) { \
-  cudaError_t err = (f); \
-  if (err != cudaSuccess) { \
-    fprintf(stderr, "CUDA error occurred: %s (%s:%d)\n", \
-            cudaGetErrorString(err), __FILE__, __LINE__); \
-    exit(err); \
-  } \
-}
-
-#define CUBLAS_CALL(f) { \
-  cublasStatus_t stat = (f); \
-  if (stat != CUBLAS_STATUS_SUCCESS) { \
-    fprintf(stderr, "cuBLAS error occurred: %d (%s:%d)\n", \
-            stat, __FILE__, __LINE__); \
-    exit(stat); \
-  } \
-}
-"""
+  override def templateRawCode: String = super.templateRawCode +
+    """
+      |#define CUDA_CALL(f) { \
+      |  cudaError_t err = (f); \
+      |  if (err != cudaSuccess) { \
+      |    fprintf(stderr, "CUDA error occurred: %s (%s:%d)\n", \
+      |            cudaGetErrorString(err), __FILE__, __LINE__); \
+      |    exit(err); \
+      |  } \
+      |}
+      |
+      |#define CUBLAS_CALL(f) { \
+      |  cublasStatus_t stat = (f); \
+      |  if (stat != CUBLAS_STATUS_SUCCESS) { \
+      |    fprintf(stderr, "cuBLAS error occurred: %d (%s:%d)\n", \
+      |            stat, __FILE__, __LINE__); \
+      |    exit(stat); \
+      |  } \
+      |}
+    """.stripMargin
 }
 
 @virtualize
@@ -516,16 +517,17 @@ trait DslGenCudnn extends DslGenCublas {
   import IR._
 
   override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cuda.h>", "<cudnn.h>")
-  override def templateRawCode: String = super.templateRawCode + """
-#define CUDNN_CALL(f) { \
-  cudnnStatus_t stat = (f); \
-  if (stat != CUDNN_STATUS_SUCCESS) { \
-    fprintf(stderr, "cuDNN error occurred: %d (%s:%d)\n", \
-            stat, __FILE__, __LINE__); \
-    exit(stat); \
-  } \
-}
-"""
+  override def templateRawCode: String = super.templateRawCode +
+    """
+      |#define CUDNN_CALL(f) { \
+      |  cudnnStatus_t stat = (f); \
+      |  if (stat != CUDNN_STATUS_SUCCESS) { \
+      |    fprintf(stderr, "cuDNN error occurred: %d (%s:%d)\n", \
+      |            stat, __FILE__, __LINE__); \
+      |    exit(stat); \
+      |  } \
+      |}
+    """.stripMargin
 }
 
 @virtualize
