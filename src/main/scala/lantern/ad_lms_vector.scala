@@ -827,7 +827,7 @@ trait TensorExp extends Dsl with Diff {
     // the result is to update this so that this += that * y, where * is cartesian product
     def add_cartesian(that: Tensor, y: Tensor) = {
       generateRawComment("add_cartesian")
-      assert(this.rank == 2 && that.shape == Dimensions(this.shape(1)) && y.shape == Dimensions(this.shape(0)) ||
+      assert(this.rank == 2 && that.shape == Dimensions(NSeq(this.shape(1))) && y.shape == Dimensions(NSeq(this.shape(0))) ||
         this.rank == 1 && that.shape == this.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
       val off = var_new(0)
       // TODO remove loop if not used
