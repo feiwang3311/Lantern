@@ -31,7 +31,7 @@ import java.io._
 import scala.annotation.tailrec
 import scala.util.{Try, Success, Failure}
 
-trait ONNXLib extends TensorExp {
+trait ONNXLib extends TensorDsl {
 
   object ParseHelper {
 

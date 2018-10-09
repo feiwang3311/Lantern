@@ -13,7 +13,7 @@ trait Diff {
   def RST(a: =>Unit @diff) = continuations.reset { a; () }
 }
 
-trait DiffApi extends Dsl with Diff {
+trait DiffApi extends DslOps with Diff {
 
   type RDouble = Rep[Double]
 
