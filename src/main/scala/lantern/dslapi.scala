@@ -169,19 +169,19 @@ trait DslExp extends DslOps
   }
 }
 
-trait TensorOps extends DslOps {
+trait GPUOps extends DslOps {
   object NewGPUArray {
     // Allocate an array of the specified size on the GPU.
     def apply[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]] = gpu_array_new(scalarCount)
   }
-  def gpu_array_new[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]] = ???
+  def gpu_array_new[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]]
 }
 
-trait TensorDslExp extends TensorDsl with DslExp {
+trait GPUOpsExp extends DslExp {
   case class GPUArrayNew[T: Manifest](scalarCount: Rep[Int]) extends Def[Array[T]] {
     val m = manifest[T]
   }
-  override def gpu_array_new[T: Manifest](scalarCount: Exp[Int]) = reflectMutable(GPUArrayNew(scalarCount))
+  def gpu_array_new[T: Manifest](scalarCount: Exp[Int]) = reflectMutable(GPUArrayNew(scalarCount))
 }
 
 trait DslGenScala extends ScalaGenNumericOps
@@ -610,9 +610,16 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
   }
 }
 
-abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A, B] { self =>
+abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with GPUOps with GPUOpsExp { self =>
   override val codegen = new DslGenCublas {
     val IR: self.type = self
+
+    override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+      case a@GPUArrayNew(n) =>
+        val dataType = remap(a.m)
+        emitValDef(sym, getCudaMallocArenaString(quote(n), dataType))
+      case _ => super.emitNode(sym,rhs)
+    }
   }
 
   override def eval(a: A) {
@@ -631,9 +638,16 @@ abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A
   }
 }
 
-abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslExp { self =>
+abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with GPUOps with GPUOpsExp { self =>
   override val codegen = new DslGenCudnn {
     val IR: self.type = self
+
+    override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+      case a@GPUArrayNew(n) =>
+        val dataType = remap(a.m)
+        emitValDef(sym, getCudaMallocArenaString(quote(n), dataType))
+      case _ => super.emitNode(sym,rhs)
+    }
   }
 
   override def eval(a: A) {
@@ -656,7 +670,7 @@ abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A,
   * A wrapper around `DslDriverBase` that provides a `wrapper` function that performs backend setup/cleanup.
   * Extend this instead of `DslDriverBase` for correct backend management.
   */
-trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorDslExp { self =>
+trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorDsl with DslExp { self =>
   // Hacky workaround to support trait type parameters with context bounds.
   // `trait LanternDriver[A: Manifest, B: Manifest]` doesn't work.
   // These must be overridden in subclasses.
@@ -685,36 +699,12 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B]
   override def manifestB: Manifest[B] = manifest[B]
 }
 
-abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCublas[A, B] with LanternDriver[A, B] { self =>
-  backend = BackendCublas()
+abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCublas[A, B] with LanternDriver[A, B] with TensorDslCublas { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
-
-  override val codegen = new DslGenCublas {
-    val IR: self.type = self
-
-    override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-      case a@GPUArrayNew(n) =>
-        val dataType = remap(a.m)
-        emitValDef(sym, getCudaMallocArenaString(quote(n), dataType))
-      case _ => super.emitNode(sym,rhs)
-    }
-  }
 }
 
-abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] { self =>
-  backend = BackendCudnn()
+abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] with TensorDslCudnn { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
-
-  override val codegen = new DslGenCudnn {
-    val IR: self.type = self
-
-    override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-      case a@GPUArrayNew(n) =>
-        val dataType = remap(a.m)
-        emitValDef(sym, getCudaMallocArenaString(quote(n), dataType))
-      case _ => super.emitNode(sym,rhs)
-    }
-  }
 }

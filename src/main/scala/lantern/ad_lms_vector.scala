@@ -9,7 +9,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
 import scala.math._
 
-trait TensorDsl extends TensorOps with Diff {
+trait TensorDsl extends DslOps with Diff {
 
   /**
     Memory Management:
@@ -292,107 +292,10 @@ trait TensorDsl extends TensorOps with Diff {
     def apply() = new BackendCPU
   }
 
-  /**
-    * cuBLAS tensor operation backend. WIP.
-    */
-  class BackendCublas protected() extends Backend {
-    override def setup(): Unit = generateRawCode(
-      """cublasHandle_t cublasHandle;
-        |CUBLAS_CALL(cublasCreate(&cublasHandle));
-        |CUDA_CALL(cudaMalloc(&gpuMallocAddr, HEAP_SIZE));
-      """.stripMargin)
-
-    override def cleanup(): Unit = generateRawCode(
-      """CUBLAS_CALL(cublasDestroy(cublasHandle));
-        |CUDA_CALL(cudaFree(gpuMallocAddr));
-      """.stripMargin)
-
-    override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewGPUArray[T](length)
-
-    // Reference:
-    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
-    // FIXME: `sdot` seems to fail without `cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_DEVICE)`.
-    def sdot(n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) =
-      unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",1,", b, ",1,", result, "))")
-
-    override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
-      val res = mallocArray[Float](1)
-      sdot(x.scalarCount, x.data, y.data, res)
-      Tensor(res, 1)
-    }
-
-    // Reference:
-    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
-    def sgemv(m: Int, n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
-        m, ",", n, ",", one, ",",
-        a, ",", m, ",", b, ",", zero, ",", result, ",", one, "))")
-    }
-
-    override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
-      val m = x.shape(0)
-      val n = x.shape(1)
-      val res = mallocArray[Float](m)
-      sgemv(m, n, x.data, y.data, res)
-      Tensor(res, m)
-    }
-
-    // Reference:
-    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
-    def sgemm(m: Int, n: Int, k: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-        m, ",", n, ",", k, ",", one, ",",
-        a, ",", m, ",", b, ",", k, ",", zero, ",", result, ",", m, "))")
-    }
-
-    override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = {
-      val m = x.shape(0)
-      val n = y.shape(1)
-      val k = y.shape(0)
-      val res = mallocArray[Float](m * n)
-      sgemm(m, n, k, x.data, y.data, res)
-      Tensor(res, m, n)
-    }
-  }
-  object BackendCublas {
-    def apply() = new BackendCublas
-  }
-
-  /**
-    * cuDNN tensor operation backend. WIP.
-    * Extends `BackendCublas` to leverage cuBLAS primitives.
-    */
-  class BackendCudnn protected() extends BackendCublas {
-    override def setup(): Unit = {
-      super.setup()
-      generateRawCode("cudnnHandle_t cudnnHandle;\nCUDNN_CALL(cudnnCreate(&cudnnHandle));")
-    }
-
-    override def cleanup(): Unit = {
-      super.cleanup()
-      generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
-    }
-  }
-  object BackendCudnn {
-    def apply() = new BackendCudnn
-  }
-
   // The current backend for code generation.
   // To switch code generation to a different backend, simply change this value
   // in your DSL program.
   var backend: Backend = BackendCPU()
-
-  private def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
-
-  private def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
 
   class Tensor(val data: Rep[Array[Float]], val dimensions: NSeq[Int]) extends Serializable {
 
@@ -406,22 +309,6 @@ trait TensorDsl extends TensorOps with Diff {
 
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
     // def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i + 1) +: shape.tail)
-
-    // Get a CPU-allocated copy of this tensor.
-    def toCPU(): Tensor = {
-      generateRawComment("'toCPU' invocation.")
-      val res = BackendCPU().mallocArray[Float](scalarCount)
-      cudaMemcpyDeviceToHost(res, data, scalarCount)
-      Tensor(res, shape: _*)
-    }
-
-    // Get a GPU-allocated copy of this tensor.
-    def toGPU(): Tensor = {
-      generateRawComment("'toGPU' invocation.")
-      val res = BackendCudnn().mallocArray[Float](scalarCount)
-      cudaMemcpyHostToDevice(res, data, scalarCount)
-      Tensor(res, shape: _*)
-    }
 
     @virtualize
     def clipAt(bound: Float) = {
@@ -2579,5 +2466,133 @@ trait TensorDsl extends TensorOps with Diff {
   def resetMallocAddr(addr: Rep[Long]) = {
     unchecked[Unit]("mallocAddr = (void*)", addr)
   }
+}
 
+trait TensorDslCublas extends TensorDsl with GPUOps {
+  /**
+    * cuBLAS tensor operation backend. WIP.
+    */
+  class BackendCublas protected() extends Backend {
+    override def setup(): Unit = generateRawCode(
+      """cublasHandle_t cublasHandle;
+        |CUBLAS_CALL(cublasCreate(&cublasHandle));
+        |CUDA_CALL(cudaMalloc(&gpuMallocAddr, HEAP_SIZE));
+      """.stripMargin)
+
+    override def cleanup(): Unit = generateRawCode(
+      """CUBLAS_CALL(cublasDestroy(cublasHandle));
+        |CUDA_CALL(cudaFree(gpuMallocAddr));
+      """.stripMargin)
+
+    override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewGPUArray[T](length)
+
+    // Reference:
+    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
+    // FIXME: `sdot` seems to fail without `cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_DEVICE)`.
+    def sdot(n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) =
+    unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",1,", b, ",1,", result, "))")
+
+    override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
+      val res = mallocArray[Float](1)
+      sdot(x.scalarCount, x.data, y.data, res)
+      Tensor(res, 1)
+    }
+
+    // Reference:
+    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
+    def sgemv(m: Int, n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
+        m, ",", n, ",", one, ",",
+        a, ",", m, ",", b, ",", zero, ",", result, ",", one, "))")
+    }
+
+    override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
+      val m = x.shape(0)
+      val n = x.shape(1)
+      val res = mallocArray[Float](m)
+      sgemv(m, n, x.data, y.data, res)
+      Tensor(res, m)
+    }
+
+    // Reference:
+    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
+    def sgemm(m: Int, n: Int, k: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+        m, ",", n, ",", k, ",", one, ",",
+        a, ",", m, ",", b, ",", k, ",", zero, ",", result, ",", m, "))")
+    }
+
+    override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = {
+      val m = x.shape(0)
+      val n = y.shape(1)
+      val k = y.shape(0)
+      val res = mallocArray[Float](m * n)
+      sgemm(m, n, k, x.data, y.data, res)
+      Tensor(res, m, n)
+    }
+  }
+
+  object BackendCublas {
+    def apply() = new BackendCublas
+  }
+
+  backend = BackendCublas()
+
+  /**
+    * Defines tensor transfer operations.
+    */
+  class TensorTransferOps(t: Tensor) {
+    // Get a CPU-allocated copy of this tensor.
+    def toCPU(): Tensor = {
+      generateRawComment("'toCPU' invocation.")
+      val res = BackendCPU().mallocArray[Float](t.scalarCount)
+      cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
+      Tensor(res, t.shape: _*)
+    }
+
+    // Get a GPU-allocated copy of this tensor.
+    def toGPU(): Tensor = {
+      generateRawComment("'toGPU' invocation.")
+      val res = BackendCublas().mallocArray[Float](t.scalarCount)
+      cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
+      Tensor(res, t.shape: _*)
+    }
+  }
+  implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
+
+  protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
+
+  protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
+}
+
+trait TensorDslCudnn extends TensorDslCublas {
+  /**
+    * cuDNN tensor operation backend. WIP.
+    * Extends `BackendCublas` to leverage cuBLAS primitives.
+    */
+  class BackendCudnn protected() extends BackendCublas {
+    override def setup(): Unit = {
+      super.setup()
+      generateRawCode("cudnnHandle_t cudnnHandle;\nCUDNN_CALL(cudnnCreate(&cudnnHandle));")
+    }
+
+    override def cleanup(): Unit = {
+      super.cleanup()
+      generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
+    }
+  }
+
+  object BackendCudnn {
+    def apply() = new BackendCudnn
+  }
+
+  backend = BackendCudnn()
 }
