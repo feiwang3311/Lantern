@@ -152,7 +152,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val loss = gradR_loss(model)(Tensor.zeros(1))
         Tensor.assertEqual(loss, (matrix dot vector).sum(), "11")
         Tensor.assertEqual(ma.d, Tensor.expand(vector, dim0), "12")
-        val sol = matrix.sumOnDim1()
+        val sol = matrix.sum2D(dim = 0)
         Tensor.assertEqual(ve.d, sol, "13")
         ()
       }
@@ -1325,7 +1325,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val bias = Tensor.ones(1)
         val strides: Seq[Int] = List(2, 2).toSeq
         val pads: Seq[Int] = List(0,0,0,0).toSeq
-        val output = input.conv2D_batch(kernel, bias, strides, pads)
+        val output = input.conv2D_batch(kernel, Some(bias), strides, pads)
 
         // assert equal
         val expect = Tensor.fromData(scala.collection.Seq(1,1,3,3), 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f)
@@ -1353,7 +1353,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val bias = Tensor.zeros(1)
         val strides: Seq[Int] = List(3, 3).toSeq
         val pads: Seq[Int] = List(1, 1, 1, 1).toSeq
-        val output = input.conv2D_batch(kernel, bias, strides, pads)
+        val output = input.conv2D_batch(kernel, Some(bias), strides, pads)
 
         // assert equal
         val expect = Tensor.fromData(scala.collection.Seq(1,1,2,2), 4.0f, 4.0f, 4.0f, 4.0f)
@@ -1362,6 +1362,30 @@ class AdLMSVectorTest extends LanternFunSuite {
     }
 
     val debug_file = new PrintWriter(new File(gene_dir + "conv_pad.cpp"))
+    debug_file.println(deb.code)
+    debug_file.flush()
+
+    runTest(deb)
+  }
+
+  test("op_conv_pad_nobias") {
+    val deb = new LanternDriverC[String, Unit] {
+      import scala.collection.Seq;
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.ones(1, 1, 4, 4)
+        val kernel = Tensor.ones(1, 1, 3, 3)
+        val strides: Seq[Int] = List(3, 3).toSeq
+        val pads: Seq[Int] = List(1, 1, 1, 1).toSeq
+        val output = input.conv2D_batch(kernel, None, strides, pads)
+
+        val expect = Tensor.fromData(scala.collection.Seq(1,1,2,2), 4.0f, 4.0f, 4.0f, 4.0f)
+        Tensor.assertEqual(expect, output, "expect and output are")
+      }
+    }
+
+    val debug_file = new PrintWriter(new File(gene_dir + "conv_pad_nobias.cpp"))
     debug_file.println(deb.code)
     debug_file.flush()
 
@@ -1380,7 +1404,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val pads: scala.collection.Seq[Int] = List(0,0,0,0).toSeq
 
         def lossFun(x: TensorR) = {
-          val output = input.convBBP(kernel, bias, strides, pads)
+          val output = input.convBBP(kernel, Some(bias), strides, pads)
           output.sum()
         }
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
@@ -1415,7 +1439,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val pads: scala.collection.Seq[Int] = List(1,1,1,1).toSeq
 
         def lossFun(x: TensorR) = {
-          val output = input.convBBP(kernel, bias, strides, pads)
+          val output = input.convBBP(kernel, Some(bias), strides, pads)
           output.sum()
         }
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
@@ -1435,6 +1459,32 @@ class AdLMSVectorTest extends LanternFunSuite {
     debug_file.println(deb.code)
     debug_file.flush()
 
+    runTest(deb)
+  }
+
+  test("averagePool_backprop") {
+    val deb = new LanternDriverC[String, Unit] {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = TensorR(Tensor.ones(1,1,4,4))
+        def lossFun(x: TensorR) = {
+          input.averagePoolBK(List(2, 2).toSeq, List(2, 2).toSeq, None).sum()
+        }
+        gradR_loss(lossFun)(Tensor.zeros(1))
+        // assert equal
+        val expected_grad = Tensor.fill(0.25f, 1, 1, 4, 4)
+        Tensor.assertEqual(expected_grad, input.d, "expect and input.gradient are")
+
+        input.clear_grad()
+        def lossFun2(x: TensorR) = {
+          input.averagePoolBK(List(2, 2).toSeq, List(1, 1).toSeq, None).sum()
+        }
+        gradR_loss(lossFun2)(Tensor.zeros(1))
+        // assert equal
+        val expected_grad2 = Tensor(Array[Float](0.25f, 0.5f, 0.5f, 0.25f, 0.5f, 1, 1, 0.5f, 0.5f, 1, 1, 0.5f, 0.25f, 0.5f, 0.5f, 0.25f), 1, 1, 4, 4)
+        Tensor.assertEqual(expected_grad2, input.d, "")
+      }
+    }
     runTest(deb)
   }
 }

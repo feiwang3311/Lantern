@@ -21,22 +21,11 @@ import scala.collection.mutable.Map;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 
-class ONNXTest extends FunSuite {
+class ONNXTest extends LanternFunSuite {
 
   val model_file_all = (name: String) => s"""${sys.env("HOME")}/onnx_models/$name/model.onnx"""
   val model_dir_all = (name: String) => s"""${sys.env("HOME")}/onnx_models/$name/"""
   val gene_dir = "/tmp/"
-  def runTest(snippet: DslDriverC[String, Unit]) = {
-    val test = new PrintWriter(new File("/tmp/snippet.cpp"))
-    test.println(snippet.code)
-    test.flush()
-    new java.io.File("/tmp/snippet").delete
-    import scala.sys.process._
-    System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 /tmp/snippet.cpp -o /tmp/snippet": ProcessBuilder).lines.foreach(System.out.println)
-    System.out.println("Run C++ code")
-    (s"/tmp/snippet a": ProcessBuilder).lines.foreach(System.out.println)
-  }
 
   test("onnx_reading_basic") {
 
@@ -310,7 +299,7 @@ class ONNXTest extends FunSuite {
               val pads = atts("pads")
               val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
-              val out = input1.conv2D_batch(input2, input3, strides, pads)
+              val out = input1.conv2D_batch(input2, Some(input3), strides, pads)
               intermediate_map_tensor += (outputs.head -> out)
             }
 
@@ -350,7 +339,7 @@ class ONNXTest extends FunSuite {
               assert(kernel_shape.size == 2, "kernel_shape should be length 2")
 
               // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-              val (out, dummy) = input1.maxPool_k_batch(kernel_shape, strides)
+              val (out, dummy) = input1.maxPool_k_batch(kernel_shape, strides, None)
               intermediate_map_tensor += (outputs.head -> out)
             }
 
@@ -459,7 +448,7 @@ class ONNXTest extends FunSuite {
     val model_dir = model_dir_all("squeezenet")
     System.out.println(s"testing reading ONNX model using library from $model_file")
 
-    val inference_func = new DslDriverC[String, Unit] with ONNXLib {
+    val inference_func = new LanternDriverC[String, Unit] with ONNXLib {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -520,11 +509,11 @@ class ONNXTest extends FunSuite {
 
   test("resnet_inference") {
 
-    val model_file = model_file_all("resnet")
-    val model_dir = model_dir_all("resnet")
+    val model_file = model_file_all("resnet50")
+    val model_dir = model_dir_all("resnet50")
     System.out.println(s"testing reading ONNX model using library from $model_file")
 
-    val inference_func = new DslDriverC[String, Unit] with ONNXLib {
+    val inference_func = new LanternDriverC[String, Unit] with ONNXLib {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -537,12 +526,14 @@ class ONNXTest extends FunSuite {
         val input = readTensor(input_file).tensor
         val output = readTensor(output_file).tensor
         val output1 = func(input)
+        output.print("true output")
+        output1.print("computed output")
         Tensor.assertEqual(output, output1)
       }
     }
     val resnet_file = new PrintWriter(new File(gene_dir + "resnet.cpp"))
     resnet_file.println(inference_func.code)
     resnet_file.flush()
-    runTest(inference_func)
+    //runTest(inference_func)
   }
 }

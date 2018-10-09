@@ -256,8 +256,8 @@ class MnistCNN extends FunSuite {
         val linear2 = Linear1D(inSize = 50, outSize = 10)
 
         def apply(in: TensorR): TensorR @diff = {
-          val step1 = conv1(in).relu().maxPoolBK(kernels = NSeq(2,2), strides = NSeq(2,2))
-          val step2 = conv2(step1).relu().maxPoolBK(kernels = NSeq(2,2), strides = NSeq(2,2))
+          val step1 = conv1(in).relu().maxPoolBK(kernels = NSeq(2,2), strides = NSeq(2,2), None)
+          val step2 = conv2(step1).relu().maxPoolBK(kernels = NSeq(2,2), strides = NSeq(2,2), None)
           val step3 = linear1(step2.resize(1, 320)).dropout(0.5f)
           linear2(step3)
         }

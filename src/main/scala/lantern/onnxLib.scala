@@ -13,27 +13,27 @@ import scala.collection.{Seq => NSeq}
 import scala.math._
 import scala.collection.mutable.{Map => MMap};
 import scala.io.Source
+import scala.annotation.tailrec
+import scala.util.{Try, Success, Failure}
 
-import java.io.PrintWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
-import java.io.ByteArrayInputStream;
+import java.nio._
+import java.io._
 import java.util.Scanner;
 
 import onnx.onnx_ml;
 
-import java.nio._
-import java.io._
-import scala.annotation.tailrec
-import scala.util.{Try, Success, Failure}
-
 trait ONNXLib extends TensorExp {
 
   object ParseHelper {
+
+    def toInts(ba: Array[Byte]): Seq[Int] = {
+      val bs = new ByteArrayInputStream(ba)
+      val ds = new DataInputStream(bs)
+      val ints = toBigEndiansInts(ds)
+      bs.close()
+      ds.close()
+      ints
+    }
 
     def toFloats(ba: Array[Byte]): Seq[Float] = {
       val bs = new ByteArrayInputStream(ba)
@@ -42,6 +42,22 @@ trait ONNXLib extends TensorExp {
       bs.close()
       ds.close()
       floats
+    }
+
+    def toBigEndiansInts(stream: DataInputStream): Seq[Int] = {
+      val bf = streamToByteBuffer(stream); bf.rewind()
+      val intBuffer = bf.order(ByteOrder.LITTLE_ENDIAN).asLongBuffer();
+      val n = intBuffer.remaining
+
+      @tailrec
+      def intBufferToArray_(idx: Int, ints: Array[Int]): Array[Int] = {
+        if (intBuffer.hasRemaining) {
+          ints(idx) = intBuffer.get.toInt
+          intBufferToArray_(idx + 1, ints)
+        } else ints
+      }
+      val intArray = scala.Array.ofDim[Int](n)
+      intBufferToArray_(0, intArray)
     }
 
     def toBigEndians(stream: DataInputStream): Seq[Float] = {
@@ -54,12 +70,12 @@ trait ONNXLib extends TensorExp {
 
       @tailrec
       def floatBufferToArray_(idx: Int, floats: Array[Float]):  Array[Float] = {
-          if (floatBuffer.hasRemaining) {
-              // floatBuffer.get returns current an increments position
-              floats(idx) = floatBuffer.get
-              floatBufferToArray_(idx + 1, floats)
-          }
-          else floats
+        if (floatBuffer.hasRemaining) {
+          // floatBuffer.get returns current an increments position
+          floats(idx) = floatBuffer.get
+          floatBufferToArray_(idx + 1, floats)
+        }
+        else floats
       }
       // allocate result float array
       val floatArray = scala.Array.ofDim[Float](n)
@@ -83,16 +99,24 @@ trait ONNXLib extends TensorExp {
 
     // TODO (Fei Wang): problem: this function is assuming that the data type is Float, will break if not!!!
     def extract_init(init: onnx_ml.TensorProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])) = {
-      //System.out.println(init.toProtoString)
       val dims: Seq[Int] = init.dims.map(x => x.toInt)
       val name: String = init.getName
       val datatype: onnx_ml.TensorProto.DataType = init.getDataType
-      if (datatype.name != "FLOAT") throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
-      val rawdata: com.google.protobuf.ByteString = init.getRawData
-      val floatarray: Array[Float] = toFloats(rawdata.toByteArray).toArray
-      // make sure that the initialization values correspond with the dims
-      assert(floatarray.length == dims.fold(1)(_ * _), s"${floatarray.length} != $dims.fold(1)")
-      (name -> (dims, datatype, floatarray))
+      if (datatype.name == "FLOAT") {
+        val rawdata: com.google.protobuf.ByteString = init.getRawData
+        val floatarray: Array[Float] = toFloats(rawdata.toByteArray).toArray
+        // make sure that the initialization values correspond with the dims
+        assert(floatarray.length == dims.fold(1)(_ * _), s"${floatarray.length} != $dims.fold(1)")
+        (name, (dims, datatype, floatarray))
+      } else if (datatype.name == "INT64") {
+        val rawdata: com.google.protobuf.ByteString = init.getRawData
+        val intarray: Array[Int] = toInts(rawdata.toByteArray).toArray
+        assert(intarray.length == dims.product, s"${intarray.length} != $dims.product")
+        (name, (dims, datatype, intarray.map(_.toFloat)))
+      } else {
+        System.out.println(init.toProtoString)
+        throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
+      }
     }
 
     // extract information from ValueInfoProto
@@ -126,9 +150,12 @@ trait ONNXLib extends TensorExp {
     val initializer_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] =
       initializer.map(init => ParseHelper.extract_init(init)).toMap
 
+    // filter out Int64 typed Tensor
+    val intMap: Map[String, (Seq[Int], Array[Int])] =
+      initializer_map.filter{case (_, v) => v._2.name == "INT64"}.map{ case (k, v) => (k, (v._1, v._3.map(_.toInt)))}.toMap
+
     val initializer_map_tensor: Map[String, Tensor] =
       initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
-      // initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor.rand(dims: _*)) }
     val initializer_map_tensorR: Map[String, TensorR] =
       initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
@@ -159,33 +186,69 @@ trait ONNXLib extends TensorExp {
 
     abstract class Node
     case class convNode(inputs: Seq[String], output: String, attributes: Map[String, Seq[Int]]) extends Node
+    case class bnNode(inputs: Seq[String], output: String, epsilon: Float) extends Node
+    case class sumNode(inputs: Seq[String], output: String) extends Node
     case class reluNode(input: String, output: String) extends Node
     case class maxpoolNode(input: String, output: String, attributes: Map[String, Seq[Int]]) extends Node
+    case class averagePoolNode(input: String, output: String, attributes: Map[String, Seq[Int]]) extends Node
     case class concatNode(inputs: Seq[String], output: String, axis: Int) extends Node
     case class dropoutNode(input: String, outputs: Seq[String], ratio: Float) extends Node
     case class globalAveragePoolNode(input: String, output: String) extends Node
     case class softmaxNode(input: String, output: String) extends Node
+    case class reshapeNode(inputs: Seq[String], output: String) extends Node
+    case class gemmNode(inputs: Seq[String], output: String, attInts: Map[String, Int], attFloats: Map[String, Float]) extends Node
+
+    def getConvMaxPAvPAttr(attributes: Seq[onnx_ml.AttributeProto]): Map[String, Seq[Int]] = {
+      assert (attributes.size == 2 || attributes.size == 3, s"number of attributes of a conv node should be 2 or 3, got ${attributes}")
+      val atts: Map[String, Seq[Int]] = attributes.map(att => att.getName -> att.ints.map(x => x.toInt)).toMap
+      assert (atts.contains("strides"), "attributes of a conv/maxP/avP node should have strides")
+      assert (atts.contains("kernel_shape"), "attributes of a conv/maxP/avP node should have kernel_shape")
+      assert(atts("strides").size == 2, "strides should be length 2")
+      assert(atts("kernel_shape").size == 2, "kernel_shape should be length 2")
+      if (attributes.size == 3) {
+        assert (atts.contains("pads"), "attributes of a conv/maxP/avP node should have pads")
+        atts
+      } else {
+        atts + (("pads", NSeq(0, 0, 0, 0)))
+      }
+    }
 
     val allNodes: Seq[Node] = nodes.map { node =>
       node.getOpType match {
 
         case "Conv" => {
           val inputs: Seq[String] = node.input
-          assert (inputs.size == 3, s"number of inputs of a conv node should always be 3, got ${inputs.size}")
+          assert (inputs.size == 2 || inputs.size == 3, s"number of inputs of a conv node should always be 2 or 3, got ${inputs.size}")
 
           val outputs: Seq[String] = node.output
           assert (outputs.size == 1, "number of output of a conv node should always be 1")
 
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-          assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
-          val atts: Map[String, Seq[Int]] = attributes.map(att => att.getName -> att.ints.map(x => x.toInt)).toMap
-          assert (atts.contains("strides"), "attributes of a conv node should have strides")
-          assert (atts.contains("pads"), "attributes of a conv node should have pads")
-          assert (atts.contains("kernel_shape"), "attributes of a conv node should have kernel_shape")
-          assert(atts("strides").size == 2, "strides should be length 2")
-          assert(atts("kernel_shape").size == 2, "kernel_shape should be length 2")
+          convNode(inputs, outputs.head, getConvMaxPAvPAttr(attributes))
+        }
 
-          convNode(inputs, outputs.head, atts)
+        case "BatchNormalization" => {
+          val inputs: Seq[String] = node.input
+          assert (inputs.size == 5, s"Number of inputs for a batch normalization layer should be 5, got ${inputs.size}")
+
+          val outputs: Seq[String] = node.output
+          assert (outputs.size == 1, s"number of outputs of a batch normalization layer should be 1, got ${outputs.size}")
+
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+          assert (attributes.size == 1, s"number of attributes of a batch normalization layer should be 1, got ${attributes.size}")
+          val epsilon: Float = attributes.head.getF.toFloat
+
+          bnNode(inputs, outputs.head, epsilon)
+        }
+
+        case "Sum" => {
+          val inputs: Seq[String] = node.input
+          assert (inputs.size == 2, s"number of inputs for Sum layer should be 2, got ${inputs.size}")
+
+          val outputs: Seq[String] = node.output
+          assert (outputs.size == 1, s"number of outputs for Sum layer should be 1, got ${outputs.size}")
+
+          sumNode(inputs, outputs.head)
         }
 
         case "Relu" => {
@@ -208,16 +271,8 @@ trait ONNXLib extends TensorExp {
           assert (outputs.size == 1, "number of outputs of a maxpool node should always be 1")
 
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-          assert (attributes.size == 3, "number of attributes of a conv node should always be 3")
-          val atts: Map[String, Seq[Int]] = attributes.map(att => att.getName -> att.ints.map(x => x.toInt)).toMap
-          assert (atts.contains("strides"), "attributes of a conv node should have strides")
-          assert (atts.contains("pads"), "attributes of a conv node should have pads")
-          assert (atts.contains("kernel_shape"), "attributes of a conv node should have kernel_shape")
-          assert(atts("strides").size == 2, "strides should be length 2")
-          assert(atts("kernel_shape").size == 2, "kernel_shape should be length 2")
-          // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
 
-          maxpoolNode(inputs.head, outputs.head, atts)
+          maxpoolNode(inputs.head, outputs.head, getConvMaxPAvPAttr(attributes))
         }
 
         case "Concat" => {
@@ -246,7 +301,6 @@ trait ONNXLib extends TensorExp {
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
           assert (attributes.size == 1, "number of attributes for drop out node should be 1")
           val ratio: Float = attributes.head.getF
-          // TODO: (Fei Wang) for inference, should dropout be ignored??
 
           dropoutNode(inputs.head, outputs, ratio)
         }
@@ -262,6 +316,17 @@ trait ONNXLib extends TensorExp {
           globalAveragePoolNode(inputs.head, outputs.head)
         }
 
+        case "AveragePool" => {
+          val inputs: Seq[String] = node.input
+          assert (inputs.size == 1, s"number of inputs for AveragePool layer should be 1, got ${inputs.size}")
+
+          val outputs: Seq[String] = node.output
+          assert (outputs.size == 1, s"number of outputs for AveragePool layer should be 1, got ${outputs.size}")
+
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+          averagePoolNode(inputs.head, outputs.head, getConvMaxPAvPAttr(attributes))
+        }
+
         case "Softmax" => {
 
           val inputs: Seq[String] = node.input
@@ -271,6 +336,32 @@ trait ONNXLib extends TensorExp {
           assert (outputs.size == 1, "number of outputs for softmax node should be 1")
 
           softmaxNode(inputs.head, outputs.head)
+        }
+
+        case "Reshape" => {
+          val inputs: Seq[String] = node.input
+          assert (inputs.size == 2, s"number of inputs for Reshape layer should be 2")
+
+          val outputs: Seq[String] = node.output
+          assert (outputs.size == 1, s"number of outputs for Reshape layer should be 1")
+
+          reshapeNode(inputs, outputs.head)
+        }
+
+        case "Gemm" => {
+          val inputs: Seq[String] = node.input
+          assert (inputs.size == 3, s"number of inputs for Gemm layer should be 3, got ${inputs.size}")
+
+          val outputs: Seq[String] = node.output
+          assert (outputs.size == 1, s"number of outputs for Gemm layer should be 1, got ${outputs.size}")
+
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+
+          val attsInts = attributes.filter(att => att.getName == "transA" || att.getName == "transB").map(att => att.getName -> att.getI.toInt).toMap
+          val attsFloats = attributes.filter(att => att.getName == "alpha" || att.getName == "beta").map(att => att.getName -> att.getF.toFloat).toMap
+          // val transB: Int = attributes.head.getI.toInt
+
+          gemmNode(inputs, outputs.head, attsInts, attsFloats)
         }
 
         case _ => throw new RuntimeException("Node not yet implemented")
@@ -320,14 +411,14 @@ trait ONNXLib extends TensorExp {
 
             val input1 = get_from_two_maps(inputs.head)
             val input2 = get_from_two_maps(inputs.tail.head)
-            val input3 = get_from_two_maps(inputs.last)
+            // bias tensor may not exist
+            val input3 = if (inputs.size == 2) None else Some(get_from_two_maps(inputs.last))
 
             val strides = atts("strides")
-            val pads = atts("pads")
+            val pads = atts("pads")                  // pads may be zero
             val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
             val out = input1.conv2D_batch(input2, input3, strides, pads)
-            out.printHead(msg = "conv")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -335,7 +426,6 @@ trait ONNXLib extends TensorExp {
 
             val in = get_from_two_maps(input)
             val out = in.relu()
-            out.printHead(msg = "relu")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -344,12 +434,22 @@ trait ONNXLib extends TensorExp {
             val in = get_from_two_maps(input)
 
             val strides = atts("strides")
-            val pads = atts("pads")
+            val pads = atts("pads")                     // pads may be zero
             val kernel_shape = atts("kernel_shape")
 
-            // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-            val (out, _) = in.maxPool_k_batch(kernel_shape, strides)
-            out.printHead(msg = "maxpool")
+            val (out, _) = in.maxPool_k_batch(kernel_shape, strides, Some(pads))
+            intermediate_map_tensor += (output -> out)
+          }
+
+          case averagePoolNode(input, output, atts) => {
+
+            val input1 = get_from_two_maps(input)
+
+            val strides = atts("strides")
+            val kernel = atts("kernel_shape")
+            val pads = atts("pads")           // pads may be zero
+
+            val out = input1.averagePool_batch(kernel, strides, Some(pads))
             intermediate_map_tensor += (output -> out)
           }
 
@@ -357,7 +457,6 @@ trait ONNXLib extends TensorExp {
 
             val input_s = inputs.map(x => get_from_two_maps(x))
             val out = input_s.head.concat(axis, input_s.tail: _*)
-            out.printHead(msg = "concat")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -365,18 +464,13 @@ trait ONNXLib extends TensorExp {
 
             // dropoutNode in inference function should act as identity function
             val in = get_from_two_maps(input)
-            // val (out1, out2) = in.dropout(ratio)
-            in.printHead(msg = "dropout")
             intermediate_map_tensor += (outputs.head -> in)
-            // intermediate_map_tensor += (outputs.head -> out1)
-            // intermediate_map_tensor += (outputs.last -> out2)
           }
 
           case globalAveragePoolNode(input, output) => {
 
             val in = get_from_two_maps(input)
             val out = in.global_ave_batch()
-            out.printHead(count = 100, msg = "gav")
             intermediate_map_tensor += (output -> out)
           }
 
@@ -384,11 +478,57 @@ trait ONNXLib extends TensorExp {
 
             val in = get_from_two_maps(input)
             val out = in.softmax_batch()
-            out.printHead(count = 100, msg = "softmax")
             intermediate_map_tensor += (output -> out)
           }
 
-          case _ => throw new RuntimeException("not yet implemented")
+          case bnNode(inputs, output, epsilon) => {
+
+            val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(get_from_two_maps(_))
+            val out1 = (in - runningMean.resize(-1,1,1)) / (runningVariance + epsilon).sqrt().resize(-1, 1, 1)
+            val out2 = out1 * scale.resize(-1,1,1) + bias.resize(-1,1,1)
+            intermediate_map_tensor += (output -> out2)
+          }
+
+          case sumNode(inputs, output) => {
+
+            val input1 = get_from_two_maps(inputs.head)
+            val input2 = get_from_two_maps(inputs.last)
+            val out = input1 + input2
+            intermediate_map_tensor += (output -> out)
+          }
+
+          case reshapeNode(inputs, output) => {
+
+            val input1 = get_from_two_maps(inputs.head)
+            // input2 should be Int64 tensor (we can find it in intMap)
+            val (dim2, input2: Array[Int]) = intMap(inputs.last)
+            assert (dim2.size == 1, s"reshape parameter (if presented as a tensor) should be dim 1, got ${dim2.size}")
+            val out = input1.resize(input2.toSeq: _*)
+
+            intermediate_map_tensor += (output -> out)
+          }
+
+          case gemmNode(inputs, output, attInts, attFloats) => {
+
+            val input1 = get_from_two_maps(inputs.head)
+            val input2 = get_from_two_maps(inputs.tail.head)
+            val input3 = get_from_two_maps(inputs.last)
+
+            val alpha = attFloats.getOrElse("alpha", 1.0f)
+            val beta  = attFloats.getOrElse("beta", 1.0f)
+            val transA = attInts.getOrElse("transA", 0)
+            val transB = attInts.getOrElse("transB", 0)
+
+            val out = (transA, transB) match {
+              case (0, 0) => input1.dot(input2) * alpha + input3 * beta
+              case (0, 1) => input1.dot(input2.trans()) * alpha + input3 * beta
+              case (1, 0) => input1.trans().dot(input2) * alpha + input3 * beta
+              case (1, 1) => input1.trans().dot(input2.trans()) * alpha + input3 * beta
+            }
+            intermediate_map_tensor += (output -> out)
+          }
+
+          case x => throw new RuntimeException(s"not yet implemented, $x")
         }
       }
 
@@ -431,7 +571,7 @@ trait ONNXLib extends TensorExp {
           val pads = atts("pads")
           val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
-          val out = input1.convBBP(input2, input3, strides, pads)
+          val out = input1.convBBP(input2, Some(input3), strides, pads)
           intermediate_map_tensorR.update(output, out)
         } else if (node.isInstanceOf[reluNode]) {
           val reluNode(input, output) = node
@@ -445,7 +585,7 @@ trait ONNXLib extends TensorExp {
           val pads = atts("pads")
           val kernel_shape = atts("kernel_shape")
           // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-          val out = in.maxPoolBK(kernel_shape, strides)
+          val out = in.maxPoolBK(kernel_shape, strides, None)
           intermediate_map_tensorR.update(output, out)
         } else if (node.isInstanceOf[concatNode]) {
           val concatNode(inputs, output, axis) = node
