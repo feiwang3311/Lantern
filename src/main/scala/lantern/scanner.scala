@@ -5,7 +5,7 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms.common._
 
-trait ScannerLowerBase extends Base with UncheckedOps { this: Dsl =>
+trait ScannerLowerBase extends Base with UncheckedOps { this: DslOps =>
   def open(name: Rep[String]): Rep[Int]
   def close(fd: Rep[Int]): Rep[Unit]
   def filelen(fd: Rep[Int]): Rep[Int]

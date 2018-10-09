@@ -7,7 +7,7 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
 
-trait TestExp extends Dsl {
+trait TestExp extends DslOps {
   type Size = Int
 
   object Size {

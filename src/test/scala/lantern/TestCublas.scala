@@ -46,5 +46,4 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(mmdot)
   }
-
 }
