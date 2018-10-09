@@ -388,6 +388,12 @@ trait TensorDsl extends TensorOps with Diff {
   // in your DSL program.
   var backend: Backend = BackendCPU()
 
+  private def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
+
+  private def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
+
   class Tensor(val data: Rep[Array[Float]], val dimensions: NSeq[Int]) extends Serializable {
 
     def shape = Dimensions(dimensions)
@@ -400,6 +406,22 @@ trait TensorDsl extends TensorOps with Diff {
 
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
     // def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i + 1) +: shape.tail)
+
+    // Get a CPU-allocated copy of this tensor.
+    def toCPU(): Tensor = {
+      generateRawComment("'toCPU' invocation.")
+      val res = BackendCPU().mallocArray[Float](scalarCount)
+      cudaMemcpyDeviceToHost(res, data, scalarCount)
+      Tensor(res, shape: _*)
+    }
+
+    // Get a GPU-allocated copy of this tensor.
+    def toGPU(): Tensor = {
+      generateRawComment("'toGPU' invocation.")
+      val res = BackendCudnn().mallocArray[Float](scalarCount)
+      cudaMemcpyHostToDevice(res, data, scalarCount)
+      Tensor(res, shape: _*)
+    }
 
     @virtualize
     def clipAt(bound: Float) = {

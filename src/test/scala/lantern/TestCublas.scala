@@ -10,7 +10,6 @@ class TestCublas extends LanternFunSuite {
     val vvdot = new LanternDriverCublas[String, Unit] {
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
-        val length = 2
         val v1 = Tensor.fromData(NSeq(4), 1, 2, 3, 4)
         val v2 = Tensor.fromData(NSeq(4), -1, -2, -3, -4)
         val expected = Tensor.fromData(NSeq(1), -30)
@@ -45,5 +44,30 @@ class TestCublas extends LanternFunSuite {
       }
     }
     runTest(mmdot)
+  }
+
+  // TODO: Fix the other `dot` tests.
+  testGPU("matrix-matrix-dot-transfer") {
+    val test = new LanternDriverCublas[String, Unit] {
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        backend = BackendCPU()
+        // NOTE: `sgemm` seems to act differently than
+        val c1 = Tensor.ones(4, 4)
+        val c2 = Tensor.ones(4, 4)
+        val g1 = c1.toGPU()
+        val g2 = c2.toGPU()
+
+        backend = BackendCublas()
+        val g3 = g1.dot(g2)
+        val c3 = g3.toCPU()
+
+        backend = BackendCPU()
+        val expected = Tensor.fill(4, 4, 4)
+        Tensor.assertEqual(c3, expected)
+        c3.print()
+      }
+    }
+    runTest(test)
   }
 }
