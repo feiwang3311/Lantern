@@ -26,11 +26,17 @@ trait ScannerOps extends Base with UncheckedOps {
 }
 
 trait ScannerOpsExp extends ScannerOps with UncheckedOpsExp {
-  def open(name: Rep[String]) = uncheckedPure[Int]("open(",name,",0)")
-  def close(fd: Rep[Int]) = unchecked[Unit]("close(",fd,")")
+  def remap[T:Manifest] = manifest[T] match {
+    case x if x == manifest[Float] => "float"
+    case x if x == manifest[Int] => "int"
+    case x if x == manifest[Char] => "char"
+    case _ => throw new Exception(s"${manifest[T]} todo")
+  }
+  def open(path: Rep[String]) = uncheckedPure[Int]("open(",path,",0)")
   def filelen(fd: Rep[Int]) = uncheckedPure[Int]("fsize(",fd,")") // FIXME: fresh name
-  def mmap[T:Manifest](fd: Rep[Int], len: Rep[Int]) = uncheckedPure[Array[T]]("(char *)mmap(0, ",len,", PROT_READ, MAP_FILE | MAP_SHARED, ",fd,", 0)")
+  def mmap[T:Manifest](fd: Rep[Int], len: Rep[Int]) = uncheckedPure[Array[T]]("(",remap(manifest[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
   def stringFromCharArray(data: Rep[Array[Char]], pos: Rep[Int], len: Rep[Int]): Rep[String] = uncheckedPure[String](data,"+",pos)
+  def close(fd: Rep[Int]) = unchecked[Unit]("close(",fd,")")
   def prints(s: Rep[String]): Rep[Int] = unchecked[Int]("printll(",s,")")
 
   def openf(name: Rep[String], mode: Rep[String]) = unchecked[Long]("(long)fopen(", name, ", ", mode, ")")
