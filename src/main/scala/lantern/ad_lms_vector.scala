@@ -2542,7 +2542,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     def apply() = new BackendCublas
   }
 
-  backend = BackendCublas()
+  // Define default GPU backend.
+  def BackendGPU: Backend = BackendCublas()
+  backend = BackendGPU
 
   /**
     * Defines tensor transfer operations.
@@ -2559,7 +2561,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // Get a GPU-allocated copy of this tensor.
     def toGPU(): Tensor = {
       generateRawComment("'toGPU' invocation.")
-      val res = BackendCublas().mallocArray[Float](t.scalarCount)
+      val res = BackendGPU.mallocArray[Float](t.scalarCount)
       cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
       Tensor(res, t.shape: _*)
     }
@@ -2594,5 +2596,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     def apply() = new BackendCudnn
   }
 
-  backend = BackendCudnn()
+  // Define default GPU backend.
+  override def BackendGPU: Backend = BackendCudnn()
+  backend = BackendGPU
 }
