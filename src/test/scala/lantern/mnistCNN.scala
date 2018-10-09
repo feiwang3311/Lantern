@@ -22,7 +22,7 @@ class MnistCNN extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationCNN/Lantern/Lantern.cpp"
 
-  val mnist  = new LanternDriverC[String, Unit] with ScannerLowerExp {
+  val mnist  = new LanternDriverC[String, Unit] {
 
     // From the MNIST pytorch example
     val mean = 0.1307f
@@ -32,7 +32,7 @@ class MnistCNN extends FunSuite {
 
       def open(path: Rep[String]) = uncheckedPure[Int]("open(",path,",0)")
       def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
-      def mmap[T:Typ](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",codegen.remap(typ[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
+      def mmap[T:Manifest](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",codegen.remap(manifest[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
 
       val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
       val len = filelen(fd)
@@ -239,7 +239,7 @@ class MnistCNN extends FunSuite {
     cnn_file.flush()
   }
 
-  val mnist2  = new DslDriverC[String, Unit] with NNModule with ScannerLowerExp {
+  val mnist2  = new DslDriverC[String, Unit] with NNModule {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {

@@ -62,12 +62,12 @@ trait TensorDsl extends DslOps with Diff {
 
   object Dataset {
     class DataLoader(name: String, train: Boolean, mean: Float, std: Float, dims: Int*) {
-      def remap[T:Typ] = if (typ[T] == typ[Float]) "float"
-        else if (typ[T] == typ[Int]) "int"
+      def remap[T:Manifest] = if (manifest[T] == manifest[Float]) "float"
+        else if (manifest[T] == manifest[Int]) "int"
         else ???
       def open(path: Rep[String]) = uncheckedPure[Int]("open(",path,",0)")
       def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
-      def mmap[T:Typ](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",remap(typ[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
+      def mmap[T:Manifest](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",remap(manifest[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
 
       val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
       val len = filelen(fd)
