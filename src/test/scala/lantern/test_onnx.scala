@@ -460,6 +460,8 @@ class ONNXTest extends FunSuite {
         val input = readTensor(input_file).tensor
         val output = readTensor(output_file).tensor
         val output1 = func(input)
+        output.printHead(10, "true output")
+        output1.printHead(10, "computed output")
       }
     }
 

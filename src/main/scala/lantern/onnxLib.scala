@@ -115,6 +115,32 @@ trait ONNXLib extends TensorDsl {
     val tensor: Tensor = Tensor(Array((floatarray.map(x=>unit(x)).toSeq: _*)), dims: _*)
   }
 
+  case class ParameterWriter(val filename: String) {
+    val output = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filename)))
+    var off = 0
+    def addParams(arr: Array[Byte]) = {
+      output.write(arr, 0, arr.length)
+      val offset = off
+      off += arr.length
+      offset / 4
+    }
+    def record_init(init: onnx_ml.TensorProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Int)) = {
+      val dims: Seq[Int] = init.dims.map(x => x.toInt)
+      val name: String = init.getName
+      val datatype: onnx_ml.TensorProto.DataType = init.getDataType
+      if (datatype.name != "FLOAT") throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
+      val rawdata: com.google.protobuf.ByteString = init.getRawData
+      val offset: Int = addParams(rawdata.toByteArray)
+      (name -> (dims, datatype, offset))
+    }
+    def close() = output.close()
+  }
+  case class ParameterReader(val filename: String) {
+    val fd = open(filename)
+    val parameters: Rep[Array[Float]] = mmap[Float](fd, filelen(fd))
+    def getOffset(offset: Int) = slice(parameters, offset)
+  }
+
   case class readONNX(val model_file: String) {
     val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
     val graph = model.getGraph
@@ -123,12 +149,17 @@ trait ONNXLib extends TensorDsl {
     val outputs: Seq[onnx_ml.ValueInfoProto] = graph.output
     val nodes: Seq[onnx_ml.NodeProto] = graph.node
 
-    val initializer_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] =
-      initializer.map(init => ParseHelper.extract_init(init)).toMap
+    // record all parameters
+    val parameterFileName = model_file + ".bin"
+    val writer = ParameterWriter(parameterFileName)
+    val byteMap: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Int)] =
+      initializer.map(init => writer.record_init(init)).toMap
+    writer.close()
 
+    // set up reading from parameters
+    val reader = ParameterReader(parameterFileName)
     val initializer_map_tensor: Map[String, Tensor] =
-      initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
-      // initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor.rand(dims: _*)) }
+      byteMap.map{ case (name, (dims, dt, offset)) => (name -> Tensor(reader.getOffset(offset), dims: _*)) }
     val initializer_map_tensorR: Map[String, TensorR] =
       initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
