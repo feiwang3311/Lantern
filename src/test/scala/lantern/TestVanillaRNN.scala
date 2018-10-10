@@ -22,7 +22,7 @@ class VanillaRNN extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationRNN/Lantern.cpp"
 
-  val min_char_rnn = new LanternDriverC[String, Unit] with ScannerLowerExp {
+  val min_char_rnn = new LanternDriverC[String, Unit] {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
@@ -192,7 +192,7 @@ class VanillaRNN extends FunSuite {
     //println(s"now your code at $root_dir/$file_dir is generated.")
   }
 
-  val min_char_rnn_module = new DslDriverC[String, Unit] with NNModule with ScannerLowerExp {
+  val min_char_rnn_module = new DslDriverC[String, Unit] with NNModule {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)

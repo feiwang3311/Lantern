@@ -63,7 +63,7 @@ trait NNModule extends TensorDsl {
     val scale: Float = 1.0f / sqrt(inChannel * kernelSize.head * kernelSize.last).toFloat
     val kernel = TensorR(Tensor.rand(scale, outChannel, inChannel, kernelSize.head, kernelSize.last))
     val bias = TensorR(Tensor.zeros(outChannel))
-    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, NSeq(pad, pad, pad, pad))
+    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, Some(bias), stride, NSeq(pad, pad, pad, pad))
   }
 
   abstract class RnnCell extends Module {

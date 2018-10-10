@@ -21,7 +21,7 @@ class SentimentTreeRNN extends FunSuite {
 
   val file_dir = "/tmp/sentiment_tree_rnn.cpp"
 
-	val sentimental_rnn = new LanternDriverC[String, Unit] with ScannerLowerExp {
+	val sentimental_rnn = new LanternDriverC[String, Unit] {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {

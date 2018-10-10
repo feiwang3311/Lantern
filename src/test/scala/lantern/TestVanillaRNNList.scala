@@ -21,7 +21,7 @@ class VanillaRNNList extends FunSuite {
 
   val file_dir = "/tmp/vanilla_rnn_list.cpp/"
 
-  val min_char_list = new LanternDriverC[String, Unit] with ScannerLowerExp {
+  val min_char_list = new LanternDriverC[String, Unit] {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
@@ -169,8 +169,8 @@ class VanillaRNNList extends FunSuite {
     //println("generate code for VanillaRNNList")
     val min_char_list_file = new PrintWriter(new File(file_dir))
     min_char_list_file.println(min_char_list.code)
-    min_char_list_file.flush()  
+    min_char_list_file.flush()
     //println("now your code at $file_dir is generated.")
   }
-  
+
 }

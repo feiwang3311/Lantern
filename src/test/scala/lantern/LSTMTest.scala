@@ -23,7 +23,7 @@ class LSTMTest extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationLSTM/Lantern.cpp"
 
-  val min_char_lstm = new LanternDriverC[String, Unit] with ScannerLowerExp {
+  val min_char_lstm = new LanternDriverC[String, Unit] {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)

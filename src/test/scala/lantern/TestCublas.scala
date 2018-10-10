@@ -47,12 +47,14 @@ class TestCublas extends LanternFunSuite {
   }
 
   // TODO: Fix the other `dot` tests.
+  // TODO: Simplify when Tensor initialization on GPU is supported, e.g. `fill` and `rand`.
   testGPU("matrix-matrix-dot-transfer") {
     val test = new LanternDriverCublas[String, Unit] {
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         backend = BackendCPU()
-        // NOTE: `sgemm` seems to act differently than
+        // NOTE: `cublasSgemm` behaves differently than CPU gemm implementation.
+        // This test fails for tensors with different scalar values.
         val c1 = Tensor.ones(4, 4)
         val c2 = Tensor.ones(4, 4)
         val g1 = c1.toGPU()

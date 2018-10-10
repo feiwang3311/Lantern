@@ -119,7 +119,7 @@ object ShiftReset {
     assert (gradient_if == gfif(2.4, 3.9))   
 
     println("Step 2b")
-    // Function with if-statement (like the one in ad_lms.scala)
+    // Function with if-statement (like the one in ScalarDifferentiation.scala)
     def fif2(x: Num): Num @diff = {
       if (x > 0.0) x * x else -1.0 * x * x
     }
