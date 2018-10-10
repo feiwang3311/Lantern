@@ -200,6 +200,12 @@ trait TensorDsl extends DslOps with Diff {
     // Allocate an array with the specified length.
     def mallocArray[T: Manifest](length: Int): Rep[Array[T]]
 
+    // Initialize a tensor with the specified dimensions and repeated value.
+    def makeRepeatingTensor(dims: Seq[Int], value: Rep[Float]): Tensor
+
+    // Initialize a tensor with the specified dimensions and scalar values.
+    def makeTensor(dims: Seq[Int], scalars: Float*): Tensor
+
     // Compute vector-vector dot product, i.e. inner product.
     // [V] dot [V] => [1] (scalar)
     def vectorVectorDot(x: Tensor, y: Tensor): Tensor
@@ -237,6 +243,20 @@ trait TensorDsl extends DslOps with Diff {
     override def setup() {}
     override def cleanup() {}
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewArray[T](length)
+
+    override def makeRepeatingTensor(dims: Seq[Int], value: Rep[Float]): Tensor = {
+      val scalarCount = dims.product
+      val array = mallocArray[Float](scalarCount)
+      for (i <- (0 until scalarCount): Rep[Range]) array(i) = value
+      Tensor(array, dims: _*)
+    }
+
+    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+      val scalarArray = scalars.toArray
+      val res = mallocArray[Float](scalarArray.length)
+      for (i <- 0 until scalarArray.length: Range) res(i) = scalarArray(i)
+      Tensor(res, dims: _*)
+    }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       assert(x.shape(0) == y.shape(0))
@@ -1507,12 +1527,7 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, dims)
     }
 
-    def fill(value: Rep[Float], dims: Int*) = {
-      val scalarCount = dims.product
-      val res = backend.mallocArray[Float](scalarCount)
-      for (i <- (0 until scalarCount): Rep[Range]) res(i) = value
-      new Tensor(res, dims)
-    }
+    def fill(value: Rep[Float], dims: Int*): Tensor = backend.makeRepeatingTensor(dims, value)
 
     def fill(fFill: NSeq[Rep[Int]] => Rep[Float], dims: Int*) = {
       val scalarCount = dims.product
@@ -1598,19 +1613,9 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, tensor.shape)
     }
 
-    def fromData(x: Float*) = {
-      val y = x.toArray
-      val res = backend.mallocArray[Float](y.length)
-      for (i <- 0 until y.length: Range) res(i) = y(i)
-      Tensor(res, y.length)
-    }
+    def fromData(scalars: Float*): Tensor = backend.makeTensor(NSeq(scalars.length), scalars: _*)
 
-    def fromData(dims: Seq[Int], x: Float*) = {
-      val y = x.toArray
-      val res = backend.mallocArray[Float](y.length)
-      for (i <- 0 until y.length: Range) res(i) = y(i)
-      Tensor(res, dims: _*)
-    }
+    def fromData(dims: Seq[Int], scalars: Float*): Tensor = backend.makeTensor(dims, scalars: _*)
 
     @virtualize
     def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.000001f) = {
@@ -2535,6 +2540,45 @@ trait TensorDsl extends DslOps with Diff {
 }
 
 trait TensorDslCublas extends TensorDsl with GPUOps {
+
+  protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
+
+  protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
+
+  // NOTE: `cudaMemset` is not very useful because it only works with an integer array/value.
+  protected def cudaMemset(array: Rep[Array[Int]], value: Rep[Int], n: Int): Rep[Unit] =
+    unchecked[Unit]("CUDA_CALL(cudaMemset((void **)&", array, ", ", value, ", ", n, " * sizeof(int)))")
+
+  protected def cublasSetPointerModeDevice(): Rep[Unit] =
+    unchecked[Unit]("cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_DEVICE)")
+
+  protected def cublasSetPointerModeHost(): Rep[Unit] =
+    unchecked[Unit]("cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_HOST)")
+
+  /**
+    * Defines tensor backend transfer operations.
+    */
+  class TensorTransferOps(t: Tensor) {
+    // Get a CPU-allocated copy of this tensor.
+    def toCPU(): Tensor = {
+      generateRawComment("'toCPU' invocation.")
+      val res = BackendCPU().mallocArray[Float](t.scalarCount)
+      cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
+      Tensor(res, t.shape: _*)
+    }
+
+    // Get a GPU-allocated copy of this tensor.
+    def toGPU(): Tensor = {
+      generateRawComment("'toGPU' invocation.")
+      val res = BackendGPU.mallocArray[Float](t.scalarCount)
+      cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
+      Tensor(res, t.shape: _*)
+    }
+  }
+  implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
+
   /**
     * cuBLAS tensor operation backend. WIP.
     */
@@ -2552,11 +2596,23 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewGPUArray[T](length)
 
+    override def makeRepeatingTensor(dims: Seq[Int], value: Rep[Float]): Tensor = {
+      BackendCPU().makeRepeatingTensor(dims, value).toGPU()
+    }
+
+    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+      BackendCPU().makeTensor(dims, scalars: _*).toGPU()
+    }
+
     // Reference:
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
-    // FIXME: `sdot` seems to fail without `cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_DEVICE)`.
-    def sdot(n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) =
-    unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",1,", b, ",1,", result, "))")
+    // NOTE: `sdot` fails when the cuBLAS pointer mode is host (as opposed to device).
+    // Investigate performance impact.
+    def sdot(n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
+      cublasSetPointerModeDevice()
+      unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",", 1, ",", b, ",", 1, ",", result, "))")
+      cublasSetPointerModeHost()
+    }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       val res = mallocArray[Float](1)
@@ -2566,13 +2622,13 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     // Reference:
     // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
-    def sgemv(m: Int, n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
+    def sgemv(m: Int, n: Int, matrix: Rep[Array[Float]], vector: Rep[Array[Float]], result: Rep[Array[Float]]) = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
         m, ",", n, ",", one, ",",
-        a, ",", m, ",", b, ",", zero, ",", result, ",", one, "))")
+        matrix, ",", m, ",", vector, ",", 1, ",", zero, ",", result, ",", 1, "))")
     }
 
     override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -2611,34 +2667,6 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
   // Define default GPU backend.
   def BackendGPU: Backend = BackendCublas()
   backend = BackendGPU
-
-  /**
-    * Defines tensor transfer operations.
-    */
-  class TensorTransferOps(t: Tensor) {
-    // Get a CPU-allocated copy of this tensor.
-    def toCPU(): Tensor = {
-      generateRawComment("'toCPU' invocation.")
-      val res = BackendCPU().mallocArray[Float](t.scalarCount)
-      cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
-      Tensor(res, t.shape: _*)
-    }
-
-    // Get a GPU-allocated copy of this tensor.
-    def toGPU(): Tensor = {
-      generateRawComment("'toGPU' invocation.")
-      val res = BackendGPU.mallocArray[Float](t.scalarCount)
-      cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
-      Tensor(res, t.shape: _*)
-    }
-  }
-  implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
-
-  protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
-
-  protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
 }
 
 trait TensorDslCudnn extends TensorDslCublas {
