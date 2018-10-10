@@ -16,7 +16,7 @@ import scala.math._
 import scala.reflect.runtime.universe._
 import java.lang.reflect.Field
 
-trait NNModule extends TensorExp {
+trait NNModule extends TensorDsl {
 
   abstract class Module {
     val name: String

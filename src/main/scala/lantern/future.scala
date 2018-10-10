@@ -7,7 +7,7 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
 
-trait TestExp extends Dsl {
+trait TestExp extends DslOps {
   type Size = Int
 
   object Size {
@@ -54,16 +54,16 @@ trait TestExp extends Dsl {
   }
 
   val debug: Rep[Boolean] = false
-  class Test[T:Ordering:Numeric:Typ](val data: Rep[Array[T]], val dims: Dimensions) {
+  class Test[T:Ordering:Numeric:Manifest](val data: Rep[Array[T]], val dims: Dimensions) {
 
     val nbElem = dims.nbElem
 
     def exit() = unchecked[Unit]("exit(0)")
 
-    def format = typ[T] match {
-      case t if t == typ[Int] => "%d "
-      case t if t == typ[Float] => "%.3f "
-      case t if t == typ[Double] => "%.3f "
+    def format = manifest[T] match {
+      case t if t == manifest[Int] => "%d "
+      case t if t == manifest[Float] => "%.3f "
+      case t if t == manifest[Double] => "%.3f "
     }
     val zero = implicitly[Numeric[T]].zero
     val one = implicitly[Numeric[T]].one
@@ -78,7 +78,7 @@ trait TestExp extends Dsl {
 
     @virtualize
     def apply(x: Rep[Size]*) = {
-      // Fei: should we make sure that length of x is the same as length of Dimensions 
+      // Fei: should we make sure that length of x is the same as length of Dimensions
       val idx: Rep[Size] = ((x zip (if (x.length == 1) NSeq(1) else dims.strides)) :\ (0: Rep[Int])) { (c, agg) => agg + c._1 * c._2 }
       assertC(0 <= idx && idx < nbElem, s"Out of bound: %d not in [0, ${nbElem}]", idx)
       data(idx)

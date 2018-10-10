@@ -766,7 +766,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_test1") {
-    val cnn_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_test1 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -789,7 +789,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_test2") {
-    val cnn_test2 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_test2 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -814,7 +814,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_test3") {
-    val cnn_test3 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_test3 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -838,7 +838,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_back_test1") {
-    val cnn_back_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_back_test1 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -880,7 +880,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_back_test2") {
-    val cnn_back_test2 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_back_test2 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -922,7 +922,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_back_test3") {
-    val cnn_back_test3 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_back_test3 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -963,7 +963,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_test4") {
-    val cnn_test4 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_test4 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -989,7 +989,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_back_test4") {
-    val cnn_back_test4 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_back_test4 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1031,7 +1031,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_test5") {
-    val cnn_test5 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_test5 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1057,7 +1057,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("cnn_back_test5") {
-    val cnn_back_test5 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val cnn_back_test5 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1098,7 +1098,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("maxpool_test1") {
-    val maxpool_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val maxpool_test1 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1123,7 +1123,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("maxpool_back_test1") {
-    val maxpool_back_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val maxpool_back_test1 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1156,7 +1156,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("dropout_test1") {
-    val dropout_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val dropout_test1 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1182,7 +1182,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("dropout_back_test1") {
-    val dropout_back_test1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val dropout_back_test1 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1208,7 +1208,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("dropout_back_test2") {
-    val dropout_back_test2 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val dropout_back_test2 = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1234,7 +1234,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("test_cnn_full1") {
-    val test_cnn_full1 = new LanternDriverC[String, Unit] with ScannerLowerExp {
+    val test_cnn_full1 = new LanternDriverC[String, Unit] {
 
       // FIXME: add proper check for result. see adworkplace/pytorch/cnn_test.py
       def snippet(a: Rep[String]): Rep[Unit] = {

@@ -7,7 +7,6 @@ import org.scala_lang.virtualized.virtualize
 import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.{Seq => NSeq}
 import scala.math._
@@ -22,7 +21,7 @@ import java.util.Scanner;
 
 import onnx.onnx_ml;
 
-trait ONNXLib extends TensorExp {
+trait ONNXLib extends TensorDsl {
 
   object ParseHelper {
 
@@ -139,6 +138,34 @@ trait ONNXLib extends TensorExp {
     val tensor: Tensor = Tensor(Array((floatarray.map(x=>unit(x)).toSeq: _*)), dims: _*)
   }
 
+  case class ParameterWriter(val filename: String) {
+    val output = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filename)))
+    var off = 0
+    def addParams(arr: Array[Byte]) = {
+      output.write(arr, 0, arr.length)
+      val offset = off
+      off += arr.length
+      offset / 4
+    }
+    def record_init(init: onnx_ml.TensorProto): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Int)) = {
+      val dims: Seq[Int] = init.dims.map(x => x.toInt)
+      val name: String = init.getName
+      val datatype: onnx_ml.TensorProto.DataType = init.getDataType
+      if (datatype.name == "FLOAT") {
+        val rawdata: com.google.protobuf.ByteString = init.getRawData
+        val offset: Int = addParams(rawdata.toByteArray)
+        (name -> (dims, datatype, offset))
+      } else throw new RuntimeException("data type not Float, Not handling yet: " + datatype.name)
+    }
+    def close() = output.close()
+  }
+
+  case class ParameterReader(val filename: String) {
+    val fd = open(filename)
+    val parameters: Rep[Array[Float]] = mmap[Float](fd, filelen(fd))
+    def getOffset(offset: Int) = slice(parameters, offset)
+  }
+
   case class readONNX(val model_file: String) {
     val model = onnx_ml.ModelProto.parseFrom(new FileInputStream(model_file))
     val graph = model.getGraph
@@ -147,15 +174,24 @@ trait ONNXLib extends TensorExp {
     val outputs: Seq[onnx_ml.ValueInfoProto] = graph.output
     val nodes: Seq[onnx_ml.NodeProto] = graph.node
 
-    val initializer_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])] =
-      initializer.map(init => ParseHelper.extract_init(init)).toMap
+    // partition initializer by data type
+    val (float_init, int_init) = initializer.partition(_.getDataType.name == "FLOAT")
 
-    // filter out Int64 typed Tensor
+    // record all float parameters
+    val parameterFileName = model_file + ".bin"
+    val writer = ParameterWriter(parameterFileName)
+    val byteMap: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType, Int)] =
+      float_init.map(init => writer.record_init(init)).toMap
+    writer.close()
+
+    // read and save int parameters as non-Rep type
     val intMap: Map[String, (Seq[Int], Array[Int])] =
-      initializer_map.filter{case (_, v) => v._2.name == "INT64"}.map{ case (k, v) => (k, (v._1, v._3.map(_.toInt)))}.toMap
+      int_init.map(ParseHelper.extract_init(_)).map{case (name, (dims, dt, arr)) => (name -> (dims, arr.map(_.toInt))) }.toMap
 
+    // set up reading from parameters
+    val reader = ParameterReader(parameterFileName)
     val initializer_map_tensor: Map[String, Tensor] =
-      initializer_map.map { case (name, (dims, _, value)) => (name -> Tensor(Array((value.map(x=>unit(x)).toSeq: _*)), dims: _*)) }
+      byteMap.map{ case (name, (dims, dt, offset)) => (name -> Tensor(reader.getOffset(offset), dims: _*)) }
     val initializer_map_tensorR: Map[String, TensorR] =
       initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
@@ -165,8 +201,8 @@ trait ONNXLib extends TensorExp {
     // find out the real input (a entry of input_map that is not in initializer)
     def real_input(): (String, Seq[Int]) = {
       val all_inputs = input_map.keys
-      val non_initialized_inputs = all_inputs.filter(k => !initializer_map_tensor.contains(k))
-      assert(non_initialized_inputs.size == 1, "there should be one uninitialized input")
+      val non_initialized_inputs = all_inputs.filter(k => !initializer_map_tensor.contains(k) && !intMap.contains(k))
+      assert(non_initialized_inputs.size == 1, s"there should be one uninitialized input, got ${non_initialized_inputs}")
       val x_name: String = non_initialized_inputs.head
       val x_dims: Seq[Int] = input_map(x_name)._1.map(x => x.toInt)
       (x_name, x_dims)
@@ -565,13 +601,13 @@ trait ONNXLib extends TensorExp {
           val convNode(inputs, output, atts) = node
           val input1 = get_from_two_maps(inputs.head)
           val input2 = get_from_two_maps(inputs.tail.head)
-          val input3 = get_from_two_maps(inputs.last)
+          val input3 = if (inputs.size == 2) None else Some(get_from_two_maps(inputs.last))
 
           val strides = atts("strides")
           val pads = atts("pads")
           val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
-          val out = input1.convBBP(input2, Some(input3), strides, pads)
+          val out = input1.convBBP(input2, input3, strides, pads)
           intermediate_map_tensorR.update(output, out)
         } else if (node.isInstanceOf[reluNode]) {
           val reluNode(input, output) = node
@@ -614,8 +650,68 @@ trait ONNXLib extends TensorExp {
           val out = in.logSoftmaxB()
           intermediate_map_tensorR.update(output, out)
 
-        } else {
+        } else if (node.isInstanceOf[averagePoolNode]) {
 
+          val averagePoolNode(input, output, atts) = node
+          val input1 = get_from_two_maps(input)
+          val strides = atts("strides")
+          val kernel = atts("kernel_shape")
+          val pads = atts("pads")           // pads may be zero
+          val out = input1.averagePoolBK(kernel, strides, Some(pads))
+          intermediate_map_tensorR.update(output, out)
+
+        } else if (node.isInstanceOf[bnNode]) {
+
+          val bnNode(inputs, output, epsilon) = node
+
+          val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(get_from_two_maps(_))
+          val out1 = (in - runningMean.resize(-1,1,1)) / (runningVariance + epsilon).sqrt().resize(-1, 1, 1)
+          val out2 = out1 * scale.resize(-1,1,1) + bias.resize(-1,1,1)
+          intermediate_map_tensorR.update(output, out2)
+
+        } else if (node.isInstanceOf[sumNode]) {
+
+          val sumNode(inputs, output) = node
+
+          val input1 = get_from_two_maps(inputs.head)
+          val input2 = get_from_two_maps(inputs.last)
+          val out = input1 + input2
+          intermediate_map_tensorR.update(output, out)
+
+        } else if (node.isInstanceOf[reshapeNode]) {
+
+          val reshapeNode(inputs, output) = node
+
+          val input1 = get_from_two_maps(inputs.head)
+          // input2 should be Int64 tensor (we can find it in intMap)
+          val (dim2, input2: Array[Int]) = intMap(inputs.last)
+          assert (dim2.size == 1, s"reshape parameter (if presented as a tensor) should be dim 1, got ${dim2.size}")
+          val out = input1.resize(input2.toSeq: _*)
+
+          intermediate_map_tensorR.update(output, out)
+
+        } else if (node.isInstanceOf[gemmNode]) {
+
+          val gemmNode(inputs, output, attInts, attFloats) = node
+
+          val input1 = get_from_two_maps(inputs.head)
+          val input2 = get_from_two_maps(inputs.tail.head)
+          val input3 = get_from_two_maps(inputs.last)
+
+          val alpha = attFloats.getOrElse("alpha", 1.0f)
+          val beta  = attFloats.getOrElse("beta", 1.0f)
+          val transA = attInts.getOrElse("transA", 0)
+          val transB = attInts.getOrElse("transB", 0)
+
+          val out = (transA, transB) match {
+            case (0, 0) => input1.dot(input2) * alpha + input3 * beta
+            case (0, 1) => input1.dot(input2.trans()) * alpha + input3 * beta
+            case (1, 0) => input1.trans().dot(input2) * alpha + input3 * beta
+            case (1, 1) => input1.trans().dot(input2.trans()) * alpha + input3 * beta
+          }
+          intermediate_map_tensorR.update(output, out)
+
+        } else {
           shift{ (k: Tensor => Unit) => ???}
         }
       }

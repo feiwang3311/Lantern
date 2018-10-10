@@ -478,7 +478,7 @@ class ONNXTest extends LanternFunSuite {
     val model_dir = model_dir_all("squeezenet")
     System.out.println(s"testing reading ONNX model using library from $model_file for training")
 
-    val training_func = new DslDriverC[String, Unit] with ONNXLib {
+    val training_func = new LanternDriverC[String, Unit] with ONNXLib {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -505,6 +505,7 @@ class ONNXTest extends LanternFunSuite {
     val squeezenet_file = new PrintWriter(new File(gene_dir + "squeezenetTraining.cpp"))
     squeezenet_file.println(training_func.code)
     squeezenet_file.flush()
+    runTest(training_func)
   }
 
   test("resnet_inference") {
@@ -526,14 +527,46 @@ class ONNXTest extends LanternFunSuite {
         val input = readTensor(input_file).tensor
         val output = readTensor(output_file).tensor
         val output1 = func(input)
-        output.print("true output")
-        output1.print("computed output")
         Tensor.assertEqual(output, output1)
       }
     }
     val resnet_file = new PrintWriter(new File(gene_dir + "resnet.cpp"))
     resnet_file.println(inference_func.code)
     resnet_file.flush()
-    //runTest(inference_func)
+    runTest(inference_func)
+  }
+
+  test("resnet_training") {
+
+    val model_file = model_file_all("resnet50")
+    val model_dir = model_dir_all("resnet50")
+    System.out.println(s"testing reading ONNX model using library from $model_file for training")
+
+    val training_func = new LanternDriverC[String, Unit] with ONNXLib {
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val model = readONNX(model_file)
+        val (func, x_dims, y_dims) = (model.training_func, model.x_dims, model.y_dims)
+
+        // fake input and target
+        val input_file = model_dir + "test_data_set_0/input_0.pb"
+        val output_file = model_dir + "test_data_set_0/output_0.pb"
+        val input = readTensor(input_file).tensor
+        val output = readTensor(output_file).tensor
+
+        val target = NewArray[Int](x_dims(0))
+        for (i <- DataLoop(x_dims(0))) target(i) = 1
+        def lossFun(dummy: TensorR) = func(TensorR(input)).nllLossB(target).sum()
+
+        val loss = gradR_loss(lossFun)(Tensor.zeros(1))
+        println(loss.data(0))
+      }
+    }
+
+    val resnet_file = new PrintWriter(new File(gene_dir + "resnetTraining.cpp"))
+    resnet_file.println(training_func.code)
+    resnet_file.flush()
+    // runTest(training_func)
   }
 }

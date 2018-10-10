@@ -22,48 +22,48 @@ class MnistCNN extends FunSuite {
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationCNN/Lantern/Lantern.cpp"
 
-  val mnist  = new LanternDriverC[String, Unit] with ScannerLowerExp {
+  val mnist  = new LanternDriverC[String, Unit] {
 
     // From the MNIST pytorch example
     val mean = 0.1307f
     val std = 0.3081f
 
-    class DataLoader(name: String, train: Boolean, dims: Int*) {
+    // class DataLoader(name: String, train: Boolean, dims: Int*) {
 
-      def open(path: Rep[String]) = uncheckedPure[Int]("open(",path,",0)")
-      def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
-      def mmap[T:Typ](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",codegen.remap(typ[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
+    //   def open(path: Rep[String]) = uncheckedPure[Int]("open(",path,",0)")
+    //   def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
+    //   def mmap[T:Manifest](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",codegen.remap(manifest[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
 
-      val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
-      val len = filelen(fd)
-      val data = mmap[Float](fd, len)
-      val dLength = (len/4L).toInt
+    //   val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
+    //   val len = filelen(fd)
+    //   val data = mmap[Float](fd, len)
+    //   val dLength = (len/4L).toInt
 
-      val tfd = open(s"../data/bin/${name}_${if (train) "train" else "test"}_target.bin")
-      val tlen = filelen(tfd)
-      val target = mmap[Int](tfd, tlen)
-      val length = (tlen/4L).toInt
+    //   val tfd = open(s"../data/bin/${name}_${if (train) "train" else "test"}_target.bin")
+    //   val tlen = filelen(tfd)
+    //   val target = mmap[Int](tfd, tlen)
+    //   val length = (tlen/4L).toInt
 
-      @virtualize
-      def normalize() = {
-        this.foreach { (t, d) =>
-          t.normalize(mean, std, inPlace = true)
-        }
-      }
+    //   @virtualize
+    //   def normalize() = {
+    //     this.foreach { (t, d) =>
+    //       t.normalize(mean, std, inPlace = true)
+    //     }
+    //   }
 
 
-      @virtualize
-      def foreach(f: (Tensor, Rep[Int]) => Unit) = {
-        var off = var_new(0)
-        for (img <- 0 until length: Rep[Range]) {
-          val dataPtr = slice(data, off)
-          val t = Tensor(dataPtr, dims : _*)
-          f(t, target(img))
-          off += t.scalarCount
-        }
-        assertC(off == dLength, "Data length doesn't match\\n")
-      }
-    }
+    //   @virtualize
+    //   def foreach(f: (Tensor, Rep[Int]) => Unit) = {
+    //     var off = var_new(0)
+    //     for (img <- 0 until length: Rep[Range]) {
+    //       val dataPtr = slice(data, off)
+    //       val t = Tensor(dataPtr, dims : _*)
+    //       f(t, target(img))
+    //       off += t.scalarCount
+    //     }
+    //     assertC(off == dLength, "Data length doesn't match\\n")
+    //   }
+    // }
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -128,7 +128,7 @@ class MnistCNN extends FunSuite {
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
 
-      val train = new DataLoader("mnist", true, iChan1, iRow1, iCol1)
+      val train = new Dataset.DataLoader("mnist", true, mean, std, iChan1, iRow1, iCol1)
       printf("Start normalize\\n")
       train.normalize()
 
@@ -154,12 +154,10 @@ class MnistCNN extends FunSuite {
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
 
         val trainTimer = Timer2()
-        var imgIdx = var_new(0)
         var trainLoss = var_new(0.0f)
         printf("Start training epoch %d\\n", epoch + 1)
         trainTimer.startTimer
-        train foreach { (input: Tensor, target: Rep[Int]) =>
-          imgIdx += 1
+        train foreach { (idx: Rep[Int], input: Tensor, target: Rep[Int]) =>
 
           val inputR = TensorR(input , isInput=true)
           val loss = gradR_loss(trainFun(inputR, target))(Tensor.scalar(0.0f))
@@ -180,6 +178,7 @@ class MnistCNN extends FunSuite {
             weight.clear_grad()
           }
 
+          val imgIdx = idx + 1
           if (imgIdx %  (train.length / 10) == 0) {
             printf(s"Train epoch %d: [%d/%d (%.0f%%)]\\tAverage Loss: %.6f\\n", epoch, imgIdx, train.length, 100.0 * imgIdx /train.length, trainLoss/imgIdx)
             unchecked[Unit]("fflush(stdout)")
@@ -239,7 +238,7 @@ class MnistCNN extends FunSuite {
     cnn_file.flush()
   }
 
-  val mnist2  = new DslDriverC[String, Unit] with NNModule with ScannerLowerExp {
+  val mnist2  = new DslDriverC[String, Unit] with NNModule {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
