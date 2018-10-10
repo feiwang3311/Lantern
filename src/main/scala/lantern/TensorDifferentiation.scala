@@ -2665,8 +2665,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       case tensors: Seq[Tensor] => tensors.foreach(transferTensor).asInstanceOf[T]
 
       // FIXME: "abstract type pattern Rep[Unit] is unchecked since it is eliminated by erasure"
-      // Critical to fix this because it is a catch-all. Fix using `TypeTag`?
+      // Critical to fix this because it is a catch-all. Fix using `Manifest` or `TypeTag`?
       // This case is exercised when `withBackend` is invoked with a function that returns Unit.
+      // `manifest[Rep[Unit]]` produces the error: "No Manifest available for Rep[Unit]".
       case _: Rep[Unit] | Unit => data /* no-op */
       case _ =>
         System.err.println(s"'data' has unknown type: ${data.getClass.toString}")
@@ -2694,7 +2695,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
   }
 
   def withCPU[T: Manifest, U: Manifest](input: T)(f: T => U): U = withBackend(BackendCPU())(input)(f)
-  def withGPU[T: Manifest, U: Manifest](input: T)(f: T => U): U = withBackend(BackendCublas())(input)(f)
+  def withGPU[T: Manifest, U: Manifest](input: T)(f: T => U): U = withBackend(BackendGPU)(input)(f)
 }
 
 trait TensorDslCudnn extends TensorDslCublas {
