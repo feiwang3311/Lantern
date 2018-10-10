@@ -17,7 +17,7 @@ import org.scalatest.FunSuite
 import java.io.PrintWriter;
 import java.io.File;
 
-class SentimentLSTM extends FunSuite {
+class SentimentLSTMTest extends FunSuite {
 
   val file_dir = "/tmp/sentiment_lstm.cpp"
 

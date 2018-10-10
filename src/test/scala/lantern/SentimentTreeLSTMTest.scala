@@ -17,7 +17,7 @@ import org.scalatest.FunSuite
 import java.io.PrintWriter;
 import java.io.File;
 
-class SentimentTreeLSTM extends FunSuite {
+class SentimentTreeLSTMTest extends FunSuite {
 
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationTreeLSTM/Lantern/Lantern.cpp"
