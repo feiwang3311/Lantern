@@ -2535,6 +2535,13 @@ trait TensorDsl extends DslOps with Diff {
 }
 
 trait TensorDslCublas extends TensorDsl with GPUOps {
+
+  protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
+
+  protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
+
   /**
     * cuBLAS tensor operation backend. WIP.
     */
@@ -2634,11 +2641,61 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
   }
   implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
 
-  protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
+  // Transfer either a `Tensor` or `Seq[Tensor]` from one backend to another.
+  def transfer[T: Manifest](from: Backend, to: Backend)(data: T): T = {
+    // TODO: In the future, consider cases where unified memory is used (i.e. `cudaMallocManaged`).
+    def transferTensor(tensor: Tensor): Tensor = {
+      (from, to) match {
+        case (cpu: BackendCPU, gpu: BackendCublas) =>
+          generateRawComment("Transfer tensor from CPU to GPU.")
+          tensor.toGPU()
+        case (gpu: BackendCublas, cpu: BackendCPU) =>
+          generateRawComment("Transfer tensor from GPU to CPU.")
+          tensor.toCPU()
+        case _ =>
+          System.err.println(s"Backend transfer undefined: from ${from} to ${to}")
+          ???
+      }
+    }
 
-  protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
+    data match {
+      case t: Tensor => transferTensor(t).asInstanceOf[T]
+
+      // FIXME: Type erasure makes matching `Seq[Tensor]` ineffective.
+      case tensors: Seq[Tensor] => tensors.foreach(transferTensor).asInstanceOf[T]
+
+      // FIXME: "abstract type pattern Rep[Unit] is unchecked since it is eliminated by erasure"
+      // Critical to fix this because it is a catch-all. Fix using `Manifest` or `TypeTag`?
+      // This case is exercised when `withBackend` is invoked with a function that returns Unit.
+      // `manifest[Rep[Unit]]` produces the error: "No Manifest available for Rep[Unit]".
+      case _: Rep[Unit] | Unit => data /* no-op */
+      case _ =>
+        System.err.println(s"'data' has unknown type: ${data.getClass.toString}")
+        ???
+    }
+  }
+
+  /**
+    * Call a function with given inputs, generating code for the specified backend.
+    * The inputs and result will be transferred between backends automatically.
+    */
+  def withBackend[T: Manifest, U: Manifest](b: Backend)(input: T)(f: T => U): U = {
+    val originalBackend = backend
+
+    // Change the backend (i.e. code generation target).
+    // Then, transfer input to the new backend and call `f`.
+    backend = b
+    val transferredInput = transfer(originalBackend, b)(input)
+    val result = f(transferredInput)
+
+    // Transfer `result` to the old backend, then reset the backend.
+    val transferredResult = transfer(originalBackend, b)(result)
+    backend = originalBackend
+    transferredResult
+  }
+
+  def withCPU[T: Manifest, U: Manifest](input: T)(f: T => U): U = withBackend(BackendCPU())(input)(f)
+  def withGPU[T: Manifest, U: Manifest](input: T)(f: T => U): U = withBackend(BackendGPU)(input)(f)
 }
 
 trait TensorDslCudnn extends TensorDslCublas {

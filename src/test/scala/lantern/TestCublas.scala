@@ -72,4 +72,28 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(test)
   }
+
+  // TODO: Simplify when Tensor initialization on GPU is supported, e.g. `fill` and `rand`.
+  testGPU("matrix-matrix-dot-with-backend") {
+    val test = new LanternDriverCublas[String, Unit] {
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        backend = BackendCPU()
+        val c1 = Tensor.ones(4, 4)
+        val c2 = Tensor.ones(4, 4)
+        val g1 = c1.toGPU()
+        val g2 = c2.toGPU()
+
+        backend = BackendCublas()
+        val g3 = g1.dot(g2)
+
+        withCPU(g3) { c3 =>
+          val expected = Tensor.fill(4, 4, 4)
+          Tensor.assertEqual(c3, expected)
+          c3.print()
+        }
+      }
+    }
+    runTest(test)
+  }
 }
