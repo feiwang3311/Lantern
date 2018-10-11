@@ -568,5 +568,5 @@ class ONNXTest extends LanternFunSuite {
   //   resnet_file.println(training_func.code)
   //   resnet_file.flush()
   //   // runTest(training_func)
-  // }
+  }
 }

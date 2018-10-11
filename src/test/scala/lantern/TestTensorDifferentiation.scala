@@ -152,7 +152,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val loss = gradR_loss(model)(Tensor.zeros(1))
         Tensor.assertEqual(loss, (matrix dot vector).sum(), "11")
         Tensor.assertEqual(ma.d, Tensor.expand(vector, dim0), "12")
-        val sol = matrix.sum2D(dim = 0)
+        val sol = matrix.sum(dim = 0)
         Tensor.assertEqual(ve.d, sol, "13")
         ()
       }
@@ -1483,6 +1483,40 @@ class AdLMSVectorTest extends LanternFunSuite {
         // assert equal
         val expected_grad2 = Tensor(Array[Float](0.25f, 0.5f, 0.5f, 0.25f, 0.5f, 1, 1, 0.5f, 0.5f, 1, 1, 0.5f, 0.25f, 0.5f, 0.5f, 0.25f), 1, 1, 4, 4)
         Tensor.assertEqual(expected_grad2, input.d, "")
+      }
+    }
+    runTest(deb)
+  }
+
+  test("sum_on_any_dimension") {
+    val deb = new LanternDriverC[String, Unit] {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input1 = Tensor.ones(3,4,5)
+        Tensor.assertEqual(input1.sum(dim = 0), Tensor.fill(3.0f, 4, 5))
+        Tensor.assertEqual(input1.sum(dim = 1), Tensor.fill(4.0f, 3, 5))
+        Tensor.assertEqual(input1.sum(dim = 2), Tensor.fill(5.0f, 3, 4))
+
+        val input2 = TensorR(input1)
+        gradR_loss(dummy => input2.sum(dim = 0).sum())(Tensor.zeros(1))
+        Tensor.assertEqual(input2.d, Tensor.fill(1.0f, 3, 4, 5))
+        gradR_loss(dummy => input2.sum(dim = 1).sum())(Tensor.zeros(1))
+        Tensor.assertEqual(input2.d, Tensor.fill(2.0f, 3, 4, 5))
+        gradR_loss(dummy => input2.sum(dim = 2).sum())(Tensor.zeros(1))
+        Tensor.assertEqual(input2.d, Tensor.fill(3.0f, 3, 4, 5))
+
+        val input3 = Tensor.ones(2,4,5,5)
+        Tensor.assertEqual(input3.sum(3).sum(2).sum(0).resize(-1, 1, 1), input3.batchNormAv() * 2 * 5 * 5)
+
+        val input4 = TensorR(input3)
+        gradR_loss(dummy => input4.batchNormAv().sum())(Tensor.zeros(1))
+        Tensor.assertEqual(input4.d, Tensor.fill(1.0f / 50, 2, 4, 5, 5))
+
+        val input5 = TensorR(new Tensor(Array(2.0f, 3.0f), NSeq(2)))
+        val input6 = TensorR(new Tensor(Array(2.0f, 3.0f), NSeq(2)))
+        gradR_loss(dummy => (input5 * input5).sum())(Tensor.zeros(1))
+        gradR_loss(dummy => input6.square().sum())(Tensor.zeros(1))
+        Tensor.assertEqual(input5.d, input6.d)
       }
     }
     runTest(deb)

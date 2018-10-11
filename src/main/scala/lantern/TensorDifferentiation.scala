@@ -130,10 +130,6 @@ trait TensorDsl extends DslOps with Diff {
 
   implicit def Dimensions2Seq(x: Dimensions) = x.dims
 
-  // object Dimensions {
-  //   def apply(x: Int*) = new Dimensions(x)
-  // }
-
   object Random {
     def rand() = unchecked[Float]("(float)rand()/RAND_MAX")
     def srand(seed: Option[Int] = None) = unchecked[Unit]("srand(",seed.map(_.toString).getOrElse("time(NULL)"),")")
@@ -161,28 +157,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
   }
-
-  /* Not supported in LMS??
-  abstract class ForLoop {
-    def foreach(f: Rep[Int] => Unit): Unit
-  }
-
-  @virtualize
-  object ForLoop {
-    def apply(start: Int, step: Int, step_size: Int) = if (step <= 5) {
-      new ForLoop {
-        def foreach(f: Rep[Int] => Unit) = {
-          for (i <- (start until (start + step_size * step) by step_size): Range) f(unit(i))
-        }
-      }
-    } else {
-      new ForLoop {
-        def foreach(f: Rep[Int] => Unit) = {
-          for (i <- (start until (start + step * step_size) by step_size): Rep[Range]) f(i)
-        }
-      }
-    }
-  } */
 
   /**
     * A code generation backend for tensor operations.
@@ -469,7 +443,7 @@ trait TensorDsl extends DslOps with Diff {
       backend.dot(this, that)
     }
 
-    // NOTE: only handles (Vector cart Vector)
+    // NOTE: only handles (Vector Cartesian Vector)
     def cart(that: Tensor) = {
       assert(this.rank == 1 && that.rank == 1, "cartesian product is only for 1d vectors")
       val res = backend.mallocArray[Float](this.shape(0) * that.shape(0))
@@ -503,37 +477,51 @@ trait TensorDsl extends DslOps with Diff {
     def log() = this.map(x => Math.log(x).toFloat)
     def sqrt() = this.map(x => Math.sqrt(x).toFloat)
     def sigmoid() = this.map(x => 1.0f / (Math.exp(-1.0f * x).toFloat + 1.0f))
+    def square() = this.map(x => x * x)
 
     // NOTE: sum all elements
     def sum() = Tensor.scalar(this.fold(0.0f)(_ + _))
 
     @virtualize
-    def sum2D(dim: Int) = {
-      assert(this.rank == 2, "Only deal with 2D tensor")
-      assert(dim == 0 || dim == 1, "dim must be in range of this.nbDims")
+    def sum(dim: Int) = {
+      assert(dim >= 0 && dim < this.rank, "dim should be within range of this.nbDims")
+      val higherDims = this.shape.take(dim)
+      val higherDimsSquashed = higherDims.product
+      val resDims = higherDims ++ this.shape.drop(dim + 1)
+      val res = Tensor.zeros(resDims: _*)
 
-      if (dim == 0) {
-        val res = Tensor.zeros(this.shape(1))
-        for (i <- DataLoop(this.shape(0))) {
-          for (j <- DataLoop(this.shape(1))) {
-            res.data(j) += this.data(i * this.shape.strides(0) + j)
+      // looping over the dims higher than dim, squashed
+      for (high <- DataLoop(higherDimsSquashed)) {
+        // looping over the dimension to be summed
+        val offres = var_new(high * (if (dim == 0) res.scalarCount else res.shape.strides(dim - 1)))
+        val offthis = var_new(high * (if (dim == 0) this.scalarCount else this.shape.strides(dim - 1)))
+        for (sum <- DataLoop(this.shape(dim))) {
+          // looping over the dims lower than dim
+          for (low <- DataLoop(this.shape.strides(dim))) {
+            res.data(offres + low) += this.data(offthis + low)
           }
+          offthis += this.shape.strides(dim)
         }
-        res
-      } else {
-        // val res = NewTensor[Float](this.shape(0))
-        val res = backend.mallocArray[Float](this.shape(0))
-        val offset = var_new(0)
-        for (i <- DataLoop(this.shape(0))) {
-          val sum = var_new(0.0f)
-          for (j <- DataLoop(this.shape(1))) {
-            sum += this.data(offset)
-            offset += 1
-          }
-          res(i) = sum
-        }
-        Tensor(res, this.shape(0))
       }
+      res
+    }
+
+    @virtualize
+    def batchNormAv() = {
+      assert(this.rank == 4, "tensor for batch normal averaging should have 4 dimensions")
+      val base: Rep[Float] = this.shape(0) * this.shape(2) * this.shape(3) * 1.0f
+      val res = Tensor.zeros(this.shape(1), 1, 1)
+
+      for (batch <- DataLoop(this.shape(0))) {
+        val offsetBatch = batch * this.shape.strides(0)
+        for (channel <- DataLoop(this.shape(1))) {
+          val offset = offsetBatch + channel * this.shape.strides(1)
+          for (lower <- DataLoop(this.shape.strides(1))) {
+            res.data(channel) = res.data(channel) + this.data(offset + lower)
+          }
+        }
+      }
+      res / base
     }
 
     @virtualize
@@ -598,7 +586,7 @@ trait TensorDsl extends DslOps with Diff {
           offset += 1
         }
       }
-      val sum = res.sum2D(dim = 1)
+      val sum = res.sum(dim = 1)
       offset = 0
       for (batch <- DataLoop(res.shape(0))) {
         val logsum = max.data(batch) + Math.log(sum.data(batch)).toFloat
@@ -631,7 +619,7 @@ trait TensorDsl extends DslOps with Diff {
           offset += 1
         }
       }
-      val sum = res.sum2D(dim = 1)
+      val sum = res.sum(dim = 1)
       offset = 0
       for (batch <- DataLoop(res.shape(0))) {
         for (i <- DataLoop(res.shape(1))) {
@@ -881,6 +869,18 @@ trait TensorDsl extends DslOps with Diff {
         else { data(i) = data(i) + oneMinusThenMult(a.getAt(i)) * b.getAt(i) }
       }
     }
+
+    // @virtualize
+    // def batchNorm(epsilon: Rep[Float], gamma: Tensor, beta: Tensor): Tensor = {
+    //   assert(this.rank == 4, "For batchNormalization, the input needs to be 4D tensor")
+    //   assert(gamma.rank == 1 && gamma.shape(0) == this.shape(1), "gamma should be 1D, the same as number of feature maps")
+    //   assert(beta.rank == 1 && beta.shape(0) == this.shape(1), "beta should be 1D, the same as number of feature maps")
+    //   val shift = this - this.global_ave_batch().sum(dim = 0) / this.shape(0)
+    //   val vi = shift.square().global_ave_batch().sum(dim = 0) / this.shape(0)
+    //   val xhat = shift / (vi + epsilon).sqrt()
+    //   val y = xhat * gamma.resize(-1, 1, 1) + beta.resize(-1, 1, 1)
+    //   y
+    // }
 
     @virtualize  // conv op, support batches, use conv2D_inplace as subroutine
     def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: NSeq[Int], pads: NSeq[Int]): Tensor = {
@@ -1795,9 +1795,53 @@ trait TensorDsl extends DslOps with Diff {
       this.d.mutate { (i: Rep[Int]) => y.d.data(i) / y.x.data(i) / 2.0f }
     }
 
+    def square(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.square()); k(y)
+      this.d.mutate { (i: Rep[Int]) => y.d.data(i) * this.x.data(i) * 2.0f }
+    }
+
     def sum(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = new TensorR(x.sum(), Tensor.zeros(1)); k(y)
       this.d += y.d
+    }
+
+    def sum(dim: Int): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.sum(dim)); k(y)
+
+      // back-propagate
+      val higherDims = this.x.shape.take(dim)
+      val higherDimsSquashed = higherDims.product
+      val resDims = higherDims ++ this.x.shape.drop(dim + 1)
+      // looping over the dims higher than dim, squashed
+      for (high <- DataLoop(higherDimsSquashed)) {
+        // looping over the dimension to be summed
+        val offres = var_new(high * (if (dim == 0) y.x.scalarCount else y.x.shape.strides(dim - 1)))
+        val offthis = var_new(high * (if (dim == 0) this.x.scalarCount else this.x.shape.strides(dim - 1)))
+        for (sum <- DataLoop(this.x.shape(dim))) {
+          // looping over the dims lower than dim
+          for (low <- DataLoop(this.x.shape.strides(dim))) {
+            this.d.data(offthis + low) += y.d.data(offres + low)
+          }
+          offthis += this.x.shape.strides(dim)
+        }
+      }
+    }
+
+    def batchNormAv(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.batchNormAv()); k(y)
+
+      // back-propagate
+      val base: Rep[Float] = this.x.shape(0) * this.x.shape(2) * this.x.shape(3) * 1.0f
+
+      for (batch <- DataLoop(this.x.shape(0))) {
+        val offsetBatch = batch * this.x.shape.strides(0)
+        for (channel <- DataLoop(this.x.shape(1))) {
+          val offset = offsetBatch + channel * this.x.shape.strides(1)
+          for (lower <- DataLoop(this.x.shape.strides(1))) {
+            this.d.data(offset + lower) += y.d.data(channel) / base
+          }
+        }
+      }
     }
 
     def logSoftmax(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -1813,7 +1857,7 @@ trait TensorDsl extends DslOps with Diff {
       val y = TensorR(x.logSoftmaxB()); k(y)
 
       // back propagate
-      val sum = y.d.sum2D(dim = 1)
+      val sum = y.d.sum(dim = 1)
       val offset = var_new(0)
       for (batch <- DataLoop(this.x.shape(0))) {
         for (i <- DataLoop(this.x.shape(1))) {

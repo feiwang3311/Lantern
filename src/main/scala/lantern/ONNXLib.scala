@@ -665,9 +665,12 @@ trait ONNXLib extends TensorDsl {
           val bnNode(inputs, output, epsilon) = node
 
           val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(get_from_two_maps(_))
-          val out1 = (in - runningMean.resize(-1,1,1)) / (runningVariance + epsilon).sqrt().resize(-1, 1, 1)
-          val out2 = out1 * scale.resize(-1,1,1) + bias.resize(-1,1,1)
-          intermediate_map_tensorR.update(output, out2)
+          val diff = in - in.batchNormAv()
+          val vari = diff.square().batchNormAv()
+          val xhat = diff / (vari + epsilon).sqrt()
+          val outy = xhat * scale.resize(-1, 1, 1) + bias.resize(-1, 1, 1)
+
+          intermediate_map_tensorR.update(output, outy)
 
         } else if (node.isInstanceOf[sumNode]) {
 
