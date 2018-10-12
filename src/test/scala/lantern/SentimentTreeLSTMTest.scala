@@ -118,9 +118,6 @@ class SentimentTreeLSTM extends FunSuite {
       val tWhy = TensorR(Why)
       val tby  = TensorR(by)
 
-      val dummy_word_embedding = TensorR(Tensor.zeros(word_embedding_size))
-      val dummy_forget_gate    = TensorR(Tensor.zeros(hidden_size))
-
       def lossFun(scores: Rep[Array[Int]], words: Rep[Array[Int]], lchs: Rep[Array[Int]], rchs: Rep[Array[Int]]) = { (dummy: TensorR) =>
 
         val initial_loss = TensorR(Tensor.zeros(1))
@@ -209,7 +206,7 @@ class SentimentTreeLSTM extends FunSuite {
 
       val addr = getMallocAddr() // remember current allocation pointer here
 
-       val loopStart = get_time()
+      val loopStart = get_time()
 
       for (epoc <- (0 until 30): Rep[Range]) {
 

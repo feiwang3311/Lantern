@@ -44,8 +44,8 @@ trait NNModule extends TensorDsl {
       val subParameters = allParams.filter { _.getType.isAssignableFrom(classOf[TensorR]) }
       val subModules = allParams.filter { t => classOf[Module].isAssignableFrom(t.getType) && oops[Boolean](t) { _.get(this) != this }}
 
-      subParameters.map{ field => oops[Unit](field) {x => parameters.update(s"$nameScope/${x.getName()}", (x.get(this).asInstanceOf[TensorR], None))} }
-      subModules.map{ field => oops[Unit](field) {x => {val a = x.get(this).asInstanceOf[Module]; modules.update(s"$nameScope/${x.getName()}", a); a.registerParamters(s"$nameScope/${a.name}")}}}
+      subParameters.map{ field => oops[Unit](field) {x => parameters.update(s"$nameScope${x.getName()}", (x.get(this).asInstanceOf[TensorR], None))} }
+      subModules.map{ field => oops[Unit](field) {x => {val a = x.get(this).asInstanceOf[Module]; modules.update(s"$nameScope${x.getName()}", a); a.registerParamters(s"$nameScope${x.getName()}/")}}}
     }
   }
 
@@ -56,13 +56,22 @@ trait NNModule extends TensorDsl {
     def apply(in: TensorR): TensorR @diff = in.dot(weight) + bias
   }
 
-  case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val pad: Int = 0, val name: String = "conv2d") extends Module {
+  case class Linear1D2(val inSize1: Int, val inSize2: Int, val outSize: Int, val name: String = "Linear1d2") extends Module {
+    val scale1: Float = 1.0f / sqrt(inSize1).toFloat
+    val scale2: Float = 1.0f / sqrt(inSize2).toFloat
+    val weight1 = TensorR(Tensor.rand(scale1, inSize1, outSize))
+    val weight2 = TensorR(Tensor.rand(scale2, inSize2, outSize))
+    val bias    = TensorR(Tensor.zeros(outSize))
+    def apply(in1: TensorR, in2: TensorR): TensorR @diff = in1.dot(weight1) + in2.dot(weight2) + bias
+  }
+
+  case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val useBiase: Boolean = true, val pad: Int = 0, val name: String = "conv2d") extends Module {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
     val scale: Float = 1.0f / sqrt(inChannel * kernelSize.head * kernelSize.last).toFloat
     val kernel = TensorR(Tensor.rand(scale, outChannel, inChannel, kernelSize.head, kernelSize.last))
-    val bias = TensorR(Tensor.zeros(outChannel))
-    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, Some(bias), stride, Seq(pad, pad, pad, pad))
+    val bias = if (useBiase) Some(TensorR(Tensor.zeros(outChannel))) else None
+    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, Seq(pad, pad, pad, pad))
   }
 
   abstract class RnnCell extends Module {
@@ -71,20 +80,42 @@ trait NNModule extends TensorDsl {
   }
 
   case class VanillaRNNCell(val inputSize: Int, val hiddenSize: Int, val outputSize: Int, val batchFirst: Boolean = false, val name: String = "vanilla_rnn_cell") extends RnnCell {
-    val scale1: Float = 1.0f / sqrt(inputSize).toFloat
-    val scale2: Float = 1.0f / sqrt(hiddenSize).toFloat
-    val x2hWeight = TensorR(Tensor.rand(scale1, inputSize, hiddenSize))
-    val h2hWeight = TensorR(Tensor.rand(scale2, hiddenSize, hiddenSize))
-    val hBias = TensorR(Tensor.zeros(hiddenSize))
+    val inLinear = Linear1D2(inputSize, hiddenSize, hiddenSize)
     val outLinear = Linear1D(hiddenSize, outputSize)
     def apply(ins: ArrayBuffer[TensorR]): ArrayBuffer[TensorR] @diff = {
       assert(ins.size == 2, "vanilla rnn cell should take a input of two tensors, the next element, and the last hidden layer")
       val in = ins(0)
       val lastHidden = ins(1)
-      val hidden = (in.dot(x2hWeight) + lastHidden.dot(h2hWeight) + hBias).tanh()
+      val hidden = inLinear(in, lastHidden).tanh()
       ArrayBuffer(outLinear(hidden), hidden)
     }
     def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)))
+  }
+
+  case class LSTMCell(val inputSize: Int, val hiddenSize: Int, val outputSize: Int, val batchFirst: Boolean = false, val name: String = "lstm_cell") extends RnnCell {
+    val scale1: Float = 1.0f / sqrt(inputSize).toFloat
+    val scale2: Float = 1.0f / sqrt(hiddenSize).toFloat
+
+    // initialize all parameters
+    val fGate = Linear1D2(inputSize, hiddenSize, hiddenSize)
+    val iGate = Linear1D2(inputSize, hiddenSize, hiddenSize)
+    val cGate = Linear1D2(inputSize, hiddenSize, hiddenSize)
+    val oGate = Linear1D2(inputSize, hiddenSize, hiddenSize)
+    val outLinear = Linear1D(hiddenSize, outputSize)
+    def apply(ins: ArrayBuffer[TensorR]): ArrayBuffer[TensorR] @diff = {
+      assert(ins.size == 3, "LSTM cell should take a input of three tensors, the next element, the last hidden layer, and the last cell layer")
+      val in = ins(0)
+      val lastHidden = ins(1)
+      val lastCell = ins(2)
+      val f = fGate(in, lastHidden).sigmoid()
+      val i = iGate(in, lastHidden).sigmoid()
+      val o = oGate(in, lastHidden).sigmoid()
+      val C = cGate(in, lastHidden).tanh()
+      val c = f * lastCell + i * C
+      val h = o * c.tanh()
+      ArrayBuffer(outLinear(h), h, c)
+    }
+    def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)), TensorR(Tensor.zeros(batchSize, hiddenSize)))
   }
 
   // case class DynamicRNN(val cell: RnnCell, val name: String = "dynamic_rnn_unroll") extends Module {
@@ -102,22 +133,25 @@ trait NNModule extends TensorDsl {
   case class DynamicRNNFix(val cell: RnnCell, val name: String = "dynamic_rnn_unroll_fix") extends Module {
     def apply(input: TensorR, target: Rep[Array[Int]], lengths: Option[Rep[Array[Int]]] = None, batchFirst: Boolean = false): ArrayBuffer[TensorR] @diff = {
       // TODO (Fei Wang): assuming for now that batchFirst is false and lengths is None
-      val init = ArrayBuffer(TensorR(Tensor.zeros(1)), cell.init(input.x.shape(1))(0))
+      val init = TensorR(Tensor.zeros(1)) +=: cell.init(input.x.shape(1))
       LOOPSM(init)(input.x.shape(0)) { (i: Rep[Int]) => (x: ArrayBuffer[TensorR]) =>
-        val ArrayBuffer(new_y, new_hidden) = cell(ArrayBuffer(input(i), x(1)))
-        val y = NewArray[Int](1); y(0) = target(i)
-        val loss = x(0) + new_y.logSoftmaxB().nllLossB(y).sum()
-        ArrayBuffer(loss, new_hidden)
+        val res = cell( input(i) +=: x.tail )
+        val y = NewArray[Int](input.x.shape(1))
+        for (j <- DataLoop(input.x.shape(1)))
+          y(j) = target(i + j * input.x.shape(0))
+        val loss = x(0) + res(0).logSoftmaxB().nllLossB(y).sum()
+        loss +=: res.tail
       }
     }
   }
 
   abstract class Optim {
     val module: Module
-    module.registerParamters("")
+    module.registerParamters(s"${module.name}/")
     def step_func: (TensorR, Option[Tensor]) => Unit
     def zero_grad() = module.forEachParameter(_.clear_grad())
     def step() = module.forEachPairParameter(step_func)
+    def show() = module.forEachNamedParameter{case (name, (tr, ot)) => tr.d.printHead(5, name)}
   }
   case class SGD(val module: Module, val learning_rate: Float, val gradClip: Float = 1.0f, val descent: Boolean = true) extends Optim {
     def step_func = { case (tr, _) =>

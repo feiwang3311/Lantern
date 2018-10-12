@@ -92,6 +92,18 @@ trait TensorDsl extends DslOps with Diff {
         }
         assertC(off == dLength, "Data length doesn't match\\n")
       }
+
+      @virtualize
+      def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
+        var off = var_new(0)
+        for (img <- 0 until (length / batchSize): Rep[Range]) {
+          val dataPtr = slice(data, off)
+          val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
+          val targets = slice(target, img * batchSize)
+          f(img, t, targets)
+          off += t.scalarCount
+        }
+      }
     }
   }
 
@@ -142,7 +154,7 @@ trait TensorDsl extends DslOps with Diff {
 
   @virtualize
   object DataLoop {
-    def apply(size: Int) = if (size <= 1) {
+    def apply(size: Int) = if (size <= 3) {
       new DataLoop {
         def foreach(f: Rep[Int] => Unit) = {
           for (i <- 0 until size: Range) f(unit(i))
@@ -470,6 +482,13 @@ trait TensorDsl extends DslOps with Diff {
       }
       new Tensor(res, this.shape.reverse)
     }
+
+    // def transpose(dims: Int*) = {
+    //   assert(dims.size == this.rank, "transpose parameters should be the same as rank")
+
+    //   val res = Tensor.zeros(this)
+    //   for ()
+    // }
 
     def tanh() = this.map(x => Math.tanh(x).toFloat)
     def exp() = this.map(x => Math.exp(x).toFloat)
@@ -1230,14 +1249,15 @@ trait TensorDsl extends DslOps with Diff {
         val ptrInput  = slice(this.data, i * this.shape.strides(0))
         val ptrOutput = slice(res.data, i * res.shape.strides(0))
         val ptrIdx    = slice(savedIdx, i * res.shape.strides(0))
+        val saveIdxBase = i * this.shape.strides(0)
         Tensor(ptrInput, this.shape.drop(1): _*).maxPool_k_inplace(
-          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*), ptrIdx)
+          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*), ptrIdx, saveIdxBase)
       }
       (res, savedIdx)
     }
 
     @virtualize
-    def maxPool_k_inplace(kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor, savedIdx: Rep[Array[Int]]): Unit = {
+    def maxPool_k_inplace(kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor, savedIdx: Rep[Array[Int]], saveIdxBase: Rep[Int]): Unit = {
       val resWidth = res.shape(1)
       val resHeight = res.shape(2)
 
@@ -1260,7 +1280,7 @@ trait TensorDsl extends DslOps with Diff {
                 for (dummy <- DataLoop(kernelCol)) {
                   if (this.data(this_index_2) > res.data(offout_2)) {
                     res.data(offout_2) = this.data(this_index_2)
-                    savedIdx(offout_2) = this_index_2
+                    savedIdx(offout_2) = this_index_2 + saveIdxBase
                   } else ()
                   this_index_2 += 1
                 }
@@ -1327,23 +1347,21 @@ trait TensorDsl extends DslOps with Diff {
       val res = Tensor.fill(scala.Float.MinValue, this.shape(0), resWidth, resHeight)
       val savedIdx = NewArray[Int](res.scalarCount)
 
-      this.maxPool_k_inplace(kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, res, savedIdx)
+      this.maxPool_k_inplace(kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, res, savedIdx, 0)
       (res, savedIdx)
     }
 
     @virtualize
     def dropout(prob: Float = 0.5f) = {
-      assert(0.0f <= prob && prob <= 1.0f)
+      assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
 
       val res = backend.mallocArray[Float](this.scalarCount)
       val mask = backend.mallocArray[Float](this.scalarCount)
 
-      val scale = if (prob < 1.0f) 1.0f / (1.0f - prob) else 0.0f
+      val scale = 1.0f / (1.0f - prob)
 
-      val guard: Rep[Boolean] = prob < 1.0f
       for (i <- DataLoop(this.scalarCount)) {
-      // for (i <- 0 until this.nbElem: Rep[Range]) {
-        if (guard && Random.rand() > prob) {
+        if (Random.rand() > prob) {
           res(i) = this.data(i) * scale
           mask(i) = scale
         } else {
@@ -1405,6 +1423,17 @@ trait TensorDsl extends DslOps with Diff {
       }
       Tensor(res, resDims: _*)
     }
+
+    // @virtualize
+    // def split(dim: Int, howmany: Int) = {
+    //   // TODO (Fei Wang): only support split at given dimensions into "howmany" equal size
+    //   assert(dim >= 0 && dim < this.rank, "dim should be within range of this.rank")
+    //   assert(this.shape(dim) % howmany == 0, "dim should be able to divide howmany")
+
+    //   val resDim = this.shape.updated(dim, this.shape(dim) / howmany)
+    //   val results = ArrayBuffer[Tensor]()
+    //   for (i <- 0 until howmany: Range) results.append(Tensor.zeros(resDim: _*))
+    // }
 
     @virtualize
     def global_ave_batch() = {
@@ -1943,13 +1972,13 @@ trait TensorDsl extends DslOps with Diff {
       val strideCol = stride.last
 
       if (pads.sum == 0) {
-        for (batch <- DataLoop(this.x.shape(0))) {
+        for (batch <- DataLoop(y.d.shape(0))) {
           val offOutputD = var_new(batch * y.d.shape.strides(0))     // offset for the output, based on batch, step by 1
           val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
           // looping for the output
           for (kOut <- DataLoop(y.d.shape(1))) {
-            val offInputR = var_new(batch * this.x.shape.strides(0)) // offset of input, based on batch, step by input.strides(3) * strideRow
             val sum = var_new(0.0f)                            // collector of bias gradient
+            val offInputR = var_new(batch * this.x.shape.strides(0)) // offset of input, based on batch, step by input.strides(2) * strideRow
             for (row <- DataLoop(y.d.shape(2))) {
               val offInputC = var_new(offInputR)               // offset of input, based on offInputR, step by strideCol
               for (col <- DataLoop(y.d.shape(3))) {
@@ -1959,10 +1988,10 @@ trait TensorDsl extends DslOps with Diff {
                 // looping for the kernel
                 val offInputP = var_new(offInputC)             // offset of input, based on offInputC, step by input.strides(2)
                 val offKernelR = var_new(offKernel)            // offset of kernel, based on offKernel, step by 1
-                for (pane <- DataLoop(kernel.d.shape(1))) {
+                for (pane <- DataLoop(kernel.x.shape(1))) {
                   val offInputKR = var_new(offInputP)          // offset of input, step by input.strides(3) -- row
-                  for (kR <- DataLoop(kernel.d.shape(2))) {
-                    for (kC <- DataLoop(kernel.d.shape(3))) {
+                  for (kR <- DataLoop(kernel.x.shape(2))) {
+                    for (kC <- DataLoop(kernel.x.shape(3))) {
                       if (!this.isInput) this.d.data(offInputKR + kC) = this.d.data(offInputKR + kC) + dCurr * kernel.x.data(offKernelR)
                       kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
                       offKernelR += 1
@@ -2191,7 +2220,7 @@ trait TensorDsl extends DslOps with Diff {
 
       // back propagate
       for (i <- DataLoop(y.scalarCount)) {
-        this.d.data(sidx(i)) += ty.d.data(i)
+        this.d.data(sidx(i)) = ty.d.data(i)
       }
     }
 
@@ -2567,6 +2596,7 @@ trait TensorDsl extends DslOps with Diff {
     val result = Tensor.zeros(1)                  // this should be the loss
     reset {
       val y = f(x1)
+      assert(y.x.scalarCount == 1, s"lossFun must return a Tensor of size 1, got ${y.x.scalarCount}")
       y.d.setAsOne()
       result.copy_data(y.x)
     () }

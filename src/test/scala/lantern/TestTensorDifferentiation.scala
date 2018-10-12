@@ -1406,23 +1406,19 @@ class AdLMSVectorTest extends LanternFunSuite {
           val output = input.convBBP(kernel, Some(bias), strides, pads)
           output.sum()
         }
-        val loss = gradR_loss(lossFun)(Tensor.zeros(1))
+        gradR_loss(lossFun)(Tensor.zeros(1))
+        gradR_loss(lossFun)(Tensor.zeros(1))
 
         // assert equal
         val expect_input_grad = Tensor.fromData(scala.collection.Seq(1,1,4,4),
           1.0f, 2.0f, 2.0f, 1.0f, 2.0f, 4.0f, 4.0f, 2.0f, 2.0f, 4.0f, 4.0f, 2.0f, 1.0f, 2.0f, 2.0f, 1.0f)
-        val expect_kernel_grad = Tensor.fromData(scala.collection.Seq(1,1,3,3),
-          4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f)
+        val expect_kernel_grad = Tensor.fill(4.0f, 1, 1, 3, 3)
         val expect_bias_grad = Tensor.fromData(scala.collection.Seq(1), 4.0f)
-        Tensor.assertEqual(expect_input_grad, input.d, "expect and input.gradient are")
-        Tensor.assertEqual(expect_kernel_grad, kernel.d, "expect and kernel.gradient are")
-        Tensor.assertEqual(expect_bias_grad, bias.d, "expect and bias.gradient are")
+        Tensor.assertEqual(expect_input_grad * 2.0f, input.d, "expect and input.gradient are")
+        Tensor.assertEqual(expect_kernel_grad * 2.0f, kernel.d, "expect and kernel.gradient are")
+        Tensor.assertEqual(expect_bias_grad * 2.0f, bias.d, "expect and bias.gradient are")
       }
     }
-    val debug_file = new PrintWriter(new File(gene_dir + "backprop_conv.cpp"))
-    debug_file.println(deb.code)
-    debug_file.flush()
-
     runTest(deb)
   }
 

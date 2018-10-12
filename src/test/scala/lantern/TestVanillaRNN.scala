@@ -20,6 +20,7 @@ class VanillaRNN extends FunSuite {
 
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationRNN/Lantern.cpp"
+  val root_dir2 = "src/out/NIPS18evaluation/"
 
   val min_char_rnn = new LanternDriverC[String, Unit] {
 
@@ -184,11 +185,9 @@ class VanillaRNN extends FunSuite {
   }
 
   test("generate_code_for_vanilla_rnn_original") {
-    //println("generate code for vanilla RNN")
     val min_char_rnn_file = new PrintWriter(new File(root_dir + file_dir))
     min_char_rnn_file.println(min_char_rnn.code)
     min_char_rnn_file.flush()
-    //println(s"now your code at $root_dir/$file_dir is generated.")
   }
 
   val min_char_rnn_module = new DslDriverC[String, Unit] with NNModule {
@@ -223,15 +222,17 @@ class VanillaRNN extends FunSuite {
       val seq_length = 20
       val vocab_size = 26
       val hiddenSize = 50
+      val batchSize = 20
 
       val RNN = DynamicRNNFix(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
       // val RNN = DynamicRNN(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
       val opt = Adagrad(RNN, learning_rate = 1e-1f, gradClip = 5.0f)
 
       def oneHot(input: Rep[Array[Int]]): TensorR = {
-        val res = Tensor.zeros(seq_length, 1, vocab_size)
+        val res = Tensor.zeros(seq_length, batchSize, vocab_size)
         for (i <- 0 until seq_length: Rep[Range]) {
-          res.data(i * vocab_size + input(i)) = 1.0f
+          for (j <- 0 until batchSize: Rep[Range])
+            res.data(i * vocab_size * batchSize + j * vocab_size + input(j * seq_length + i)) = 1.0f
         }
         TensorR(res)
       }
@@ -250,29 +251,27 @@ class VanillaRNN extends FunSuite {
       val addr = getMallocAddr() // remember current allocation pointer here
 
       val startAt = var_new[Int](0)
-      startAt -= seq_length
+      startAt -= seq_length * batchSize
 
-      var smooth_loss = 60.0f
       for (n <- (0 until 5001): Rep[Range]) {
 
-        startAt += seq_length
-        if (startAt + seq_length + 1 >= data_size) {
+        startAt += seq_length * batchSize
+        if (startAt + seq_length * batchSize + 1 >= data_size) {
           startAt = 0
         }
 
-        val inputs = NewArray[Int](seq_length)
-        val targets = NewArray[Int](seq_length)
-        for (i <- (0 until seq_length): Rep[Range]) {
+        val inputs = NewArray[Int](seq_length * batchSize)
+        val targets = NewArray[Int](seq_length * batchSize)
+        for (i <- (0 until seq_length * batchSize): Rep[Range]) {
           inputs(i) = translated_data(startAt+i)
           targets(i) = translated_data(startAt+i+1)
         }
 
         val loss = gradR_loss(lossFun(inputs, targets))(Tensor.zeros(1))
         val loss_value = loss.data(0) // we suppose the loss is scala (Tensor of size 1)
-        smooth_loss = smooth_loss * 0.9f + loss_value * 0.1f
         if (n % 100 == 0) {
-          printf("iter %d, loss %f\\n", n, smooth_loss)
-          loss_save(n / 100) = smooth_loss
+          printf("iter %d, loss %f\\n", n, loss_value)
+          loss_save(n / 100) = loss_value
         }
 
         opt.step()
@@ -296,7 +295,7 @@ class VanillaRNN extends FunSuite {
   }
 
   test("generate_code_for_vanilla_rnn_module") {
-    val min_char_rnn_file = new PrintWriter(new File(root_dir + file_dir))
+    val min_char_rnn_file = new PrintWriter(new File(root_dir2 + file_dir))
     min_char_rnn_file.println(min_char_rnn_module.code)
     min_char_rnn_file.flush()
   }

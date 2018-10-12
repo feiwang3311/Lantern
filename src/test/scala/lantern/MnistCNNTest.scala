@@ -20,6 +20,7 @@ import java.io.File;
 class MnistCNN extends FunSuite {
 
   val root_dir = "src/out/ICFP18evaluation/"
+  val root_dir2 = "src/out/NIPS18evaluation/"
   val file_dir = "evaluationCNN/Lantern/Lantern.cpp"
 
   val mnist  = new LanternDriverC[String, Unit] {
@@ -27,43 +28,6 @@ class MnistCNN extends FunSuite {
     // From the MNIST pytorch example
     val mean = 0.1307f
     val std = 0.3081f
-
-    // class DataLoader(name: String, train: Boolean, dims: Int*) {
-
-    //   def open(path: Rep[String]) = uncheckedPure[Int]("open(",path,",0)")
-    //   def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
-    //   def mmap[T:Manifest](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",codegen.remap(manifest[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
-
-    //   val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
-    //   val len = filelen(fd)
-    //   val data = mmap[Float](fd, len)
-    //   val dLength = (len/4L).toInt
-
-    //   val tfd = open(s"../data/bin/${name}_${if (train) "train" else "test"}_target.bin")
-    //   val tlen = filelen(tfd)
-    //   val target = mmap[Int](tfd, tlen)
-    //   val length = (tlen/4L).toInt
-
-    //   @virtualize
-    //   def normalize() = {
-    //     this.foreach { (t, d) =>
-    //       t.normalize(mean, std, inPlace = true)
-    //     }
-    //   }
-
-
-    //   @virtualize
-    //   def foreach(f: (Tensor, Rep[Int]) => Unit) = {
-    //     var off = var_new(0)
-    //     for (img <- 0 until length: Rep[Range]) {
-    //       val dataPtr = slice(data, off)
-    //       val t = Tensor(dataPtr, dims : _*)
-    //       f(t, target(img))
-    //       off += t.scalarCount
-    //     }
-    //     assertC(off == dLength, "Data length doesn't match\\n")
-    //   }
-    // }
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -247,8 +211,9 @@ class MnistCNN extends FunSuite {
       val dataTimer = Timer2()
       dataTimer.startTimer
 
+      val (batch, iChan1, iRow1, iCol1) = (100, 1, 28, 28)
+
       case class MNIST(val name: String = "mnist") extends Module {
-        val (batch, iChan1, iRow1, iCol1) = (1, 1, 28, 28)
         val conv1 = Conv2D(inChannel = 1, outChannel = 10, kernelSize = Seq(5, 5))
         val conv2 = Conv2D(inChannel = 10, outChannel = 20, kernelSize = Seq(5, 5))
         val linear1 = Linear1D(inSize = 320, outSize = 50)
@@ -257,27 +222,25 @@ class MnistCNN extends FunSuite {
         def apply(in: TensorR): TensorR @diff = {
           val step1 = conv1(in).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
           val step2 = conv2(step1).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
-          val step3 = linear1(step2.resize(1, 320)).dropout(0.5f)
+          val step3 = linear1(step2.resize(-1, 320)).dropout(0.5f)
           linear2(step3)
         }
       }
-      val net = MNIST("model")
+      val net = MNIST()
       val opt = SGD(net, learning_rate = 0.0005f, gradClip = 1000.0f)
 
-      def lossFun(input: TensorR, target: Rep[Int]) = { (dummy: TensorR) =>
-        val res = net(input).logSoftmaxB()
-        val targets = NewArray[Int](1); targets(0) = target
-        res.nllLossB(targets)
+      def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
+        val res = net(input).logSoftmaxB().nllLossB(target)
+        res.sum()
       }
 
       // Training
       val nbEpoch = 10
-      val lr = 0.0005f
 
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
 
-      val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, net.batch, net.iChan1, net.iRow1, net.iCol1)
+      val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, iChan1, iRow1, iCol1)
       train.normalize()
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f
@@ -293,13 +256,12 @@ class MnistCNN extends FunSuite {
         var trainLoss = var_new(0.0f)
         printf("Start training epoch %d\\n", epoch + 1)
         trainTimer.startTimer
-        train foreach { (dummy: Rep[Int], input: Tensor, target: Rep[Int]) =>
-          imgIdx += 1
+        train.foreachBatch(batch){ (dummy: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+          imgIdx += batch
           val inputR = TensorR(input , isInput=true)
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.scalar(0.0f))
           trainLoss += loss.data(0)
 
-          // Update weights
           opt.step()
 
           // selective printing
@@ -314,32 +276,6 @@ class MnistCNN extends FunSuite {
 
         loss_save(epoch) = trainLoss / train.length
 
-        /* skip tests
-        def testFun(input: Tensor) = {
-          val (resL1, _) = input.conv2D(conv1, sRow1, sCol1).maxPool(smRow1, smCol1)
-          val (resL2, _) = resL1.relu().conv2D(conv2, sRow2, sCol2).maxPool(smRow2, smCol2)
-          val resL3 = ((a1 dot resL2.relu().resize(in3)) + b1).relu()
-          val resL4 = (a2 dot resL3) + b2
-          resL4.logSoftmax()
-        }
-
-        printf("\\nStart testing:\\n")
-        val testTimer = Timer2()
-        testTimer.startTimer
-        imgIdx = var_new(0)
-        var testLoss = var_new(0.0)
-        val correct = var_new(0)
-        test foreach { (input: Tensor, target: Rep[Int]) =>
-          imgIdx += 1
-          val res = testFun(input)
-
-          testLoss += res.nllLoss(target).data(0)
-          if (res.maxIndex() == target)
-            correct += 1
-        }
-        printf("Test set: Average loss: %.4f, Acurracy: %d/%d (%.0f) in %ldms\\n", testLoss / test.length, correct, test.length, 100.0 * correct / test.length, testTimer.getElapsedTime/1000L)
-        printf("\\n\\n")
-        */
       }
 
       val totalTime = dataTimer.getElapsedTime / 1e6f
@@ -356,8 +292,8 @@ class MnistCNN extends FunSuite {
     }
   }
 
-  test("mnist_cnn_2") {
-    val cnn_file = new PrintWriter(new File(root_dir + file_dir))
+  test("mnist_cnn_module") {
+    val cnn_file = new PrintWriter(new File(root_dir2 + file_dir))
     cnn_file.println(mnist2.code)
     cnn_file.flush()
   }

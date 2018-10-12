@@ -21,6 +21,7 @@ class LSTMTest extends FunSuite {
 
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationLSTM/Lantern.cpp"
+  val root_dir2 = "src/out/NIPS18evaluation/"
 
   val min_char_lstm = new LanternDriverC[String, Unit] {
 
@@ -229,11 +230,118 @@ class LSTMTest extends FunSuite {
   }
 
   test("generate_code_for_lstm") {
-    //println("run min_char_lstm")
     val min_char_lstm_file = new PrintWriter(new File(root_dir + file_dir))
     min_char_lstm_file.println(min_char_lstm.code)
     min_char_lstm_file.flush()
-    //println(s"now your code at $root_dir/$file_dir is generated.")
   }
 
+  val min_char_lstm_module = new LanternDriverC[String, Unit] with NNModule {
+
+    class Scanner(name: Rep[String]) {
+      val fd = open(name)
+      val fl = filelen(fd)
+      val data = mmap[Char](fd,fl)
+      var pos = 0
+
+      def nextChar: Rep[Char] = {
+        val ch = data(pos)
+        pos += 1
+        ch
+      }
+
+      def hasNextChar = pos < fl
+      def done = close(fd)
+    }
+
+    @virtualize
+    def snippet(a: Rep[String]): Rep[Unit] = {
+      /**
+       add scanner
+       **/
+      val startTime = get_time()
+      val scanner = new Scanner("graham.txt")
+      val training_data = scanner.data
+      val data_size = scanner.fl
+      printf("LSTM Test: >> data has %d chars\\n", data_size)
+
+      val translated_data = NewArray[Int](data_size)
+      for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
+
+      val vocab_size = 26
+      val hidden_size = 50
+      val learning_rate = 1e-1f
+      val seq_length = 20
+      val batchSize = 20
+
+      val RNN = DynamicRNNFix(LSTMCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
+      val opt = Adagrad(RNN, learning_rate = 1e-1f, gradClip = 5.0f)
+
+      def oneHot(input: Rep[Array[Int]]): TensorR = {
+        val res = Tensor.zeros(seq_length, batchSize, vocab_size)
+        for (i <- 0 until seq_length: Rep[Range]) {
+          for (j <- 0 until batchSize: Rep[Range])
+            res.data(i * vocab_size * batchSize + j * vocab_size + input(j * seq_length + i)) = 1.0f
+        }
+        TensorR(res)
+      }
+
+      def lossFun(input: Rep[Array[Int]], target: Rep[Array[Int]]) = { (dummy: TensorR) =>
+        val res: ArrayBuffer[TensorR] = RNN(oneHot(input), target, lengths = None)  // returns an ArrayBuffer[TensorR]
+        res.head.sum()
+      }
+
+      val loopStart = get_time()
+      val loss_save = NewArray[Double](51)
+
+      val addr = getMallocAddr() // remember current allocation pointer here
+
+      val startAt = var_new[Int](0)
+      startAt -= seq_length * batchSize
+
+      var smooth_loss = 70.0
+      for (n <- (0 until 5001): Rep[Range]) {
+
+        startAt += seq_length * batchSize
+        if (startAt + seq_length * batchSize + 1 >= data_size) {
+          startAt = 0
+        }
+
+        val inputs = NewArray[Int](seq_length * batchSize)
+        val targets = NewArray[Int](seq_length * batchSize)
+        for (i <- (0 until seq_length * batchSize): Rep[Range]) {
+          inputs(i) = translated_data(startAt+i)
+          targets(i) = translated_data(startAt+i+1)
+        }
+
+        val loss = gradR_loss(lossFun(inputs, targets))(Tensor.zeros(1))
+        val loss_value = loss.data(0) // we suppose the loss is scala (Tensor of size 1)
+        if (n % 100 == 0) {
+          printf("iter %d, loss %f\\n", n, loss_value)
+          loss_save(n / 100) = loss_value
+        }
+
+        opt.step()
+
+        resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
+      }
+
+      val loopEndTime = get_time()
+      val prepareTime = loopStart - startTime
+      val loopTime    = loopEndTime - loopStart
+
+      val fp = openf(a, "w")
+      fprintf(fp, "unit: %s\\n", "100 iteration")
+      for (i <- (0 until loss_save.length): Rep[Range]) {
+        fprintf(fp, "%lf\\n", loss_save(i))
+      }
+      fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
+      closef(fp)
+    }
+  }
+
+  test("generate_code_for_lstm_module") {
+    val min_char_lstm_file = new PrintWriter(new File(root_dir2 + file_dir))
+    min_char_lstm_file.println(min_char_lstm_module.code)
+    min_char_lstm_file.flush()
+  }
 }
