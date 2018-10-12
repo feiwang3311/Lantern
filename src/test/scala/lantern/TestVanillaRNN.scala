@@ -294,10 +294,10 @@ class VanillaRNN extends FunSuite {
     }
   }
 
-  test("generate_code_for_vanilla_rnn_module") {
-    val min_char_rnn_file = new PrintWriter(new File(root_dir2 + file_dir))
-    min_char_rnn_file.println(min_char_rnn_module.code)
-    min_char_rnn_file.flush()
-  }
+  // test("generate_code_for_vanilla_rnn_module") {
+  //   val min_char_rnn_file = new PrintWriter(new File(root_dir2 + file_dir))
+  //   min_char_rnn_file.println(min_char_rnn_module.code)
+  //   min_char_rnn_file.flush()
+  // }
 
 }
