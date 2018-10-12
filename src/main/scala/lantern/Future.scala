@@ -1,7 +1,5 @@
 package lantern
 
-import scala.collection.{Seq => NSeq}
-
 import org.scala_lang.virtualized.virtualize
 import org.scala_lang.virtualized.SourceContext
 
@@ -35,10 +33,10 @@ trait TestExp extends DslOps {
     }
   }
 
-  class Dimensions(val dims: NSeq[Size]) {
+  class Dimensions(val dims: Seq[Size]) {
     def apply(idx: Int) = dims(idx)
 
-    val (nbElem +: strides) = (dims :\ NSeq[Int](1)) {
+    val (nbElem +: strides) = (dims :\ Seq[Int](1)) {
       case (dim, seq@(t +: q)) => (dim * t) +: seq
     }
 
@@ -79,7 +77,7 @@ trait TestExp extends DslOps {
     @virtualize
     def apply(x: Rep[Size]*) = {
       // Fei: should we make sure that length of x is the same as length of Dimensions
-      val idx: Rep[Size] = ((x zip (if (x.length == 1) NSeq(1) else dims.strides)) :\ (0: Rep[Int])) { (c, agg) => agg + c._1 * c._2 }
+      val idx: Rep[Size] = ((x zip (if (x.length == 1) Seq(1) else dims.strides)) :\ (0: Rep[Int])) { (c, agg) => agg + c._1 * c._2 }
       assertC(0 <= idx && idx < nbElem, s"Out of bound: %d not in [0, ${nbElem}]", idx)
       data(idx)
     }

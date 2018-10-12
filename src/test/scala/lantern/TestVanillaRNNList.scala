@@ -9,7 +9,6 @@ import org.scala_lang.virtualized.SourceContext
 import scala.virtualization.lms._
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{Seq => NSeq}
 import scala.math._
 
 import org.scalatest.FunSuite

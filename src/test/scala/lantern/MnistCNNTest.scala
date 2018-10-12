@@ -9,7 +9,7 @@ import org.scala_lang.virtualized.SourceContext
 import scala.virtualization.lms._
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{Seq => NSeq}
+import scala.collection.{Seq => Seq}
 import scala.math._
 
 import org.scalatest.FunSuite
@@ -249,14 +249,14 @@ class MnistCNN extends FunSuite {
 
       case class MNIST(val name: String = "mnist") extends Module {
         val (batch, iChan1, iRow1, iCol1) = (1, 1, 28, 28)
-        val conv1 = Conv2D(inChannel = 1, outChannel = 10, kernelSize = NSeq(5, 5))
-        val conv2 = Conv2D(inChannel = 10, outChannel = 20, kernelSize = NSeq(5, 5))
+        val conv1 = Conv2D(inChannel = 1, outChannel = 10, kernelSize = Seq(5, 5))
+        val conv2 = Conv2D(inChannel = 10, outChannel = 20, kernelSize = Seq(5, 5))
         val linear1 = Linear1D(inSize = 320, outSize = 50)
         val linear2 = Linear1D(inSize = 50, outSize = 10)
 
         def apply(in: TensorR): TensorR @diff = {
-          val step1 = conv1(in).relu().maxPoolBK(kernels = NSeq(2,2), strides = NSeq(2,2), None)
-          val step2 = conv2(step1).relu().maxPoolBK(kernels = NSeq(2,2), strides = NSeq(2,2), None)
+          val step1 = conv1(in).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
+          val step2 = conv2(step1).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
           val step3 = linear1(step2.resize(1, 320)).dropout(0.5f)
           linear2(step3)
         }

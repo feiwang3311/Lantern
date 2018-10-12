@@ -4,67 +4,15 @@ import org.scala_lang.virtualized.virtualize
 import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms.common._
-import scala.virtualization.lms.util.OverloadHack
-
-import scala.collection.{Seq => NSeq}
-
-
-// TODO: clean up at least, maybe add to LMS?
-trait UtilOps extends Base with OverloadHack {
-
-  implicit class HashCls[T:Manifest](o: Rep[T]) {
-    def HashCode(implicit pos: SourceContext): Rep[Long] = infix_HashCode(o)
-    def HashCode(len: Rep[Int])(implicit pos: SourceContext): Rep[Long] = o match {
-      case s: Rep[String] => infix_HashCodeS(s, len)
-      // case _ => infix_HashCode(o) // FIXME: is this an ok dispatch?
-    }
-  }
-
-  def infix_HashCode[T:Manifest](a: Rep[T])(implicit pos: SourceContext): Rep[Long]
-  def infix_HashCodeS(s: Rep[String], len: Rep[Int])(implicit v: Overloaded1, pos: SourceContext): Rep[Long]
-}
-
-trait UtilOpsExp extends UtilOps with BaseExp {
-  case class ObjHashCode[T:Manifest](o: Rep[T])(implicit pos: SourceContext) extends Def[Long] { def m = manifest[T] }
-  case class StrSubHashCode(o: Rep[String], len: Rep[Int])(implicit pos: SourceContext) extends Def[Long]
-  def infix_HashCode[T:Manifest](o: Rep[T])(implicit pos: SourceContext) = ObjHashCode(o)
-  def infix_HashCodeS(o: Rep[String], len: Rep[Int])(implicit v: Overloaded1, pos: SourceContext) = StrSubHashCode(o,len)
-
-  override def mirror[A:Manifest](e: Def[A], f: Transformer)(implicit pos: SourceContext): Exp[A] = (e match {
-    case e@ObjHashCode(a) => infix_HashCode(f(a))(e.m, pos)
-    case e@StrSubHashCode(o,len) => infix_HashCodeS(f(o),f(len))
-    case _ => super.mirror(e,f)
-  }).asInstanceOf[Exp[A]]
-}
-
-trait ScalaGenUtilOps extends ScalaGenBase {
-  val IR: UtilOpsExp
-  import IR._
-
-  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-    case ObjHashCode(o) => emitValDef(sym, src"$o.##")
-    case _ => super.emitNode(sym, rhs)
-  }
-}
-
-trait CGenUtilOps extends CGenBase {
-  val IR: UtilOpsExp
-  import IR._
-
-  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-    case StrSubHashCode(o,len) => emitValDef(sym, src"hash($o,$len)")
-    case _ => super.emitNode(sym, rhs)
-  }
-}
 
 trait DslOps extends PrimitiveOps with NumericOpsExtra with BooleanOps
     with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean
     with IfThenElse with Equal with RangeOps with OrderingOps with MiscOps with ArrayOps with StringOps
-    with SeqOps with Functions with While with StaticData
-    with Variables with LiftVariables with ObjectOps with UtilOps with UncheckedOps
+    with Functions with While with StaticData
+    with Variables with LiftVariables with UtilOps with UncheckedOps
     with MathOps with TupleOps with TupledFunctions with CastingOps with ScannerOps {
 
-  implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
+  // implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
   implicit class BooleanOps2(lhs: Rep[Boolean]) {
     def &&(rhs: =>Rep[Boolean])(implicit pos: SourceContext) = __ifThenElse(lhs, rhs, unit(false))
   }
@@ -82,8 +30,8 @@ trait DslOps extends PrimitiveOps with NumericOpsExtra with BooleanOps
 trait DslExp extends DslOps
     with PrimitiveOpsExpOpt with NumericOpsExpOpt with NumericOpsExtraExp with BooleanOpsExp
     with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp with OrderingOpsExp
-    with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp
-    with FunctionsRecursiveExp with WhileExp with StaticDataExp with ObjectOpsExpOpt
+    with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp
+    with FunctionsRecursiveExp with WhileExp with StaticDataExp
     with UtilOpsExp with UncheckedOpsExp with MathOpsExp
     with TupleOps with TupledFunctionsExp with CastingOpsExp
     with ScannerOpsExp {
@@ -188,9 +136,8 @@ trait DslGenScala extends ScalaGenNumericOps
     with ScalaGenPrimitiveOps with ScalaGenBooleanOps with ScalaGenIfThenElse
     with ScalaGenEqual with ScalaGenRangeOps with ScalaGenOrderingOps
     with ScalaGenMiscOps with ScalaGenArrayOps with ScalaGenStringOps
-    with ScalaGenSeqOps with ScalaGenFunctions with ScalaGenWhile
+    with ScalaGenFunctions with ScalaGenWhile
     with ScalaGenStaticData with ScalaGenVariables
-    with ScalaGenObjectOps
     with ScalaGenUtilOps with ScalaGenMathOps with ScalaGenTupledFunctions
     with ScalaGenCastingOps {
   val IR: DslExp
@@ -245,9 +192,8 @@ trait DslGenBase extends CGenNumericOpsExtra
     with CGenPrimitiveOps with CGenBooleanOps with CGenIfThenElse
     with CGenEqual with CGenRangeOps with CGenOrderingOps
     with CGenMiscOps with CGenArrayOps with CGenStringOps
-    with CGenSeqOps with CGenFunctions with CGenWhile
+    with CGenFunctions with CGenWhile
     with CGenStaticData with CGenVariables
-    with CGenObjectOps
     with CGenUtilOps with CGenUncheckedOps with CGenMathOps with CGenTupledFunctions
     with CGenCastingOps {
   val IR: DslExp
@@ -393,7 +339,7 @@ trait DslGenBase extends CGenNumericOpsExtra
   }
 
   // List of header files, to be imported in the code template.
-  def templateHeaders: NSeq[String] = NSeq(
+  def templateHeaders: Seq[String] = Seq(
     "<assert.h>", "<err.h>", "<errno.h>", "<fcntl.h>", "<functional>",
     "<math.h>", "<memory>", "<random>", "<stdint.h>", "<stdio.h>",
     "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>")
@@ -499,8 +445,8 @@ trait DslGenCublas extends DslGenBase {
   def getCudaMallocManagedString(buffer: String, count: String, dataType: String): String =
     "CUDA_CALL(cudaMallocManaged((void **)&" + buffer + ", " + count + " * sizeof(" + dataType + ")));"
 
-  override def templateHeaders: NSeq[String] =
-    super.templateHeaders ++ NSeq("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
+  override def templateHeaders: Seq[String] =
+    super.templateHeaders ++ Seq("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
 
   override def templateRawCode: String = super.templateRawCode +
     """
@@ -540,7 +486,7 @@ trait DslGenCudnn extends DslGenCublas {
   val IR: DslExp
   import IR._
 
-  override def templateHeaders: NSeq[String] = super.templateHeaders ++ NSeq("<cudnn.h>")
+  override def templateHeaders: Seq[String] = super.templateHeaders ++ Seq("<cudnn.h>")
   override def templateRawCode: String = super.templateRawCode +
     """
       |#define CUDNN_CALL(f) { \

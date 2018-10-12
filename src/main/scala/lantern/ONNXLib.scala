@@ -8,7 +8,6 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{Seq => NSeq}
 import scala.math._
 import scala.collection.mutable.{Map => MMap};
 import scala.io.Source
@@ -245,7 +244,7 @@ trait ONNXLib extends TensorDsl {
         assert (atts.contains("pads"), "attributes of a conv/maxP/avP node should have pads")
         atts
       } else {
-        atts + (("pads", NSeq(0, 0, 0, 0)))
+        atts + (("pads", Seq(0, 0, 0, 0)))
       }
     }
 

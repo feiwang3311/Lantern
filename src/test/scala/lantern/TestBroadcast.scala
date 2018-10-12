@@ -9,7 +9,6 @@ import org.scala_lang.virtualized.SourceContext
 import scala.virtualization.lms._
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{Seq => NSeq}
 import scala.math._
 
 import org.scalatest.FunSuite
@@ -22,21 +21,21 @@ class BroadCastingTest extends FunSuite {
     val test1 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]) = {}
       def test() = {
-        def dimfy(x: Option[(NSeq[Int], NSeq[Int], NSeq[Int])]) = x match {
+        def dimfy(x: Option[(Seq[Int], Seq[Int], Seq[Int])]) = x match {
           case None => None
           case Some((x1, x2, x3)) => Some((new Dimensions(x1), new Dimensions(x2), new Dimensions(x3)))
         }
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 3)) == dimfy(Some((NSeq(2, 3), NSeq(2, 3), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(3), NSeq(2, 3)) == dimfy(Some((NSeq(1, 3), NSeq(2, 3), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(3)) == dimfy(Some((NSeq(2, 3), NSeq(1, 3), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(1, 3), NSeq(2, 3)) == dimfy(Some((NSeq(1, 3), NSeq(2, 3), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(1, 3)) == dimfy(Some((NSeq(2, 3), NSeq(1, 3), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 1)) == dimfy(Some((NSeq(2, 3), NSeq(2, 1), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(2, 1), NSeq(2, 3)) == dimfy(Some((NSeq(2, 1), NSeq(2, 3), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(), NSeq(2, 3)) == dimfy(Some((NSeq(1, 1), NSeq(2, 3), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq()) == dimfy(Some((NSeq(2, 3), NSeq(1, 1), NSeq(2, 3)))))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(3, 3)) == dimfy(None))
-        assert(Tensor.dimBroadcast(NSeq(2, 3), NSeq(2, 3, 3)) == dimfy(None))
+        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(2, 3)) == dimfy(Some((Seq(2, 3), Seq(2, 3), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(3), Seq(2, 3)) == dimfy(Some((Seq(1, 3), Seq(2, 3), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(3)) == dimfy(Some((Seq(2, 3), Seq(1, 3), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(1, 3), Seq(2, 3)) == dimfy(Some((Seq(1, 3), Seq(2, 3), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(1, 3)) == dimfy(Some((Seq(2, 3), Seq(1, 3), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(2, 1)) == dimfy(Some((Seq(2, 3), Seq(2, 1), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(2, 1), Seq(2, 3)) == dimfy(Some((Seq(2, 1), Seq(2, 3), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(), Seq(2, 3)) == dimfy(Some((Seq(1, 1), Seq(2, 3), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(2, 3), Seq()) == dimfy(Some((Seq(2, 3), Seq(1, 1), Seq(2, 3)))))
+        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(3, 3)) == dimfy(None))
+        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(2, 3, 3)) == dimfy(None))
       }
     }
     test1.test()

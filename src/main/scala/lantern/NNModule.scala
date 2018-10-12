@@ -10,7 +10,6 @@ import scala.virtualization.lms._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
-import scala.collection.{Seq => NSeq}
 import scala.math._
 
 import scala.reflect.runtime.universe._
@@ -57,13 +56,13 @@ trait NNModule extends TensorDsl {
     def apply(in: TensorR): TensorR @diff = in.dot(weight) + bias
   }
 
-  case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: NSeq[Int], val stride: NSeq[Int] = NSeq(1, 1), val pad: Int = 0, val name: String = "conv2d") extends Module {
+  case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val pad: Int = 0, val name: String = "conv2d") extends Module {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
     val scale: Float = 1.0f / sqrt(inChannel * kernelSize.head * kernelSize.last).toFloat
     val kernel = TensorR(Tensor.rand(scale, outChannel, inChannel, kernelSize.head, kernelSize.last))
     val bias = TensorR(Tensor.zeros(outChannel))
-    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, Some(bias), stride, NSeq(pad, pad, pad, pad))
+    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, Some(bias), stride, Seq(pad, pad, pad, pad))
   }
 
   abstract class RnnCell extends Module {

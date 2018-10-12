@@ -6,7 +6,6 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{Seq => NSeq}
 import scala.math._
 
 trait TensorDsl extends DslOps with Diff {
@@ -73,7 +72,7 @@ trait TensorDsl extends DslOps with Diff {
       val target = mmap[Int](tfd, tlen)
       val length = tlen/4
 
-      def dataset = new Tensor(data, NSeq(60000, dims(1), dims(2)))
+      def dataset = new Tensor(data, Seq(60000, dims(1), dims(2)))
 
       @virtualize
       def normalize() = {
@@ -113,7 +112,7 @@ trait TensorDsl extends DslOps with Diff {
     def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix + ix_a).AsInstanceOf[Char]
   }
 
-  case class Dimensions(val dims: NSeq[Int]) {
+  case class Dimensions(val dims: Seq[Int]) {
     def apply(idx: Int) = {
       if (idx >= dims.length) ???
       else dims(idx)
@@ -121,7 +120,7 @@ trait TensorDsl extends DslOps with Diff {
     def last = dims.last
     def reverse = Dimensions(dims.reverse)
 
-    val (nbElem +: strides) = (dims :\ NSeq[Int](1)) {
+    val (nbElem +: strides) = (dims :\ Seq[Int](1)) {
       case (dim, seq@(t +: q)) => (dim * t) +: seq
     }
 
@@ -285,7 +284,7 @@ trait TensorDsl extends DslOps with Diff {
   // in your DSL program.
   var backend: Backend = BackendCPU()
 
-  class Tensor(val data: Rep[Array[Float]], val dimensions: NSeq[Int]) extends Serializable {
+  class Tensor(val data: Rep[Array[Float]], val dimensions: Seq[Int]) extends Serializable {
 
     def shape = Dimensions(dimensions)
     val rank = dimensions.length
@@ -663,7 +662,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def resize(dims: Int*) = {
       val new_dims = if (dims.forall(_ > 0)) dims else {
-        assert(dims.filter(_ < 0) == NSeq(-1), s"there should be at most one -1 in the resize dims, got $dims")
+        assert(dims.filter(_ < 0) == Seq(-1), s"there should be at most one -1 in the resize dims, got $dims")
         dims.updated(dims.indexOf(-1, 0), this.scalarCount / dims.filter(_ > 0).product)
       }
       assert(new_dims.product == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
@@ -738,7 +737,7 @@ trait TensorDsl extends DslOps with Diff {
     // the result is to update this so that this += that * y, where * is cartesian product
     def add_cartesian(that: Tensor, y: Tensor) = {
       generateRawComment("add_cartesian")
-      assert(this.rank == 2 && that.shape == Dimensions(NSeq(this.shape(1))) && y.shape == Dimensions(NSeq(this.shape(0))) ||
+      assert(this.rank == 2 && that.shape == Dimensions(Seq(this.shape(1))) && y.shape == Dimensions(Seq(this.shape(0))) ||
         this.rank == 1 && that.shape == this.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
       val off = var_new(0)
       val up = if (this.rank > 1) this.shape(0) else 1
@@ -753,7 +752,7 @@ trait TensorDsl extends DslOps with Diff {
     // setting: this is dims(0)-sized vector, that is matrix (dims(0) * dims(1)), y is dims(1)-sized vector
     // the result is to update this so that this accumulate every matrix col * y
     def add_composion(that: Tensor, y: Tensor) = {
-      assert(that.rank == 2 && this.shape.seq == NSeq(that.shape(1)) && y.shape.seq == NSeq(that.shape(0))
+      assert(that.rank == 2 && this.shape.seq == Seq(that.shape(1)) && y.shape.seq == Seq(that.shape(0))
         || that.rank == 1 && this.shape == that.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
       val off = var_new(0)
       val up = if (that.rank > 1) that.shape(0) else 1
@@ -883,7 +882,7 @@ trait TensorDsl extends DslOps with Diff {
     // }
 
     @virtualize  // conv op, support batches, use conv2D_inplace as subroutine
-    def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: NSeq[Int], pads: NSeq[Int]): Tensor = {
+    def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = {
       assert (this.rank == 4, "For conv_batch , input should be 4-D, with the first dim to be batch")
       assert(kernel.rank == 4, "For Conv, kernel should be 4-D")
       bias match {
@@ -919,7 +918,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def conv2D_inplace(kernel: Tensor, strides: NSeq[Int], pads: NSeq[Int], res: Tensor): Unit = {
+    def conv2D_inplace(kernel: Tensor, strides: Seq[Int], pads: Seq[Int], res: Tensor): Unit = {
       val totalPads = pads.sum
       val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
       val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
@@ -954,7 +953,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // conv op, with bias, with padding, use either conv2D1 or conv2D2 as subroutine, depending on whether padding is zero
-    def conv2D(kernel: Tensor, bias: Tensor, strides: NSeq[Int], pads: NSeq[Int]) = {
+    def conv2D(kernel: Tensor, bias: Tensor, strides: Seq[Int], pads: Seq[Int]) = {
 
       assert(this.rank == 3 && kernel.rank == 4, "For Conv, input should be 3-D and kernel should be 4-D: " + this.rank + "|" + kernel.rank)
       assert(kernel.shape(1) == this.shape(0), "For Conv, input dim_0 should be the same as kernel dim_1")
@@ -1481,8 +1480,8 @@ trait TensorDsl extends DslOps with Diff {
       (a.shape == b.shape) || a.isScalar || b.isScalar
     }
 
-    def dimBroadcast(a: NSeq[Int], b: NSeq[Int]): Option[(Dimensions, Dimensions, Dimensions)] = {
-      def bc(a: NSeq[Int], b: NSeq[Int], trail: List[Int]): List[Int] = {
+    def dimBroadcast(a: Seq[Int], b: Seq[Int]): Option[(Dimensions, Dimensions, Dimensions)] = {
+      def bc(a: Seq[Int], b: Seq[Int], trail: List[Int]): List[Int] = {
         if (a.size == 0) b.toList ++ trail
         else if (b.size == 0) a.toList ++ trail
         else if (a.last == 1) bc(a.init, b.init, b.last :: trail)
@@ -1494,8 +1493,8 @@ trait TensorDsl extends DslOps with Diff {
       if (res == List(-1)) None
       else {
         // add dimensions of 1 to tensors with smaller rank
-        if (a.size > b.size) Some((new Dimensions(a), new Dimensions(NSeq.fill(a.size - b.size)(1) ++ b), new Dimensions(res.toSeq)))
-        else if (a.size < b.size) Some((new Dimensions(NSeq.fill(b.size - a.size)(1) ++ a), new Dimensions(b), new Dimensions(res.toSeq)))
+        if (a.size > b.size) Some((new Dimensions(a), new Dimensions(Seq.fill(a.size - b.size)(1) ++ b), new Dimensions(res.toSeq)))
+        else if (a.size < b.size) Some((new Dimensions(Seq.fill(b.size - a.size)(1) ++ a), new Dimensions(b), new Dimensions(res.toSeq)))
         else Some((new Dimensions(a), new Dimensions(b), new Dimensions(res.toSeq)))
       }
     }
@@ -1504,10 +1503,10 @@ trait TensorDsl extends DslOps with Diff {
     def randseed() = unchecked[Unit]("srand(time(NULL))")
     def rand(dims: Int*) = randinit(dims.toSeq, 1.0f, None)
     def rand(scale: Float, dims: Int*) = randinit(dims.toSeq, scale, None)
-    def randinit(dim0: Int): Tensor = randinit(NSeq(dim0), 1.0f, None)
-    def randinit(dim0: Int, seed: Option[Int]): Tensor = randinit(NSeq(dim0), 1.0f, seed)
-    def randinit(dim0: Int, dim1: Int, scale: Float): Tensor = randinit(NSeq(dim0, dim1), scale, None)
-    def randinit(dims: NSeq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
+    def randinit(dim0: Int): Tensor = randinit(Seq(dim0), 1.0f, None)
+    def randinit(dim0: Int, seed: Option[Int]): Tensor = randinit(Seq(dim0), 1.0f, seed)
+    def randinit(dim0: Int, dim1: Int, scale: Float): Tensor = randinit(Seq(dim0, dim1), scale, None)
+    def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
       val scalarCount = dims.product
       val res = backend.mallocArray[Float](scalarCount)
       for (i <- (0 until scalarCount): Rep[Range]) res(i) = (Random.rand() - 0.5f) * scale
@@ -1529,25 +1528,25 @@ trait TensorDsl extends DslOps with Diff {
 
     def fill(value: Rep[Float], dims: Int*): Tensor = backend.makeRepeatingTensor(dims, value)
 
-    def fill(fFill: NSeq[Rep[Int]] => Rep[Float], dims: Int*) = {
+    def fill(fFill: Seq[Rep[Int]] => Rep[Float], dims: Int*) = {
       val scalarCount = dims.product
       val res = backend.mallocArray[Float](scalarCount)
 
       var idx = var_new(0)
-      def innerFill(args: NSeq[Rep[Int]]) = {
+      def innerFill(args: Seq[Rep[Int]]) = {
         res(idx) = fFill(args)
         idx += 1
       }
 
       val dum = (dims :\ innerFill _) {
         case (up, f) =>
-          (args: NSeq[Rep[Int]]) => {
+          (args: Seq[Rep[Int]]) => {
             for (i <- 0 until up: Rep[Range]) {
               f(args :+ i)
             }
           }
       }
-      dum(NSeq[Rep[Int]]())
+      dum(Seq[Rep[Int]]())
       new Tensor(res, dims)
     }
 
@@ -1613,7 +1612,7 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, tensor.shape)
     }
 
-    def fromData(scalars: Float*): Tensor = backend.makeTensor(NSeq(scalars.length), scalars: _*)
+    def fromData(scalars: Float*): Tensor = backend.makeTensor(Seq(scalars.length), scalars: _*)
 
     def fromData(dims: Seq[Int], scalars: Float*): Tensor = backend.makeTensor(dims, scalars: _*)
 
@@ -1901,7 +1900,7 @@ trait TensorDsl extends DslOps with Diff {
       val kernelSize = kernelRow * kernelCol
       val pad = pads match {
         case None => 0
-        case Some(NSeq(padUp, padDown, padLeft, padRight)) => padUp
+        case Some(Seq(padUp, padDown, padLeft, padRight)) => padUp
       }
 
       if (pad == 0) {
@@ -1929,7 +1928,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // conv with batch, bias, and pads
-    def convBBP(kernel: TensorR, bias: Option[TensorR], stride: NSeq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
+    def convBBP(kernel: TensorR, bias: Option[TensorR], stride: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
       assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
       assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
       assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
@@ -2038,7 +2037,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // conv with bias and pads
-    def convBP(kernel: TensorR, bias: TensorR, strides: NSeq[Int], pads: NSeq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
+    def convBP(kernel: TensorR, bias: TensorR, strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
 
       assert(this.isInput || this.d.scalarCount == this.x.scalarCount)
       assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
