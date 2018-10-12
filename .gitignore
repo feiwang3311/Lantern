@@ -1,4 +1,10 @@
 *.bin
 .*.sw*
 target/
-src/out/
+src/out/ICFP18evaluation/
+src/out/NIPS18evaluation/save_fig/
+src/out/NIPS18evaluation/evaluationRNN/
+src/out/NIPS18evaluation/evaluationLSTM/
+src/out/NIPS18evaluation/evaluationCNN/
+src/out/NIPS18evaluation/evaluationTreeLSTM/Dynet/
+src/out/NIPS18evaluation/evaluationTreeLSTM/Lantern/

@@ -235,7 +235,7 @@ class MnistCNN extends FunSuite {
       }
 
       // Training
-      val nbEpoch = 10
+      val nbEpoch = 4
 
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
