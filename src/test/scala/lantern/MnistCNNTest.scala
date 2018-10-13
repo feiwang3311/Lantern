@@ -50,7 +50,7 @@ class MnistCNN extends FunSuite {
       val (smRow1, smCol1) = (2, 2)
 
       // FIXME scale based on PyTorch
-      val varConv1 = TensorR(Tensor.rand(1.0f / sqrt(inChan1 * kRow1 * kCol1).toFloat, outChan1, inChan1, kRow1, kCol1))
+      val varConv1 = TensorR(Tensor.rand(Seq(outChan1, inChan1, kRow1, kCol1), 1.0f / sqrt(inChan1 * kRow1 * kCol1).toFloat))
       variables += varConv1
 
       // input size
@@ -62,23 +62,23 @@ class MnistCNN extends FunSuite {
       // stride maxpool
       val (smRow2, smCol2) = (2, 2)
 
-      val varConv2 = TensorR(Tensor.rand(1.0f / sqrt(inChan2 * kRow2 * kCol2).toFloat, outChan2, inChan2, kRow2, kCol2))
+      val varConv2 = TensorR(Tensor.rand(Seq(outChan2, inChan2, kRow2, kCol2), 1.0f / sqrt(inChan2 * kRow2 * kCol2).toFloat))
       variables += varConv2
 
       // Layer 3
       val (oRow2, oCol2) = (convSize(iRow2, kRow2, sRow2)/smRow2, convSize(iCol2, kCol2, sCol2)/smCol2)
       val (in3, out3) = (outChan2 * oRow2 * oCol2, 50)  // 320
 
-      val varA1 = TensorR(Tensor.rand(1.0f / sqrt(in3).toFloat, out3, in3))
-      val varB1 = TensorR(Tensor.rand(1.0f / sqrt(in3).toFloat, out3))
+      val varA1 = TensorR(Tensor.rand(Seq(out3, in3), 1.0f / sqrt(in3).toFloat))
+      val varB1 = TensorR(Tensor.rand(Seq(out3), 1.0f / sqrt(in3).toFloat))
       variables += varA1
       variables += varB1
 
       // Layer 4
       val (in4, out4) = (out3, 10)
 
-      val varA2 = TensorR(Tensor.rand(1.0f / sqrt(in4).toFloat, out4, in4))
-      val varB2 = TensorR(Tensor.rand(1.0f / sqrt(in4).toFloat, out4))
+      val varA2 = TensorR(Tensor.rand(Seq(out4, in4), 1.0f / sqrt(in4).toFloat))
+      val varB2 = TensorR(Tensor.rand(Seq(out4), 1.0f / sqrt(in4).toFloat))
       variables += varA2
       variables += varB2
 
@@ -87,12 +87,12 @@ class MnistCNN extends FunSuite {
       val lr = 0.0005f
       val mom = 0.0f
 
-      val momentum = if (mom > 0.0f) variables map(tR => Tensor.zeros(tR.d)) else ArrayBuffer[Tensor]()
+      val momentum = if (mom > 0.0f) variables map(tR => Tensor.zeros_like(tR.d)) else ArrayBuffer[Tensor]()
 
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
 
-      val train = new Dataset.DataLoader("mnist", true, mean, std, iChan1, iRow1, iCol1)
+      val train = new Dataset.DataLoader("mnist", true, mean, std, Seq(iChan1, iRow1, iCol1))
       printf("Start normalize\\n")
       train.normalize()
 
@@ -240,7 +240,7 @@ class MnistCNN extends FunSuite {
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
 
-      val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, iChan1, iRow1, iCol1)
+      val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, Seq(iChan1, iRow1, iCol1))
       train.normalize()
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f

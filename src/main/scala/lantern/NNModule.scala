@@ -26,7 +26,7 @@ trait NNModule extends TensorDsl {
       for ((_, module) <- modules) module.forEachNamedParameter(f)
     }
     def enrichParameter(): Unit = {
-      for ((k, (tensorR, _)) <- parameters) parameters(k) = (tensorR, Some(Tensor.zeros(tensorR.x)))
+      for ((k, (tensorR, _)) <- parameters) parameters(k) = (tensorR, Some(Tensor.zeros_like(tensorR.x)))
       for ((_, module) <- modules) module.enrichParameter()
     }
     def forEachParameter(f: TensorR => Unit) = forEachNamedParameter{case (_, (tensorR, _)) => f(tensorR)}
@@ -51,14 +51,14 @@ trait NNModule extends TensorDsl {
 
   case class Linear1D(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
     val scale: Float = 1.0f / sqrt(inSize).toFloat
-    val weight = TensorR(Tensor.rand(scale, inSize, outSize))
+    val weight = TensorR(Tensor.rand(Seq(inSize, outSize), scale))
     val bias = TensorR(Tensor.zeros(outSize))
     def apply(in: TensorR): TensorR @diff = in.dot(weight) + bias
   }
 
   case class Linear1DTrans(val inSize: Int, val outSize: Int, val name: String = "linear1dtrans") extends Module {
     val scale: Float = 1.0f / sqrt(inSize).toFloat
-    val weight = TensorR(Tensor.rand(scale, outSize, inSize))
+    val weight = TensorR(Tensor.rand(Seq(outSize, inSize), scale))
     val bias = TensorR(Tensor.zeros(outSize))
     def apply(in: TensorR): TensorR @diff = in.dot_trans(weight) + bias
   }
@@ -66,8 +66,8 @@ trait NNModule extends TensorDsl {
   case class Linear1D2(val inSize1: Int, val inSize2: Int, val outSize: Int, val name: String = "Linear1d2") extends Module {
     val scale1: Float = 1.0f / sqrt(inSize1).toFloat
     val scale2: Float = 1.0f / sqrt(inSize2).toFloat
-    val weight1 = TensorR(Tensor.rand(scale1, inSize1, outSize))
-    val weight2 = TensorR(Tensor.rand(scale2, inSize2, outSize))
+    val weight1 = TensorR(Tensor.rand(Seq(inSize1, outSize), scale1))
+    val weight2 = TensorR(Tensor.rand(Seq(inSize2, outSize), scale2))
     val bias    = TensorR(Tensor.zeros(outSize))
     def apply(in1: TensorR, in2: TensorR): TensorR @diff = in1.dot(weight1) + in2.dot(weight2) + bias
   }
@@ -75,8 +75,8 @@ trait NNModule extends TensorDsl {
   case class Linear1D2Trans(val inSize1: Int, val inSize2: Int, val outSize: Int, val name: String = "Linear1d2trans") extends Module {
     val scale1: Float = 1.0f / sqrt(inSize1).toFloat
     val scale2: Float = 1.0f / sqrt(inSize2).toFloat
-    val weight1 = TensorR(Tensor.rand(scale1, outSize, inSize1))
-    val weight2 = TensorR(Tensor.rand(scale2, outSize, inSize2))
+    val weight1 = TensorR(Tensor.rand(Seq(outSize, inSize1), scale1))
+    val weight2 = TensorR(Tensor.rand(Seq(outSize, inSize2), scale2))
     val bias    = TensorR(Tensor.zeros(outSize))
     def apply(in1: TensorR, in2: TensorR): TensorR @diff = in1.dot_trans(weight1) + in2.dot_trans(weight2) + bias
   }
@@ -85,7 +85,7 @@ trait NNModule extends TensorDsl {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
     val scale: Float = 1.0f / sqrt(inChannel * kernelSize.head * kernelSize.last).toFloat
-    val kernel = TensorR(Tensor.rand(scale, outChannel, inChannel, kernelSize.head, kernelSize.last))
+    val kernel = TensorR(Tensor.rand(Seq(outChannel, inChannel, kernelSize.head, kernelSize.last), scale))
     val bias = if (useBiase) Some(TensorR(Tensor.zeros(outChannel))) else None
     def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, Seq(pad, pad, pad, pad))
   }

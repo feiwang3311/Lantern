@@ -37,7 +37,7 @@ class TestCublas extends LanternFunSuite {
         val result = m.dot(v).toCPU()
 
         backend = BackendCPU()
-        val expected = Tensor.fill(4, 2)
+        val expected = Tensor.fill(Seq(2), 4)
         Tensor.assertEqual(result, expected)
       }
     }
@@ -62,7 +62,7 @@ class TestCublas extends LanternFunSuite {
         val result = m1.dot(m2).toCPU()
 
         backend = BackendCPU()
-        val expected = Tensor.fill(4, 4, 4)
+        val expected = Tensor.fill(Seq(4, 4), 4)
         Tensor.assertEqual(result, expected)
       }
     }
