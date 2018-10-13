@@ -60,7 +60,7 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   object Dataset {
-    class DataLoader(name: String, train: Boolean, mean: Float, std: Float, dims: Int*) {
+    class DataLoader(name: String, train: Boolean, mean: Float, std: Float, dims: Seq[Int]) {
 
       val fd = open(s"../data/bin/${name}_${if (train) "train" else "test"}.bin")
       val len = filelen(fd)
@@ -946,7 +946,7 @@ trait TensorDsl extends DslOps with Diff {
       val resWidth = convSize(this.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
       val resHeight = convSize(this.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
       val res = bias match {
-        case Some(bias) => Tensor.fillWithBias(bias, 1, this.shape(0), kernel.shape(0), resWidth, resHeight)
+        case Some(bias) => Tensor.fillWithBias(Seq(this.shape(0), kernel.shape(0), resWidth, resHeight), bias, 1)
         case None => Tensor.zeros(this.shape(0), kernel.shape(0), resWidth, resHeight)
       }
 
@@ -1012,7 +1012,7 @@ trait TensorDsl extends DslOps with Diff {
 
       val resWidth = convSize(this.shape(1) + padLeft + padRight, kernel.shape(2), strideRow)
       val resHeight = convSize(this.shape(2) + padUp + padDown, kernel.shape(3), strideCol)
-      val res = Tensor.fillWithBias(bias, 0, kernel.shape(0), resWidth, resHeight)
+      val res = Tensor.fillWithBias(Seq(kernel.shape(0), resWidth, resHeight), bias, 0)
 
       val offOut = var_new(0)                         // offset for the res by channel
       val offWeight1 = var_new(0)                     // offset for the kernel by channel (dim_0)
@@ -1166,7 +1166,7 @@ trait TensorDsl extends DslOps with Diff {
 
       val resWidth = convSize(this.shape(2) + padUp + padDown, kernelRow, strideRow)
       val resHeight = convSize(this.shape(3) + padLeft + padRight, kernelCol, strideCol)
-      val res = Tensor.fill(0.0f, this.shape(0), this.shape(1), resWidth, resHeight)
+      val res = Tensor.zeros(this.shape(0), this.shape(1), resWidth, resHeight)
 
       for (i <- DataLoop(this.shape(0))) {
         val ptrInput = slice(this.data, i * this.shape.strides(0))
@@ -1212,7 +1212,7 @@ trait TensorDsl extends DslOps with Diff {
 
       val resHeight = this.shape(1) / strideRow
       val resWidth = this.shape(2) / strideCol
-      val res = Tensor.fill(scala.Float.MinValue, this.shape(0), resHeight, resWidth)
+      val res = Tensor.fill(Seq(this.shape(0), resHeight, resWidth), scala.Float.MinValue)
 
       // FIXME adhoc transform tensor to be using generic type!
       val savedIdx = NewArray[Int](res.scalarCount)
@@ -1264,7 +1264,7 @@ trait TensorDsl extends DslOps with Diff {
 
       val resWidth = convSize(this.shape(2) + padUp + padDown, kernelRow, strideRow)
       val resHeight = convSize(this.shape(3) + padLeft + padRight, kernelCol, strideCol)
-      val res = Tensor.fill(scala.Float.MinValue, this.shape(0), this.shape(1), resWidth, resHeight)
+      val res = Tensor.fill(Seq(this.shape(0), this.shape(1), resWidth, resHeight), scala.Float.MinValue)
       val savedIdx = NewArray[Int](res.scalarCount)
 
       for (i <- DataLoop(this.shape(0))) {
@@ -1366,7 +1366,7 @@ trait TensorDsl extends DslOps with Diff {
 
       val resWidth = convSize(this.shape(1) + padUp + padDown, kernelRow, strideRow)
       val resHeight = convSize(this.shape(2) + padLeft + padRight, kernelCol, strideCol)
-      val res = Tensor.fill(scala.Float.MinValue, this.shape(0), resWidth, resHeight)
+      val res = Tensor.fill(Seq(this.shape(0), resWidth, resHeight), scala.Float.MinValue)
       val savedIdx = NewArray[Int](res.scalarCount)
 
       this.maxPool_k_inplace(kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, res, savedIdx, 0)
@@ -1553,7 +1553,7 @@ trait TensorDsl extends DslOps with Diff {
     def randseed(seed: Int) = unchecked[Unit]("srand(", seed, ")")
     def randseed() = unchecked[Unit]("srand(time(NULL))")
     def rand(dims: Int*) = randinit(dims.toSeq, 1.0f, None)
-    def rand(scale: Float, dims: Int*) = randinit(dims.toSeq, scale, None)
+    def rand(dims: Seq[Int], scale: Float) = randinit(dims.toSeq, scale, None)
     def randinit(dim0: Int): Tensor = randinit(Seq(dim0), 1.0f, None)
     def randinit(dim0: Int, seed: Option[Int]): Tensor = randinit(Seq(dim0), 1.0f, seed)
     def randinit(dim0: Int, dim1: Int, scale: Float): Tensor = randinit(Seq(dim0, dim1), scale, None)
@@ -1577,9 +1577,9 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, dims)
     }
 
-    def fill(value: Rep[Float], dims: Int*): Tensor = backend.makeRepeatingTensor(dims, value)
+    def fill(dims: Seq[Int], value: Rep[Float]): Tensor = backend.makeRepeatingTensor(dims, value)
 
-    def fill(fFill: Seq[Rep[Int]] => Rep[Float], dims: Int*) = {
+    def fill(dims: Seq[Int], fFill: Seq[Rep[Int]] => Rep[Float]) = {
       val scalarCount = dims.product
       val res = backend.mallocArray[Float](scalarCount)
 
@@ -1601,7 +1601,7 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, dims)
     }
 
-    def fillWithBias(bias: Tensor, dim: Int, dims: Int*) = {
+    def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int) = {
       assert(dim < dims.size && dim >= 0, s"target dimension ${dim} is out of range ${dims}")
       assert(bias.rank == 1 && bias.scalarCount == dims.drop(dim).head, s"bias should be 1D and have the same length as given dim")
       val scalarCount = dims.product
@@ -1622,27 +1622,17 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, dims)
     }
 
-    def zeros(dims: Int*): Tensor = {
-      fill(0.0f, dims: _*)
-    }
-
-    def zeros(that: Tensor): Tensor = {
-      zeros(that.shape : _*)
-    }
-
-    def zeros_like(that: Tensor) = {
-      zeros(that.shape : _*)
-    }
-
     def scalar(value: Rep[Float]) = {
       val res = backend.mallocArray[Float](1)
       res(0) = value
       Tensor(res, 1)
     }
 
-    def ones(dims: Int*) = fill(1.0f, dims: _*)
-    def ones(that: Tensor) = fill(1.0f, that.shape: _*)
-    def halves(dims: Int*) = fill(0.5f, dims: _*)
+    def zeros(dims: Int*): Tensor = fill(dims, 0.0f)
+    def zeros_like(that: Tensor) = zeros(that.shape: _*)
+    def ones(dims: Int*) = fill(dims, 1.0f)
+    def ones_like(that: Tensor) = ones(that.shape: _*)
+    def halves(dims: Int*) = fill(dims, 0.5f)
 
     def expand(vector: Tensor, dim1: Int) = {
       assert(vector.rank == 1)

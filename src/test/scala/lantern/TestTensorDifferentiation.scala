@@ -151,7 +151,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val loss = gradR_loss(model)(Tensor.zeros(1))
         Tensor.assertEqual(loss, ((vector dot vector) * Tensor.halves(dim0)).sum(), "1")
         Tensor.assertEqual(ve.d, vector * 2.0f ,"2")
-        Tensor.assertEqual(half.d, Tensor.fill((vector dot vector).data(0), 2), "3")
+        Tensor.assertEqual(half.d, Tensor.fill(Seq(2), (vector dot vector).data(0)), "3")
         ()
       }
     }
@@ -194,7 +194,7 @@ class AdLMSVectorTest extends LanternFunSuite {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val idx = var_new(0)
-        val t = Tensor.fill(seq => { idx += 1; idx }, 2, 3)
+        val t = Tensor.fill(Seq(2, 3), (seq => { idx += 1; idx }))
 
         Tensor.assertEqual(t.trans(), Tensor.fromData(1.0f, 4.0f, 2.0f, 5.0f, 3.0f, 6.0f).resize(3, 2), "Transpose invalid")
       }
@@ -810,7 +810,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val kernel = Tensor.ones(kOut, kIn, kRow, kCol)
 
         val res = input.conv2D(kernel, 1, 1)
-        Tensor.assertEqual(res, Tensor.fill((kRow * kCol * kIn) * 1.0f, kOut, iRow - kRow + 1, iCol - kCol + 1), "CNN 1")
+        Tensor.assertEqual(res, Tensor.fill(Seq(kOut, iRow - kRow + 1, iCol - kCol + 1), (kRow * kCol * kIn) * 1.0f), "CNN 1")
       }
     }
     cnn_test1.eval("abc")
@@ -830,10 +830,10 @@ class AdLMSVectorTest extends LanternFunSuite {
         val kIn = iPane
         val kRow = 3
         val kCol = 3
-        val kernel = Tensor.fill((i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f, kOut, kIn, kRow, kCol)
+        val kernel = Tensor.fill(Seq(kOut, kIn, kRow, kCol), (i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f)
 
         val res = input.conv2D(kernel, 1, 1)
-        Tensor.assertEqual(res, Tensor.fill(1.0f, kOut, iRow - kRow + 1, iCol - kCol + 1), "CNN 2")
+        Tensor.assertEqual(res, Tensor.fill(Seq(kOut, iRow - kRow + 1, iCol - kCol + 1), 1.0f), "CNN 2")
       }
     }
 
@@ -855,10 +855,10 @@ class AdLMSVectorTest extends LanternFunSuite {
         val kIn = iPane
         val kRow = 3
         val kCol = 3
-        val kernel = Tensor.fill((i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f ,kOut, kIn, kRow, kCol)
+        val kernel = Tensor.fill(Seq(kOut, kIn, kRow, kCol), ((i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f))
 
         val res = input.conv2D(kernel, 2, 2)
-        Tensor.assertEqual(res, Tensor.fill(1.0f, kOut, (iRow - kRow)/2 + 1, (iCol - kCol)/2 + 1), "CNN 3")
+        Tensor.assertEqual(res, Tensor.fill(Seq(kOut, (iRow - kRow)/2 + 1, (iCol - kCol)/2 + 1), 1.0f), "CNN 3")
       }
     }
 
@@ -900,7 +900,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
         Tensor.assertEqual(loss, Tensor.scalar(resR * resC * 9.0f), "BACK - LOSS")
 
-        Tensor.assertEqual(varKernel.d, Tensor.fill(resR * resC * 1.0f, kIn, kOut, kRow, kCol), "BACK 1 - KERNEL D")
+        Tensor.assertEqual(varKernel.d, Tensor.fill(Seq(kIn, kOut, kRow, kCol), resR * resC * 1.0f), "BACK 1 - KERNEL D")
       }
     }
 
@@ -921,7 +921,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val kIn = iPane
         val kRow = 3
         val kCol = 3
-        val kernel = Tensor.fill((i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f ,kOut, kIn, kRow, kCol)
+        val kernel = Tensor.fill(Seq(kOut, kIn, kRow, kCol), (i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f)
 
         val varInput = TensorR(input)
         val varKernel = TensorR(kernel)
@@ -942,7 +942,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val resC = (iCol - kCol)/cS + 1
         Tensor.assertEqual(loss, Tensor.scalar(resR * resC * 1.0f), "BACK 2 - LOSS")
 
-        Tensor.assertEqual(varKernel.d, Tensor.fill(resR * resC * 1.0f, kIn, kOut, kRow, kCol), "BACK 2 - KERNEL D")
+        Tensor.assertEqual(varKernel.d, Tensor.fill(Seq(kIn, kOut, kRow, kCol), resR * resC * 1.0f), "BACK 2 - KERNEL D")
       }
     }
 
@@ -963,7 +963,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val kIn = iPane
         val kRow = 3
         val kCol = 3
-        val kernel = Tensor.fill((i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f, kOut, kIn, kRow, kCol)
+        val kernel = Tensor.fill(Seq(kOut, kIn, kRow, kCol), (i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f)
 
         val varInput = TensorR(input)
         val varKernel = TensorR(kernel)
@@ -983,7 +983,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val resC = (iCol - kCol)/cS + 1
         Tensor.assertEqual(loss, Tensor.scalar(resR * resC * 1.0f), "BACK 2 - LOSS")
 
-        Tensor.assertEqual(varKernel.d, Tensor.fill(resR * resC * 1.0f, kIn, kOut, kRow, kCol), "BACK 2 - KERNEL D")
+        Tensor.assertEqual(varKernel.d, Tensor.fill(Seq(kIn, kOut, kRow, kCol), resR * resC * 1.0f), "BACK 2 - KERNEL D")
       }
     }
 
@@ -1009,7 +1009,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val rS = 2
         val cS = 2
         val res = input.conv2D(kernel, rS, cS)
-        Tensor.assertEqual(res, Tensor.fill(iPane * kRow * kCol * 1.0f, kOut, (iRow - kRow)/rS + 1, (iCol - kCol)/cS + 1), "CNN 4")
+        Tensor.assertEqual(res, Tensor.fill(Seq(kOut, (iRow - kRow)/rS + 1, (iCol - kCol)/cS + 1), iPane * kRow * kCol * 1.0f), "CNN 4")
       }
     }
 
@@ -1050,7 +1050,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val resC = (iCol - kCol)/cS + 1
         Tensor.assertEqual(loss, Tensor.scalar(kOut * resR * resC * 27.0f), "BACK 4 - LOSS")
 
-        Tensor.assertEqual(varKernel.d, Tensor.fill(resR * resC * 1.0f, kOut, kIn, kRow, kCol), "BACK 4 - KERNEL D")
+        Tensor.assertEqual(varKernel.d, Tensor.fill(Seq(kOut, kIn, kRow, kCol), resR * resC * 1.0f), "BACK 4 - KERNEL D")
       }
     }
 
@@ -1077,7 +1077,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val rS = 2
         val cS = 2
         val res = input.conv2D(kernel, rS, cS)
-        Tensor.assertEqual(res, Tensor.fill(iPane * kRow * kCol * 1.0f, kOut, (iRow - kRow)/rS + 1, (iCol - kCol)/cS + 1), "CNN 5")
+        Tensor.assertEqual(res, Tensor.fill(Seq(kOut, (iRow - kRow)/rS + 1, (iCol - kCol)/cS + 1), iPane * kRow * kCol * 1.0f), "CNN 5")
       }
     }
 
@@ -1098,7 +1098,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val kIn = iPane
         val kRow = 3
         val kCol = 3
-        val kernel = Tensor.fill((i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f ,kOut, kIn, kRow, kCol)
+        val kernel = Tensor.fill(Seq(kOut, kIn, kRow, kCol), (i: Seq[Rep[Int]]) => if (i(2) == kRow/2 && i(3) == kCol/2) 1.0f else 0.0f)
 
         val varInput = TensorR(input)
         val varKernel = TensorR(kernel)
@@ -1118,7 +1118,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val resC = (iCol - kCol)/cS + 1
         Tensor.assertEqual(loss, Tensor.scalar(kOut * resR * resC * kIn * 1.0f), "BACK 5 - LOSS")
 
-        Tensor.assertEqual(varKernel.d, Tensor.fill(resR * resC * 1.0f, kOut, kIn, kRow, kCol), "BACK 5 - KERNEL D")
+        Tensor.assertEqual(varKernel.d, Tensor.fill(Seq(kOut, kIn, kRow, kCol), resR * resC * 1.0f), "BACK 5 - KERNEL D")
       }
     }
 
@@ -1173,7 +1173,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
 
         Tensor.assertEqual(loss, Tensor.scalar(iPane * (iRow/sR) * (iCol/sC) * 1.0f), "MAXPOOL BACK 1 - LOSS")
-        Tensor.assertEqual(varInput.d, Tensor.fill((i: Seq[Rep[Int]]) => if (i(1) % sR == 0 && i(2) % sC == 0) 1.0f else 0.0f, iPane, iRow, iCol), "MAXPOOL BACK 1 - D")
+        Tensor.assertEqual(varInput.d, Tensor.fill(Seq(iPane, iRow, iCol), (i: Seq[Rep[Int]]) => if (i(1) % sR == 0 && i(2) % sC == 0) 1.0f else 0.0f), "MAXPOOL BACK 1 - D")
 
       }
 
@@ -1197,7 +1197,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         // val (resNone, idxNone) = input.dropout(1.0f)
 
         Tensor.assertEqual(resAll, input, "DROPOUT 1")
-        // Tensor.assertEqual(resNone, Tensor.zeros(input), "DROPOUT 2")
+        // Tensor.assertEqual(resNone, Tensor.zeros_like(input), "DROPOUT 2")
 
         for (i <- 0 until input.scalarCount: Rep[Range]) {
           assertC(idxAll.data(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll.data(i))
@@ -1227,7 +1227,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         }
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-        Tensor.assertEqual(varInput.d, Tensor.ones(input), "DROPOUT BACK 1 - D")
+        Tensor.assertEqual(varInput.d, Tensor.ones_like(input), "DROPOUT BACK 1 - D")
 
       }
     }
@@ -1253,7 +1253,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   //       }
 
   //       val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-  //       Tensor.assertEqual(varInput.d, Tensor.zeros(input), "DROPOUT BACK 1 - D")
+  //       Tensor.assertEqual(varInput.d, Tensor.zeros_like(input), "DROPOUT BACK 1 - D")
 
   //     }
   //   }
@@ -1273,7 +1273,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val iRow1 = 10
         val iCol1 = 10
 
-        val input = Tensor.rand(1.0f, iChan1, iRow1, iCol1)
+        val input = Tensor.rand(Seq(iChan1, iRow1, iCol1), 1.0f)
 
         // Layer 1
         val inChan1 = iChan1
@@ -1289,22 +1289,22 @@ class AdLMSVectorTest extends LanternFunSuite {
         val smRow1 = 2
         val smCol1 = 2
 
-        val conv1 = Tensor.rand(1.0f, outChan1, inChan1, kRow1, kCol1)
+        val conv1 = Tensor.rand(Seq(outChan1, inChan1, kRow1, kCol1), 1.0f)
         val oRow1 = convSize(iRow1, kRow1, sRow1)/smRow1
         val oCol1 = convSize(iCol1, kCol1, sCol1)/smCol1
 
         val inChan2 = outChan1
         val outChan2 = 3
 
-        val conv2 = Tensor.rand(1.0f, outChan2, inChan2, kRow1, kCol1)
+        val conv2 = Tensor.rand(Seq(outChan2, inChan2, kRow1, kCol1), 1.0f)
 
         val oRow2 = convSize(oRow1, kRow1, sRow1)
         val oCol2 = convSize(oCol1, kCol1, sCol1)
         val out3 = 5
         val in3 = outChan2 * oRow2 * oCol2
 
-        val a1 = Tensor.rand(1.0f, out3, in3)
-        val b1 = Tensor.rand(1.0f, out3)
+        val a1 = Tensor.rand(Seq(out3, in3), 1.0f)
+        val b1 = Tensor.rand(Seq(out3), 1.0f)
 
 
         val varInput = TensorR(input)
@@ -1441,7 +1441,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         // assert equal
         val expect_input_grad = Tensor.fromData(scala.collection.Seq(1,1,4,4),
           1.0f, 2.0f, 2.0f, 1.0f, 2.0f, 4.0f, 4.0f, 2.0f, 2.0f, 4.0f, 4.0f, 2.0f, 1.0f, 2.0f, 2.0f, 1.0f)
-        val expect_kernel_grad = Tensor.fill(4.0f, 1, 1, 3, 3)
+        val expect_kernel_grad = Tensor.fill(Seq(1, 1, 3, 3), 4.0f)
         val expect_bias_grad = Tensor.fromData(scala.collection.Seq(1), 4.0f)
         Tensor.assertEqual(expect_input_grad * 2.0f, input.d, "expect and input.gradient are")
         Tensor.assertEqual(expect_kernel_grad * 2.0f, kernel.d, "expect and kernel.gradient are")
@@ -1496,7 +1496,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         }
         gradR_loss(lossFun)(Tensor.zeros(1))
         // assert equal
-        val expected_grad = Tensor.fill(0.25f, 1, 1, 4, 4)
+        val expected_grad = Tensor.fill(Seq(1, 1, 4, 4), 0.25f)
         Tensor.assertEqual(expected_grad, input.d, "expect and input.gradient are")
 
         input.clear_grad()
@@ -1517,24 +1517,24 @@ class AdLMSVectorTest extends LanternFunSuite {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input1 = Tensor.ones(3,4,5)
-        Tensor.assertEqual(input1.sum(dim = 0), Tensor.fill(3.0f, 4, 5))
-        Tensor.assertEqual(input1.sum(dim = 1), Tensor.fill(4.0f, 3, 5))
-        Tensor.assertEqual(input1.sum(dim = 2), Tensor.fill(5.0f, 3, 4))
+        Tensor.assertEqual(input1.sum(dim = 0), Tensor.fill(Seq(4, 5), 3.0f))
+        Tensor.assertEqual(input1.sum(dim = 1), Tensor.fill(Seq(3, 5), 4.0f))
+        Tensor.assertEqual(input1.sum(dim = 2), Tensor.fill(Seq(3, 4), 5.0f))
 
         val input2 = TensorR(input1)
         gradR_loss(dummy => input2.sum(dim = 0).sum())(Tensor.zeros(1))
-        Tensor.assertEqual(input2.d, Tensor.fill(1.0f, 3, 4, 5))
+        Tensor.assertEqual(input2.d, Tensor.fill(Seq(3, 4, 5), 1.0f))
         gradR_loss(dummy => input2.sum(dim = 1).sum())(Tensor.zeros(1))
-        Tensor.assertEqual(input2.d, Tensor.fill(2.0f, 3, 4, 5))
+        Tensor.assertEqual(input2.d, Tensor.fill(Seq(3, 4, 5), 2.0f))
         gradR_loss(dummy => input2.sum(dim = 2).sum())(Tensor.zeros(1))
-        Tensor.assertEqual(input2.d, Tensor.fill(3.0f, 3, 4, 5))
+        Tensor.assertEqual(input2.d, Tensor.fill(Seq(3, 4, 5), 3.0f))
 
         val input3 = Tensor.ones(2,4,5,5)
         Tensor.assertEqual(input3.sum(3).sum(2).sum(0).resize(-1, 1, 1), input3.batchNormAv() * 2 * 5 * 5)
 
         val input4 = TensorR(input3)
         gradR_loss(dummy => input4.batchNormAv().sum())(Tensor.zeros(1))
-        Tensor.assertEqual(input4.d, Tensor.fill(1.0f / 50, 2, 4, 5, 5))
+        Tensor.assertEqual(input4.d, Tensor.fill(Seq(2, 4, 5, 5), 1.0f / 50))
 
         val input5 = TensorR(new Tensor(Array(2.0f, 3.0f), Seq(2)))
         val input6 = TensorR(new Tensor(Array(2.0f, 3.0f), Seq(2)))
