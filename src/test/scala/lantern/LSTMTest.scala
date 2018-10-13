@@ -339,9 +339,9 @@ class LSTMTest extends FunSuite {
     }
   }
 
-  test("generate_code_for_lstm_module") {
-    val min_char_lstm_file = new PrintWriter(new File(root_dir2 + file_dir))
-    min_char_lstm_file.println(min_char_lstm_module.code)
-    min_char_lstm_file.flush()
-  }
+  // test("generate_code_for_lstm_module") {
+  //   val min_char_lstm_file = new PrintWriter(new File(root_dir2 + file_dir))
+  //   min_char_lstm_file.println(min_char_lstm_module.code)
+  //   min_char_lstm_file.flush()
+  // }
 }

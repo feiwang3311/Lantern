@@ -70,12 +70,41 @@ class AdLMSVectorTest extends LanternFunSuite {
       def snippet(x: Rep[String]): Rep[Unit] = {
         // Note: it's better to test with matrices [M1 x M2] and [M2 x M3] where M1 != M3.
         val m1 = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
-        val m2 = Tensor.fromData(Seq(3, 1), 2, 3, 4)
-        val expected = Tensor.fromData(Seq(2, 1), 20, 47)
+        val m2 = Tensor.fromData(Seq(3, 2), 2, 3, 4, 2, 3, 4)
+        val expected = Tensor.fromData(Seq(2, 2), 19, 19, 46, 46)
         Tensor.assertEqual(m1.dot(m2), expected)
+
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR_loss(dummy => (mm1 dot mm2).sum())(Tensor.zeros(1))
+        val expected1 = Tensor.fromData(Seq(2, 3), 5, 6, 7, 5, 6, 7)
+        val expected2 = Tensor.fromData(Seq(3, 2), 5, 5, 7, 7, 9, 9)
+        Tensor.assertEqual(mm1.d, expected1)
+        Tensor.assertEqual(mm2.d, expected2)
       }
     }
     runTest(mmdot)
+  }
+
+  test("matrix-matrix-dot_trans") {
+    val mmdot_trans = new LanternDriverC[String, Unit] {
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
+        val m2 = Tensor.fromData(Seq(2, 3), 2, 3, 4, 2, 3, 4)
+        val expected = Tensor.fromData(Seq(2, 2), 20, 20, 47, 47)
+        Tensor.assertEqual(m1.dot_trans(m2), expected)
+
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR_loss(dummy => (mm1 dot_trans mm2).sum())(Tensor.zeros(1))
+        val expected1 = Tensor.fromData(Seq(2, 3), 4, 6, 8, 4, 6, 8)
+        val expected2 = Tensor.fromData(Seq(2, 3), 5, 7, 9, 5, 7, 9)
+        Tensor.assertEqual(mm1.d, expected1)
+        Tensor.assertEqual(mm2.d, expected2)
+      }
+    }
+    runTest(mmdot_trans)
   }
 
   test("array2") {
@@ -1165,14 +1194,14 @@ class AdLMSVectorTest extends LanternFunSuite {
         val input = Tensor.rand(iPane, iRow, iCol)
 
         val (resAll, idxAll) = input.dropout(0.0f)
-        val (resNone, idxNone) = input.dropout(1.0f)
+        // val (resNone, idxNone) = input.dropout(1.0f)
 
         Tensor.assertEqual(resAll, input, "DROPOUT 1")
-        Tensor.assertEqual(resNone, Tensor.zeros(input), "DROPOUT 2")
+        // Tensor.assertEqual(resNone, Tensor.zeros(input), "DROPOUT 2")
 
         for (i <- 0 until input.scalarCount: Rep[Range]) {
           assertC(idxAll.data(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll.data(i))
-          assertC(idxNone.data(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone.data(i))
+          // assertC(idxNone.data(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone.data(i))
         }
       }
     }
@@ -1206,31 +1235,31 @@ class AdLMSVectorTest extends LanternFunSuite {
     dropout_back_test1.eval("abc")
   }
 
-  test("dropout_back_test2") {
-    val dropout_back_test2 = new LanternDriverC[String, Unit] {
+  // test("dropout_back_test2") {
+  //   val dropout_back_test2 = new LanternDriverC[String, Unit] {
 
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val iPane = 2
-        val iRow = 16
-        val iCol = 20
-        val input = Tensor.rand(iPane, iRow, iCol)
+  //     @virtualize
+  //     def snippet(a: Rep[String]): Rep[Unit] = {
+  //       val iPane = 2
+  //       val iRow = 16
+  //       val iCol = 20
+  //       val input = Tensor.rand(iPane, iRow, iCol)
 
-        val varInput = TensorR(input)
+  //       val varInput = TensorR(input)
 
-        def lossFun = { (dummy: TensorR) =>
-          val res = varInput.dropout(1.0f)
-          res.sum()
-        }
+  //       def lossFun = { (dummy: TensorR) =>
+  //         val res = varInput.dropout(1.0f)
+  //         res.sum()
+  //       }
 
-        val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-        Tensor.assertEqual(varInput.d, Tensor.zeros(input), "DROPOUT BACK 1 - D")
+  //       val loss = gradR_loss(lossFun)(Tensor.zeros(1))
+  //       Tensor.assertEqual(varInput.d, Tensor.zeros(input), "DROPOUT BACK 1 - D")
 
-      }
-    }
+  //     }
+  //   }
 
-    dropout_back_test2.eval("abc")
-  }
+  //   dropout_back_test2.eval("abc")
+  // }
 
   test("test_cnn_full1") {
     val test_cnn_full1 = new LanternDriverC[String, Unit] {

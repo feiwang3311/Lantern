@@ -292,9 +292,9 @@ class MnistCNN extends FunSuite {
     }
   }
 
-  test("mnist_cnn_module") {
-    val cnn_file = new PrintWriter(new File(root_dir2 + file_dir))
-    cnn_file.println(mnist2.code)
-    cnn_file.flush()
-  }
+  // test("mnist_cnn_module") {
+  //   val cnn_file = new PrintWriter(new File(root_dir2 + file_dir))
+  //   cnn_file.println(mnist2.code)
+  //   cnn_file.flush()
+  // }
 }

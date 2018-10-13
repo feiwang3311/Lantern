@@ -454,6 +454,28 @@ trait TensorDsl extends DslOps with Diff {
       backend.dot(this, that)
     }
 
+    def dot_trans(that: Tensor) = {
+      (this.rank, that.rank) match {
+        case (1, 1) | (2, 1) => this.dot(that)
+        case (2, 2) =>
+          assert (this.shape(1) == that.shape(1), s"Incompatible shapes for dot_trans ${this.shape}. ${that.shape}")
+          val dim1 = this.shape(0)
+          val dim2 = that.shape(0)
+          val dim3 = this.shape(1)
+          val res = backend.mallocArray[Float](dim1 * dim2)
+          for (i <- DataLoop(dim1)) {
+            for (j <- DataLoop(dim2)) {
+              val value = var_new(0.0f)
+              for (k <- DataLoop(dim3)) {
+                value += this.data(i * dim3 + k) * that.data(j * dim3 + k)
+              }
+              res(i * dim2 + j) = readVar(value)
+            }
+          }
+          Tensor(res, dim1, dim2)
+      }
+    }
+
     // NOTE: only handles (Vector Cartesian Vector)
     def cart(that: Tensor) = {
       assert(this.rank == 1 && that.rank == 1, "cartesian product is only for 1d vectors")
@@ -1780,6 +1802,24 @@ trait TensorDsl extends DslOps with Diff {
               }
             }
           }
+      }
+    }
+
+    def dot_trans(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
+      assert(this.x.rank == 2 && that.x.rank == 2 && this.x.shape(1) == that.x.shape(1), s"shape must match for dot_trans, got ${this.x.shape}, ${that.x.shape}")
+      val y = TensorR(x dot_trans that.x); k(y)
+      // back-propagate
+      val dim1 = this.x.shape(0)
+      val dim2 = that.x.shape(0)
+      val dim3 = this.x.shape(1)
+      for (i <- DataLoop(dim1)) {
+        for (j <- DataLoop(dim2)) {
+          val curr = y.d.data(i * dim2 + j)
+          for (k <- DataLoop(dim3)) {
+            this.d.data(i * dim3 + k) += that.x.data(j * dim3 + k) * curr
+            that.d.data(j * dim3 + k) += this.x.data(i * dim3 + k) * curr
+          }
+        }
       }
     }
 
