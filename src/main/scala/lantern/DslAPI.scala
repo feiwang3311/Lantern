@@ -521,6 +521,9 @@ abstract class DslDriverBase[A: Manifest, B: Manifest] extends DslExp { self =>
     val IR: self.type
   }
 
+  val dir = "/tmp"
+  val fileName = s"lantern-snippet-${scala.util.Random.alphanumeric.take(4).mkString}"
+
   // The code snippet to compile.
   def snippet(x: Rep[A]): Rep[B]
 
@@ -541,8 +544,8 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
   }
 
   override def eval(a: A) {
-    val cppFileName = "/tmp/lantern-snippet.cpp"
-    val binaryFileName = "/tmp/lantern-snippet"
+    val cppFileName = s"$dir/$fileName.cpp"
+    val binaryFileName = s"$dir/$fileName"
     val out = new java.io.PrintWriter(cppFileName)
     out.println(code)
     out.close()
@@ -569,8 +572,8 @@ abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverBase[A
   }
 
   override def eval(a: A) {
-    val cudaFileName = "/tmp/lantern-snippet.cu"
-    val binaryFileName = "/tmp/lantern-snippet"
+    val cudaFileName = s"$dir/$fileName.cu"
+    val binaryFileName = s"$dir/$fileName"
     val out = new java.io.PrintWriter(cudaFileName)
     out.println(code)
     out.close()
@@ -597,8 +600,8 @@ abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverBase[A,
   }
 
   override def eval(a: A) {
-    val cudaFileName = "/tmp/lantern-snippet.cu"
-    val binaryFileName = "/tmp/lantern-snippet"
+    val cudaFileName = s"$dir/$fileName.cu"
+    val binaryFileName = s"$dir/$fileName"
     val out = new java.io.PrintWriter(cudaFileName)
     out.println(code)
     out.close()
