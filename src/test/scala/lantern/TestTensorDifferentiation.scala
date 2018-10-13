@@ -70,12 +70,41 @@ class AdLMSVectorTest extends LanternFunSuite {
       def snippet(x: Rep[String]): Rep[Unit] = {
         // Note: it's better to test with matrices [M1 x M2] and [M2 x M3] where M1 != M3.
         val m1 = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
-        val m2 = Tensor.fromData(Seq(3, 1), 2, 3, 4)
-        val expected = Tensor.fromData(Seq(2, 1), 20, 47)
+        val m2 = Tensor.fromData(Seq(3, 2), 2, 3, 4, 2, 3, 4)
+        val expected = Tensor.fromData(Seq(2, 2), 19, 19, 46, 46)
         Tensor.assertEqual(m1.dot(m2), expected)
+
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR_loss(dummy => (mm1 dot mm2).sum())(Tensor.zeros(1))
+        val expected1 = Tensor.fromData(Seq(2, 3), 5, 6, 7, 5, 6, 7)
+        val expected2 = Tensor.fromData(Seq(3, 2), 5, 5, 7, 7, 9, 9)
+        Tensor.assertEqual(mm1.d, expected1)
+        Tensor.assertEqual(mm2.d, expected2)
       }
     }
     runTest(mmdot)
+  }
+
+  test("matrix-matrix-dot_trans") {
+    val mmdot_trans = new LanternDriverC[String, Unit] {
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
+        val m2 = Tensor.fromData(Seq(2, 3), 2, 3, 4, 2, 3, 4)
+        val expected = Tensor.fromData(Seq(2, 2), 20, 20, 47, 47)
+        Tensor.assertEqual(m1.dot_trans(m2), expected)
+
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR_loss(dummy => (mm1 dot_trans mm2).sum())(Tensor.zeros(1))
+        val expected1 = Tensor.fromData(Seq(2, 3), 4, 6, 8, 4, 6, 8)
+        val expected2 = Tensor.fromData(Seq(2, 3), 5, 7, 9, 5, 7, 9)
+        Tensor.assertEqual(mm1.d, expected1)
+        Tensor.assertEqual(mm2.d, expected2)
+      }
+    }
+    runTest(mmdot_trans)
   }
 
   test("array2") {
