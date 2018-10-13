@@ -8,12 +8,6 @@ from nltk.tokenize import sexpr
 import numpy as np
 from six.moves import urllib
 
-#data_dir = "../senti"
-
-#sample = "(3 (2 It) (4 (4 (2 's) (4 (3 (2 a) (4 (3 lovely) (2 film))) (3 (2 with) (4 (3 (3 lovely) (2 performances)) (2 (2 by) (2 (2 (2 Buy) (2 and)) (2 Accorsi))))))) (2 .)))"
-#         0   1      2  3   4     5  6  7     8  9          10          11 12      13 14 15         16                17 18     19 20  21      22      23                24     
-#sample2= "(2 (2 (1 No) (2 one)) (1 (1 (2 goes) (2 (1 (2 (2 unindicted) (2 here)) (2 ,)) (2 (2 which) (3 (2 (2 is) (2 probably)) (3 (2 for) (4 (2 the) (4 best))))))) (2 .)))"
-
 def getAllwordsFromOneData(data):
   data = data.split()
   words = set()
@@ -79,25 +73,25 @@ def filter_small_glove(words):
   # then we actually write to the file
   with codecs.open(filtered_glove_path, encoding='utf-8') as f:
     with codecs.open(dev_glove_path, 'w', encoding='utf-8') as out:
-      out.write(str(ncount) + '\n') # write the number of entries in this file 
+      out.write(str(ncount) + '\n') # write the number of entries in this file
       for line in f:
         nread += 1
         line = line.strip()
         if not line: continue
-        temp = line.split(u' ', 1) 
+        temp = line.split(u' ', 1)
         if temp[0] in words:
           #out.write(temp[0] + ' ')
           out.write(temp[1] + '\n')
           word_idx[temp[0]] = nwrote
           nwrote += 1
       # add a random row of 300 number, for unseen words
-      rn = np.random.uniform(-0.05, 0.05, 300).astype(np.float32)  
+      rn = np.random.uniform(-0.05, 0.05, 300).astype(np.float32)
       for i in range(len(rn)):
         if i == len(rn) - 1: out.write(str(rn[i]) + '\n')
-        else: out.write(str(rn[i]) + ' ') 
+        else: out.write(str(rn[i]) + ' ')
   print('Lantern: read %s lines, wrote %s' % (nread, nwrote + 1))
   return (nwrote), word_idx
-  
+
 # filter Glove file and get word -> index relationship
 index_unknown, word_idx = filter_small_glove(words)
 
@@ -112,7 +106,7 @@ def parseOneSample(data):
         count -= (data[i].count(')') - 1)
         if count == 0:
           return (i+1)
-      else: 
+      else:
         count += 1
 
   data_raw = data.split()
@@ -134,7 +128,7 @@ def parseOneSample(data):
       values.append(encode)
     else:
       values.append(-1)
-  
+
   lch = []
   rch = []
   for i in range(len(data)):

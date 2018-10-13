@@ -91,7 +91,7 @@ def plot(files, model):
   ax.set_xticklabels(labels)
   ax.set_ylim([0, max(loopTimes) * 1.2])
   ax.set_ylabel("seconds")
-  ax.set_title("training time of " + step_desc)
+  ax.set_title("training time of {} in {}".format(step_desc, model))
   pylab.savefig(save_dir + model + '.png')
 
   # # plot

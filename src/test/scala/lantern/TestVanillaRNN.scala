@@ -224,7 +224,7 @@ class VanillaRNN extends FunSuite {
       val hiddenSize = 50
       val batchSize = 20
 
-      val RNN = DynamicRNNFix(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
+      val RNN = DynamicRNNFix(VanillaRNNCellTrans(inputSize = 26, hiddenSize = 50, outputSize = 26))
       // val RNN = DynamicRNN(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
       val opt = Adagrad(RNN, learning_rate = 1e-1f, gradClip = 5.0f)
 
@@ -294,10 +294,10 @@ class VanillaRNN extends FunSuite {
     }
   }
 
-  // test("generate_code_for_vanilla_rnn_module") {
-  //   val min_char_rnn_file = new PrintWriter(new File(root_dir2 + file_dir))
-  //   min_char_rnn_file.println(min_char_rnn_module.code)
-  //   min_char_rnn_file.flush()
-  // }
+  test("generate_code_for_vanilla_rnn_module") {
+    val min_char_rnn_file = new PrintWriter(new File(root_dir2 + file_dir))
+    min_char_rnn_file.println(min_char_rnn_module.code)
+    min_char_rnn_file.flush()
+  }
 
 }

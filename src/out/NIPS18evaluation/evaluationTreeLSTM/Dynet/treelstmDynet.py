@@ -106,7 +106,7 @@ def tree_lstm_network(scores, words, lchs, rchs):
       return (loss, hidden, cell)
   return rec(0)[0]
 
-epocNum = 3
+epocNum = 6
 loopStart = time.time()
 loss_save = []
 for epoc in range(epocNum):

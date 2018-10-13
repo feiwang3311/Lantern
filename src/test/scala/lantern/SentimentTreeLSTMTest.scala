@@ -20,6 +20,7 @@ class SentimentTreeLSTM extends FunSuite {
 
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationTreeLSTM/Lantern/Lantern.cpp"
+  val root_dir2 = "src/out/NIPS18evaluation/"
 
   val sentimental_lstm = new LanternDriverC[String, Unit] {
 
@@ -202,13 +203,15 @@ class SentimentTreeLSTM extends FunSuite {
       val mWhy = Tensor.zeros_like(Why)
       val mby  = Tensor.zeros_like(by)
 
-      val loss_save = NewArray[Double](30)
+      val epocN = 6
+
+      val loss_save = NewArray[Double](epocN)
 
       val addr = getMallocAddr() // remember current allocation pointer here
 
       val loopStart = get_time()
 
-      for (epoc <- (0 until 30): Rep[Range]) {
+      for (epoc <- (0 until epocN): Rep[Range]) {
 
         var average_loss = 0.0f
         for (n <- (0 until tree_number): Rep[Range]) {
@@ -243,7 +246,7 @@ class SentimentTreeLSTM extends FunSuite {
       val loopEnd = get_time()
       val prepareTime = loopStart - startTime
       val loopTime = loopEnd - loopStart
-      val timePerEpoc = loopTime / 30
+      val timePerEpoc = loopTime / epocN
 
       val fp2 = openf(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
@@ -258,11 +261,9 @@ class SentimentTreeLSTM extends FunSuite {
   }
 
   test("generate_code_for_sentiment_tree_lstm"){
-    //println("generate code for Sentiment Tree LSTM")
-    val sentit_file = new PrintWriter(new File(root_dir + file_dir))
+    val sentit_file = new PrintWriter(new File(root_dir2 + file_dir))
     sentit_file.println(sentimental_lstm.code)
     sentit_file.flush()
-    //println(s"now your code at $root_dir/$file_dir is generated.")
   }
 
 }

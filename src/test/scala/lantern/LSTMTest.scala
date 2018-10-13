@@ -273,7 +273,7 @@ class LSTMTest extends FunSuite {
       val seq_length = 20
       val batchSize = 20
 
-      val RNN = DynamicRNNFix(LSTMCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
+      val RNN = DynamicRNNFix(LSTMCellTrans(inputSize = 26, hiddenSize = 50, outputSize = 26))
       val opt = Adagrad(RNN, learning_rate = 1e-1f, gradClip = 5.0f)
 
       def oneHot(input: Rep[Array[Int]]): TensorR = {
@@ -339,9 +339,9 @@ class LSTMTest extends FunSuite {
     }
   }
 
-  // test("generate_code_for_lstm_module") {
-  //   val min_char_lstm_file = new PrintWriter(new File(root_dir2 + file_dir))
-  //   min_char_lstm_file.println(min_char_lstm_module.code)
-  //   min_char_lstm_file.flush()
-  // }
+  test("generate_code_for_lstm_module") {
+    val min_char_lstm_file = new PrintWriter(new File(root_dir2 + file_dir))
+    min_char_lstm_file.println(min_char_lstm_module.code)
+    min_char_lstm_file.flush()
+  }
 }
