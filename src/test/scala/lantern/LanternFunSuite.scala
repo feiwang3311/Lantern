@@ -8,6 +8,16 @@ class LanternFunSuite extends FunSuite {
     driver.eval("dummy")
   }
 
+  private val _currentTestName = new ThreadLocal[String]
+
+  override def withFixture(test: NoArgTest) = {
+    _currentTestName.set(test.name)
+    val outcome = super.withFixture(test)
+    _currentTestName.set(null)
+    outcome
+  }
+  protected def currentTestName: String = _currentTestName.get()
+
   // TODO: Edit this function to actually detect whether GPU codegen is possible.
   // One idea: check for:
   // - The existence of cuBLAS header files (<cuda_runtime.h>, <cublas_v2.h>).

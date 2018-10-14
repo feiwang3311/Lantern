@@ -67,7 +67,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   test("matrix-matrix-dot") {
     val mmdot = new LanternDriverC[String, Unit] {
 
-      override val fileName = "matrix_matrix_dot"
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
