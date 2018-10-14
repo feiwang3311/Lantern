@@ -74,10 +74,11 @@ def plot(files, model):
   print(unit)
   if (unit == ' 1 epoch'):
     steps = len(losses[0])
+    step_desc = "1 epoch"
   else:
     steps = len(losses[0]) - 1
-  temp = unit.split()
-  step_desc = str(int(temp[0]) * steps) + " " + temp[1] + "s"
+    temp = unit.split()
+    step_desc = str(int(temp[0]) * steps) + " " + temp[1] + "s"
 
   # plot
   fig, ax = plt.subplots()

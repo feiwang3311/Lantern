@@ -71,6 +71,7 @@ cd ..
 
 
 cd evaluationTreeLSTM
+echo "Note: Let's run TreeLSTM experiment now"
 echo "Now let's run Lantern"
 cd Lantern
 echo "RUN: run Lantern"
@@ -88,32 +89,6 @@ cd ..
 echo "Now let's run PyTorch"
 cd PyTorch
 python3 treeLSTM.py
-cd ..
-cd TensorFold
-echo "RUN: run TensorFold"
-python3 preprocess_data.py
-echo "Note: we assume the system has python-pip python-dev python-virtualenv"
-echo "Note: if not, you can install it by uncomment the commands below, but you need root access"
-#sudo apt install python-pip python-dev python-virtualenv
-echo "Note: we assume the system has ./virEnv setup with tensorflow1.0.0 and fold"
-echo "Note: if not, uncomment the commands below to set it up"
-#virtualenv -p python3 virEnv
-source ./virEnv/bin/activate
-#sudo pip3 install tensorflow==1.0.0
-#pip install https://storage.googleapis.com/tensorflow_fold/tensorflow_fold-0.0.1-py3-none-linux_x86_64.whl
-python3 TreeLSTMTensorFlow.py result_TensorFold20.txt
-# python TreeLSTMTensorFlow.py result_TensorFold1.txt 1
-deactivate
-echo "Result: run sentiment in TensorFold is successful"
-cd ..
-echo "RUN: copy the result files and do plotting"
-cp Lantern/result_Lantern.txt result_Lantern.txt
-cp PyTorch/result_PyTorch.txt result_PyTorch.txt
-cp TensorFold/result_TensorFold20.txt result_TensorFold20.txt
-# cp TensorFold/result_TensorFold1.txt result_TensorFold1.txt
-cp Dynet/result_Dynet.txt result_Dynet.txt
-python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_Dynet.txt # result_TensorFold1.txt
-echo "RESULT: run TreeLSTM experiment successful"
 cd ..
 cd TensorFold
 echo "RUN: run TensorFold"
