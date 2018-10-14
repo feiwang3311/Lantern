@@ -9,15 +9,13 @@ import org.scala_lang.virtualized.SourceContext
 import scala.virtualization.lms._
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.{Seq => Seq}
+import scala.collection.Seq
 import scala.math._
-
-import org.scalatest.FunSuite
 
 import java.io.PrintWriter;
 import java.io.File;
 
-class MnistCNN extends FunSuite {
+object MnistCNN {
 
   val root_dir = "src/out/ICFP18evaluation/"
   val root_dir2 = "src/out/NIPS18evaluation/"
@@ -196,12 +194,6 @@ class MnistCNN extends FunSuite {
     }
   }
 
-  test("generate_code_for_mnist_cnn") {
-    val cnn_file = new PrintWriter(new File(root_dir + file_dir))
-    cnn_file.println(mnist.code)
-    cnn_file.flush()
-  }
-
   val mnist2  = new DslDriverC[String, Unit] with NNModule {
 
     @virtualize
@@ -292,9 +284,9 @@ class MnistCNN extends FunSuite {
     }
   }
 
-  // test("mnist_cnn_module") {
-  //   val cnn_file = new PrintWriter(new File(root_dir2 + file_dir))
-  //   cnn_file.println(mnist2.code)
-  //   cnn_file.flush()
-  // }
+  def main(args: Array[String]) {
+    val cnn_file = new PrintWriter(new File(root_dir2 + file_dir))
+    cnn_file.println(mnist2.code)
+    cnn_file.flush()
+  }
 }

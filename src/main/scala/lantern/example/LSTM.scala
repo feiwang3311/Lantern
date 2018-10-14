@@ -11,18 +11,16 @@ import scala.virtualization.lms._
 import scala.collection.mutable.ArrayBuffer
 import scala.math._
 
-import org.scalatest.FunSuite
-
 import java.io.PrintWriter;
 import java.io.File;
 
-class VanillaRNN extends FunSuite {
+object LSTM {
 
   val root_dir = "src/out/ICFP18evaluation/"
-  val file_dir = "evaluationRNN/Lantern.cpp"
+  val file_dir = "evaluationLSTM/Lantern.cpp"
   val root_dir2 = "src/out/NIPS18evaluation/"
 
-  val min_char_rnn = new LanternDriverC[String, Unit] {
+  val min_char_lstm = new LanternDriverC[String, Unit] {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
@@ -40,15 +38,12 @@ class VanillaRNN extends FunSuite {
       def done = close(fd)
     }
 
-
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       /**
        add scanner
        **/
-
       val startTime = get_time()
-
       val scanner = new Scanner("graham.txt")
       val training_data = scanner.data
       val data_size = scanner.fl
@@ -61,36 +56,63 @@ class VanillaRNN extends FunSuite {
       val translated_data = NewArray[Int](data_size)
       for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
 
-      val vocab_size = 26                 // Do we have to get this size?
+      val vocab_size = 26
       val hidden_size = 50
       val learning_rate = 1e-1f
       val seq_length = 20
-      //val Wxh = Tensor.randinit(vocab_size, hidden_size, 0.01f)  // input to hidden
-      val Wxh = Tensor.randn(hidden_size, vocab_size, 0.01f)  // input to hidden
-      val Whh = Tensor.randn(hidden_size, hidden_size, 0.01f) // hidden to hidden
+
+      // initialize all parameters:
+      val Wfh = Tensor.randn(hidden_size, hidden_size, 0.01f)
+      val Wfx = Tensor.randn(hidden_size, vocab_size, 0.01f)
+      val bf  = Tensor.zeros(hidden_size)
+      val Wih = Tensor.randn(hidden_size, hidden_size, 0.01f)
+      val Wix = Tensor.randn(hidden_size, vocab_size, 0.01f)
+      val bi  = Tensor.zeros(hidden_size)
+      val Wch = Tensor.randn(hidden_size, hidden_size, 0.01f)
+      val Wcx = Tensor.randn(hidden_size, vocab_size, 0.01f)
+      val bc  = Tensor.zeros(hidden_size)
+      val Woh = Tensor.randn(hidden_size, hidden_size, 0.01f)
+      val Wox = Tensor.randn(hidden_size, vocab_size, 0.01f)
+      val bo  = Tensor.zeros(hidden_size)
       val Why = Tensor.randn(vocab_size, hidden_size, 0.01f)  // hidden to output
-      val bh  = Tensor.zeros(hidden_size)
       val by  = Tensor.zeros(vocab_size)
+
       val hprev = Tensor.zeros(hidden_size)
+      val cprev = Tensor.zeros(hidden_size)
+      val hsave = Tensor.zeros_like(hprev)
+      val csave = Tensor.zeros_like(cprev)
 
-      val hnext = Tensor.zeros_like(hprev)
+      // wrap as Tensors
+      val tWfh = TensorR(Wfh)
+      val tWfx = TensorR(Wfx)
+      val tbf = TensorR(bf)
+      val tWih = TensorR(Wih)
+      val tWix = TensorR(Wix)
+      val tbi = TensorR(bi)
+      val tWch = TensorR(Wch)
+      val tWcx = TensorR(Wcx)
+      val tbc = TensorR(bc)
+      val tWoh = TensorR(Woh)
+      val tWox = TensorR(Wox)
+      val tbo = TensorR(bo)
+      val tWhy = TensorR(Why)
+      val tby = TensorR(by)
+      val thprev = TensorR(hprev)
+      val tcprev = TensorR(cprev)
 
-      // wrap as tensors
-      val Wxh1 = TensorR(Wxh)
-      val Whh1 = TensorR(Whh)
-      val Why1 = TensorR(Why)
-      val bh1  = TensorR(bh)
-      val by1  = TensorR(by)
-      val hprev1 = TensorR(hprev)
 
+      // lossFun
       def lossFun(inputs: Rep[Array[Int]], targets: Rep[Array[Int]]) = { (dummy: TensorR) =>
+
         val loss = TensorR(Tensor.zeros(1))
         val in = ArrayBuffer[TensorR]()
+
         in.append(loss)
-        in.append(hprev1)
+        in.append(thprev)
+        in.append(tcprev)
+
         val outputs = LOOPSM(in)(inputs.length){i => t =>
 
-          // printf("at iteration %d ", i)
           // get input as one-hot tensor
           val x = Tensor.zeros(vocab_size)
           x.data(inputs(i)) = 1
@@ -100,16 +122,24 @@ class VanillaRNN extends FunSuite {
           y.data(targets(i)) = 1
           val y1 = TensorR(y)
 
-          val h1 = ((Wxh1 dot x1) + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
-          val e1 = (Why1.dot(h1) + by1).exp()                       // use new hidden state to compute unnormalized prob
-          val p1 = e1 / e1.sum()                            // use unnormalized prob to compute normalize prob
-          val newloss = t(0) - (p1 dot y1).log()            // loss is updated by original loss t(0) and additional loss
+          val ft = (tWfh.dot(t(1)) + tWfx.dot(x1) + tbf).sigmoid()
+          val it = (tWih.dot(t(1)) + tWix.dot(x1) + tbi).sigmoid()
+          val ot = (tWoh.dot(t(1)) + tWox.dot(x1) + tbo).sigmoid()
+          val Ct = (tWch.dot(t(1)) + tWcx.dot(x1) + tbc).tanh()
+          val ct = ft * t(2) + it * Ct
+          val ht = ot * ct.tanh()
+          val et = (tWhy.dot(ht) + tby).exp()
+          val pt = et / et.sum()
+          val loss = t(0) - (pt dot y1).log()
+
           val out = ArrayBuffer[TensorR]()
-          out.append(newloss)
-          out.append(h1)
+          out.append(loss)
+          out.append(ht)
+          out.append(ct)
           out
         }
-        hnext.copy_data(outputs(1).x)     // update the hidden state with the result from LOOP
+        hsave.copy_data(outputs(1).x)     // save the hidden state with the result from LOOP
+        csave.copy_data(outputs(2).x)     // save the cell state with the result from LOOP
         outputs(0)                        // return the final loss
       }
 
@@ -117,21 +147,30 @@ class VanillaRNN extends FunSuite {
       val lr = learning_rate
       val hp = 1e-8f
 
-      val mWxh = Tensor.zeros_like(Wxh)
-      val mWhh = Tensor.zeros_like(Whh)
+      val mWfh = Tensor.zeros_like(Wfh)
+      val mWfx = Tensor.zeros_like(Wfx)
+      val mbf = Tensor.zeros_like(bf)
+      val mWih = Tensor.zeros_like(Wih)
+      val mWix = Tensor.zeros_like(Wix)
+      val mbi = Tensor.zeros_like(bi)
+      val mWch = Tensor.zeros_like(Wch)
+      val mWcx = Tensor.zeros_like(Wcx)
+      val mbc = Tensor.zeros_like(bc)
+      val mWoh = Tensor.zeros_like(Woh)
+      val mWox = Tensor.zeros_like(Wox)
+      val mbo = Tensor.zeros_like(bo)
       val mWhy = Tensor.zeros_like(Why)
-      val mbh  = Tensor.zeros_like(bh)
-      val mby  = Tensor.zeros_like(by)
+      val mby = Tensor.zeros_like(by)
 
+      val loopStart = get_time()
       val loss_save = NewArray[Double](51)
-      val loopStartTime = get_time()
 
       val addr = getMallocAddr() // remember current allocation pointer here
 
       val startAt = var_new[Int](0)
       startAt -= seq_length
 
-      var smooth_loss = 60.0f
+      var smooth_loss = 70.0
       for (n <- (0 until 5001): Rep[Range]) {
 
         startAt += seq_length
@@ -149,33 +188,36 @@ class VanillaRNN extends FunSuite {
 
         val loss = gradR_loss(lossFun(inputs, targets))(Tensor.zeros(1))
         val loss_value = loss.data(0) // we suppose the loss is scala (Tensor of size 1)
-        smooth_loss = smooth_loss * 0.9f + loss_value * 0.1f
+        smooth_loss = smooth_loss * 0.9 + loss_value * 0.1
         if (n % 100 == 0) {
           printf("iter %d, loss %f\\n", n, smooth_loss)
           loss_save(n / 100) = smooth_loss
         }
 
-        val pars = ArrayBuffer(Wxh1, Whh1, Why1, bh1, by1)
-        val mems = ArrayBuffer(mWxh, mWhh, mWhy, mbh, mby)
+        val pars = ArrayBuffer(tWfh, tWfx, tbf, tWih, tWix, tbi, tWch, tWcx, tbc, tWoh, tWox, tbo, tWhy, tby)
+        val mems = ArrayBuffer(mWfh, mWfx, mbf, mWih, mWix, mbi, mWch, mWcx, mbc, mWoh, mWox, mbo, mWhy, mby)
         for ((par, mem) <- pars.zip(mems)) {
           par.clip_grad(5.0f)
           mem += par.d * par.d
           par.x -= par.d * lr / (mem + hp).sqrt()
           par.clear_grad()
         }
-        hprev1.clear_grad()          // clear gradient of all Tensors for next cycle
-        hprev1.x.copy_data(hnext)
+        thprev.clear_grad()          // clear gradient of all Tensors for next cycle
+        tcprev.clear_grad()          // clear gradient of all Tensors for next cycle
+        thprev.x.copy_data(hsave)
+        tcprev.x.copy_data(csave)
 
         resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer
       }
 
       val loopEndTime = get_time()
-      val prepareTime = loopStartTime - startTime
-      val loopTime    = loopEndTime - loopStartTime
+      val prepareTime = loopStart - startTime
+      val loopTime    = loopEndTime - loopStart
 
       val fp = openf(a, "w")
       fprintf(fp, "unit: %s\\n", "100 iteration")
       for (i <- (0 until loss_save.length): Rep[Range]) {
+        //printf("loss_saver is %lf \\n", loss_save(i))
         fprintf(fp, "%lf\\n", loss_save(i))
       }
       fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
@@ -184,13 +226,7 @@ class VanillaRNN extends FunSuite {
     }
   }
 
-  test("generate_code_for_vanilla_rnn_original") {
-    val min_char_rnn_file = new PrintWriter(new File(root_dir + file_dir))
-    min_char_rnn_file.println(min_char_rnn.code)
-    min_char_rnn_file.flush()
-  }
-
-  val min_char_rnn_module = new DslDriverC[String, Unit] with NNModule {
+  val min_char_lstm_module = new LanternDriverC[String, Unit] with NNModule {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
@@ -210,22 +246,25 @@ class VanillaRNN extends FunSuite {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
-
+      /**
+       add scanner
+       **/
       val startTime = get_time()
-
       val scanner = new Scanner("graham.txt")
       val training_data = scanner.data
       val data_size = scanner.fl
+      printf("LSTM Test: >> data has %d chars\\n", data_size)
 
       val translated_data = NewArray[Int](data_size)
       for (i <- (0 until data_size)) { translated_data(i) = Encoding.char_to_ix(training_data(i)) }
-      val seq_length = 20
+
       val vocab_size = 26
-      val hiddenSize = 50
+      val hidden_size = 50
+      val learning_rate = 1e-1f
+      val seq_length = 20
       val batchSize = 20
 
-      val RNN = DynamicRNNFix(VanillaRNNCellTrans(inputSize = 26, hiddenSize = 50, outputSize = 26))
-      // val RNN = DynamicRNN(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
+      val RNN = DynamicRNNFix(LSTMCellTrans(inputSize = 26, hiddenSize = 50, outputSize = 26))
       val opt = Adagrad(RNN, learning_rate = 1e-1f, gradClip = 5.0f)
 
       def oneHot(input: Rep[Array[Int]]): TensorR = {
@@ -240,19 +279,17 @@ class VanillaRNN extends FunSuite {
       def lossFun(input: Rep[Array[Int]], target: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val res: ArrayBuffer[TensorR] = RNN(oneHot(input), target, lengths = None)  // returns an ArrayBuffer[TensorR]
         res.head.sum()
-        // val resCon = res.head.concat(0, res.tail.toSeq: _*)
-        // //val resCon = res.init.head.concat(0, res.init.tail.toSeq: _*)
-        // resCon.logSoftmaxB().nllLossB(target).sum()
       }
 
+      val loopStart = get_time()
       val loss_save = NewArray[Double](51)
-      val loopStartTime = get_time()
 
       val addr = getMallocAddr() // remember current allocation pointer here
 
       val startAt = var_new[Int](0)
       startAt -= seq_length * batchSize
 
+      var smooth_loss = 70.0
       for (n <- (0 until 5001): Rep[Range]) {
 
         startAt += seq_length * batchSize
@@ -280,8 +317,8 @@ class VanillaRNN extends FunSuite {
       }
 
       val loopEndTime = get_time()
-      val prepareTime = loopStartTime - startTime
-      val loopTime    = loopEndTime - loopStartTime
+      val prepareTime = loopStart - startTime
+      val loopTime    = loopEndTime - loopStart
 
       val fp = openf(a, "w")
       fprintf(fp, "unit: %s\\n", "100 iteration")
@@ -290,14 +327,12 @@ class VanillaRNN extends FunSuite {
       }
       fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
       closef(fp)
-
     }
   }
 
-  test("generate_code_for_vanilla_rnn_module") {
-    val min_char_rnn_file = new PrintWriter(new File(root_dir2 + file_dir))
-    min_char_rnn_file.println(min_char_rnn_module.code)
-    min_char_rnn_file.flush()
+  def main(args: Array[String]) {
+    val min_char_lstm_file = new PrintWriter(new File(root_dir2 + file_dir))
+    min_char_lstm_file.println(min_char_lstm_module.code)
+    min_char_lstm_file.flush()
   }
-
 }

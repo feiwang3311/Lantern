@@ -11,12 +11,10 @@ import scala.virtualization.lms._
 import scala.collection.mutable.ArrayBuffer
 import scala.math._
 
-import org.scalatest.FunSuite
-
 import java.io.PrintWriter;
 import java.io.File;
 
-class SentimentTreeLSTM extends FunSuite {
+object SentimentTreeLSTM {
 
   val root_dir = "src/out/ICFP18evaluation/"
   val file_dir = "evaluationTreeLSTM/Lantern/Lantern.cpp"
@@ -260,7 +258,7 @@ class SentimentTreeLSTM extends FunSuite {
     }
   }
 
-  test("generate_code_for_sentiment_tree_lstm"){
+  def main(args: Array[String]) {
     val sentit_file = new PrintWriter(new File(root_dir2 + file_dir))
     sentit_file.println(sentimental_lstm.code)
     sentit_file.flush()
