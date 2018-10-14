@@ -110,7 +110,7 @@ trait NNModule extends TensorDsl {
 
   case class VanillaRNNCellTrans(val inputSize: Int, val hiddenSize: Int, val outputSize: Int, val name: String = "vanilla_rnn_cell_trans") extends RnnCell {
     val inLinear = Linear1D2Trans(inputSize, hiddenSize, hiddenSize)
-    val outLinear = Linear1D(hiddenSize, outputSize)
+    val outLinear = Linear1DTrans(hiddenSize, outputSize)
     def apply(ins: ArrayBuffer[TensorR]): ArrayBuffer[TensorR] @diff = {
       assert(ins.size == 2, "vanilla rnn cell trans should take a input of two tensors, the next element, and the last hidden layer")
       val in = ins(0)
