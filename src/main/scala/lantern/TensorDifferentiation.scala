@@ -269,6 +269,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+      // less memory copy
       Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
     }
 
