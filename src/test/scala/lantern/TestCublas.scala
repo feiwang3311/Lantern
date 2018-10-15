@@ -28,19 +28,24 @@ class TestCublas extends LanternFunSuite {
         // This test fails for tensors with different scalar values.
 
         // TODO: Fix this test for the following values:
-        // val m = Tensor.fromData(Seq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
-        // val v = Tensor.fromData(Seq(4), -1, -2, -3, -4)
-        // val expected = Tensor.fromData(Seq(2), -30, -70)
+        val m = Tensor.fromData(Seq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
+        val v = Tensor.fromData(Seq(4), -1, -2, -3, -4)
 
-        val m = Tensor.ones(2, 4)
-        val v = Tensor.ones(4)
+        // val m = Tensor.ones(2, 4)
+        // val v = Tensor.ones(4)
         val result = m.dot(v).toCPU()
 
         backend = BackendCPU()
-        val expected = Tensor.fill(Seq(2), 4)
+        // val expected = Tensor.fill(Seq(2), 4)
+        val expected = Tensor.fromData(Seq(2), -30, -70)
+        result.print()
         Tensor.assertEqual(result, expected)
       }
     }
+    val file = "src/out/untested/vvd.cu"
+    val out = new java.io.PrintWriter(file)
+    out.println(mvdot.code)
+    out.close()
     runTest(mvdot)
   }
 
@@ -53,16 +58,16 @@ class TestCublas extends LanternFunSuite {
         // This test fails for tensors with different scalar values.
 
         // TODO: Fix this test for the following values:
-        // val m1 = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
-        // val m2 = Tensor.fromData(Seq(3, 1), 2, 3, 4)
-        // val expected = Tensor.fromData(Seq(2, 1), 20, 47)
+        val m1 = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
+        val m2 = Tensor.fromData(Seq(3, 1), 2, 3, 4)
 
-        val m1 = Tensor.ones(4, 4)
-        val m2 = Tensor.ones(4, 4)
+        // val m1 = Tensor.ones(4, 4)
+        // val m2 = Tensor.ones(4, 4)
         val result = m1.dot(m2).toCPU()
 
         backend = BackendCPU()
-        val expected = Tensor.fill(Seq(4, 4), 4)
+        // val expected = Tensor.fill(Seq(4, 4), 4)
+        val expected = Tensor.fromData(Seq(2, 1), 20, 47)
         Tensor.assertEqual(result, expected)
       }
     }

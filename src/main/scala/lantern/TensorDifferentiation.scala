@@ -269,10 +269,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
-      val scalarArray = scalars.toArray
-      val res = mallocArray[Float](scalarArray.length)
-      for (i <- 0 until scalarArray.length: Range) res(i) = scalarArray(i)
-      Tensor(res, dims: _*)
+      Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -2787,9 +2784,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
-        m, ",", n, ",", one, ",",
-        matrix, ",", m, ",", vector, ",", 1, ",", zero, ",", result, ",", 1, "))")
+        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_T, ",
+        n, ",", m, ",", one, ",",
+        matrix, ",", n, ",", vector, ",", 1, ",", zero, ",", result, ",", 1, "))")
     }
 
     override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -2806,9 +2803,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
         m, ",", n, ",", k, ",", one, ",",
-        a, ",", m, ",", b, ",", k, ",", zero, ",", result, ",", m, "))")
+        a, ",", k, ",", b, ",", n, ",", zero, ",", result, ",", m, "))")
     }
 
     override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = {
