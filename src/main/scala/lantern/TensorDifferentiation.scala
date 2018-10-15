@@ -2818,27 +2818,58 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       Tensor(res, m, n)
     }
 
+    def launchBinaryKernel(n: Int, x: Tensor, y: Tensor, res: Rep[Array[Float]])
+                          (op: (String, String) => String): Unit = {
+      // TODO: Generalize to `launchKernel` function that's usable for unary ops, etc.
+      // TODO: Implement broadcasting.
+      // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/cuda/Loops.cuh#L196
+      unchecked[Unit](
+        "launch_kernel<128, 4>(", n, ", [=]__device__(int idx) {\n" +
+        "  float* out = (float*)&", res, "[idx];\n" +
+        "  float* in1 = (float*)&", x.data, "[idx];\n" +
+        "  float* in2 = (float*)&", y.data, "[idx];\n" +
+        s"  *out = ${op("(*in1)", "(*in2)")};\n" +
+        "});")
+    }
+
     // TODO: Implement elementwise binary ops.
     override def +(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def +(x: Tensor, y: Tensor): Tensor = ???
+
+    override def +(x: Tensor, y: Tensor): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      launchBinaryKernel(x.scalarCount, x, y, res) { (a, b) => a + " + " + b }
+      Tensor(res, x.shape: _*)
+    }
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = ???
     override def +=(x: Tensor, y: Tensor): Unit = ???
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def -(x: Tensor, y: Tensor): Tensor = ???
+    override def -(x: Tensor, y: Tensor): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      launchBinaryKernel(x.scalarCount, x, y, res) { (a, b) => a + " - " + b }
+      Tensor(res, x.shape: _*)
+    }
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = ???
     override def -=(x: Tensor, y: Tensor): Unit = ???
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def *(x: Tensor, y: Tensor): Tensor = ???
+    override def *(x: Tensor, y: Tensor): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      launchBinaryKernel(x.scalarCount, x, y, res) { (a, b) => a + " * " + b }
+      Tensor(res, x.shape: _*)
+    }
 
     override def *=(x: Tensor, y: Rep[Float]): Unit = ???
     override def *=(x: Tensor, y: Tensor): Unit = ???
 
     override def /(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def /(x: Tensor, y: Tensor): Tensor = ???
+    override def /(x: Tensor, y: Tensor): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      launchBinaryKernel(x.scalarCount, x, y, res) { (a, b) => a + " / " + b }
+      Tensor(res, x.shape: _*)
+    }
 
     override def /=(x: Tensor, y: Rep[Float]): Unit = ???
     override def /=(x: Tensor, y: Tensor): Unit = ???

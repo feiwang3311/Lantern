@@ -479,6 +479,31 @@ trait DslGenCublas extends DslGenBase {
       |__global__ void arrayUpdate(T *data, int index, T value) {
       |  data[index] = value;
       |}
+      |
+      |template<int nt, int vt, typename func_t>
+      |__launch_bounds__(nt, 4)
+      |__global__ void elementwise_kernel(int N, func_t f) {
+      |  int tid = threadIdx.x;
+      |  int nv = nt * vt;
+      |  int idx = nv * blockIdx.x + tid;
+      |  #pragma unroll
+      |  for (int i = 0; i < vt; i++) {
+      |    if (idx < N) {
+      |      f(idx);
+      |      idx += nt;
+      |    }
+      |  }
+      |}
+      |
+      |template<int nt, int vt, typename func_t>
+      |static void launch_kernel(int64_t N, const func_t& f) {
+      |  if (N == 0) {
+      |    return;
+      |  }
+      |  dim3 block(nt);
+      |  dim3 grid((N + block.x * vt - 1) / (block.x * vt));
+      |  elementwise_kernel<nt, vt, func_t><<<grid, block>>>(N, f);
+      |}
     """.stripMargin
 }
 

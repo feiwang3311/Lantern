@@ -666,7 +666,7 @@ for(int x591=0; x591 < 32000; x591++) {
 x590[x591] = 0.0f;
 
 }
-// dot: ArrayBuffer(100, 320), WrappedArray(320, 50)
+// dot: ArrayBuffer(100, 320), List(320, 50)
 float* x596 = (float*)myMalloc(5000 * sizeof(float));;
 for(int x597=0; x597 < 100; x597++) {
 int32_t x602 = x597 * 320;
@@ -749,7 +749,7 @@ for(int x675=0; x675 < 5000; x675++) {
 x674[x675] = 0.0f;
 
 }
-// dot: List(100, 50), WrappedArray(50, 10)
+// dot: List(100, 50), List(50, 10)
 float* x680 = (float*)myMalloc(1000 * sizeof(float));;
 for(int x681=0; x681 < 100; x681++) {
 int32_t x685 = x681 * 50;
