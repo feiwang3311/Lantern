@@ -218,6 +218,38 @@ trait TensorDsl extends DslOps with Diff {
     // - Conv2d.
     // - Activation functions (e.g. relu).
     // - Fused multiply add operations?
+
+    // Elementwise addition.
+    def +(x: Tensor, y: Rep[Float]): Tensor
+    def +(x: Tensor, y: Tensor): Tensor
+
+    // In-place elementwise addition.
+    def +=(x: Tensor, y: Rep[Float]): Unit
+    def +=(x: Tensor, y: Tensor): Unit
+
+    // Elementwise subtraction.
+    def -(x: Tensor, y: Rep[Float]): Tensor
+    def -(x: Tensor, y: Tensor): Tensor
+
+    // In-place elementwise subtraction.
+    def -=(x: Tensor, y: Rep[Float]): Unit
+    def -=(x: Tensor, y: Tensor): Unit
+
+    // Elementwise multiplication.
+    def *(x: Tensor, y: Rep[Float]): Tensor
+    def *(x: Tensor, y: Tensor): Tensor
+
+    // In-place elementwise multiplication.
+    def *=(x: Tensor, y: Rep[Float]): Unit
+    def *=(x: Tensor, y: Tensor): Unit
+
+    // Elementwise division.
+    def /(x: Tensor, y: Rep[Float]): Tensor
+    def /(x: Tensor, y: Tensor): Tensor
+
+    // In-place elementwise division.
+    def /=(x: Tensor, y: Rep[Float]): Unit
+    def /=(x: Tensor, y: Tensor): Unit
   }
 
   /**
@@ -286,6 +318,91 @@ trait TensorDsl extends DslOps with Diff {
       }
       Tensor(res, dim1, dim3)
     }
+
+    def elementWiseOpWithBroadCast(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
+      Tensor.dimBroadcast(x.shape, y.shape) match {
+        case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
+        case Some((xShape, yShape, resShape)) => {
+          val resData = backend.mallocArray[Float](resShape.nbElem)
+          val res = new Tensor(resData, resShape)
+
+          def inplace(offX: Rep[Int], offY: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
+            val offres = var_new[Int](offRes)
+            val offx = var_new[Int](offX)
+            val offy = var_new[Int](offY)
+            for (i <- DataLoop(resShape(dim))) {
+              if (dim == resShape.size - 1) {
+                resData(offres) = op(x.data(offx), y.data(offy))
+              } else {
+                inplace(offx, offy, offres, dim + 1)
+              }
+              offres += resShape.strides(dim)
+              if (xShape(dim) > 1) offx += xShape.strides(dim)
+              if (yShape(dim) > 1) offy += yShape.strides(dim)
+            }
+          }
+          inplace(0, 0, 0, 0)
+          res
+        }
+      }
+    }
+
+    override def +(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s + y)
+    override def +(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ + _)
+
+    override def +=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s + y)
+    override def +=(x: Tensor, y: Tensor): Unit = {
+      if (y.scalarCount == 1) {
+        generateRawComment("+= tensor of dim 0")
+        x += y.data(0) // broadcast
+      }
+      else if (x.scalarCount == 1) ??? // x.data(0) = y.fold(x.data(0))((agg, s) => agg + s)
+      else if (x.shape == y.shape)
+        for (i <- DataLoop(x.scalarCount)) x.data(i) += y.data(i)
+      else throw new IllegalArgumentException(s"dimensions of vector do not match +=! ${x.shape.seq} != ${y.shape.seq}")
+    }
+
+    override def -(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s - y)
+    override def -(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ - _)
+
+    override def -=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s - y)
+    override def -=(x: Tensor, y: Tensor): Unit = {
+      if (y.scalarCount == 1) x -= y.data(0) // broadcast
+      else if (x.scalarCount == 1) {
+        ???
+        // x.data(0) = y.fold(x.data(0))((agg, s) => agg - s)
+      }
+      else if (x.shape == y.shape)
+        for (i <- DataLoop(x.scalarCount)) x.data(i) -= y.data(i)
+      else throw new IllegalArgumentException("dimensions of vector do not match -=!")
+    }
+
+    override def *(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s * y)
+    override def *(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ * _)
+
+    override def *=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s * y)
+    override def *=(x: Tensor, y: Tensor): Unit = {
+      if (y.scalarCount == 1) x *= y.data(0) // broadcast
+      else if (x.scalarCount == 1) {
+        ???
+        // x.data(0) = y.fold(x.data(0))((agg, s) => agg * s)
+      }
+      else if (x.shape == y.shape)
+        for (i <- DataLoop(x.scalarCount)) x.data(i) *= y.data(i)
+      else throw new IllegalArgumentException("dimensions of vector do not match *=!")
+    }
+
+    override def /(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s / y)
+    override def /(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ / _)
+
+    override def /=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s / y)
+    override def /=(x: Tensor, y: Tensor): Unit = {
+      if (y.scalarCount == 1) x /= y.data(0) // broadcast
+      else if (x.scalarCount == 1) ??? // x.data(0) = y.fold(x.data(0))((agg, s) => agg / s)
+      else if (x.shape == y.shape)
+        for (i <- DataLoop(x.scalarCount)) x.data(i) /= y.data(i)
+      else throw new IllegalArgumentException("dimensions of vector do not match /=!")
+    }
   }
   object BackendCPU {
     def apply() = new BackendCPU
@@ -317,12 +434,12 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    def mapInPlace(op: Rep[Float] => Rep[Float]) = {
-      for (i <- DataLoop(scalarCount)) this.data(i) = op(this.data(i))
-    }
-
     def mutate(delta: Rep[Int] => Rep[Float]) = {
       for (i <- DataLoop(scalarCount)) this.data(i) += delta(i)
+    }
+
+    def mapInPlace(op: Rep[Float] => Rep[Float]) = {
+      for (i <- DataLoop(scalarCount)) this.data(i) = op(this.data(i))
     }
 
     def map(op: Rep[Float] => Rep[Float]) = {
@@ -337,96 +454,37 @@ trait TensorDsl extends DslOps with Diff {
       res
     }
 
-    def elementWiseOpWithBroadCast(that: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
-      Tensor.dimBroadcast(shape, that.shape) match {
-        case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${this.shape.seq} != ${that.shape.seq}")
-        case Some((thisShape, thatShape, resShape)) => {
-          val resData = backend.mallocArray[Float](resShape.nbElem)
-          val res = new Tensor(resData, resShape)
+    // Elementwise addition.
+    def +(that: Rep[Float]): Tensor = backend.+(this, that)
+    def +(that: Tensor): Tensor = backend.+(this, that)
 
-          def inplace(offThis: Rep[Int], offThat: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
-            val offres = var_new[Int](offRes)
-            val offthis = var_new[Int](offThis)
-            val offthat = var_new[Int](offThat)
-            for (i <- DataLoop(resShape(dim))) {
-              if (dim == resShape.size - 1) {
-                resData(offres) = op(this.data(offthis), that.data(offthat))
-              } else {
-                inplace(offthis, offthat, offres, dim + 1)
-              }
-              offres += resShape.strides(dim)
-              if (thisShape(dim) > 1) offthis += thisShape.strides(dim)
-              if (thatShape(dim) > 1) offthat += thatShape.strides(dim)
-            }
-          }
-          inplace(0, 0, 0, 0)
-          res
-        }
-      }
-    }
+    // In-place elementwise addition.
+    def +=(that: Rep[Float]): Unit = backend.+=(this, that)
+    def += (that: Tensor): Unit = backend.+=(this, that)
 
-    def +(that: Rep[Float]): Tensor = this.map(x => x + that)
-    def +(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ + _)
+    // Elementwise subtraction.
+    def -(that: Rep[Float]): Tensor = backend.-(this, that)
+    def -(that: Tensor): Tensor = backend.-(this, that)
 
-    // this operator updates the values of this, unlike the + operator
-    def +=(that: Rep[Float]): Unit = this.mapInPlace(x => x + that)
-    def += (that: Tensor): Unit = {
-      if (that.scalarCount == 1) {
-        generateRawComment("+= tensor of dim 0")
-        this += that.data(0) // broadcast
-      }
-      else if (this.scalarCount == 1) ??? // this.data(0) = that.fold(this.data(0))((agg, x) => agg + x)
-      else if (this.shape == that.shape)
-        for (i <- DataLoop(scalarCount)) this.data(i) += that.data(i)
-      else throw new IllegalArgumentException(s"dimensions of vector do not match +=! ${this.shape.seq} != ${that.shape.seq}")
-    }
+    // In-place elementwise subtraction.
+    def -=(that: Rep[Float]): Unit = backend.-=(this, that)
+    def -= (that: Tensor): Unit = backend.-=(this, that)
 
-    def -(that: Rep[Float]): Tensor = this.map(x => x - that)
-    def -(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ - _)
+    // Elementwise multiplication.
+    def *(that: Rep[Float]): Tensor = backend.*(this, that)
+    def *(that: Tensor): Tensor = backend.*(this, that)
 
-    // this operator updates the values of this, unlike the - operator
-    def -=(that: Rep[Float]): Unit = this.mapInPlace(x => x - that)
-    def -= (that: Tensor): Unit = {
-      if (that.scalarCount == 1) this -= that.data(0) // broadcast
-      else if (this.scalarCount == 1) {
-        ???
-        // this.data(0) = that.fold(this.data(0))((agg, x) => agg - x)
-      }
-      else if (this.shape == that.shape)
-        for (i <- DataLoop(scalarCount)) this.data(i) -= that.data(i)
-      else throw new IllegalArgumentException("dimensions of vector do not match +=!")
-    }
+    // In-place elementwise multiplication.
+    def *=(that: Rep[Float]): Unit = backend.*=(this, that)
+    def *= (that: Tensor): Unit = backend.*=(this, that)
 
-    // Element wise multiplication
-    def *(that: Rep[Float]): Tensor = this.map(x => x * that)
-    def *(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ * _)
+    // Elementwise division.
+    def /(that: Rep[Float]): Tensor = backend./(this, that)
+    def /(that: Tensor): Tensor = backend./(this, that)
 
-    // this operator updates the values of this, unlike the * operator
-    def *=(that: Rep[Float]): Unit = this.mapInPlace(x => x * that)
-    def *= (that: Tensor): Unit = {
-      if (that.scalarCount == 1) this *= that.data(0) // broadcast
-      else if (this.scalarCount == 1) {
-        ???
-        // this.data(0) = that.fold(this.data(0))((agg, x) => agg * x)
-      }
-      else if (this.shape == that.shape)
-        for (i <- DataLoop(scalarCount)) this.data(i) *= that.data(i)
-      else throw new IllegalArgumentException("dimensions of vector do not match +=!")
-    }
-
-    // element wise division
-    def /(that: Rep[Float]): Tensor = this.map(x => x / that)
-    def /(that: Tensor): Tensor = this.elementWiseOpWithBroadCast(that, _ / _)
-
-    // this operator updates the values of this, unlike the / operator
-    def /=(that: Rep[Float]): Unit = this.mapInPlace(x => x / that)
-    def /= (that: Tensor): Unit = {
-      if (that.scalarCount == 1) this /= that.data(0) // broadcast
-      else if (this.scalarCount == 1) ??? // this.data(0) = that.fold(this.data(0))((agg, x) => agg / x)
-      else if (this.shape == that.shape)
-        for (i <- DataLoop(scalarCount)) this.data(i) /= that.data(i)
-      else throw new IllegalArgumentException("dimensions of vector do not match +=!")
-    }
+    // In-place elementwise division.
+    def /=(that: Rep[Float]): Unit = backend./=(this, that)
+    def /= (that: Tensor): Unit = backend./=(this, that)
 
     def setAsOne() = { this.mapInPlace(x => 1.0f); () }
     def clear() = { this.mapInPlace(x => 0.0f); () }
@@ -2761,6 +2819,31 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       sgemm(m, n, k, x.data, y.data, res)
       Tensor(res, m, n)
     }
+
+    // TODO: Implement elementwise binary ops.
+    override def +(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def +(x: Tensor, y: Tensor): Tensor = ???
+
+    override def +=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def +=(x: Tensor, y: Tensor): Unit = ???
+
+    override def -(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def -(x: Tensor, y: Tensor): Tensor = ???
+
+    override def -=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def -=(x: Tensor, y: Tensor): Unit = ???
+
+    override def *(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def *(x: Tensor, y: Tensor): Tensor = ???
+
+    override def *=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def *=(x: Tensor, y: Tensor): Unit = ???
+
+    override def /(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def /(x: Tensor, y: Tensor): Tensor = ???
+
+    override def /=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def /=(x: Tensor, y: Tensor): Unit = ???
   }
 
   object BackendCublas {
