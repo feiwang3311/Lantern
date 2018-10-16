@@ -128,4 +128,26 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(binops)
   }
+
+  testGPU("binary-ops-tensor-scalar") {
+    val binops = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-gpu-binops-tensor-scalar"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
+        x += 4
+        x -= 4
+        x *= -8
+        x /= -8
+        val result = x.toCPU()
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
+        result.print()
+        Tensor.assertEqual(result, expected)
+      }
+    }
+    runTest(binops)
+  }
 }
