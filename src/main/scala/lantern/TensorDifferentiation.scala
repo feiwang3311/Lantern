@@ -175,7 +175,7 @@ trait TensorDsl extends DslOps with Diff {
     * Note: Eventually, a tensor operation IR may be introduced to enable analyses and
     * transformations such as operator fusion and matrix chain multiplication optimization.
     */
-  trait Backend {
+  trait Backend extends Serializable {
     // Setup the backend. This is the first function that will be called in DSL programs.
     def setup(): Unit
 
@@ -2834,29 +2834,16 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       Tensor(res, m, n)
     }
 
-    // TODO: Fix this version, which produces java.io.NotSerializableException.
-    /*
-    def launchBinaryKernel(res: Rep[Array[Float]], x: Rep[Array[Float]], y: Rep[Array[Float]],
-                           rank: Int, scalarCount: Int, shape: Rep[Array[Int]], strides: Rep[Array[Array[Int]]],
-                           op: Rep[(Float, Float) => Float]): Rep[Unit] = {
-      unchecked[Unit](
-        "gpu_binary_kernel(", res, ",", x, ",", y, ",",
-        rank, ",", scalarCount, ",", shape, ",", strides, ",", op, ")")
-    }
-    */
-
-    def launchBinaryKernel(res: Tensor, x: Tensor, y: Tensor)(op: (String, String) => String): Unit = {
-      // TODO: Use `op: Rep[((Float, Float)) => Float]`. I tried it but got java.io.NotSerializableException.
-
-      // Compute broadcasting strides.
-      // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/TensorIterator.cpp#L396
-      // TODO: Generalize for different-ranked tensors. Currently, broadcasting works only for same-rank tensors.
-      def computeStrides(shape: Dimensions): Seq[Int] = {
-        shape.strides.zipWithIndex.map { case (s, i) =>
-          if (shape(i) == 1) 0 else s
-        }
+    // Compute broadcasting strides.
+    // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/TensorIterator.cpp#L396
+    // TODO: Generalize for different-ranked tensors. Currently, broadcasting works only for same-rank tensors.
+    def getBroadcastingStrides(shape: Dimensions): Seq[Int] = {
+      shape.strides.zipWithIndex.map { case (s, i) =>
+        if (shape(i) == 1) 0 else s
       }
+    }
 
+    def launchBinaryKernel(res: Tensor, x: Tensor, y: Tensor)(op: (Rep[Float], Rep[Float]) => Rep[Float]): Unit = {
       // Store shapes as local variables.
       val resShape = res.shape
       val xShape = x.shape
@@ -2867,24 +2854,16 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val yDims = Array(yShape.map(unit(_)): _*)
       // Compute strides.
       val strides = NewArray[Array[Int]](3)
-      strides(0) = Array(computeStrides(resShape).map(unit(_)): _*)
-      strides(1) = Array(computeStrides(xShape).map(unit(_)): _*)
-      strides(2) = Array(computeStrides(yShape).map(unit(_)): _*)
+      strides(0) = Array(getBroadcastingStrides(resShape).map(unit(_)): _*)
+      strides(1) = Array(getBroadcastingStrides(xShape).map(unit(_)): _*)
+      strides(2) = Array(getBroadcastingStrides(yShape).map(unit(_)): _*)
       // Launch kernel.
       unchecked[Unit](
-        "{\n" +
-          "OffsetCalculator<3> calc(", resShape.length, ",", resDims, ",", strides, "); \n" +
-          "launch_kernel<128, 4>(", resShape.scalarCount, ", [=]__device__(int idx) {\n" +
-          "  auto offsets = calc.get(idx);\n" +
-          "  float* out = (float*)&", res.data, "[offsets[0]];\n" +
-          "  float* in1 = (float*)&", x.data, "[offsets[1]];\n" +
-          "  float* in2 = (float*)&", y.data, "[offsets[2]];\n" +
-          s"  *out = ${op("(*in1)", "(*in2)")};\n" +
-          "});\n" +
-          "}")
+        "gpu_binary_kernel(", res.data, ",", x.data, ",", y.data, ",",
+        resShape.length, ",", resShape.scalarCount, ",", resDims, ",", strides, ",", fun(op), ")")
     }
 
-    def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Tensor = {
+    def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (Rep[Float], Rep[Float]) => Rep[Float]): Tensor = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) =>
@@ -2895,7 +2874,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       }
     }
 
-    def elementwiseInplaceBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Unit = {
+    def elementwiseInplaceBinaryOp(x: Tensor, y: Tensor)(op: (Rep[Float], Rep[Float]) => Rep[Float]): Unit = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) =>
@@ -2906,28 +2885,28 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     // TODO: Implement elementwise binary ops.
     override def +(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def +(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " + " + _ }
+    override def +(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + _ }
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = ???
-    override def +=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " + " + _ }
+    override def +=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + _ }
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def -(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " - " + _ }
+    override def -(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + _ }
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = ???
-    override def -=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " - " + _ }
+    override def -=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ - _ }
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " * " + _ }
+    override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ * _ }
 
     override def *=(x: Tensor, y: Rep[Float]): Unit = ???
-    override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " * " + _ }
+    override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ * _ }
 
     override def /(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def /(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " / " + _ }
+    override def /(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ / _ }
 
     override def /=(x: Tensor, y: Rep[Float]): Unit = ???
-    override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
+    override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ / _ }
   }
 
   object BackendCublas {
