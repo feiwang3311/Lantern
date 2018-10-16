@@ -1584,7 +1584,6 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   object Tensor {
-
     def apply(data: Rep[Array[Float]], dims: Int*) = new Tensor(data, dims)
 
     def dimCompatible(a: Tensor, b: Tensor) = {
@@ -1604,9 +1603,9 @@ trait TensorDsl extends DslOps with Diff {
       if (res == List(-1)) None
       else {
         // add dimensions of 1 to tensors with smaller rank
-        if (a.size > b.size) Some((new Dimensions(a), new Dimensions(Seq.fill(a.size - b.size)(1) ++ b), new Dimensions(res.toSeq)))
-        else if (a.size < b.size) Some((new Dimensions(Seq.fill(b.size - a.size)(1) ++ a), new Dimensions(b), new Dimensions(res.toSeq)))
-        else Some((new Dimensions(a), new Dimensions(b), new Dimensions(res.toSeq)))
+        if (a.size > b.size) Some((Dimensions(a), Dimensions(Seq.fill(a.size - b.size)(1) ++ b), Dimensions(res)))
+        else if (a.size < b.size) Some((Dimensions(Seq.fill(b.size - a.size)(1) ++ a), Dimensions(b), Dimensions(res)))
+        else Some((Dimensions(a), Dimensions(b), Dimensions(res)))
       }
     }
 
@@ -2840,13 +2839,34 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       // TODO: Generalize to `launchKernel` function that's usable for unary ops, etc.
       // TODO: Implement broadcasting.
       // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/cuda/Loops.cuh#L196
-      unchecked[Unit](
-        "launch_kernel<128, 4>(", n, ", [=]__device__(int idx) {\n" +
-        "  float* out = (float*)&", res, "[idx];\n" +
-        "  float* in1 = (float*)&", x.data, "[idx];\n" +
-        "  float* in2 = (float*)&", y.data, "[idx];\n" +
-        s"  *out = ${op("(*in1)", "(*in2)")};\n" +
-        "});")
+      generateRawComment("SHAPES HERE")
+
+      Tensor.dimBroadcast(x.shape, y.shape) match {
+        case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
+        case Some((xShape, yShape, resShape)) =>
+          System.out.println("Shapes", xShape, yShape, resShape)
+          System.out.println("Strides", xShape.strides, yShape.strides, resShape.strides)
+          val xdims = Array(xShape.map(unit(_)): _*)
+          val ydims = Array(yShape.map(unit(_)): _*)
+          val rdims = Array(resShape.map(unit(_)): _*)
+          val strides = NewArray[Array[Int]](3)
+          strides(0) = Array(xShape.strides.map(unit(_)): _*)
+          strides(1) = Array(yShape.strides.map(unit(_)): _*)
+          strides(2) = Array(resShape.strides.map(unit(_)): _*)
+
+          unchecked[Unit](
+            "{\n" +
+            "OffsetCalculator<3> calc(", xShape.length, ",", rdims, ",", strides, "); \n" +
+            "launch_kernel<128, 4>(", n, ", [=]__device__(int idx) {\n" +
+            "  auto offsets = calc.get(idx);\n" +
+            // "  auto offsets = OffsetCalculator<3>(", xShape.length, ",", rdims, ",", strides, ").get(idx);\n" +
+            "  float* out = (float*)&", res, "[offsets[0]];\n" +
+            "  float* in1 = (float*)&", x.data, "[offsets[1]];\n" +
+            "  float* in2 = (float*)&", y.data, "[offsets[2]];\n" +
+            s"  *out = ${op("(*in1)", "(*in2)")};\n" +
+            "});\n" +
+            "}")
+      }
     }
 
     // TODO: Implement elementwise binary ops.

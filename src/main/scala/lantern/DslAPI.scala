@@ -480,6 +480,7 @@ trait DslGenCublas extends DslGenBase {
       |  data[index] = value;
       |}
       |
+      |/*
       |template<int nt, int vt, typename func_t>
       |__launch_bounds__(nt, 4)
       |__global__ void elementwise_kernel(int N, func_t f) {
@@ -503,6 +504,163 @@ trait DslGenCublas extends DslGenBase {
       |  dim3 block(nt);
       |  dim3 grid((N + block.x * vt - 1) / (block.x * vt));
       |  elementwise_kernel<nt, vt, func_t><<<grid, block>>>(N, f);
+      |}
+      |*/
+      |
+      |// Result of div/mod operation stored together.
+      |template <typename Value>
+      |struct DivMod {
+      |  Value div, mod;
+      |
+      |  __host__ __device__ DivMod(Value div, Value mod) : div(div), mod(mod) { }
+      |};
+      |
+      |// Base case: we only have an implementation for uint32_t for now.  For
+      |// everything else, we use plain division.
+      |template <typename Value>
+      |struct IntDivider {
+      |  IntDivider() { }  // Dummy constructor for arrays.
+      |  IntDivider(Value d) : divisor(d) { }
+      |
+      |  __host__ __device__ inline Value div(Value n) const { return n / divisor; }
+      |  __host__ __device__ inline Value mod(Value n) const { return n % divisor; }
+      |  __host__ __device__ inline DivMod<Value> divmod(Value n) const {
+      |    return DivMod<Value>(n / divisor, n % divisor);
+      |  }
+      |
+      |  Value divisor;
+      |};
+      |
+      |// Implement fast integer division.
+      |template <>
+      |struct IntDivider<unsigned int> {
+      |  static_assert(sizeof(unsigned int) == 4, "Assumes 32-bit unsigned int.");
+      |
+      |  IntDivider() { }  // Dummy constructor for arrays.
+      |
+      |  IntDivider(unsigned int d) : divisor(d) {
+      |    assert(divisor >= 1 && divisor <= INT32_MAX);
+      |
+      |    // TODO: gcc/clang has __builtin_clz() but it's not portable.
+      |    for (shift = 0; shift < 32; shift++) if ((1U << shift) >= divisor) break;
+      |
+      |    uint64_t one = 1;
+      |    uint64_t magic = ((one << 32) * ((one << shift) - divisor)) / divisor + 1;
+      |    m1 = magic;
+      |    assert(m1 > 0 && m1 == magic);  // m1 must fit in 32 bits.
+      |  }
+      |
+      |  __host__ __device__ inline unsigned int div(unsigned int n) const {
+      |#ifdef __CUDA_ARCH__
+      |    // 't' is the higher 32-bits of unsigned 32-bit multiplication of 'n' and
+      |    // 'm1'.
+      |    unsigned int t = __umulhi(n, m1);
+      |    return (t + n) >> shift;
+      |#else
+      |    // Using uint64_t so that the addition does not overflow.
+      |    uint64_t t = ((uint64_t) n * m1) >> 32;
+      |    return (t + n) >> shift;
+      |#endif
+      |  }
+      |
+      |  __host__ __device__ inline unsigned int mod(unsigned int n) const {
+      |    return n - div(n) * divisor;
+      |  }
+      |
+      |  __host__ __device__ inline DivMod<unsigned int> divmod(unsigned int n) const {
+      |    unsigned int q = div(n);
+      |    return DivMod<unsigned int>(q, n - q * divisor);
+      |  }
+      |
+      |  unsigned int divisor;  // d above.
+      |  unsigned int m1;  // Magic number: m' above.
+      |  unsigned int shift;  // Shift amounts.
+      |};
+      |
+      |/// OffsetCalculator calculates the offset in bytes of a linear index for NARGS
+      |/// operands that share the same shape, but may have different strides.
+      |
+      |template <int NARGS>
+      |struct OffsetCalculator {
+      |    static constexpr int MAX_DIMS = 25;
+      |
+      |    // The offset for each argument (in bytes). Wrapper around fixed-size array.
+      |    struct offsets_t {
+      |        __host__ __device__ uint32_t& operator[](int idx) {
+      |            return values[idx];
+      |        }
+      |        uint32_t values[NARGS];
+      |    };
+      |
+      |
+      |    // OffsetCalculator(int dims, const int64_t* sizes, const int64_t* const* strides) : dims(dims) {
+      |    OffsetCalculator(int dims, const int32_t* sizes, const int32_t* const* strides) : dims(dims) {
+      |        for (int i = 0; i < MAX_DIMS; ++i) {
+      |            if (i < dims) {
+      |                sizes_[i] = IntDivider<uint32_t>(sizes[i]);
+      |            } else {
+      |                sizes_[i] = IntDivider<uint32_t>(1);
+      |            }
+      |            for (int arg = 0; arg < NARGS; arg++) {
+      |                strides_[i][arg] =  i < dims ? strides[arg][i] : 0;
+      |            }
+      |        }
+      |    }
+      |
+      |    __host__ __device__ offsets_t get(uint32_t linear_idx) const {
+      |        offsets_t offsets;
+      |#pragma unroll
+      |        for (int arg = 0; arg < NARGS; arg++) {
+      |            offsets[arg] = 0;
+      |        }
+      |
+      |#pragma unroll
+      |        for (int dim = 0; dim < MAX_DIMS; ++dim) {
+      |            if (dim == dims) {
+      |                break;
+      |            }
+      |            auto divmod = sizes_[dim].divmod(linear_idx);
+      |            linear_idx = divmod.div;
+      |
+      |#pragma unroll
+      |            for (int arg = 0; arg < NARGS; arg++) {
+      |                offsets[arg] += divmod.mod * strides_[dim][arg];
+      |            }
+      |
+      |        }
+      |        return offsets;
+      |    }
+      |
+      |    int dims;
+      |    IntDivider<uint32_t> sizes_[MAX_DIMS];
+      |    uint32_t strides_[MAX_DIMS][NARGS];
+      |};
+      |
+      |template<int nt, int vt, typename func_t>
+      |__launch_bounds__(nt, 4)
+      |__global__ void elementwise_kernel(int N, func_t f) {
+      |    int tid = threadIdx.x;
+      |    int nv = nt * vt;
+      |    int idx = nv * blockIdx.x + tid;
+      |#pragma unroll
+      |    for (int i = 0; i < vt; i++) {
+      |        if (idx < N) {
+      |            f(idx);
+      |            idx += nt;
+      |        }
+      |    }
+      |}
+      |
+      |template<int nt, int vt, typename func_t>
+      |static void launch_kernel(int64_t N, const func_t& f) {
+      |    if (N == 0) {
+      |        return;
+      |    }
+      |    dim3 block(nt);
+      |    dim3 grid((N + block.x * vt - 1) / (block.x * vt));
+      |    // auto stream = at::cuda::getCurrentCUDAStream();
+      |    // elementwise_kernel<nt, vt, func_t><<<grid, block, 0, stream>>>(N, f);
+      |    elementwise_kernel<nt, vt, func_t><<<grid, block, 0>>>(N, f);
       |}
     """.stripMargin
 }
