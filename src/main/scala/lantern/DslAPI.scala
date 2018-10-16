@@ -480,33 +480,8 @@ trait DslGenCublas extends DslGenBase {
       |  data[index] = value;
       |}
       |
-      |/*
-      |template<int nt, int vt, typename func_t>
-      |__launch_bounds__(nt, 4)
-      |__global__ void elementwise_kernel(int N, func_t f) {
-      |  int tid = threadIdx.x;
-      |  int nv = nt * vt;
-      |  int idx = nv * blockIdx.x + tid;
-      |  #pragma unroll
-      |  for (int i = 0; i < vt; i++) {
-      |    if (idx < N) {
-      |      f(idx);
-      |      idx += nt;
-      |    }
-      |  }
-      |}
       |
-      |template<int nt, int vt, typename func_t>
-      |static void launch_kernel(int64_t N, const func_t& f) {
-      |  if (N == 0) {
-      |    return;
-      |  }
-      |  dim3 block(nt);
-      |  dim3 grid((N + block.x * vt - 1) / (block.x * vt));
-      |  elementwise_kernel<nt, vt, func_t><<<grid, block>>>(N, f);
-      |}
-      |*/
-      |
+      |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/THC/THCIntegerDivider.cuh
       |// Result of div/mod operation stored together.
       |template <typename Value>
       |struct DivMod {
@@ -577,6 +552,7 @@ trait DslGenCublas extends DslGenBase {
       |  unsigned int shift;  // Shift amounts.
       |};
       |
+      |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/detail/OffsetCalculator.cuh
       |/// OffsetCalculator calculates the offset in bytes of a linear index for NARGS
       |/// operands that share the same shape, but may have different strides.
       |
@@ -631,9 +607,13 @@ trait DslGenCublas extends DslGenBase {
       |  }
       |
       |  void print() {
-      |    for (auto i = 0; i < 128; i++) {
+      |    for (auto i = 1; i < 128; i++) {
       |      auto offsets = get(i);
-      |      printf("offsets[%d]: out = %d, in1 = %d, in2 = %d\n", i, offsets[0], offsets[1], offsets[2]);
+      |      printf("offsets[%d]: ", i);
+      |      for (auto arg = 0; arg < NARGS; arg++) {
+      |        printf("%d ", offsets[arg]);
+      |      }
+      |      printf("\n");
       |    }
       |  }
       |
@@ -642,6 +622,7 @@ trait DslGenCublas extends DslGenBase {
       |  uint32_t strides_[MAX_DIMS][NARGS];
       |};
       |
+      |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/cuda/Loops.cuh
       |template<int nt, int vt, typename func_t>
       |__launch_bounds__(nt, 4)
       |__global__ void elementwise_kernel(int N, func_t f) {
@@ -664,8 +645,6 @@ trait DslGenCublas extends DslGenBase {
       |  }
       |  dim3 block(nt);
       |  dim3 grid((N + block.x * vt - 1) / (block.x * vt));
-      |  // auto stream = at::cuda::getCurrentCUDAStream();
-      |  // elementwise_kernel<nt, vt, func_t><<<grid, block, 0, stream>>>(N, f);
       |  elementwise_kernel<nt, vt, func_t><<<grid, block, 0>>>(N, f);
       |}
     """.stripMargin
