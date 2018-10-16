@@ -100,4 +100,24 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(binops)
   }
+
+  // TODO: Implement broadcasting.
+  testGPU("binary-ops-broadcast2") {
+    val binops = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-gpu-binops-broadcast2"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fromData(Seq(2, 3, 2), 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+        val y = Tensor.fromData(Seq(2, 1, 1), 4, 5)
+        val result = (x + y).toCPU()
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 3, 2), 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16)
+        result.print()
+        Tensor.assertEqual(result, expected)
+      }
+    }
+    runTest(binops)
+  }
 }
