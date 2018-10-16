@@ -81,30 +81,9 @@ class TestCublas extends LanternFunSuite {
     runTest(binops)
   }
 
-  // TODO: Implement broadcasting.
-  testGPU("binary-ops-broadcast") {
+  testGPU("binary-ops-broadcast1") {
     val binops = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-binops-broadcast"
-
-      @virtualize
-      def snippet(x: Rep[String]): Rep[Unit] = {
-        val x = Tensor.fromData(Seq(2, 2), 1, 2, 3, 4)
-        val y = Tensor.fromData(Seq(2, 1), 4, 5)
-        val result = (x + y).toCPU()
-
-        backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(2, 2), 5, 7, 7, 9)
-        result.print()
-        Tensor.assertEqual(result, expected)
-      }
-    }
-    runTest(binops)
-  }
-
-  // TODO: Implement broadcasting.
-  testGPU("binary-ops-broadcast2") {
-    val binops = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-binops-broadcast2"
+      override val fileName = "lantern-gpu-binops-broadcast1"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
@@ -114,6 +93,31 @@ class TestCublas extends LanternFunSuite {
 
         backend = BackendCPU()
         val expected = Tensor.fromData(Seq(2, 3, 2), 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16)
+        result.print()
+        Tensor.assertEqual(result, expected)
+      }
+    }
+    runTest(binops)
+  }
+
+  testGPU("binary-ops-broadcast2") {
+    val binops = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-gpu-binops-broadcast2"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fromData(Seq(2, 1, 4), 1, 2, 3, 4, 5, 6, 7, 8)
+        val y = Tensor.fromData(Seq(1, 3, 1), 1, 2, 3)
+        val result = (x + y).toCPU()
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 3, 4),
+          2, 3, 4, 5,
+          3, 4, 5, 6,
+          4, 5, 6, 7,
+          6, 7, 8, 9,
+          7, 8, 9, 10,
+          8, 9, 10, 11)
         result.print()
         Tensor.assertEqual(result, expected)
       }

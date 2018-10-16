@@ -2834,38 +2834,43 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       Tensor(res, m, n)
     }
 
-    def launchBinaryKernel(n: Int, x: Tensor, y: Tensor, res: Rep[Array[Float]])
-                          (op: (String, String) => String): Unit = {
+    def launchBinaryKernel(x: Tensor, y: Tensor)(op: (String, String) => String): Tensor = {
       // TODO: Generalize to `launchKernel` function that's usable for unary ops, etc.
-      // TODO: Implement broadcasting.
       // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/cuda/Loops.cuh#L196
-      generateRawComment("SHAPES HERE")
+
+      // Compute broadcasting strides.
+      // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/TensorIterator.cpp#L396
+      // TODO: Generalize for different-ranked tensors. Currently, broadcasting works only for same-rank tensors.
+      def computeStrides(shape: Dimensions): Seq[Int] = {
+        shape.strides.zipWithIndex.map { case (s, i) =>
+          if (shape(i) == 1) 0 else s
+        }
+      }
 
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) =>
-          System.out.println("Shapes", xShape, yShape, resShape)
-          System.out.println("Strides", xShape.strides, yShape.strides, resShape.strides)
           val xdims = Array(xShape.map(unit(_)): _*)
           val ydims = Array(yShape.map(unit(_)): _*)
           val rdims = Array(resShape.map(unit(_)): _*)
           val strides = NewArray[Array[Int]](3)
-          strides(0) = Array(xShape.strides.map(unit(_)): _*)
-          strides(1) = Array(yShape.strides.map(unit(_)): _*)
-          strides(2) = Array(resShape.strides.map(unit(_)): _*)
+          strides(0) = Array(computeStrides(resShape).map(unit(_)): _*)
+          strides(1) = Array(computeStrides(xShape).map(unit(_)): _*)
+          strides(2) = Array(computeStrides(yShape).map(unit(_)): _*)
 
+          val res = mallocArray[Float](resShape.nbElem)
           unchecked[Unit](
             "{\n" +
-            "OffsetCalculator<3> calc(", xShape.length, ",", rdims, ",", strides, "); \n" +
-            "launch_kernel<128, 4>(", n, ", [=]__device__(int idx) {\n" +
+            "OffsetCalculator<3> calc(", resShape.length, ",", rdims, ",", strides, "); \n" +
+            "launch_kernel<128, 4>(", resShape.nbElem, ", [=]__device__(int idx) {\n" +
             "  auto offsets = calc.get(idx);\n" +
-            // "  auto offsets = OffsetCalculator<3>(", xShape.length, ",", rdims, ",", strides, ").get(idx);\n" +
             "  float* out = (float*)&", res, "[offsets[0]];\n" +
             "  float* in1 = (float*)&", x.data, "[offsets[1]];\n" +
             "  float* in2 = (float*)&", y.data, "[offsets[2]];\n" +
             s"  *out = ${op("(*in1)", "(*in2)")};\n" +
             "});\n" +
             "}")
+          Tensor(res, resShape: _*)
       }
     }
 
@@ -2873,9 +2878,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def +(x: Tensor, y: Rep[Float]): Tensor = ???
 
     override def +(x: Tensor, y: Tensor): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
-      launchBinaryKernel(x.scalarCount, x, y, res) { (a, b) => a + " + " + b }
-      Tensor(res, x.shape: _*)
+      launchBinaryKernel(x, y) { (a, b) => a + " + " + b }
     }
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = ???
@@ -2883,9 +2886,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = ???
     override def -(x: Tensor, y: Tensor): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
-      launchBinaryKernel(x.scalarCount, x, y, res) { (a, b) => a + " - " + b }
-      Tensor(res, x.shape: _*)
+      launchBinaryKernel(x, y) { (a, b) => a + " - " + b }
     }
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = ???
@@ -2893,9 +2894,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = ???
     override def *(x: Tensor, y: Tensor): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
-      launchBinaryKernel(x.scalarCount, x, y, res) { (a, b) => a + " * " + b }
-      Tensor(res, x.shape: _*)
+      launchBinaryKernel(x, y) { (a, b) => a + " * " + b }
     }
 
     override def *=(x: Tensor, y: Rep[Float]): Unit = ???
@@ -2903,9 +2902,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def /(x: Tensor, y: Rep[Float]): Tensor = ???
     override def /(x: Tensor, y: Tensor): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
-      launchBinaryKernel(x.scalarCount, x, y, res) { (a, b) => a + " / " + b }
-      Tensor(res, x.shape: _*)
+      launchBinaryKernel(x, y) { (a, b) => a + " / " + b }
     }
 
     override def /=(x: Tensor, y: Rep[Float]): Unit = ???
