@@ -3,15 +3,12 @@ sudo: required
 
 language: scala
 
+addons:
+  apt_packages:
+    libopenblas-dev
+
 scala:
   - 2.11.2
-
-os:
- - linux
-
-env:
-  matrix:
-  - BLAS_LIB=OpenBLAS
 
 cache:
   directories:
@@ -19,11 +16,6 @@ cache:
     - $HOME/.sbt/boot
     - $HOME/tmp
     - $HOME/onnx_models
-    - .travis/OpenBLAS.cache
-
-# Install the appropriate blas library (if any) and associated gonum software.
-install:
-  - source ${TRAVIS_BUILD_DIR}/.travis/$TRAVIS_OS_NAME/$BLAS_LIB/install.sh
 
 before_script:
   - scripts/download_squeezenet.sh
