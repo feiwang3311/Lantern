@@ -260,6 +260,7 @@ trait DslGenBase extends CGenNumericOpsExtra
     // scala.Function1[Array[Double], Array[Double]] --> function<double*(double*)>
     case _ => super.remap(m)
   }
+
   override def format(s: Exp[Any]): String = {
     remap(s.tp) match {
       case "uint16_t" => "%c"
@@ -662,7 +663,34 @@ trait DslGenCublas extends DslGenBase {
       |    *out = f(*in1, *in2);
       |  });
       |}
+      |
     """.stripMargin
+
+  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    // NOTE: Custom codegen is necesary for device lambdas.
+    // This code adds "__host__ __device__" to all lambdas. Redesign if this doesn't work for other lambdas.
+    // Modified from: https://github.com/TiarkRompf/virtualization-lms-core/blob/develop/src/common/Functions.scala#L374
+
+    case Lambda(fun, UnboxedTuple(xs), y) =>
+      val retType = remap(getBlockResult(y).tp)
+      // NOTE: `auto` type is necessary for nvcc to infer __device__ and __host__ annotations.
+      stream.println("auto "+quote(sym)+" = [=]__host__ __device__("+xs.map(s=>remap(s.tp)+" "+quote(s)).mkString(",")+") {")
+      emitBlock(y)
+      val z = getBlockResult(y)
+      if (retType != "void")
+        stream.println("return " + quote(z) + ";")
+      stream.println("};")
+
+    case Lambda(fun, x, y) =>
+      val retType = remap(getBlockResult(y).tp)
+      stream.println("auto "+quote(sym)+" = [=]__host__ __device__("+remap(x.tp)+" "+quote(x)+") {")
+      emitBlock(y)
+      val z = getBlockResult(y)
+      if (retType != "void")
+        stream.println("return " + quote(z) + ";")
+      stream.println("};")
+    case _ => super.emitNode(sym, rhs)
+  }
 }
 
 trait DslGenCudnn extends DslGenCublas {
