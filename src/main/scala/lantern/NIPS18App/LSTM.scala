@@ -265,7 +265,7 @@ object LSTM {
       val seq_length = 20
       val batchSize = 20
 
-      val RNN = DynamicRNNFix(LSTMCellTrans(inputSize = 26, hiddenSize = 50, outputSize = 26))
+      val RNN = DynamicRNNFix(LSTMCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
       val opt = Adagrad(RNN, learning_rate = 1e-1f, gradClip = 5.0f)
 
       def oneHot(input: Rep[Array[Int]]): TensorR = {

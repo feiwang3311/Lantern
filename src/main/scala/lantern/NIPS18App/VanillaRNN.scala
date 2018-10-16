@@ -217,7 +217,7 @@ object VanillaRNN {
       val hiddenSize = 50
       val batchSize = 20
 
-      val RNN = DynamicRNNFix(VanillaRNNCellTrans(inputSize = 26, hiddenSize = 50, outputSize = 26))
+      val RNN = DynamicRNNFix(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
       // val RNN = DynamicRNN(VanillaRNNCell(inputSize = 26, hiddenSize = 50, outputSize = 26))
       val opt = Adagrad(RNN, learning_rate = 1e-1f, gradClip = 5.0f)
 

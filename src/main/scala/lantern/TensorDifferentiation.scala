@@ -305,15 +305,19 @@ trait TensorDsl extends DslOps with Diff {
       val dim2 = x.shape(1)
       val dim3 = y.shape(1)
       val res = mallocArray[Float](dim1 * dim3)
-      for (i <- DataLoop(dim1)) {
-        for (j <- DataLoop(dim3)) {
-          val value = var_new(0.0f)
-          for (k <- DataLoop(dim2)) {
-            value += x.data(i * dim2 + k) * y.data(k * dim3 + j)
-          }
-          res(i * dim3 + j) = readVar(value)
-        }
-      }
+      unchecked[Unit](
+        "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+        dim1, ",", dim3, ",", dim2, ",", 1, ",",
+        x.data, ",", dim2, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
+      // for (i <- DataLoop(dim1)) {
+      //   for (j <- DataLoop(dim3)) {
+      //     val value = var_new(0.0f)
+      //     for (k <- DataLoop(dim2)) {
+      //       value += x.data(i * dim2 + k) * y.data(k * dim3 + j)
+      //     }
+      //     res(i * dim3 + j) = readVar(value)
+      //   }
+      // }
       Tensor(res, dim1, dim3)
     }
 
@@ -1836,18 +1840,31 @@ trait TensorDsl extends DslOps with Diff {
     def dot(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val res = x dot that.x
       val y = TensorR(res); k(y)
+
+      // back-propagate
       (this.x.rank, that.x.rank) match {
         case (1, 1) => this.d.addMul(y.d.data(0), that.x); that.d.addMul(y.d.data(0), this.x)
         case (2, 1) => this.d.add_cartesian(that.x, y.d);  that.d.add_composion(this.x, y.d)
         case (2, 2) => val dim1 = this.x.shape(0); val dim2 = this.x.shape(1); val dim3 = that.x.shape(1)
-          for (i <- DataLoop(dim1)) {
-            for (j <- DataLoop(dim3)) {
-              for (k <- DataLoop(dim2)) {
-                this.d.data(i * dim2 + k) += that.x.data(k * dim3 + j) * y.d.data(i * dim3 + j)
-                that.d.data(k * dim3 + j) += this.x.data(i * dim2 + k) * y.d.data(i * dim3 + j)
-              }
-            }
-          }
+          // use cblas_sgemm
+          // this.d += y.d dot that.x.trans()
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+            dim1, ",", dim2, ",", dim3, ",", 1, ",",
+            y.d.data, ",", dim3, ",", that.x.data, ",", dim3, ",", 1, ",", this.d.data, ",", dim2, ")")
+          // that.d += this.x.trans() dot y.d
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+            dim2, ",", dim3, ",", dim1, ",", 1, ",",
+            this.x.data, ",", dim2, ",", y.d.data, ",", dim3, ",", 1, ",", that.d.data, ",", dim3, ")")
+          // for (i <- DataLoop(dim1)) {
+          //   for (j <- DataLoop(dim3)) {
+          //     for (k <- DataLoop(dim2)) {
+          //       this.d.data(i * dim2 + k) += that.x.data(k * dim3 + j) * y.d.data(i * dim3 + j)
+          //       that.d.data(k * dim3 + j) += this.x.data(i * dim2 + k) * y.d.data(i * dim3 + j)
+          //     }
+          //   }
+          // }
       }
     }
 
