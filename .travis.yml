@@ -8,25 +8,10 @@ scala:
 
 os:
  - linux
- - osx
 
 env:
   matrix:
   - BLAS_LIB=OpenBLAS
-  - BLAS_LIB=gonum
-  - BLAS_LIB=Accelerate
-  - BLAS_LIB=ATLAS
-
-matrix:
- exclude:
-  - os: linux
-    env: BLAS_LIB=Accelerate
-  - os: linux
-    env: BLAS_LIB=ATLAS
-  - os: osx
-    env: BLAS_LIB=ATLAS
-  - os: osx
-    env: BLAS_LIB=OpenBLAS
 
 cache:
   directories:
@@ -45,7 +30,6 @@ before_script:
   - scripts/download_resnet.sh
 
 script:
-  - source ${TRAVIS_BUILD_DIR}/.travis/$TRAVIS_OS_NAME/$BLAS_LIB/test.sh
   - sbt test
   # Tricks to avoid unnecessary cache updates
   - find $HOME/.sbt -name "*.lock" | xargs rm
