@@ -582,85 +582,91 @@ trait DslGenCublas extends DslGenBase {
       |
       |template <int NARGS>
       |struct OffsetCalculator {
-      |    static constexpr int MAX_DIMS = 25;
+      |  static constexpr int MAX_DIMS = 25;
       |
-      |    // The offset for each argument (in bytes). Wrapper around fixed-size array.
-      |    struct offsets_t {
-      |        __host__ __device__ uint32_t& operator[](int idx) {
-      |            return values[idx];
-      |        }
-      |        uint32_t values[NARGS];
-      |    };
+      |  // The offset for each argument (in bytes). Wrapper around fixed-size array.
+      |  struct offsets_t {
+      |    __host__ __device__ uint32_t& operator[](int idx) {
+      |      return values[idx];
+      |    }
+      |    uint32_t values[NARGS];
+      |  };
       |
       |
-      |    // OffsetCalculator(int dims, const int64_t* sizes, const int64_t* const* strides) : dims(dims) {
-      |    OffsetCalculator(int dims, const int32_t* sizes, const int32_t* const* strides) : dims(dims) {
-      |        for (int i = 0; i < MAX_DIMS; ++i) {
-      |            if (i < dims) {
-      |                sizes_[i] = IntDivider<uint32_t>(sizes[i]);
-      |            } else {
-      |                sizes_[i] = IntDivider<uint32_t>(1);
-      |            }
-      |            for (int arg = 0; arg < NARGS; arg++) {
-      |                strides_[i][arg] =  i < dims ? strides[arg][i] : 0;
-      |            }
-      |        }
+      |  // OffsetCalculator(int dims, const int64_t* sizes, const int64_t* const* strides) : dims(dims) {
+      |  OffsetCalculator(int dims, const int32_t* sizes, const int32_t* const* strides) : dims(dims) {
+      |    for (int i = 0; i < MAX_DIMS; ++i) {
+      |      if (i < dims) {
+      |        sizes_[i] = IntDivider<uint32_t>(sizes[i]);
+      |      } else {
+      |        sizes_[i] = IntDivider<uint32_t>(1);
+      |      }
+      |      for (int arg = 0; arg < NARGS; arg++) {
+      |        strides_[i][arg] = i < dims ? strides[arg][i] : 0;
+      |      }
+      |    }
+      |  }
+      |
+      |  __host__ __device__ offsets_t get(uint32_t linear_idx) const {
+      |    offsets_t offsets;
+      |#pragma unroll
+      |    for (int arg = 0; arg < NARGS; arg++) {
+      |      offsets[arg] = 0;
       |    }
       |
-      |    __host__ __device__ offsets_t get(uint32_t linear_idx) const {
-      |        offsets_t offsets;
       |#pragma unroll
-      |        for (int arg = 0; arg < NARGS; arg++) {
-      |            offsets[arg] = 0;
-      |        }
+      |    for (int dim = 0; dim < MAX_DIMS; ++dim) {
+      |      if (dim == dims) {
+      |        break;
+      |      }
+      |      auto divmod = sizes_[dim].divmod(linear_idx);
+      |      linear_idx = divmod.div;
       |
       |#pragma unroll
-      |        for (int dim = 0; dim < MAX_DIMS; ++dim) {
-      |            if (dim == dims) {
-      |                break;
-      |            }
-      |            auto divmod = sizes_[dim].divmod(linear_idx);
-      |            linear_idx = divmod.div;
-      |
-      |#pragma unroll
-      |            for (int arg = 0; arg < NARGS; arg++) {
-      |                offsets[arg] += divmod.mod * strides_[dim][arg];
-      |            }
-      |
-      |        }
-      |        return offsets;
+      |      for (int arg = 0; arg < NARGS; arg++) {
+      |        offsets[arg] += divmod.mod * strides_[dim][arg];
+      |      }
       |    }
+      |    return offsets;
+      |  }
       |
-      |    int dims;
-      |    IntDivider<uint32_t> sizes_[MAX_DIMS];
-      |    uint32_t strides_[MAX_DIMS][NARGS];
+      |  void print() {
+      |    for (auto i = 0; i < 128; i++) {
+      |      auto offsets = get(i);
+      |      printf("offsets[%d]: out = %d, in1 = %d, in2 = %d\n", i, offsets[0], offsets[1], offsets[2]);
+      |    }
+      |  }
+      |
+      |  int dims;
+      |  IntDivider<uint32_t> sizes_[MAX_DIMS];
+      |  uint32_t strides_[MAX_DIMS][NARGS];
       |};
       |
       |template<int nt, int vt, typename func_t>
       |__launch_bounds__(nt, 4)
       |__global__ void elementwise_kernel(int N, func_t f) {
-      |    int tid = threadIdx.x;
-      |    int nv = nt * vt;
-      |    int idx = nv * blockIdx.x + tid;
+      |  int tid = threadIdx.x;
+      |  int nv = nt * vt;
+      |  int idx = nv * blockIdx.x + tid;
       |#pragma unroll
-      |    for (int i = 0; i < vt; i++) {
-      |        if (idx < N) {
-      |            f(idx);
-      |            idx += nt;
-      |        }
+      |  for (int i = 0; i < vt; i++) {
+      |    if (idx < N) {
+      |      f(idx);
+      |      idx += nt;
       |    }
+      |  }
       |}
       |
       |template<int nt, int vt, typename func_t>
       |static void launch_kernel(int64_t N, const func_t& f) {
-      |    if (N == 0) {
-      |        return;
-      |    }
-      |    dim3 block(nt);
-      |    dim3 grid((N + block.x * vt - 1) / (block.x * vt));
-      |    // auto stream = at::cuda::getCurrentCUDAStream();
-      |    // elementwise_kernel<nt, vt, func_t><<<grid, block, 0, stream>>>(N, f);
-      |    elementwise_kernel<nt, vt, func_t><<<grid, block, 0>>>(N, f);
+      |  if (N == 0) {
+      |    return;
+      |  }
+      |  dim3 block(nt);
+      |  dim3 grid((N + block.x * vt - 1) / (block.x * vt));
+      |  // auto stream = at::cuda::getCurrentCUDAStream();
+      |  // elementwise_kernel<nt, vt, func_t><<<grid, block, 0, stream>>>(N, f);
+      |  elementwise_kernel<nt, vt, func_t><<<grid, block, 0>>>(N, f);
       |}
     """.stripMargin
 }
