@@ -132,7 +132,7 @@ trait TensorDsl extends DslOps with Diff {
     def last = dims.last
     def reverse = Dimensions(dims.reverse)
 
-    val (nbElem +: strides) = (dims :\ Seq[Int](1)) {
+    val (scalarCount +: strides) = (dims :\ Seq[Int](1)) {
       case (dim, seq@(t +: q)) => (dim * t) +: seq
     }
 
@@ -325,7 +325,7 @@ trait TensorDsl extends DslOps with Diff {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) => {
-          val resData = backend.mallocArray[Float](resShape.nbElem)
+          val resData = backend.mallocArray[Float](resShape.scalarCount)
           val res = new Tensor(resData, resShape)
 
           def inplace(offX: Rep[Int], offY: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
@@ -419,7 +419,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def shape = Dimensions(dimensions)
     val rank = dimensions.length
-    val scalarCount = shape.nbElem
+    val scalarCount = shape.scalarCount
     val isScalar = scalarCount == 1
 
     assert(shape.strides.length >= 1)
@@ -1495,7 +1495,7 @@ trait TensorDsl extends DslOps with Diff {
         // looping over the concatenation dim
         for (whichTensor <- totalFrom) {
           // looping over the dimensions lower than or equal to dim, in the current tensor
-          val stride = if (dim == 0) whichTensor.shape.nbElem else whichTensor.shape.strides(dim-1)
+          val stride = if (dim == 0) whichTensor.shape.scalarCount else whichTensor.shape.strides(dim-1)
           val ptrIntput = slice(whichTensor.data, high * stride)
           for (lowOrEqual <- DataLoop(stride)) {
             res(targetId) = ptrIntput(lowOrEqual)
@@ -2367,7 +2367,7 @@ trait TensorDsl extends DslOps with Diff {
         // looping over the concatenation dim
         for (whichTensorR <- totalFrom) {
           // looping over the dimensions lower than or equal to dim (but within an input tensor)
-          val stride = if (dim == 0) whichTensorR.x.shape.nbElem else whichTensorR.x.shape.strides(dim-1)
+          val stride = if (dim == 0) whichTensorR.x.shape.scalarCount else whichTensorR.x.shape.strides(dim-1)
           val ptrInput = slice(whichTensorR.d.data, high * stride)
           for (lowOrEqual <- DataLoop(stride)) {
             ptrInput(lowOrEqual) += ty.d.data(targetId)
@@ -2858,11 +2858,11 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
           strides(1) = Array(computeStrides(xShape).map(unit(_)): _*)
           strides(2) = Array(computeStrides(yShape).map(unit(_)): _*)
 
-          val res = mallocArray[Float](resShape.nbElem)
+          val res = mallocArray[Float](resShape.scalarCount)
           unchecked[Unit](
             "{\n" +
             "OffsetCalculator<3> calc(", resShape.length, ",", rdims, ",", strides, "); \n" +
-            "launch_kernel<128, 4>(", resShape.nbElem, ", [=]__device__(int idx) {\n" +
+            "launch_kernel<128, 4>(", resShape.scalarCount, ", [=]__device__(int idx) {\n" +
             "  auto offsets = calc.get(idx);\n" +
             "  float* out = (float*)&", res, "[offsets[0]];\n" +
             "  float* in1 = (float*)&", x.data, "[offsets[1]];\n" +
