@@ -2843,6 +2843,35 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       }
     }
 
+    def launchUnaryKernel(res: Tensor, x: Tensor)(op: Rep[Float] => Rep[Float]): Unit = {
+      assert(res.shape == x.shape, s"Unary kernel incompatible shapes: ${res.shape.seq}, ${x.shape.seq}")
+
+      // Store shapes as local variables.
+      val resShape = res.shape
+      // Convert shapes to Rep[Array[Int]].
+      val resDims = Array(resShape.map(unit(_)): _*)
+      // Compute strides.
+      val strides = NewArray[Array[Int]](2)
+      val tmp = Array(getBroadcastingStrides(resShape).map(unit(_)): _*)
+      strides(0) = tmp
+      strides(1) = tmp
+      // Launch kernel.
+      unchecked[Unit](
+        "gpu_unary_kernel(", res.data, ",", x.data, ",",
+        resShape.length, ",", resShape.scalarCount, ",", resDims, ",", strides, ",", fun(op), ")")
+    }
+
+    def elementwiseUnaryOp(x: Tensor)(op: Rep[Float] => Rep[Float]): Tensor = {
+      val resData = mallocArray[Float](x.scalarCount)
+      val res = Tensor(resData, x.shape: _*)
+      launchUnaryKernel(res, x)(op)
+      res
+    }
+
+    def elementwiseInplaceUnaryOp(x: Tensor)(op: Rep[Float] => Rep[Float]): Unit = {
+      launchUnaryKernel(x, x)(op)
+    }
+
     def launchBinaryKernel(res: Tensor, x: Tensor, y: Tensor)(op: (Rep[Float], Rep[Float]) => Rep[Float]): Unit = {
       // Store shapes as local variables.
       val resShape = res.shape
@@ -2883,29 +2912,28 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       }
     }
 
-    // TODO: Implement elementwise binary ops.
-    override def +(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def +(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x) { _ + y }
     override def +(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + _ }
 
-    override def +=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def +=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x) { _ + y }
     override def +=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + _ }
 
-    override def -(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def -(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x) { _ - y }
     override def -(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + _ }
 
-    override def -=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def -=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x) { _ - y }
     override def -=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ - _ }
 
-    override def *(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def *(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x) { _ * y }
     override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ * _ }
 
-    override def *=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def *=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x) { _ * y }
     override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ * _ }
 
-    override def /(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def /(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x) { _ / y }
     override def /(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ / _ }
 
-    override def /=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x) { _ / y }
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ / _ }
   }
 

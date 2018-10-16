@@ -650,6 +650,20 @@ trait DslGenCublas extends DslGenBase {
       |}
       |
       |template<typename func_t>
+      |void gpu_unary_kernel(float *res, float *x,
+      |                      int32_t resRank, const int32_t resScalarCount,
+      |                      const int32_t* resShape, const int32_t* const* strides,
+      |                      const func_t& f) {
+      |  OffsetCalculator<2> calc(resRank, resShape, strides);
+      |  launch_kernel<128, 4>(resScalarCount, [=]__device__(int idx) {
+      |    auto offsets = calc.get(idx);
+      |    float* out = &res[offsets[0]];
+      |    float* in = &x[offsets[1]];
+      |    *out = f(*in);
+      |  });
+      |}
+      |
+      |template<typename func_t>
       |void gpu_binary_kernel(float *res, float *x, float *y,
       |                       int32_t resRank, const int32_t resScalarCount,
       |                       const int32_t* resShape, const int32_t* const* strides,
