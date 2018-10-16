@@ -212,10 +212,7 @@ trait TensorDsl extends DslOps with Diff {
       }
 
     // TODO: Add more ops:
-    // - Elementwise binary ops (+, -, *, /).
-    //   - GPU backends need to address broadcasting.
-    //   - `BackendCublas` can define addition using `cublasSaxpy`.
-    // - Conv2d.
+    // - Convolution and pooling.
     // - Activation functions (e.g. relu).
     // - Fused multiply add operations?
 
