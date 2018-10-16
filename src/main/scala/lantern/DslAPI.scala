@@ -647,6 +647,21 @@ trait DslGenCublas extends DslGenBase {
       |  dim3 grid((N + block.x * vt - 1) / (block.x * vt));
       |  elementwise_kernel<nt, vt, func_t><<<grid, block, 0>>>(N, f);
       |}
+      |
+      |template<typename func_t>
+      |void gpu_binary_kernel(float *res, float *x, float *y,
+      |                       int32_t resRank, const int32_t resScalarCount,
+      |                       const int32_t* resShape, const int32_t* const* strides,
+      |                       const func_t& f) {
+      |  OffsetCalculator<3> calc(resRank, resShape, strides);
+      |  launch_kernel<128, 4>(resScalarCount, [=]__device__(int idx) {
+      |    auto offsets = calc.get(idx);
+      |    float* out = &res[offsets[0]];
+      |    float* in1 = &x[offsets[1]];
+      |    float* in2 = &y[offsets[2]];
+      |    *out = f(*in1, *in2);
+      |  });
+      |}
     """.stripMargin
 }
 

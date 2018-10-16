@@ -70,10 +70,10 @@ class TestCublas extends LanternFunSuite {
         val y1 = Tensor.fromData(Seq(2, 2), 4, 5, 6, 7)
         val y2 = Tensor.fromData(Seq(2, 2), 5, 7, 9, 11)
         val y3 = Tensor.fromData(Seq(2, 2), 2, 3, 4, 5)
-        val result = (((x + y1) / y2) * y3).toCPU()
+        val result = ((((x + y1) / y2) * y3) - y1).toCPU()
 
         backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(2, 2), 2, 3, 4, 5)
+        val expected = Tensor.ones(2, 2)
         result.print()
         Tensor.assertEqual(result, expected)
       }
@@ -84,25 +84,6 @@ class TestCublas extends LanternFunSuite {
   testGPU("binary-ops-broadcast1") {
     val binops = new LanternDriverCublas[String, Unit] {
       override val fileName = "lantern-gpu-binops-broadcast1"
-
-      @virtualize
-      def snippet(x: Rep[String]): Rep[Unit] = {
-        val x = Tensor.fromData(Seq(2, 3, 2), 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-        val y = Tensor.fromData(Seq(2, 1, 1), 4, 5)
-        val result = (x + y).toCPU()
-
-        backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(2, 3, 2), 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16)
-        result.print()
-        Tensor.assertEqual(result, expected)
-      }
-    }
-    runTest(binops)
-  }
-
-  testGPU("binary-ops-broadcast2") {
-    val binops = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-binops-broadcast2"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
@@ -118,6 +99,29 @@ class TestCublas extends LanternFunSuite {
           6, 7, 8, 9,
           7, 8, 9, 10,
           8, 9, 10, 11)
+        result.print()
+        Tensor.assertEqual(result, expected)
+      }
+    }
+    runTest(binops)
+  }
+
+  testGPU("binary-ops-broadcast2") {
+    val binops = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-gpu-binops-broadcast2"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
+        val y = Tensor.fromData(Seq(3, 1, 1), 1, 2, 3)
+        x += y
+        x -= y
+        x *= y
+        x /= y
+        val result = x.toCPU()
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
         result.print()
         Tensor.assertEqual(result, expected)
       }

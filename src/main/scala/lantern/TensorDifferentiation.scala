@@ -2716,7 +2716,7 @@ trait TensorDsl extends DslOps with Diff {
 
 trait TensorDslCublas extends TensorDsl with GPUOps {
 
-  protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int) =
+  protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
     unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
 
   protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
@@ -2834,9 +2834,19 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       Tensor(res, m, n)
     }
 
-    def launchBinaryKernel(x: Tensor, y: Tensor)(op: (String, String) => String): Tensor = {
-      // TODO: Generalize to `launchKernel` function that's usable for unary ops, etc.
-      // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/cuda/Loops.cuh#L196
+    // TODO: Fix this version, which produces java.io.NotSerializableException.
+    /*
+    def launchBinaryKernel(res: Rep[Array[Float]], x: Rep[Array[Float]], y: Rep[Array[Float]],
+                           rank: Int, scalarCount: Int, shape: Rep[Array[Int]], strides: Rep[Array[Array[Int]]],
+                           op: Rep[(Float, Float) => Float]): Rep[Unit] = {
+      unchecked[Unit](
+        "gpu_binary_kernel(", res, ",", x, ",", y, ",",
+        rank, ",", scalarCount, ",", shape, ",", strides, ",", op, ")")
+    }
+    */
+
+    def launchBinaryKernel(res: Tensor, x: Tensor, y: Tensor)(op: (String, String) => String): Unit = {
+      // TODO: Use `op: Rep[((Float, Float)) => Float]`. I tried it but got java.io.NotSerializableException.
 
       // Compute broadcasting strides.
       // https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/TensorIterator.cpp#L396
@@ -2847,66 +2857,77 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         }
       }
 
+      // Store shapes as local variables.
+      val resShape = res.shape
+      val xShape = x.shape
+      val yShape = y.shape
+      // Convert shapes to Rep[Array[Int]].
+      val resDims = Array(resShape.map(unit(_)): _*)
+      val xDims = Array(xShape.map(unit(_)): _*)
+      val yDims = Array(yShape.map(unit(_)): _*)
+      // Compute strides.
+      val strides = NewArray[Array[Int]](3)
+      strides(0) = Array(computeStrides(resShape).map(unit(_)): _*)
+      strides(1) = Array(computeStrides(xShape).map(unit(_)): _*)
+      strides(2) = Array(computeStrides(yShape).map(unit(_)): _*)
+      // Launch kernel.
+      unchecked[Unit](
+        "{\n" +
+          "OffsetCalculator<3> calc(", resShape.length, ",", resDims, ",", strides, "); \n" +
+          "launch_kernel<128, 4>(", resShape.scalarCount, ", [=]__device__(int idx) {\n" +
+          "  auto offsets = calc.get(idx);\n" +
+          "  float* out = (float*)&", res.data, "[offsets[0]];\n" +
+          "  float* in1 = (float*)&", x.data, "[offsets[1]];\n" +
+          "  float* in2 = (float*)&", y.data, "[offsets[2]];\n" +
+          s"  *out = ${op("(*in1)", "(*in2)")};\n" +
+          "});\n" +
+          "}")
+    }
+
+    def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Tensor = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) =>
-          val xdims = Array(xShape.map(unit(_)): _*)
-          val ydims = Array(yShape.map(unit(_)): _*)
-          val rdims = Array(resShape.map(unit(_)): _*)
-          val strides = NewArray[Array[Int]](3)
-          strides(0) = Array(computeStrides(resShape).map(unit(_)): _*)
-          strides(1) = Array(computeStrides(xShape).map(unit(_)): _*)
-          strides(2) = Array(computeStrides(yShape).map(unit(_)): _*)
+          val resData = mallocArray[Float](resShape.scalarCount)
+          val res = Tensor(resData, resShape: _*)
+          launchBinaryKernel(res, x, y)(op)
+          res
+      }
+    }
 
-          val res = mallocArray[Float](resShape.scalarCount)
-          unchecked[Unit](
-            "{\n" +
-            "OffsetCalculator<3> calc(", resShape.length, ",", rdims, ",", strides, "); \n" +
-            "launch_kernel<128, 4>(", resShape.scalarCount, ", [=]__device__(int idx) {\n" +
-            "  auto offsets = calc.get(idx);\n" +
-            "  float* out = (float*)&", res, "[offsets[0]];\n" +
-            "  float* in1 = (float*)&", x.data, "[offsets[1]];\n" +
-            "  float* in2 = (float*)&", y.data, "[offsets[2]];\n" +
-            s"  *out = ${op("(*in1)", "(*in2)")};\n" +
-            "});\n" +
-            "}")
-          Tensor(res, resShape: _*)
+    def elementwiseInplaceBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Unit = {
+      Tensor.dimBroadcast(x.shape, y.shape) match {
+        case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
+        case Some((xShape, yShape, resShape)) =>
+          assert(x.shape == resShape, s"Output shape ${xShape.seq} does not match broadcast shape: ${resShape.seq}")
+          launchBinaryKernel(x, x, y)(op)
       }
     }
 
     // TODO: Implement elementwise binary ops.
     override def +(x: Tensor, y: Rep[Float]): Tensor = ???
-
-    override def +(x: Tensor, y: Tensor): Tensor = {
-      launchBinaryKernel(x, y) { (a, b) => a + " + " + b }
-    }
+    override def +(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " + " + _ }
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = ???
-    override def +=(x: Tensor, y: Tensor): Unit = ???
+    override def +=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " + " + _ }
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def -(x: Tensor, y: Tensor): Tensor = {
-      launchBinaryKernel(x, y) { (a, b) => a + " - " + b }
-    }
+    override def -(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " - " + _ }
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = ???
-    override def -=(x: Tensor, y: Tensor): Unit = ???
+    override def -=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " - " + _ }
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def *(x: Tensor, y: Tensor): Tensor = {
-      launchBinaryKernel(x, y) { (a, b) => a + " * " + b }
-    }
+    override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " * " + _ }
 
     override def *=(x: Tensor, y: Rep[Float]): Unit = ???
-    override def *=(x: Tensor, y: Tensor): Unit = ???
+    override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " * " + _ }
 
     override def /(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def /(x: Tensor, y: Tensor): Tensor = {
-      launchBinaryKernel(x, y) { (a, b) => a + " / " + b }
-    }
+    override def /(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " / " + _ }
 
     override def /=(x: Tensor, y: Rep[Float]): Unit = ???
-    override def /=(x: Tensor, y: Tensor): Unit = ???
+    override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
   }
 
   object BackendCublas {
