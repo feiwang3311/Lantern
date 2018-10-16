@@ -342,7 +342,7 @@ trait DslGenBase extends CGenNumericOpsExtra
   def templateHeaders: Seq[String] = Seq(
     "<assert.h>", "<err.h>", "<errno.h>", "<fcntl.h>", "<functional>",
     "<math.h>", "<memory>", "<random>", "<stdint.h>", "<stdio.h>",
-    "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>")
+    "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>", "<cblas.h>")
 
   // Raw code, to be included in the code template at file scope, before the main function.
   def templateRawCode: String = ""
@@ -553,7 +553,7 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
     new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ code")
-    (s"g++ -std=c++11 -O1 $cppFileName -o $binaryFileName": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    (s"g++ -std=c++11 -O1 $cppFileName -o $binaryFileName -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lpthread": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ code")
     (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }

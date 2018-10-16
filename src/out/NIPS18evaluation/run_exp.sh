@@ -63,9 +63,9 @@ echo "RUN: copy the result files and do plotting"
 cp Lantern/result_Lantern.txt result_Lantern.txt
 cp PyTorch/result_PyTorch100.txt result_PyTorch.txt
 #cp PyTorch/result_PyTorch1.txt result_PyTorch1.txt
-cp TensorFlow/result_TensorFlow100.txt result_TF.txt
+cp TensorFlow/result_TensorFlow100.txt result_TensorFlow.txt
 #cp TensorFlow/result_TensorFlow1.txt result_TF1.txt
-python3 ../plot.py CNN result_Lantern.txt result_PyTorch.txt result_TF.txt
+python3 ../plot.py CNN result_Lantern.txt result_PyTorch.txt result_TensorFlow.txt
 echo "RESULT: run CNN experiment successful"
 cd ..
 
