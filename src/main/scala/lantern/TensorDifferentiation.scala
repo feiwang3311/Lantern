@@ -186,7 +186,10 @@ trait TensorDsl extends DslOps with Diff {
     def mallocArray[T: Manifest](length: Int): Rep[Array[T]]
 
     // Initialize a tensor with the specified dimensions and repeated value.
-    def makeRepeatingTensor(dims: Seq[Int], value: Rep[Float]): Tensor
+    def fill(dims: Seq[Int], value: Rep[Float]): Tensor
+
+    // Initialize a tensor with the specified bias tensor at the specified dimension.
+    def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor
 
     // Initialize a tensor with the specified dimensions and scalar values.
     def makeTensor(dims: Seq[Int], scalars: Float*): Tensor
@@ -270,11 +273,33 @@ trait TensorDsl extends DslOps with Diff {
     override def cleanup() {}
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewArray[T](length)
 
-    override def makeRepeatingTensor(dims: Seq[Int], value: Rep[Float]): Tensor = {
+    override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
       val scalarCount = dims.product
       val array = mallocArray[Float](scalarCount)
       for (i <- (0 until scalarCount): Rep[Range]) array(i) = value
       Tensor(array, dims: _*)
+    }
+
+    override def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor = {
+      assert(dim >= 0 && dim < dims.size, s"Target dimension $dim is out of range $dims")
+      assert(bias.rank == 1 && bias.scalarCount == dims(dim),
+        "Bias must be 1D and have length equal to the target dimension")
+      val scalarCount = dims.product
+      val res = mallocArray[Float](scalarCount)
+
+      // iterate for higherDims
+      val offset = var_new(0)
+      for (hd <- DataLoop(dims.take(dim).product)) {
+        // iterate for current dim
+        for (cd <- DataLoop(dims.drop(dim).head)) {
+          // iterate for lowerDims
+          for (ld <- DataLoop(dims.drop(dim+1).product)) {
+            res(offset) = bias.data(cd)
+            offset += 1
+          }
+        }
+      }
+      Tensor(res, dims: _*)
     }
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
@@ -1663,7 +1688,7 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, dims)
     }
 
-    def fill(dims: Seq[Int], value: Rep[Float]): Tensor = backend.makeRepeatingTensor(dims, value)
+    def fill(dims: Seq[Int], value: Rep[Float]): Tensor = backend.fill(dims, value)
 
     def fill(dims: Seq[Int], fFill: Seq[Rep[Int]] => Rep[Float]) = {
       val scalarCount = dims.product
@@ -1687,26 +1712,7 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, dims)
     }
 
-    def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int) = {
-      assert(dim < dims.size && dim >= 0, s"target dimension ${dim} is out of range ${dims}")
-      assert(bias.rank == 1 && bias.scalarCount == dims.drop(dim).head, s"bias should be 1D and have the same length as given dim")
-      val scalarCount = dims.product
-      val res = backend.mallocArray[Float](scalarCount)
-
-      // iterate for higherDims
-      val offset = var_new(0)
-      for (hd <- DataLoop(dims.take(dim).product)) {
-        // iterate for current dim
-        for (cd <- DataLoop(dims.drop(dim).head)) {
-          // iterate for lowerDims
-          for (ld <- DataLoop(dims.drop(dim+1).product)) {
-            res(offset) = bias.data(cd)
-            offset += 1
-          }
-        }
-      }
-      new Tensor(res, dims)
-    }
+    def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int) = backend.fillWithBias(dims, bias, dim)
 
     def scalar(value: Rep[Float]) = {
       val res = backend.mallocArray[Float](1)
@@ -2803,8 +2809,12 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewGPUArray[T](length)
 
-    override def makeRepeatingTensor(dims: Seq[Int], value: Rep[Float]): Tensor = {
-      BackendCPU().makeRepeatingTensor(dims, value).toGPU()
+    override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
+      BackendCPU().fill(dims, value).toGPU()
+    }
+
+    override def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor = {
+      BackendCPU().fillWithBias(dims, bias.toCPU(), dim).toGPU()
     }
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
@@ -3095,9 +3105,10 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resWidth = convSize(input.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
       val resHeight = convSize(input.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
       val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
-      val resData = mallocArray[Float](resShape.product)
-      // TODO: Implement convolution with bias.
-      val res = Tensor(resData, resShape: _*)
+      val res = bias match {
+        case Some(bias) => fillWithBias(Seq(input.shape(0), kernel.shape(0), resWidth, resHeight), bias, 1)
+        case None => Tensor(mallocArray[Float](resShape.product), resShape: _*)
+      }
       cudnnConvolutionForward(input, kernel, res, padding = (padUp, padLeft), strides = (strideCol, strideRow), dilations = (1, 1))
       res
     }
