@@ -6,13 +6,17 @@ import org.scala_lang.virtualized.SourceContext
 class TestCudnn extends LanternFunSuite {
   testGPU("vector-vector-dot") {
     val vvdot = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-vvdot"
+
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
-        val length = 2
         val v1 = Tensor.fromData(Seq(4), 1, 2, 3, 4)
         val v2 = Tensor.fromData(Seq(4), -1, -2, -3, -4)
+        val result = v1.dot(v2).toCPU()
+
+        backend = BackendCPU()
         val expected = Tensor.fromData(Seq(1), -30)
-        Tensor.assertEqual(v1.dot(v2), expected)
+        Tensor.assertEqual(result, expected)
       }
     }
     runTest(vvdot)
@@ -20,12 +24,17 @@ class TestCudnn extends LanternFunSuite {
 
   testGPU("matrix-vector-dot") {
     val mvdot = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-mvdot"
+
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val m = Tensor.fromData(Seq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
         val v = Tensor.fromData(Seq(4), -1, -2, -3, -4)
+        val result = m.dot(v).toCPU()
+
+        backend = BackendCPU()
         val expected = Tensor.fromData(Seq(2), -30, -70)
-        Tensor.assertEqual(m.dot(v), expected)
+        Tensor.assertEqual(result, expected)
       }
     }
     runTest(mvdot)
@@ -33,15 +42,42 @@ class TestCudnn extends LanternFunSuite {
 
   testGPU("matrix-matrix-dot") {
     val mmdot = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-mmdot"
+
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
-        // Note: it's better to test with matrices [M1 x M2] and [M2 x M3] where M1 != M3.
         val m1 = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
         val m2 = Tensor.fromData(Seq(3, 1), 2, 3, 4)
+        val result = m1.dot(m2).toCPU()
+
+        backend = BackendCPU()
         val expected = Tensor.fromData(Seq(2, 1), 20, 47)
-        Tensor.assertEqual(m1.dot(m2), expected)
+        result.print()
+        Tensor.assertEqual(result, expected)
       }
     }
     runTest(mmdot)
+  }
+
+  testGPU("conv2D") {
+    val conv2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-conv2d"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.ones(1, 3, 8, 8)
+        val kernel = Tensor.ones(1, 3, 3, 3)
+        val bias = Tensor.ones(1)
+        val strides = Seq(2, 2)
+        val pads = Seq(0,0,0,0)
+        val result = input.conv2D_batch(kernel, None, strides, pads).toCPU()
+
+        backend = BackendCPU()
+        val expected = Tensor.fill(Seq(1,1,3,3), 27.0f)
+        result.print()
+        Tensor.assertEqual(expected, result)
+      }
+    }
+    runTest(conv2D)
   }
 }

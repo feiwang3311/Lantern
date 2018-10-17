@@ -6,7 +6,7 @@ import org.scala_lang.virtualized.SourceContext
 class TestCublas extends LanternFunSuite {
   testGPU("vector-vector-dot") {
     val vvdot = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-vvdot"
+      override val fileName = "lantern-cublas-vvdot"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
@@ -24,7 +24,7 @@ class TestCublas extends LanternFunSuite {
 
   testGPU("matrix-vector-dot") {
     val mvdot = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-mvdot"
+      override val fileName = "lantern-cublas-mvdot"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
@@ -43,7 +43,7 @@ class TestCublas extends LanternFunSuite {
 
   testGPU("matrix-matrix-dot") {
     val mmdot = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-mmdot"
+      override val fileName = "lantern-cublas-mmdot"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
@@ -62,7 +62,7 @@ class TestCublas extends LanternFunSuite {
 
   testGPU("binary-ops") {
     val binops = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-binops"
+      override val fileName = "lantern-cublas-binops"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
@@ -83,7 +83,7 @@ class TestCublas extends LanternFunSuite {
 
   testGPU("binary-ops-broadcast1") {
     val binops = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-binops-broadcast1"
+      override val fileName = "lantern-cublas-binops-broadcast1"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
@@ -108,7 +108,7 @@ class TestCublas extends LanternFunSuite {
 
   testGPU("binary-ops-broadcast2") {
     val binops = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-binops-broadcast2"
+      override val fileName = "lantern-cublas-binops-broadcast2"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
@@ -131,7 +131,7 @@ class TestCublas extends LanternFunSuite {
 
   testGPU("binary-ops-tensor-scalar") {
     val binops = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-gpu-binops-tensor-scalar"
+      override val fileName = "lantern-cublas-binops-tensor-scalar"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {

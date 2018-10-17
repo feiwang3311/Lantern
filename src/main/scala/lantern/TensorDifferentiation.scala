@@ -247,6 +247,18 @@ trait TensorDsl extends DslOps with Diff {
     // In-place elementwise division.
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
+
+    /**
+      * 2D convolution.
+      * @param input Input with shape [batchSize, inChannels, iW, iH].
+      * @param kernel Kernel with shape [outChannels, inChannels, kW, kH].
+      * @param bias Optional bias with shape [outChannels].
+      * @param strides Kernel strides of length two: [strideWidth, strideHeight].
+      * @param pads Padding of length four: [padTop, padBottom, padLeft, padRight].
+      * @return Result of 2D convolution.
+      */
+    // NOTE: cuDNN accepts only two padding arguments: [padVertical, padHorizontal].
+    def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor
   }
 
   /**
@@ -322,7 +334,7 @@ trait TensorDsl extends DslOps with Diff {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) => {
-          val resData = backend.mallocArray[Float](resShape.scalarCount)
+          val resData = mallocArray[Float](resShape.scalarCount)
           val res = new Tensor(resData, resShape)
 
           def inplace(offX: Rep[Int], offY: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
@@ -402,6 +414,153 @@ trait TensorDsl extends DslOps with Diff {
         for (i <- DataLoop(x.scalarCount)) x.data(i) /= y.data(i)
       else throw new IllegalArgumentException("dimensions of vector do not match /=!")
     }
+
+    // 2-D convolution that supports batches. Uses `conv2D_inplace` as subroutine.
+    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = {
+      // TODO: Dedupe assertions/shape calculations with cuDNN implementation.
+      assert(input.rank == 4, "Input must be 4-D (first dimension is batch size)")
+      assert(kernel.rank == 4, "Kernel must be 4-D")
+      bias match {
+        case Some(bias) =>
+          assert(bias.rank == 1, s"Bias should be 1-D, got ${bias.shape}")
+          assert(bias.shape(0) == kernel.shape(0), "Bias length must equal number of out-channels")
+        case None => ()
+      }
+      assert(kernel.shape(1) == input.shape(1), "In-channel count mismatch: input.shape[1] should match kernel.shape[1]")
+      assert(input.shape(2) >= kernel.shape(2) && input.shape(3) >= kernel.shape(3), "Image too small for conv")
+
+      assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
+      assert(pads.size == 4, "Pads should have length 4: [padTop, padBottom, padLeft, padRight]")
+      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
+      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
+      assert(strideRow >= 1, "Row stride must be at least 1")
+      assert(strideCol >= 1, "Column stride must be at least 1")
+      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "All paddings must be equal (for now)")
+
+      val resWidth = convSize(input.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
+      val resHeight = convSize(input.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
+      val res = bias match {
+        case Some(bias) => Tensor.fillWithBias(Seq(input.shape(0), kernel.shape(0), resWidth, resHeight), bias, 1)
+        case None => Tensor.zeros(input.shape(0), kernel.shape(0), resWidth, resHeight)
+      }
+
+      for (i <- DataLoop(input.shape(0))) {
+        val ptrInput = slice(input.data, i * input.shape.strides(0))
+        val ptrOutput = slice(res.data, i * res.shape.strides(0))
+        conv2D_inplace(
+          Tensor(ptrOutput, res.shape.drop(1): _*),
+          Tensor(ptrInput, input.shape.drop(1): _*),
+          kernel, strides, pads)
+      }
+      res
+    }
+
+    @virtualize
+    def conv2D_inplace(res: Tensor, input: Tensor, kernel: Tensor, strides: Seq[Int], pads: Seq[Int]): Unit = {
+      val totalPads = pads.sum
+      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
+      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
+      val resWidth = res.shape(1)
+      val resHeight = res.shape(2)
+
+      val offOut = var_new(0)                         // offset for the res by channel
+      val offWeight1 = var_new(0)                     // offset for the kernel by channel (dim_0)
+      for (outPane <- DataLoop(kernel.shape(0))) {
+        val offWeight2 = var_new(offWeight1)          // offset for the kernel for each z-dim of a given channel
+        val offInput = var_new(0)                     // offset for this for each channel of input
+        val ptrOutput = slice(res.data, offOut)           // res, restarting from the start of this output channel (2D)
+        for (inPane <- DataLoop(input.shape(0))) {
+          val ptrInput = slice(input.data, offInput)       // input, restarting from the start of this input channel (2D)
+          val ptrWeight = slice(kernel.data, offWeight2)  // kernel, restarting from the start of this input channel (2D)
+
+          if (totalPads == 0) conv2D1(
+            Tensor(ptrOutput, resHeight, resWidth),
+            Tensor(ptrInput, input.shape(1), input.shape(2)),
+            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
+            strideRow, strideCol)
+          else conv2D2(
+            Tensor(ptrOutput, resHeight, resWidth),
+            Tensor(ptrInput, input.shape(1), input.shape(2)),
+            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
+            strideRow, strideCol, padUp, padDown, padLeft, padRight)
+
+          offWeight2 += kernel.shape.strides(1)
+          offInput += input.shape.strides(0)
+        }
+        offWeight1 += kernel.shape.strides(0)
+        offOut += res.shape.strides(0)
+      }
+    }
+
+    // Taken from Torch: THTensorConv.cpp#198L
+    // https://github.com/pytorch/pytorch/blob/master/aten/src/TH/generic/THTensorConv.cpp
+    @virtualize  // subroutine of conv ops (don't handle padding)
+    def conv2D1(res: Tensor, input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int): Unit = {
+      assert(res.rank == 2 && input.rank == 2 && kernel.rank == 2)
+
+      // looping for the output
+      val offOutput = var_new(0)                 // offset of the output, move one by one in second loop
+      val offInputR = var_new(0)                 // offset of the input, move by each row * strideRow
+      for (outRow <- DataLoop(res.shape(0))) {
+        val offInputC = var_new(offInputR)       // offset of the input, built on offInputR, move by each strideCol
+        for (outCol <- DataLoop(res.shape(1))) {
+
+          // looping for the kernel
+          val sum = var_new(0.0f)
+          val offKernel = var_new(0)             // offset of the kernel, move by kernel.strides(1) i.e. by row of kernel
+          val offInput = var_new(offInputC)      // offset of the input, built on offInputC, move by row of input
+          for (kernelRow <- DataLoop(kernel.shape(0))) {
+            val ptrInput = slice(input.data, offInput)
+            val ptrKernel = slice(kernel.data, offKernel)
+            for (kernelCol <- DataLoop(kernel.shape(1))) {
+              sum +=  ptrInput(kernelCol) * ptrKernel(kernelCol)
+            }
+            offKernel += kernel.shape.strides(0)
+            offInput += input.shape.strides(0)
+          }
+          res.data(offOutput) = res.data(offOutput) + sum
+          offOutput += 1
+          offInputC += strideCol
+        }
+        offInputR += strideRow * input.shape.strides(0)
+      }
+    }
+
+    @virtualize  // subroutine of conv ops (handle padding)
+    def conv2D2(res: Tensor, input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int): Unit = {
+      assert(res.rank == 2 && input.rank == 2 && kernel.rank == 2)
+
+      // looping for the output
+      val offOutput = var_new(0)                    // offset of the output, move one by one in second loop
+      val InputR = var_new(-padLeft)
+      for (outRow <- DataLoop(res.shape(0))) {
+        val InputC = var_new(-padUp)
+        for (outCol <- DataLoop(res.shape(1))) {
+
+          // looping for the kernel
+          val sum = var_new(0.0f)
+          val offKernel = var_new(0)                // offset of the kernel, move by row of kernel
+          for (kernelRow <- DataLoop(kernel.shape(0))) {
+            for (kernelCol <- DataLoop(kernel.shape(1))) {
+              val iR = InputR + kernelRow
+              val iC = InputC + kernelCol
+              if (iR < 0 || iC < 0 || iR >= input.shape(0) || iC >= input.shape(1)) ()
+              else {
+                sum += kernel.data(offKernel) * input.data(iR * input.shape.strides(0) + iC)
+              }
+              offKernel += 1
+            }
+          }
+          res.data(offOutput) = res.data(offOutput) + sum
+
+          // stepping of the offsets of the looping for the output
+          offOutput += 1
+          InputC += strideCol
+        }
+        InputR += strideRow
+      }
+    }
+
   }
   object BackendCPU {
     def apply() = new BackendCPU
@@ -979,80 +1138,12 @@ trait TensorDsl extends DslOps with Diff {
     //   y
     // }
 
-    @virtualize  // conv op, support batches, use conv2D_inplace as subroutine
-    def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = {
-      assert (this.rank == 4, "For conv_batch , input should be 4-D, with the first dim to be batch")
-      assert(kernel.rank == 4, "For Conv, kernel should be 4-D")
-      bias match {
-        case Some(bias) =>
-          assert(bias.rank == 1, s"For Conv, bias should be 1-D, got ${bias.shape}")
-          assert(bias.shape(0) == kernel.shape(0), "For Conv, bias length should be the same as number of kernels")
-        case None => ()
-      }
-      assert(kernel.shape(1) == this.shape(1), "For Conv, input dim_0 should be the same as kernel dim_1")
-      assert(this.shape(2) >= kernel.shape(2) && this.shape(3) >= kernel.shape(3), "Image too small for Conv")
-
-      assert(pads.size == 4, "pads should have 4 values, up, down, left, right")
-      assert(strides.size == 2, "strides should have a strideRow and a strideCol")
-      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
-      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
-      assert(strideRow >= 1, "stride of row should be at least 1")
-      assert(strideCol >= 1, "stride of col should be at least 1")
-      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "For now, assume all values in pads are the same")
-
-      val resWidth = convSize(this.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
-      val resHeight = convSize(this.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
-      val res = bias match {
-        case Some(bias) => Tensor.fillWithBias(Seq(this.shape(0), kernel.shape(0), resWidth, resHeight), bias, 1)
-        case None => Tensor.zeros(this.shape(0), kernel.shape(0), resWidth, resHeight)
-      }
-
-      for (i <- DataLoop(this.shape(0))) {
-        val ptrInput = slice(this.data, i * this.shape.strides(0))
-        val ptrOutput = slice(res.data, i * res.shape.strides(0))
-        Tensor(ptrInput, this.shape.drop(1): _*).conv2D_inplace(kernel, strides, pads, Tensor(ptrOutput, res.shape.drop(1): _*))
-      }
-      res
-    }
-
     @virtualize
-    def conv2D_inplace(kernel: Tensor, strides: Seq[Int], pads: Seq[Int], res: Tensor): Unit = {
-      val totalPads = pads.sum
-      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
-      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
-      val resWidth = res.shape(1)
-      val resHeight = res.shape(2)
-
-      val offOut = var_new(0)                         // offset for the res by channel
-      val offWeight1 = var_new(0)                     // offset for the kernel by channel (dim_0)
-      for (outPane <- DataLoop(kernel.shape(0))) {
-        val offWeight2 = var_new(offWeight1)          // offset for the kernel for each z-dim of a given channel
-        val offInput = var_new(0)                     // offset for this for each channel of input
-        val ptrOutput = slice(res.data, offOut)           // res, restarting from the start of this output channel (2D)
-        for (inPane <- DataLoop(this.shape(0))) {
-          val ptrInput = slice(this.data, offInput)       // input, restarting from the start of this input channel (2D)
-          val ptrWeight = slice(kernel.data, offWeight2)  // kernel, restarting from the start of this input channel (2D)
-
-          if (totalPads == 0) Tensor(ptrOutput, resHeight, resWidth).conv2D1(
-            Tensor(ptrInput, this.shape(1), this.shape(2)),
-            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
-            strideRow, strideCol)
-          else Tensor(ptrOutput, resHeight, resWidth).conv2D2(
-            Tensor(ptrInput, this.shape(1), this.shape(2)),
-            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
-            strideRow, strideCol, padUp, padDown, padLeft, padRight)
-
-          offWeight2 += kernel.shape.strides(1)
-          offInput += this.shape.strides(0)
-        }
-        offWeight1 += kernel.shape.strides(0)
-        offOut += res.shape.strides(0)
-      }
-    }
+    def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor =
+      backend.conv2D_batch(this, kernel, bias, strides, pads)
 
     @virtualize  // conv op, with bias, with padding, use either conv2D1 or conv2D2 as subroutine, depending on whether padding is zero
     def conv2D(kernel: Tensor, bias: Tensor, strides: Seq[Int], pads: Seq[Int]) = {
-
       assert(this.rank == 3 && kernel.rank == 4, "For Conv, input should be 3-D and kernel should be 4-D: " + this.rank + "|" + kernel.rank)
       assert(kernel.shape(1) == this.shape(0), "For Conv, input dim_0 should be the same as kernel dim_1")
       assert(this.shape(1) >= kernel.shape(2) && this.shape(2) >= kernel.shape(3), "Image too small for Conv")
@@ -1081,11 +1172,13 @@ trait TensorDsl extends DslOps with Diff {
           val ptrInput = slice(this.data, offInput)      // input, restarting from the start of this input channel (2D)
           val ptrWeight = slice(kernel.data, offWeight2)  // kernel, restarting from the start of this input channel (2D)
 
-          if (totalPads == 0) Tensor(ptrOutput, resHeight, resWidth).conv2D1(
+          if (totalPads == 0) BackendCPU().conv2D1(
+            Tensor(ptrOutput, resHeight, resWidth),
             Tensor(ptrInput, this.shape(1), this.shape(2)),
             Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
             strideRow, strideCol)
-          else Tensor(ptrOutput, resHeight, resWidth).conv2D2(
+          else BackendCPU().conv2D2(
+            Tensor(ptrOutput, resHeight, resWidth),
             Tensor(ptrInput, this.shape(1), this.shape(2)),
             Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
             strideRow, strideCol, padUp, padDown, padLeft, padRight)
@@ -1121,8 +1214,10 @@ trait TensorDsl extends DslOps with Diff {
           val ptrInput = slice(this.data, offInput)     // input, restarting from the start of this input channel (2D)
           val ptrWeight = slice(kernel.data, offWeight2) // kernel, restarting from the start of this input channel (2D)
 
-          Tensor(ptrOutput, resHeight, resWidth).conv2D1(
-            Tensor(ptrInput, this.shape(1), this.shape(2)), Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)), strideRow, strideCol)
+          BackendCPU().conv2D1(
+            Tensor(ptrOutput, resHeight, resWidth),
+            Tensor(ptrInput, this.shape(1), this.shape(2)),
+            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)), strideRow, strideCol)
 
           offWeight2 += kernel.shape.strides(1)
           offInput += this.shape.strides(0)
@@ -1131,75 +1226,6 @@ trait TensorDsl extends DslOps with Diff {
         offOut += res.shape.strides(0)
       }
       res
-    }
-
-    // Taken from Torch: THTensorConv.cpp#198L
-    // https://github.com/pytorch/pytorch/blob/master/aten/src/TH/generic/THTensorConv.cpp
-    @virtualize  // subroutine of conv ops (don't handle padding)
-    def conv2D1(input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int): Unit = {
-      assert(this.rank == 2 && input.rank == 2 && kernel.rank == 2)
-
-      // looping for the output
-      val offOutput = var_new(0)                 // offset of the output, move one by one in second loop
-      val offInputR = var_new(0)                 // offset of the input, move by each row * strideRow
-      for (outRow <- DataLoop(this.shape(0))) {
-        val offInputC = var_new(offInputR)       // offset of the input, built on offInputR, move by each strideCol
-        for (outCol <- DataLoop(this.shape(1))) {
-
-          // looping for the kernel
-          val sum = var_new(0.0f)
-          val offKernel = var_new(0)             // offset of the kernel, move by kernel.strides(1) i.e. by row of kernel
-          val offInput = var_new(offInputC)      // offset of the input, built on offInputC, move by row of input
-          for (kernelRow <- DataLoop(kernel.shape(0))) {
-            val ptrInput = slice(input.data, offInput)
-            val ptrKernel = slice(kernel.data, offKernel)
-            for (kernelCol <- DataLoop(kernel.shape(1))) {
-              sum +=  ptrInput(kernelCol) * ptrKernel(kernelCol)
-            }
-            offKernel += kernel.shape.strides(0)
-            offInput += input.shape.strides(0)
-          }
-          this.data(offOutput) = this.data(offOutput) + sum
-          offOutput += 1
-          offInputC += strideCol
-        }
-        offInputR += strideRow * input.shape.strides(0)
-      }
-    }
-
-    @virtualize  // subroutine of conv ops (handle padding)
-    def conv2D2(input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int): Unit = {
-      assert(this.rank == 2 && input.rank == 2 && kernel.rank == 2)
-
-      // looping for the output
-      val offOutput = var_new(0)                    // offset of the output, move one by one in second loop
-      val InputR = var_new(-padLeft)
-      for (outRow <- DataLoop(this.shape(0))) {
-        val InputC = var_new(-padUp)
-        for (outCol <- DataLoop(this.shape(1))) {
-
-          // looping for the kernel
-          val sum = var_new(0.0f)
-          val offKernel = var_new(0)                // offset of the kernel, move by row of kernel
-          for (kernelRow <- DataLoop(kernel.shape(0))) {
-            for (kernelCol <- DataLoop(kernel.shape(1))) {
-              val iR = InputR + kernelRow
-              val iC = InputC + kernelCol
-              if (iR < 0 || iC < 0 || iR >= input.shape(0) || iC >= input.shape(1)) ()
-              else {
-                sum += kernel.data(offKernel) * input.data(iR * input.shape.strides(0) + iC)
-              }
-              offKernel += 1
-            }
-          }
-          this.data(offOutput) = this.data(offOutput) + sum
-
-          // stepping of the offsets of the looping for the output
-          offOutput += 1
-          InputC += strideCol
-        }
-        InputR += strideRow
-      }
     }
 
     @virtualize
@@ -2892,7 +2918,6 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       strides(1) = Array(getBroadcastingStrides(xShape).map(unit(_)): _*)
       strides(2) = Array(getBroadcastingStrides(yShape).map(unit(_)): _*)
       // Launch kernel.
-      // NOTE: Hacky way to propagate `Rep[Float]` as an argument to `unchecked`.
       unchecked[Unit](
         "{\n" +
         "OffsetCalculator<3> calc(", resShape.length, ",", resDims, ",", strides, "); \n" +
@@ -2949,6 +2974,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
+
+    // TODO: Implement cuBLAS `conv2D_batch` in terms of primitive ops.
+    // Reuse CPU implementation?
+    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = ???
   }
 
   object BackendCublas {
@@ -2974,6 +3003,94 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def cleanup(): Unit = {
       super.cleanup()
       generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
+    }
+
+    def cudnnConvolutionForward(input: Tensor, filter: Tensor, res: Tensor, bias: Option[Tensor] = None,
+                                padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |      in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |      ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |
+          |cudnnFilterDescriptor_t filt_desc;
+          |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+          |CUDNN_CALL(cudnnSetFilter4dDescriptor(
+          |      filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+          |      ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
+          |
+          |cudnnConvolutionDescriptor_t conv_desc;
+          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |      conv_desc,
+          |      ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
+          |      CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |      out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |      ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |
+          |// Algorithm.
+          |cudnnConvolutionFwdAlgo_t algo;
+          |CUDNN_CALL(cudnnGetConvolutionForwardAlgorithm(
+          |      cudnnHandle,
+          |      in_desc, filt_desc, conv_desc, out_desc,
+          |      CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 0, &algo));
+          |
+          |// Workspace.
+          |size_t ws_size;
+          |CUDNN_CALL(cudnnGetConvolutionForwardWorkspaceSize(
+          |           cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, algo, &ws_size));
+          |float *ws_data;
+          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |""".stripMargin) ++
+        Seq(
+          "// Execute convolution.\n" +
+          "CUDNN_CALL(cudnnConvolutionForward(\n" +
+          "      cudnnHandle,\n" +
+          "      ", one, ", in_desc, ", input.data, ", filt_desc, ", filter.data, ",\n" +
+          "      conv_desc, algo, ws_data, ws_size,\n" +
+          "      ", zero, ", out_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = {
+      // TODO: Dedupe assertions/shape calculations with CPU implementation.
+      assert(input.rank == 4, "Input must be 4-D (first dimension is batch size)")
+      assert(kernel.rank == 4, "Kernel must be 4-D")
+      bias match {
+        case Some(bias) =>
+          assert(bias.rank == 1, s"Bias should be 1-D, got ${bias.shape}")
+          assert(bias.shape(0) == kernel.shape(0), "Bias length must equal number of out-channels")
+        case None => ()
+      }
+      assert(kernel.shape(1) == input.shape(1), "In-channel count mismatch: input.shape[1] should match kernel.shape[1]")
+      assert(input.shape(2) >= kernel.shape(2) && input.shape(3) >= kernel.shape(3), "Image too small for conv")
+
+      assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
+      assert(pads.size == 4, "Pads should have length 4: [padTop, padBottom, padLeft, padRight]")
+      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
+      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
+      assert(strideRow >= 1, "Row stride must be at least 1")
+      assert(strideCol >= 1, "Column stride must be at least 1")
+      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "All paddings must be equal (for now)")
+
+      val resWidth = convSize(input.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
+      val resHeight = convSize(input.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
+      val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
+      val resData = mallocArray[Float](resShape.product)
+      // TODO: Implement convolution with bias.
+      val res = Tensor(resData, resShape: _*)
+      cudnnConvolutionForward(input, kernel, res, padding = (padUp, padLeft), strides = (strideCol, strideRow), dilations = (1, 1))
+      res
     }
   }
 
