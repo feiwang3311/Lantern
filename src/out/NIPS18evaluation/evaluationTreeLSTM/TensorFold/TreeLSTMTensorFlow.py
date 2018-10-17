@@ -8,7 +8,10 @@ from nltk.tokenize import sexpr
 import numpy as np
 from six.moves import urllib
 import tensorflow as tf
-sess = tf.InteractiveSession()
+session_conf = tf.ConfigProto(
+      intra_op_parallelism_threads=1,
+      inter_op_parallelism_threads=1)
+sess = tf.InteractiveSession(config=session_conf)
 import tensorflow_fold as td
 import time
 
@@ -42,7 +45,7 @@ def run(write_to, batch_size_setting):
     'glove.840B.300d.txt')
 
   train_path, dev_path, test_path = download_and_unzip(
-    'http://nlp.stanford.edu/sentiment/', 'trainDevTestTrees_PTB.zip', 
+    'http://nlp.stanford.edu/sentiment/', 'trainDevTestTrees_PTB.zip',
     'trees/train.txt', 'trees/dev.txt', 'trees/test.txt')
 
 
@@ -52,7 +55,7 @@ def run(write_to, batch_size_setting):
     vocab = set()
     # Download the full set of unlabeled sentences separated by '|'.
     sentence_path, = download_and_unzip(
-      'http://nlp.stanford.edu/~socherr/', 'stanfordSentimentTreebank.zip', 
+      'http://nlp.stanford.edu/~socherr/', 'stanfordSentimentTreebank.zip',
       'stanfordSentimentTreebank/SOStr.txt')
     with codecs.open(sentence_path, encoding='utf-8') as f:
       for line in f:
@@ -93,7 +96,7 @@ def run(write_to, batch_size_setting):
         -0.05, 0.05, weight_vectors[0].shape).astype(np.float32))
     return np.stack(weight_vectors), word_idx
 
-  weight_matrix, word_idx = load_embeddings(dev_glove_path)  
+  weight_matrix, word_idx = load_embeddings(dev_glove_path)
 
   def load_trees(filename):
     with codecs.open(filename, encoding='utf-8') as f:
@@ -179,7 +182,7 @@ def run(write_to, batch_size_setting):
     """Creates a block that goes from tokens to (logits, state) tuples."""
     unknown_idx = len(word_idx)
     lookup_word = lambda word: word_idx.get(word, unknown_idx)
-    
+
     word2vec = (td.GetItem(0) >> td.InputTransform(lookup_word) >>
                 td.Scalar('int32') >> word_embedding)
 

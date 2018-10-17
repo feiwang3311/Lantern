@@ -4,7 +4,7 @@ echo "Note: make sure you are using the most updated .cpp file!"
 cd evaluationRNN
 echo "Note: Let's run vanilla RNN experiment first"
 echo "RUN: run Lantern"
-g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern
+g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
 ./Lantern result_Lantern.txt
 echo "RUN: run PyTorch"
 python3 min-char-rnn-pytorch.py result_PyTorch.txt
@@ -15,11 +15,10 @@ python3 ../plot.py vanilla_RNN result_Lantern.txt result_PyTorch.txt result_Tens
 echo "RESULT: vanilla RNN experiment successful"
 cd ..
 
-
 cd evaluationLSTM
 echo "Note: Let's run LSTM experiment now"
 echo "RUN: run Lantern"
-g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern
+g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
 ./Lantern result_Lantern.txt
 echo "RUN: run PyTorch"
 python3 min-char-lstm-pytorch.py result_PyTorch.txt
@@ -29,7 +28,6 @@ echo "RUN: plotting"
 python3 ../plot.py LSTM result_Lantern.txt result_PyTorch.txt result_TensorFlow.txt
 echo "RESULT: LSTM experiment successful"
 cd ..
-
 
 cd evaluationCNN
 cd PyTorch
@@ -53,7 +51,7 @@ echo "Result: TensorFlow CNN run successfully"
 cd ..
 cd Lantern
 echo "Note: Let's run Lantern now with batch size 100"
-g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern
+g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
 echo "RUN: Lantern CNN"
 ./Lantern result_Lantern.txt
 echo "Result: Lantern CNN successful"
@@ -68,14 +66,13 @@ python3 ../plot.py CNN result_Lantern.txt result_PyTorch.txt result_TensorFlow.t
 echo "RESULT: run CNN experiment successful"
 cd ..
 
-
 cd evaluationTreeLSTM
 echo "Note: Let's run TreeLSTM experiment now"
 echo "Now let's run Lantern"
 cd Lantern
 echo "RUN: run Lantern"
 # python3 preprocess_data.py
-g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern
+g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
 ./Lantern result_Lantern.txt
 echo "Result: run sentiment in Lantern is successful"
 cd ..
@@ -118,6 +115,7 @@ cp Dynet/result_DynetB.txt result_DynetB.txt
 python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_DynetNB.txt result_DynetB.txt # result_TensorFold1.txt
 echo "RESULT: run TreeLSTM experiment successful"
 cd ..
+
 
 
 # cd evaluationTreeLSTM
