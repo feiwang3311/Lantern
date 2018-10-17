@@ -9,6 +9,8 @@ from torch.autograd import Variable as Var
 import numpy as np
 import torch.nn.functional as F
 
+
+torch.set_num_threads(1)
 startTime = time.time()
 torch.manual_seed(7)
 # read word embedding

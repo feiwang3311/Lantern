@@ -11,6 +11,8 @@ import torch.nn.functional as F
 
 def run(write_to):
   # data I/O
+  torch.set_num_threads(1)
+
   start = time.time()
   data = open('graham.txt', 'r').read() # should be simple plain text file
   chars = list(set(data))
