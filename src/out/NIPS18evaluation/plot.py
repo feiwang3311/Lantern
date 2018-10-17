@@ -26,20 +26,16 @@ def getColor(label):
     return 'g'
   if label == 'Lantern':
     return 'b'
-  if label == 'PyTorch' or label == 'PyTorch1':
+  if label == 'PyTorch':
     return 'r'
-  if label == 'PyTorch20' or label == 'PyTorch100':
-    return 'c'
-  if label == 'TensorFlow' or label == 'TensorFlow1' or label == 'TF' or label == 'TF1':
+  if label == 'TensorFlow':
     return 'y'
-  if label == 'TensorFlow20' or label == 'TensorFlow100' or label == 'TF20' or label == 'TF100':
+  if label == 'TensorFold' or label == 'TensorFold20':
     return 'm'
-  if label == 'TensorFold' or label == 'TensorFold1':
-    return 'y'
-  if label == 'TensorFold20' or label == 'TensorFold100':
-    return 'm'
-  if label == 'Dynet' or label == 'Dynet20':
+  if label == 'Dynet' or label == 'DynetB':
     return 'g'
+  if label == 'DynetNB':
+    return 'c'
   else:
     print("NOTE: color not defined for label: %s" % label)
 

@@ -1,7 +1,6 @@
 #!/bin/bash
 echo "Note: make sure you are using the most updated .cpp file!"
 
-
 cd evaluationRNN
 echo "Note: Let's run vanilla RNN experiment first"
 echo "RUN: run Lantern"
@@ -82,8 +81,10 @@ echo "Result: run sentiment in Lantern is successful"
 cd ..
 echo "Now let's run Dynet"
 cd Dynet
-echo "RUN: run dynet"
-python3 treelstmDynet.py --dynet-autobatch 1 --dynet-mem 2048
+echo "RUN: run dynet without autobatching"
+python3 treelstmDynet.py result_DynetNB.txt --dynet-mem 2048
+echo "RUN: run dynet with autobatching"
+python3 treelstmDynet.py result_DynetB.txt --dynet-autobatch 1 --dynet-mem 2048
 echo "Result: run sentiment in Dynet is successful"
 cd ..
 echo "Now let's run PyTorch"
@@ -112,8 +113,9 @@ cp Lantern/result_Lantern.txt result_Lantern.txt
 cp PyTorch/result_PyTorch.txt result_PyTorch.txt
 cp TensorFold/result_TensorFold20.txt result_TensorFold20.txt
 # cp TensorFold/result_TensorFold1.txt result_TensorFold1.txt
-cp Dynet/result_Dynet.txt result_Dynet.txt
-python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_Dynet.txt # result_TensorFold1.txt
+cp Dynet/result_DynetNB.txt result_DynetNB.txt
+cp Dynet/result_DynetB.txt result_DynetB.txt
+python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_DynetNB.txt result_DynetB.txt # result_TensorFold1.txt
 echo "RESULT: run TreeLSTM experiment successful"
 cd ..
 
