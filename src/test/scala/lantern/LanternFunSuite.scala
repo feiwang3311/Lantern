@@ -22,7 +22,7 @@ class LanternFunSuite extends FunSuite {
   // One idea: check for:
   // - The existence of cuBLAS header files (<cuda_runtime.h>, <cublas_v2.h>).
   // - The existence of a GPU (perhaps run `nvidia-smi`).
-  def isGPUAvailable = true
+  def isGPUAvailable: Boolean = sys.env.get("LANTERN_RUN_GPU").isDefined
 
   // Utility function wrapping `test` that checks whether GPU is available.
   def testGPU(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */)(implicit pos: source.Position) {
