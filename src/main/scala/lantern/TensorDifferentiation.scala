@@ -2840,7 +2840,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       }
     }
 
-    def launchUnaryKernel(res: Tensor, x: Tensor)(op: Rep[Float] => Rep[Float]): Unit = {
+    def launchUnaryKernel(res: Tensor, x: Tensor)(op: String => Seq[Any]): Unit = {
       assert(res.shape == x.shape, s"Unary kernel incompatible shapes: ${res.shape.seq}, ${x.shape.seq}")
 
       // Store shapes as local variables.
@@ -2853,23 +2853,31 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       strides(0) = tmp
       strides(1) = tmp
       // Launch kernel.
+      // NOTE: Hacky way to propagate `Rep[Float]` as an argument to `unchecked`.
       unchecked[Unit](
-        "gpu_unary_kernel(", res.data, ",", x.data, ",",
-        resShape.length, ",", resShape.scalarCount, ",", resDims, ",", strides, ",", fun(op), ")")
+        Seq("{\n" +
+        "OffsetCalculator<2> calc(", resShape.length, ",", resDims, ",", strides, "); \n" +
+        "launch_kernel<128, 4>(", resShape.scalarCount, ", [=]__device__(int idx) {\n" +
+        "  auto offsets = calc.get(idx);\n" +
+        "  float* out = (float*)&", res.data, "[offsets[0]];\n" +
+        "  float* in = (float*)&", x.data, "[offsets[1]];\n" +
+        "  *out = ") ++ op("(*in)") ++ Seq(";\n" +
+        "});\n" +
+        "}"): _*)
     }
 
-    def elementwiseUnaryOp(x: Tensor)(op: Rep[Float] => Rep[Float]): Tensor = {
+    def elementwiseUnaryOp(x: Tensor)(op: String => Seq[Any]): Tensor = {
       val resData = mallocArray[Float](x.scalarCount)
       val res = Tensor(resData, x.shape: _*)
       launchUnaryKernel(res, x)(op)
       res
     }
 
-    def elementwiseInplaceUnaryOp(x: Tensor)(op: Rep[Float] => Rep[Float]): Unit = {
+    def elementwiseInplaceUnaryOp(x: Tensor)(op: String => Seq[Any]): Unit = {
       launchUnaryKernel(x, x)(op)
     }
 
-    def launchBinaryKernel(res: Tensor, x: Tensor, y: Tensor)(op: (Rep[Float], Rep[Float]) => Rep[Float]): Unit = {
+    def launchBinaryKernel(res: Tensor, x: Tensor, y: Tensor)(op: (String, String) => String): Unit = {
       // Store shapes as local variables.
       val resShape = res.shape
       val xShape = x.shape
@@ -2884,12 +2892,21 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       strides(1) = Array(getBroadcastingStrides(xShape).map(unit(_)): _*)
       strides(2) = Array(getBroadcastingStrides(yShape).map(unit(_)): _*)
       // Launch kernel.
+      // NOTE: Hacky way to propagate `Rep[Float]` as an argument to `unchecked`.
       unchecked[Unit](
-        "gpu_binary_kernel(", res.data, ",", x.data, ",", y.data, ",",
-        resShape.length, ",", resShape.scalarCount, ",", resDims, ",", strides, ",", fun(op), ")")
+        "{\n" +
+        "OffsetCalculator<3> calc(", resShape.length, ",", resDims, ",", strides, "); \n" +
+        "launch_kernel<128, 4>(", resShape.scalarCount, ", [=]__device__(int idx) {\n" +
+        "  auto offsets = calc.get(idx);\n" +
+        "  float* out = (float*)&", res.data, "[offsets[0]];\n" +
+        "  float* in1 = (float*)&", x.data, "[offsets[1]];\n" +
+        "  float* in2 = (float*)&", y.data, "[offsets[2]];\n" +
+        s"  *out = ${op("(*in1)", "(*in2)")};\n" +
+        "});\n" +
+        "}")
     }
 
-    def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (Rep[Float], Rep[Float]) => Rep[Float]): Tensor = {
+    def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Tensor = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) =>
@@ -2900,7 +2917,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       }
     }
 
-    def elementwiseInplaceBinaryOp(x: Tensor, y: Tensor)(op: (Rep[Float], Rep[Float]) => Rep[Float]): Unit = {
+    def elementwiseInplaceBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Unit = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) =>
@@ -2909,29 +2926,29 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       }
     }
 
-    override def +(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x) { _ + y }
-    override def +(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + _ }
+    override def +(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " + ", y))
+    override def +(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " + " + _ }
 
-    override def +=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x) { _ + y }
-    override def +=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + _ }
+    override def +=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " + ", y))
+    override def +=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " + " + _ }
 
-    override def -(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x) { _ - y }
-    override def -(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + _ }
+    override def -(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " - ", y))
+    override def -(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " - " + _ }
 
-    override def -=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x) { _ - y }
-    override def -=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ - _ }
+    override def -=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " - ", y))
+    override def -=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " - " + _ }
 
-    override def *(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x) { _ * y }
-    override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ * _ }
+    override def *(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " * ", y))
+    override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " * " + _ }
 
-    override def *=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x) { _ * y }
-    override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ * _ }
+    override def *=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " * ", y))
+    override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " * " + _ }
 
-    override def /(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x) { _ / y }
-    override def /(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ / _ }
+    override def /(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " / ", y))
+    override def /(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " / " + _ }
 
-    override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x) { _ / y }
-    override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ / _ }
+    override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
+    override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
   }
 
   object BackendCublas {
