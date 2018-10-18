@@ -2868,6 +2868,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     }
 
     override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
+      // TOOO: Compare performance with GPU allocation + `fillInPlace`.
       BackendCPU().fill(dims, value).toGPU()
     }
 
@@ -3362,11 +3363,19 @@ trait TensorDslCudnn extends TensorDslCublas {
     @virtualize
     override def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
-      cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations)
-      cudnnConvolutionBackwardFilter(filter.d, input.x, res.d, padding, strides, dilations)
+      // Peephole-optimization: use uninitialized arrays rather than allocating to zero.
+      val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
+      val filterGrad = Tensor(mallocArray[Float](filter.d.scalarCount), filter.d.shape: _*)
+      cudnnConvolutionBackwardData(inputGrad, filter.x, res.d, padding, strides, dilations)
+      cudnnConvolutionBackwardFilter(filterGrad, input.x, res.d, padding, strides, dilations)
+      input.d += inputGrad
+      filter.d += filterGrad
       bias match {
         case None =>
-        case Some(bias) => cudnnConvolutionBackwardBias(bias.d, res.d)
+        case Some(bias) =>
+          val biasGrad = Tensor(mallocArray[Float](bias.d.scalarCount), bias.d.shape: _*)
+          cudnnConvolutionBackwardBias(biasGrad, res.d)
+          bias.d += biasGrad
       }
     }
   }
