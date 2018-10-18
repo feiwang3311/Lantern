@@ -15,10 +15,10 @@ import scala.math._
 import java.io.PrintWriter;
 import java.io.File;
 
-object SentimentTreeLSTM {
+object SentimentTreeRNN {
 
   val root_dir = "src/out/ICFP18evaluation/"
-  val file_dir = "evaluationTreeLSTM/Lantern/Lantern.cpp"
+  val file_dir = "evaluationTreeLSTM/Lantern/LanternRNN.cpp"
   val root_dir2 = "src/out/NIPS18evaluation/"
 
   val sentimental_lstm = new LanternDriverC[String, Unit] {
@@ -67,24 +67,24 @@ object SentimentTreeLSTM {
       val learning_rate = 0.05f
 
       // parameters for leaf node
-      val Wi = Tensor.randinit(hidden_size, word_embedding_size, 0.01f)  // from word embedding to hidden vector, input gate
-      val bi = Tensor.zeros(hidden_size)                                // bias word embedding to hidden vector, input gate
-      val Wo = Tensor.randinit(hidden_size, word_embedding_size, 0.01f)  // from word embedding to hidden vector, outout gate
-      val bo = Tensor.zeros(hidden_size)                                // bias word embedding to hidden vector, outout gate
+      // val Wi = Tensor.randinit(hidden_size, word_embedding_size, 0.01f)  // from word embedding to hidden vector, input gate
+      // val bi = Tensor.zeros(hidden_size)                                // bias word embedding to hidden vector, input gate
+      // val Wo = Tensor.randinit(hidden_size, word_embedding_size, 0.01f)  // from word embedding to hidden vector, outout gate
+      // val bo = Tensor.zeros(hidden_size)                                // bias word embedding to hidden vector, outout gate
       val Wu = Tensor.randinit(hidden_size, word_embedding_size, 0.01f)  // from word embedding to hidden vector, cell state
       val bu = Tensor.zeros(hidden_size)                                // bias word embedding to hidden vector, cell state
       // parameters for non-leaf node
-      val U0i  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left child, input gate
-      val U1i  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right child, input gate
-      val bbi  = Tensor.zeros(hidden_size)                       // bias, input gate
-      val U00f = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left-left forget gate
-      val U01f = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left-right forget gate
-      val U10f = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right-left forget gate
-      val U11f = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right-right forget gate
-      val bbf  = Tensor.zeros(hidden_size)                       // bias, forget gate
-      val U0o  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left child, output gate
-      val U1o  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right child, output gate
-      val bbo  = Tensor.zeros(hidden_size)                       // bias, output gate
+      // val U0i  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left child, input gate
+      // val U1i  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right child, input gate
+      // val bbi  = Tensor.zeros(hidden_size)                       // bias, input gate
+      // val U00f = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left-left forget gate
+      // val U01f = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left-right forget gate
+      // val U10f = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right-left forget gate
+      // val U11f = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right-right forget gate
+      // val bbf  = Tensor.zeros(hidden_size)                       // bias, forget gate
+      // val U0o  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left child, output gate
+      // val U1o  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right child, output gate
+      // val bbo  = Tensor.zeros(hidden_size)                       // bias, output gate
       val U0u  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // left child, cell state
       val U1u  = Tensor.randinit(hidden_size, hidden_size, 0.01f) // right child, cell state
       val bbu  = Tensor.zeros(hidden_size)                       // bias, cell state
@@ -93,24 +93,24 @@ object SentimentTreeLSTM {
       val by  = Tensor.zeros(output_size)                               // bias hidden vector to output
 
       // Cast Tensors as Tensors
-      val tWi = TensorR(Wi)
-      val tbi = TensorR(bi)
-      val tWo = TensorR(Wo)
-      val tbo = TensorR(bo)
+      // val tWi = TensorR(Wi)
+      // val tbi = TensorR(bi)
+      // val tWo = TensorR(Wo)
+      // val tbo = TensorR(bo)
       val tWu = TensorR(Wu)
       val tbu = TensorR(bu)
       // Cast Tensors as Tensors
-      val tU0i  = TensorR(U0i)
-      val tU1i  = TensorR(U1i)
-      val tbbi  = TensorR(bbi)
-      val tU00f = TensorR(U00f)
-      val tU01f = TensorR(U01f)
-      val tU10f = TensorR(U10f)
-      val tU11f = TensorR(U11f)
-      val tbbf = TensorR(bbf)
-      val tU0o = TensorR(U0o)
-      val tU1o = TensorR(U1o)
-      val tbbo = TensorR(bbo)
+      // val tU0i  = TensorR(U0i)
+      // val tU1i  = TensorR(U1i)
+      // val tbbi  = TensorR(bbi)
+      // val tU00f = TensorR(U00f)
+      // val tU01f = TensorR(U01f)
+      // val tU10f = TensorR(U10f)
+      // val tU11f = TensorR(U11f)
+      // val tbbf = TensorR(bbf)
+      // val tU0o = TensorR(U0o)
+      // val tU1o = TensorR(U1o)
+      // val tbbo = TensorR(bbo)
       val tU0u = TensorR(U0u)
       val tU1u = TensorR(U1u)
       val tbbu = TensorR(bbu)
@@ -122,27 +122,26 @@ object SentimentTreeLSTM {
 
         val initial_loss = TensorR(Tensor.zeros(1))
         val initial_hidd = TensorR(Tensor.zeros(hidden_size))
-        val initial_cell = TensorR(Tensor.zeros(hidden_size))
+        // val initial_cell = TensorR(Tensor.zeros(hidden_size))
         val inBuffer     = new ArrayBuffer[TensorR]()
-        inBuffer.append(initial_loss); inBuffer.append(initial_hidd); inBuffer.append(initial_cell)
+        inBuffer.append(initial_loss); inBuffer.append(initial_hidd); // inBuffer.append(initial_cell)
 
         val outBuffer = LOOPTM(0)(inBuffer)(lchs, rchs) { (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
 
-          val lossl = l(0); val hiddenl = l(1); val celll = l(2)
-          val lossr = r(0); val hiddenr = r(1); val cellr = r(2)
+          val lossl = l(0); val hiddenl = l(1); // val celll = l(2)
+          val lossr = r(0); val hiddenr = r(1); // val cellr = r(2)
 
-          val targ = Tensor.zeros(output_size); targ.data(scores(i)) = 1; val targ1 = TensorR(targ)
+          // val targ = Tensor.zeros(output_size); targ.data(scores(i)) = 1; val targ1 = TensorR(targ)
 
           IFm (lchs(i) < 0) {
             val embedding_tensor = TensorR(Tensor(word_embedding_data(words(i)), word_embedding_size))
-            val i_gate = (tWi.dot(embedding_tensor) + tbi).sigmoid()
-            val o_gate = (tWo.dot(embedding_tensor) + tbo).sigmoid()
-            val u_value = (tWu.dot(embedding_tensor) + tbu).tanh()
-            val cell = i_gate * u_value
+            // val i_gate = (tWi.dot(embedding_tensor) + tbi).sigmoid()
+            // val o_gate = (tWo.dot(embedding_tensor) + tbo).sigmoid()
+            val hidden = (tWu.dot(embedding_tensor) + tbu).tanh()
+            // val cell = i_gate * u_value
 
-            val hidden = o_gate * cell.tanh()
+            // val hidden = o_gate * cell.tanh()
             val pred1 = (tWhy.dot(hidden) + tby)
-            // val pred1 = (tWhy.dot(hidden) + tby).exp()
             val loss = pred1.logSoftmax().nllLoss(scores(i))
             // val pred2 = pred1 / pred1.sum()
             // val loss = lossl + lossr - (pred2 dot targ1).log()
@@ -150,18 +149,17 @@ object SentimentTreeLSTM {
             val out = ArrayBuffer[TensorR]()
             out.append(loss)
             out.append(hidden)
-            out.append(cell)
+            // out.append(cell)
             out
           } {
-            val i_gate = (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
-            val fl_gate = (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).sigmoid()
-            val fr_gate = (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).sigmoid()
-            val o_gate = (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).sigmoid()
-            val u_value = (tU0u.dot(hiddenl) + tU1u.dot(hiddenr) + tbbu).tanh()
-            val cell = i_gate * u_value + fl_gate * celll + fr_gate * cellr
+            // val i_gate = (tU0i.dot(hiddenl) + tU1i.dot(hiddenr) + tbbi).sigmoid()
+            // val fl_gate = (tU00f.dot(hiddenl) + tU01f.dot(hiddenr) + tbbf).sigmoid()
+            // val fr_gate = (tU10f.dot(hiddenl) + tU11f.dot(hiddenr) + tbbf).sigmoid()
+            // val o_gate = (tU0o.dot(hiddenl) + tU1o.dot(hiddenr) + tbbo).sigmoid()
+            val hidden = (tU0u.dot(hiddenl) + tU1u.dot(hiddenr) + tbbu).tanh()
+            // val cell = i_gate * u_value + fl_gate * celll + fr_gate * cellr
 
-            val hidden = o_gate * cell.tanh()
-            // val pred1 = (tWhy.dot(hidden) + tby).exp()
+            // val hidden = o_gate * cell.tanh()
             val pred1 = (tWhy.dot(hidden) + tby)
             val loss = lossl + lossr + pred1.logSoftmax().nllLoss(scores(i))
             // val pred2 = pred1 / pred1.sum()
@@ -170,7 +168,7 @@ object SentimentTreeLSTM {
             val out = ArrayBuffer[TensorR]()
             out.append(loss)
             out.append(hidden)
-            out.append(cell)
+            // out.append(cell)
             out
           }
         }
@@ -181,24 +179,24 @@ object SentimentTreeLSTM {
       val hp = 1e-8f
 
       // parameters for leaf node
-      val mWi = Tensor.zeros_like(Wi)
-      val mbi = Tensor.zeros_like(bi)
-      val mWo = Tensor.zeros_like(Wo)
-      val mbo = Tensor.zeros_like(bo)
+      // val mWi = Tensor.zeros_like(Wi)
+      // val mbi = Tensor.zeros_like(bi)
+      // val mWo = Tensor.zeros_like(Wo)
+      // val mbo = Tensor.zeros_like(bo)
       val mWu = Tensor.zeros_like(Wu)
       val mbu = Tensor.zeros_like(bu)
       // parameters for non-leaf node
-      val mU0i  = Tensor.zeros_like(U0i)
-      val mU1i  = Tensor.zeros_like(U1i)
-      val mbbi  = Tensor.zeros_like(bbi)
-      val mU00f = Tensor.zeros_like(U00f)
-      val mU01f = Tensor.zeros_like(U01f)
-      val mU10f = Tensor.zeros_like(U10f)
-      val mU11f = Tensor.zeros_like(U11f)
-      val mbbf  = Tensor.zeros_like(bbf)
-      val mU0o  = Tensor.zeros_like(U0o)
-      val mU1o  = Tensor.zeros_like(U1o)
-      val mbbo  = Tensor.zeros_like(bbo)
+      // val mU0i  = Tensor.zeros_like(U0i)
+      // val mU1i  = Tensor.zeros_like(U1i)
+      // val mbbi  = Tensor.zeros_like(bbi)
+      // val mU00f = Tensor.zeros_like(U00f)
+      // val mU01f = Tensor.zeros_like(U01f)
+      // val mU10f = Tensor.zeros_like(U10f)
+      // val mU11f = Tensor.zeros_like(U11f)
+      // val mbbf  = Tensor.zeros_like(bbf)
+      // val mU0o  = Tensor.zeros_like(U0o)
+      // val mU1o  = Tensor.zeros_like(U1o)
+      // val mbbo  = Tensor.zeros_like(bbo)
       val mU0u  = Tensor.zeros_like(U0u)
       val mU1u  = Tensor.zeros_like(U1u)
       val mbbu  = Tensor.zeros_like(bbu)
@@ -228,8 +226,8 @@ object SentimentTreeLSTM {
           val loss_value = loss.data(0)  // we suppose the loss is scala (Tensor of size 1)
           average_loss = average_loss * (n) / (n+1) + loss_value / (n+1)
 
-          val pars = ArrayBuffer(tWi, tbi, tWo, tbo, tWu, tbu, tU0i, tU1i, tbbi, tU00f, tU01f, tU10f, tU11f, tbbf, tU0o, tU1o, tbbo, tU0u, tU1u, tbbu, tWhy, tby)
-          val mems = ArrayBuffer(mWi, mbi, mWo, mbo, mWu, mbu, mU0i, mU1i, mbbi, mU00f, mU01f, mU10f, mU11f, mbbf, mU0o, mU1o, mbbo, mU0u, mU1u, mbbu, mWhy, mby)
+          val pars = ArrayBuffer(tWu, tbu, tU0u, tU1u, tbbu, tWhy, tby)
+          val mems = ArrayBuffer(mWu, mbu, mU0u, mU1u, mbbu, mWhy, mby)
           for ((par, mem) <- pars.zip(mems)) {
             par.clip_grad(5.0f)
             mem += par.d * par.d
