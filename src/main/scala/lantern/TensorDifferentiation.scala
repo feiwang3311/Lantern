@@ -3012,6 +3012,35 @@ trait TensorDslCudnn extends TensorDslCublas {
       generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
     }
 
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
+    // Note: this function performs in-place addition for `res`.
+    def cudnnAddBiasTensor(bias: Tensor, res: Tensor): Unit = {
+      assert(bias.rank == 1, "Bias must have rank 1")
+      assert(res.rank == 4, "Currently, only rank 4 tensors are supported")
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t bias_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&bias_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    1, ${bias.shape(0)}, 1, 1));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnAddTensor(\n" +
+          "    cudnnHandle, ", one, ", bias_desc, ", bias.data, ", ", one, ", out_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+    }
+
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionForward
     def cudnnConvolutionForward(input: Tensor, filter: Tensor, res: Tensor, bias: Option[Tensor] = None,
                                 padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
@@ -3023,49 +3052,49 @@ trait TensorDslCudnn extends TensorDslCublas {
           |cudnnTensorDescriptor_t in_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |      in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |      ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
           |
           |cudnnFilterDescriptor_t filt_desc;
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
           |CUDNN_CALL(cudnnSetFilter4dDescriptor(
-          |      filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-          |      ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
+          |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+          |    ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
           |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
-          |      conv_desc,
-          |      ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
-          |      CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |    conv_desc,
+          |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
+          |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |      out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |      ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
           |
           |// Algorithm.
           |cudnnConvolutionFwdAlgo_t algo;
           |CUDNN_CALL(cudnnGetConvolutionForwardAlgorithm(
-          |      cudnnHandle,
-          |      in_desc, filt_desc, conv_desc, out_desc,
-          |      CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 0, &algo));
+          |    cudnnHandle,
+          |    in_desc, filt_desc, conv_desc, out_desc,
+          |    CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 0, &algo));
           |
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionForwardWorkspaceSize(
-          |           cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, algo, &ws_size));
+          |    cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, algo, &ws_size));
           |float *ws_data;
           |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
           |""".stripMargin) ++
         Seq(
           "// Execute convolution.\n" +
           "CUDNN_CALL(cudnnConvolutionForward(\n" +
-          "      cudnnHandle,\n" +
-          "      ", one, ", in_desc, ", input.data, ", filt_desc, ", filter.data, ",\n" +
-          "      conv_desc, algo, ws_data, ws_size,\n" +
-          "      ", zero, ", out_desc, ", res.data, "));\n" +
+          "    cudnnHandle,\n" +
+          "    ", one, ", in_desc, ", input.data, ", filt_desc, ", filter.data, ",\n" +
+          "    conv_desc, algo, ws_data, ws_size,\n" +
+          "    ", zero, ", out_desc, ", res.data, "));\n" +
           "}"): _*
       )
     }
@@ -3091,14 +3120,19 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(strideCol >= 1, "Column stride must be at least 1")
       assert(padUp == padDown && padUp == padLeft && padUp == padRight, "All paddings must be equal (for now)")
 
+      // Execute `cudnnConvolutionForward`.
       val resWidth = convSize(input.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
       val resHeight = convSize(input.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
       val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
-      val res = bias match {
-        case Some(bias) => fillWithBias(resShape, bias, 1)
-        case None => Tensor(mallocArray[Float](resShape.product), resShape: _*)
-      }
+      val resData = mallocArray[Float](resShape.product)
+      val res = Tensor(resData, resShape: _*)
       cudnnConvolutionForward(input, kernel, res, padding = (padUp, padLeft), strides = (strideCol, strideRow), dilations = (1, 1))
+
+      // If bias is defined, execute `cudnnAddBiasTensor`.
+      bias match {
+        case None =>
+        case Some(bias) => cudnnAddBiasTensor(bias, res)
+      }
       res
     }
   }
