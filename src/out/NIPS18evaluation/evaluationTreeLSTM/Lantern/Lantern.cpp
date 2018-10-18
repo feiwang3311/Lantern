@@ -13,6 +13,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <cblas.h>
 
 using namespace std;
 #ifndef MAP_FILE
