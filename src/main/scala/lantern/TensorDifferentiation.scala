@@ -3104,7 +3104,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resHeight = convSize(input.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
       val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
       val res = bias match {
-        case Some(bias) => fillWithBias(Seq(input.shape(0), kernel.shape(0), resWidth, resHeight), bias, 1)
+        case Some(bias) => fillWithBias(resShape, bias, 1)
         case None => Tensor(mallocArray[Float](resShape.product), resShape: _*)
       }
       cudnnConvolutionForward(input, kernel, res, padding = (padUp, padLeft), strides = (strideCol, strideRow), dilations = (1, 1))
