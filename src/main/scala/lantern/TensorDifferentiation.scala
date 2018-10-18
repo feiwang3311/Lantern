@@ -262,6 +262,10 @@ trait TensorDsl extends DslOps with Diff {
       */
     // NOTE: cuDNN accepts only two padding arguments: [padVertical, padHorizontal].
     def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor
+
+    @virtualize
+    def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
+                          padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
   }
 
   /**
@@ -590,6 +594,110 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // Gradient of `conv2D_batch`.
+    @virtualize
+    override def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
+                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      // NOTE: Strides/paddings may be in the wrong order.
+      assert(dilations._1 == 1 && dilations._2 == 1, "Currently, only dilations of 1 are supported")
+
+      // back propagate
+      val strideRow = strides._1
+      val strideCol = strides._2
+
+      if (padding._1 + padding._2 == 0) {
+        for (batch <- DataLoop(res.d.shape(0))) {
+          val offOutputD = var_new(batch * res.d.shape.strides(0)) // offset for the output, based on batch, step by 1
+          val offFilter = var_new(0) // offset for filter, step by filter strides(1) -- which filter
+          // looping for the output
+          for (kOut <- DataLoop(res.d.shape(1))) {
+            val sum = var_new(0.0f) // collector of bias gradient
+            val offInputR = var_new(batch * input.x.shape.strides(0)) // offset of input, based on batch, step by input.strides(2) * strideRow
+            for (row <- DataLoop(res.d.shape(2))) {
+              val offInputC = var_new(offInputR) // offset of input, based on offInputR, step by strideCol
+              for (col <- DataLoop(res.d.shape(3))) {
+                val dCurr: Rep[Float] = res.d.data(offOutputD)
+                sum += dCurr // collect bias gradient
+
+                // looping for the filter
+                val offInputP = var_new(offInputC) // offset of input, based on offInputC, step by input.strides(2)
+                val offFilterR = var_new(offFilter) // offset of filter, based on offFilter, step by 1
+                for (pane <- DataLoop(filter.x.shape(1))) {
+                  val offInputKR = var_new(offInputP) // offset of input, step by input.strides(3) -- row
+                  for (kR <- DataLoop(filter.x.shape(2))) {
+                    for (kC <- DataLoop(filter.x.shape(3))) {
+                      if (!input.isInput) input.d.data(offInputKR + kC) = input.d.data(offInputKR + kC) + dCurr * filter.x.data(offFilterR)
+                      filter.d.data(offFilterR) = filter.d.data(offFilterR) + dCurr * input.x.data(offInputKR + kC)
+                      offFilterR += 1
+                    }
+                    offInputKR += input.x.shape.strides(2)
+                  }
+                  offInputP += input.x.shape.strides(1)
+                }
+
+                offInputC += strideCol
+                offOutputD += 1
+              }
+              offInputR += strideRow * input.x.shape.strides(2)
+            }
+            bias match {
+              case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum // give value of collector to the bias gradient
+              case None => ()
+            }
+            offFilter += filter.x.shape.strides(0)
+          }
+        }
+      } else {
+        for (batch <- DataLoop(input.x.shape(0))) {
+          val offOutputD = var_new(batch * res.d.shape.strides(0)) // offset for the output, based on batch, step by 1
+          val offFilter = var_new(0) // offset for the filter, step by filter strides(1) -- which filter
+          val offInputD = batch * input.x.shape.strides(0) // fixed offset for the input, based on batch
+          // looping for the output
+          for (kOut <- DataLoop(res.d.shape(1))) {
+            val InputR = var_new(-padding._1) // Row of input, starting from -pads
+            val sum = var_new(0.0f) // collector of bias gradient
+            for (row <- DataLoop(res.d.shape(2))) {
+              val InputC = var_new(-padding._1) // Col of input, starting from -pads
+              for (col <- DataLoop(res.d.shape(3))) {
+                val dCurr: Rep[Float] = res.d.data(offOutputD)
+                sum += dCurr // collect the bias gradient
+
+                // looping for the filter
+                val offFilterR = var_new(offFilter) // offset if filter, based on offFilter, step by 1
+                // offset of input based on batch, pane, and index of output
+                val InputI_pane = var_new[Int](offInputD + InputR * input.x.shape.strides(2) + InputC)
+                for (pane <- DataLoop(filter.d.shape(1))) {
+                  val InputI_kR = var_new[Int](InputI_pane) // offset of input based on InputI_pane and row
+                  for (kR <- DataLoop(filter.d.shape(2))) {
+                    for (kC <- DataLoop(filter.d.shape(3))) {
+                      if (InputR + kR < 0 || InputR + kR >= input.x.shape(2) || InputC + kC < 0 || InputC + kC >= input.x.shape(3)) ()
+                      else {
+                        val InputI = InputI_kR + kC
+                        if (!input.isInput) input.d.data(InputI) = input.d.data(InputI) + dCurr * filter.x.data(offFilterR)
+                        filter.d.data(offFilterR) = filter.d.data(offFilterR) + dCurr * input.x.data(InputI)
+                      }
+                      offFilterR += 1
+                    }
+                    InputI_kR += input.x.shape.strides(2)
+                  }
+                  InputI_pane += input.x.shape.strides(1)
+                }
+
+                InputC += strideCol
+                offOutputD += 1
+              }
+              InputR += strideRow
+            }
+            bias match {
+              case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum
+              case None => ()
+            }
+            offFilter += filter.x.shape.strides(0)
+          }
+        }
+      }
+      ()
+    }
   }
   object BackendCPU {
     def apply() = new BackendCPU
@@ -2097,112 +2205,17 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // conv with batch, bias, and pads
-    def convBBP(kernel: TensorR, bias: Option[TensorR], stride: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
+    def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
       assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
       assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
       assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
       val y = bias match {
-        case Some(bias) => TensorR(x conv2D_batch(kernel.x, Some(bias.x), stride, pads))
-        case None => TensorR(x conv2D_batch(kernel.x, None, stride, pads))
+        case Some(bias) => TensorR(x conv2D_batch(kernel.x, Some(bias.x), strides, pads))
+        case None => TensorR(x conv2D_batch(kernel.x, None, strides, pads))
       }
       k(y)
 
-      // back propagate
-      val strideRow = stride.head
-      val strideCol = stride.last
-
-      if (pads.sum == 0) {
-        for (batch <- DataLoop(y.d.shape(0))) {
-          val offOutputD = var_new(batch * y.d.shape.strides(0))     // offset for the output, based on batch, step by 1
-          val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
-          // looping for the output
-          for (kOut <- DataLoop(y.d.shape(1))) {
-            val sum = var_new(0.0f)                            // collector of bias gradient
-            val offInputR = var_new(batch * this.x.shape.strides(0)) // offset of input, based on batch, step by input.strides(2) * strideRow
-            for (row <- DataLoop(y.d.shape(2))) {
-              val offInputC = var_new(offInputR)               // offset of input, based on offInputR, step by strideCol
-              for (col <- DataLoop(y.d.shape(3))) {
-                val dCurr: Rep[Float] = y.d.data(offOutputD)
-                sum += dCurr                                   // collect bias gradient
-
-                // looping for the kernel
-                val offInputP = var_new(offInputC)             // offset of input, based on offInputC, step by input.strides(2)
-                val offKernelR = var_new(offKernel)            // offset of kernel, based on offKernel, step by 1
-                for (pane <- DataLoop(kernel.x.shape(1))) {
-                  val offInputKR = var_new(offInputP)          // offset of input, step by input.strides(3) -- row
-                  for (kR <- DataLoop(kernel.x.shape(2))) {
-                    for (kC <- DataLoop(kernel.x.shape(3))) {
-                      if (!this.isInput) this.d.data(offInputKR + kC) = this.d.data(offInputKR + kC) + dCurr * kernel.x.data(offKernelR)
-                      kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
-                      offKernelR += 1
-                    }
-                    offInputKR += this.x.shape.strides(2)
-                  }
-                  offInputP += this.x.shape.strides(1)
-                }
-
-                offInputC += strideCol
-                offOutputD += 1
-              }
-              offInputR += strideRow * this.x.shape.strides(2)
-            }
-            bias match {
-              case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum        // give value of collector to the bias gradient
-              case None => ()
-            }
-            offKernel += kernel.x.shape.strides(0)
-          }
-        }
-      } else {
-        for (batch <- DataLoop(this.x.shape(0))) {
-          val offOutputD = var_new(batch * y.d.shape.strides(0))     // offset for the output, based on batch, step by 1
-          val offKernel  = var_new(0)                          // offset for the kernel, step by kernel strides(1) -- which kernel
-          val offInputD  = batch * this.x.shape.strides(0)           // fixed offset for the input, based on batch
-          // looping for the output
-          for (kOut <- DataLoop(y.d.shape(1))) {
-            val InputR = var_new(-pads.head)                   // Row of input, starting from -pads
-            val sum = var_new(0.0f)                            // collector of bias gradient
-            for (row <- DataLoop(y.d.shape(2))) {
-              val InputC = var_new(-pads.head)                 // Col of input, starting from -pads
-              for (col <- DataLoop(y.d.shape(3))) {
-                val dCurr: Rep[Float] = y.d.data(offOutputD)
-                sum += dCurr                                   // collect the bias gradient
-
-                // looping for the kernel
-                val offKernelR = var_new(offKernel)            // offset if kernel, based on offKernel, step by 1
-                // offset of input based on batch, pane, and index of output
-                val InputI_pane = var_new[Int](offInputD + InputR * this.x.shape.strides(2) + InputC)
-                for (pane <- DataLoop(kernel.d.shape(1))) {
-                  val InputI_kR = var_new[Int](InputI_pane)    // offset of input based on InputI_pane and row
-                  for (kR <- DataLoop(kernel.d.shape(2))) {
-                    for (kC <- DataLoop(kernel.d.shape(3))) {
-                      if (InputR+kR < 0 || InputR+kR >= this.x.shape(2) || InputC+kC < 0 || InputC+kC >= this.x.shape(3)) ()
-                      else {
-                        val InputI = InputI_kR + kC
-                        if (!this.isInput) this.d.data(InputI) = this.d.data(InputI) + dCurr * kernel.x.data(offKernelR)
-                        kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(InputI)
-                      }
-                      offKernelR += 1
-                    }
-                    InputI_kR += this.x.shape.strides(2)
-                  }
-                  InputI_pane += this.x.shape.strides(1)
-                }
-
-                InputC += strideCol
-                offOutputD += 1
-              }
-              InputR += strideRow
-            }
-            bias match {
-              case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum
-              case None => ()
-            }
-            offKernel += kernel.x.shape.strides(0)
-          }
-        }
-      }
-      ()
+      backend.conv2D_batch_grad(this, kernel, y, bias, (pads.head, pads.head), (strides.head, strides.last), dilations = (1, 1))
     }
 
     @virtualize  // conv with bias and pads
@@ -2994,6 +3007,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // TODO: Implement cuBLAS `conv2D_batch` in terms of primitive ops.
     // Reuse CPU implementation?
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = ???
+    override def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
+                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
   }
 
   object BackendCublas {
@@ -3070,18 +3085,18 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
           |    ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
           |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
           |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
           |
           |// Algorithm.
           |cudnnConvolutionFwdAlgo_t algo;
@@ -3104,6 +3119,153 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    ", one, ", in_desc, ", input.data, ", filt_desc, ", filter.data, ",\n" +
           "    conv_desc, algo, ws_data, ws_size,\n" +
           "    ", zero, ", out_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias
+    // This is effectively the gradient of `cudnnAddBiasTensor`.
+    def cudnnConvolutionBackwardBias(biasGrad: Tensor, resGrad: Tensor): Unit = {
+      assert(biasGrad.rank == 1, "Bias gradient must have rank 1")
+      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t grad_bias_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_bias_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    1, ${biasGrad.shape(0)}, 1, 1));
+          |
+          |cudnnTensorDescriptor_t grad_out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnConvolutionBackwardBias(\n" +
+          "    cudnnHandle, ", one, ", grad_out_desc, ", resGrad.data, ",\n",
+          "    ", zero, ", grad_bias_desc, ", biasGrad.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardData
+    def cudnnConvolutionBackwardData(inputGrad: Tensor, filter: Tensor, resGrad: Tensor,
+                                     padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnFilterDescriptor_t filt_desc;
+          |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+          |CUDNN_CALL(cudnnSetFilter4dDescriptor(
+          |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+          |    ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t grad_in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${inputGrad.shape(0)}, ${inputGrad.shape(1)}, ${inputGrad.shape(2)}, ${inputGrad.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t grad_out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |
+          |cudnnConvolutionDescriptor_t conv_desc;
+          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |    conv_desc,
+          |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
+          |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |
+          |// Algorithm.
+          |cudnnConvolutionBwdDataAlgo_t algo;
+          |CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+          |    cudnnHandle,
+          |    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+          |    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+          |
+          |// Workspace.
+          |size_t ws_size;
+          |CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+          |    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+          |float *ws_data;
+          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnConvolutionBackwardData(\n" +
+          "    cudnnHandle,\n" +
+          "    ", one, ", filt_desc, ", filter.data, ", grad_out_desc, ", resGrad.data, ",\n" +
+          "    conv_desc, algo, ws_data, ws_size,\n" +
+          "    ", zero, ", grad_in_desc, ", inputGrad.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardFilter
+    def cudnnConvolutionBackwardFilter(filterGrad: Tensor, input: Tensor, resGrad: Tensor,
+                                       padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnFilterDescriptor_t grad_filt_desc;
+          |CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
+          |CUDNN_CALL(cudnnSetFilter4dDescriptor(
+          |    grad_filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+          |    ${filterGrad.shape(0)}, ${filterGrad.shape(1)}, ${filterGrad.shape(2)}, ${filterGrad.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t grad_out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |
+          |cudnnConvolutionDescriptor_t conv_desc;
+          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |    conv_desc,
+          |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
+          |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |
+          |// Algorithm.
+          |cudnnConvolutionBwdFilterAlgo_t algo;
+          |CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
+          |    cudnnHandle,
+          |    in_desc, grad_out_desc, conv_desc, grad_filt_desc,
+          |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
+          |
+          |// Workspace.
+          |size_t ws_size;
+          |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
+          |    cudnnHandle, in_desc, grad_out_desc, conv_desc, grad_filt_desc, algo, &ws_size));
+          |float *ws_data;
+          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnConvolutionBackwardFilter(\n" +
+          "    cudnnHandle,\n" +
+          "    ", one, ", in_desc, ", input.data, ", grad_out_desc, ", resGrad.data, ",\n" +
+          "    conv_desc, algo, ws_data, ws_size,\n" +
+          "    ", zero, ", grad_filt_desc, ", filterGrad.data, "));\n" +
           "}"): _*
       )
     }
@@ -3143,6 +3305,17 @@ trait TensorDslCudnn extends TensorDslCublas {
         case Some(bias) => cudnnAddBiasTensor(bias, res)
       }
       res
+    }
+
+    @virtualize
+    override def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
+                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations)
+      cudnnConvolutionBackwardFilter(filter.d, input.x, res.d, padding, strides, dilations)
+      bias match {
+        case None =>
+        case Some(bias) => cudnnConvolutionBackwardBias(bias.d, res.d)
+      }
     }
   }
 
