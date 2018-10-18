@@ -185,14 +185,29 @@ trait TensorDsl extends DslOps with Diff {
     // Allocate an array with the specified length.
     def mallocArray[T: Manifest](length: Int): Rep[Array[T]]
 
+    // Copy data from one array to another.
+    // NOTE: This function is intentionally not defined generically to simplify the codegen implementation.
+    // The only user of this function is currently `copyTensorData`.
+    def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit
+
+    // Copy data from one tensor to another.
+    def copyTensorData(dest: Tensor, src: Tensor): Unit = {
+      assert(dest.scalarCount == src.scalarCount,
+        s"Tensors do not have same scalar count: ${dest.scalarCount}, ${src.scalarCount}")
+      copyFloatArray(dest.data, src.data, dest.scalarCount)
+    }
+
+    // Initialize a tensor with the specified dimensions and scalar values.
+    def makeTensor(dims: Seq[Int], scalars: Float*): Tensor
+
     // Initialize a tensor with the specified dimensions and repeated value.
     def fill(dims: Seq[Int], value: Rep[Float]): Tensor
 
     // Initialize a tensor with the specified bias tensor at the specified dimension.
     def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor
 
-    // Initialize a tensor with the specified dimensions and scalar values.
-    def makeTensor(dims: Seq[Int], scalars: Float*): Tensor
+    // Fill a tensor in-place with the specified value.
+    def fillInPlace(x: Tensor, value: Rep[Float])
 
     // Compute vector-vector dot product, i.e. inner product.
     // [V] dot [V] => [1] (scalar)
@@ -277,6 +292,15 @@ trait TensorDsl extends DslOps with Diff {
     override def cleanup() {}
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewArray[T](length)
 
+    override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit = {
+      for (i <- DataLoop(length)) dest(i) = src(i)
+    }
+
+    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+      // less memory copy
+      Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
+    }
+
     override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
       val scalarCount = dims.product
       val array = mallocArray[Float](scalarCount)
@@ -306,9 +330,8 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, dims: _*)
     }
 
-    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
-      // less memory copy
-      Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
+    override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
+      for (i <- DataLoop(x.scalarCount)) x.data(i) = value
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -781,13 +804,12 @@ trait TensorDsl extends DslOps with Diff {
     def /=(that: Rep[Float]): Unit = backend./=(this, that)
     def /= (that: Tensor): Unit = backend./=(this, that)
 
-    def setAsOne() = { this.mapInPlace(x => 1.0f); () }
-    def clear() = { this.mapInPlace(x => 0.0f); () }
+    def fillInPlace(value: Rep[Float]): Unit = backend.fillInPlace(this, value)
+    def setAsOne() = fillInPlace(1)
+    def clear() = fillInPlace(0)
 
-    def copy_data(that: Tensor) = {
-      assert(this.scalarCount == that.scalarCount, "dimensions of vector do not match copy_data!")
-      for (i <- DataLoop(scalarCount)) this.data(i) = that.data(i)
-    }
+    // Copy data from another tensor, in-place.
+    def copy_data(src: Tensor) = backend.copyTensorData(this, src)
 
     // `dot` represents the following:
     // - vector-vector dot product.
@@ -2735,9 +2757,11 @@ trait TensorDsl extends DslOps with Diff {
 
   def gradR(f: TensorR => TensorR @diff)(x: Tensor): Tensor = {
     val x1 = new TensorR(x, Tensor.zeros(x.shape(0)))
-    reset { val y = f(x1)
+    reset {
+      val y = f(x1)
       y.d.setAsOne()
-    () }
+      ()
+    }
     x1.d
   }
 
@@ -2749,10 +2773,11 @@ trait TensorDsl extends DslOps with Diff {
     val result = Tensor.zeros(1)                  // this should be the loss
     reset {
       val y = f(x1)
-      assert(y.x.scalarCount == 1, s"lossFun must return a Tensor of size 1, got ${y.x.scalarCount}")
+      assert(y.x.scalarCount == 1, s"Loss function must return a Tensor of size 1, got ${y.x.scalarCount}")
       y.d.setAsOne()
       result.copy_data(y.x)
-    () }
+      ()
+    }
     result
   }
 
@@ -2772,6 +2797,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
   protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
     unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
+
+  protected def cudaMemcpyDeviceToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToDevice))")
 
   // NOTE: `cudaMemset` is not very useful because it only works with an integer array/value.
   protected def cudaMemset(array: Rep[Array[Int]], value: Rep[Int], n: Int): Rep[Unit] =
@@ -2822,6 +2850,13 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewGPUArray[T](length)
 
+    override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
+      cudaMemcpyDeviceToDevice(dest, src, length)
+
+    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+      BackendCPU().makeTensor(dims, scalars: _*).toGPU()
+    }
+
     override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
       BackendCPU().fill(dims, value).toGPU()
     }
@@ -2830,8 +2865,15 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       BackendCPU().fillWithBias(dims, bias.toCPU(), dim).toGPU()
     }
 
-    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
-      BackendCPU().makeTensor(dims, scalars: _*).toGPU()
+    override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
+      // TODO: Consider different grid/block parameters.
+      unchecked[Unit](s"arrayFill<<<${x.scalarCount}, 1>>>(", x.data, ", ", value, ")")
+    }
+
+    override def copyTensorData(dest: Tensor, src: Tensor): Unit = {
+      assert(dest.scalarCount == src.scalarCount,
+        s"Tensors do not have same shape: ${dest.shape.seq}, ${src.shape.seq}")
+      cudaMemcpyDeviceToDevice(dest.data, src.data, dest.scalarCount)
     }
 
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot

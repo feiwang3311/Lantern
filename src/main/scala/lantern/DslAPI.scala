@@ -481,6 +481,10 @@ trait DslGenCublas extends DslGenBase {
       |  data[index] = value;
       |}
       |
+      |__global__ void arrayFill(float *data, float value) {
+      |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+      |  data[tid] = value;
+      |}
       |
       |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/THC/THCIntegerDivider.cuh
       |// Result of div/mod operation stored together.
