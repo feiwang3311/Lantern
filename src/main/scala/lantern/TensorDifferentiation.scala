@@ -286,13 +286,17 @@ trait TensorDsl extends DslOps with Diff {
       val dim1 = x.shape(0)
       val dim2 = x.shape(1)
       val res = mallocArray[Float](dim1)
-      for (i <- DataLoop(dim1)) {
-        val value = var_new(0.0f)
-        for (j <- DataLoop(dim2)) {
-          value += x.data(i * dim2 + j) * y.data(j)
-        }
-        res(i) = readVar(value)
-      }
+      unchecked[Unit] (
+        "cblas_sgemv(CblasRowMajor, CblasNoTrans, ",
+        dim1, ",", dim2, ",", 1, ",",
+        x.data, ",", dim2, ",", y.data, ",", 1, ",", 0, ",", res, ",", 1, ")")
+      // for (i <- DataLoop(dim1)) {
+      //   val value = var_new(0.0f)
+      //   for (j <- DataLoop(dim2)) {
+      //     value += x.data(i * dim2 + j) * y.data(j)
+      //   }
+      //   res(i) = readVar(value)
+      // }
       Tensor(res, dim1)
     }
 
@@ -832,7 +836,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
-    // the result is to update this so that this += that * y, where * is cartesian product
+    // the result is to update this so that this += that * y, where * is Cartesian product
     def add_cartesian(that: Tensor, y: Tensor) = {
       generateRawComment("add_cartesian")
       assert(this.rank == 2 && that.shape == Dimensions(Seq(this.shape(1))) && y.shape == Dimensions(Seq(this.shape(0))) ||
@@ -1840,7 +1844,12 @@ trait TensorDsl extends DslOps with Diff {
       // back-propagate
       (this.x.rank, that.x.rank) match {
         case (1, 1) => this.d.addMul(y.d.data(0), that.x); that.d.addMul(y.d.data(0), this.x)
-        case (2, 1) => this.d.add_cartesian(that.x, y.d);  that.d.add_composion(this.x, y.d)
+        case (2, 1) => this.d.add_cartesian(that.x, y.d); // that.d.add_composion(this.x, y.d)
+          val dim1 = this.x.shape(0); val dim2 = this.x.shape(1)
+          unchecked[Unit](
+            "cblas_sgemv(CblasRowMajor, CblasTrans, ",
+            dim1, ",", dim2, ",", 1, ",",
+            this.x.data, ",", dim2, ",", y.d.data, ",", 1, ",", 1, ",", that.d.data, ",", 1, ")")
         case (2, 2) => val dim1 = this.x.shape(0); val dim2 = this.x.shape(1); val dim3 = that.x.shape(1)
           // use cblas_sgemm
           // this.d += y.d dot that.x.trans()

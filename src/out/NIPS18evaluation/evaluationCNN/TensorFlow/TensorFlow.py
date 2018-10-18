@@ -35,9 +35,6 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 import tensorflow as tf
 
-#FLAGS = None
-
-
 def deepnn(x):
   """deepnn builds the graph for a deep net for classifying digits.
 
@@ -78,10 +75,10 @@ def deepnn(x):
   # Fully connected layer 1 -- after 2 round of downsampling, our 28x28 image
   # is down to 7x7x64 feature maps -- maps this to 1024 features.
   with tf.name_scope('fc1'):
-    W_fc1 = weight_variable([4 * 4 * 20, 50])
+    W_fc1 = weight_variable([320, 50])
     b_fc1 = bias_variable([50])
 
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 4 * 4 * 20])
+    h_pool2_flat = tf.reshape(h_pool2, [-1, 320])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
   # Dropout - controls the complexity of the model, prevents co-adaptation of
@@ -143,13 +140,13 @@ def run(write_to):
         labels=y_, logits=y_conv)
   cross_entropy = tf.reduce_mean(cross_entropy)
 
-  with tf.name_scope('adam_optimizer'):
+  with tf.name_scope('optimizer'):
     train_step = tf.train.GradientDescentOptimizer(args.lr).minimize(cross_entropy)
 
-  with tf.name_scope('accuracy'):
-    correct_prediction = tf.equal(tf.argmax(y_conv, 1), y_)
-    correct_prediction = tf.cast(correct_prediction, tf.float32)
-  accuracy = tf.reduce_mean(correct_prediction)
+  # with tf.name_scope('accuracy'):
+  #   correct_prediction = tf.equal(tf.argmax(y_conv, 1), y_)
+  #   correct_prediction = tf.cast(correct_prediction, tf.float32)
+  # accuracy = tf.reduce_mean(correct_prediction)
 
   #graph_location = tempfile.mkdtemp()
   #print('Saving graph to: %s' % graph_location)

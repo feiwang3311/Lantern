@@ -146,5 +146,5 @@ timePerEpoch = loopTime / epocNum
 with open("result_PyTorch.txt", "w") as f:
   f.write("unit: " + "1 epoch\n")
   for loss in loss_save:
-    f.write(str(loss) + "\n")
+    f.write("{}\n".format(loss))
   f.write("run time: " + str(prepareTime) + " " + str(timePerEpoch) + "\n")

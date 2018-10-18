@@ -59,6 +59,16 @@ class AdLMSVectorTest extends LanternFunSuite {
         val v = Tensor.fromData(Seq(4), -1, -2, -3, -4)
         val expected = Tensor.fromData(Seq(2), -30, -70)
         Tensor.assertEqual(m.dot(v), expected)
+
+        val mm = TensorR(m)
+        val vv = TensorR(v)
+        gradR_loss(dummy => (mm dot vv).sum())(Tensor.zeros(1))
+        // mm.d.print("mm grad")
+        // vv.d.print("vv grad")
+        val expected1 = Tensor.fromData(Seq(2, 4), -1,-2,-3,-4,-1,-2,-3,-4)
+        val expected2 = Tensor.fromData(Seq(4), 6, 8, 10, 12)
+        Tensor.assertEqual(mm.d, expected1)
+        Tensor.assertEqual(vv.d, expected2)
       }
     }
     runTest(mvdot)

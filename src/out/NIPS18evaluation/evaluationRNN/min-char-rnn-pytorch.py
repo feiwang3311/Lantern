@@ -108,7 +108,7 @@ def run(write_to):
   with open(write_to, "w") as f:
     f.write("unit: " + "100 iteration\n")
     for loss in loss_save:
-      f.write(str(loss) + "\n")
+      f.write("{}\n".format(loss))
     f.write("run time: " + str(prepareTime) + " " + str(loopTime) + "\n")
 
 if __name__ == '__main__':
