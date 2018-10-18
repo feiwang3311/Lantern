@@ -229,11 +229,6 @@ trait TensorDsl extends DslOps with Diff {
         case _ => throw new IllegalArgumentException(s"Incompatible shapes: ${x.shape}, ${y.shape}")
       }
 
-    // TODO: Add more ops:
-    // - Convolution and pooling.
-    // - Activation functions (e.g. relu).
-    // - Fused multiply add operations?
-
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
     def +(x: Tensor, y: Tensor): Tensor
@@ -281,6 +276,15 @@ trait TensorDsl extends DslOps with Diff {
     @virtualize
     def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
+
+    // TODO: Add more ops:
+    // - Reduction operators (e.g. sum).
+    //   - Reduction op GPU implementations are non-trivial.
+    //   - Roll out own reduction op kernels? There may be significant boilerplate.
+    //   - Use thrust library reduction ops? Need to consider device_vector initialization overhead.
+    // - Pooling, dropout.
+    // - Activation functions (e.g. relu).
+    // - Fused multiply add operations?
   }
 
   /**
@@ -2832,6 +2836,12 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     }
   }
   implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
+
+  class TensorRTransferOps(t: TensorR) {
+    def toCPU(): TensorR = new TensorR(t.x.toCPU(), t.d.toCPU())
+    def toGPU(): TensorR = new TensorR(t.x.toGPU(), t.d.toGPU())
+  }
+  implicit def tensorRToTransferOps(t: TensorR) = new TensorRTransferOps(t)
 
   /**
     * cuBLAS tensor operation backend. WIP.
