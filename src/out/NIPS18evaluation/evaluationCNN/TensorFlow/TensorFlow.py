@@ -155,9 +155,7 @@ def run(write_to):
 
   loopStart = time.time()
   loss_save = []
-  with tf.Session(config=tf.ConfigProto(
-        intra_op_parallelism_threads=1,
-        inter_op_parallelism_threads=1)) as sess:
+  with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     for epoch in range(args.epochs):
       train_accuracy = 0.0
@@ -165,10 +163,9 @@ def run(write_to):
       for i in range(60000 // args.batch_size):
         batch = mnist.train.next_batch(args.batch_size)
         _, loss = sess.run([train_step, cross_entropy], feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
-        #print(loss)
         train_accuracy += loss
-        #if (i + 1) % 60 == 0:
-        #  print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))
+        if (i + 1) % (60000 // args.batch_size // 10) == 0:
+          print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))
       stop = time.time() * 1000
       print('Training completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/60000))
       average_loss = train_accuracy / (60000 / args.batch_size)

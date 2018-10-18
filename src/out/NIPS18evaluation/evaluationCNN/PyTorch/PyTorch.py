@@ -14,13 +14,9 @@ def run(write_to):
 
   torch.set_num_threads(1)
   torch.manual_seed(args.seed)
-  if args.cuda:
-    torch.cuda.manual_seed(args.seed)
-
-
-  kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+  kwargs = {}
   train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=True, # download=True,
+    datasets.MNIST('../data', train=True, download=True,
              transform=transforms.Compose([
                transforms.ToTensor(),
                transforms.Normalize((0.1307,), (0.3081,))
@@ -28,14 +24,7 @@ def run(write_to):
              # transform=transforms.ToTensor()),
     batch_size=args.batch_size, shuffle=False, **kwargs)
 
-  # skip tests
-  #test_loader = torch.utils.data.DataLoader(
-  #    datasets.MNIST('../data', train=False, transform=transforms.Compose([
-  #                       transforms.ToTensor(),
-  #                       transforms.Normalize((0.1307,), (0.3081,))
-  #                   ])),
-  #    batch_size=args.test_batch_size, shuffle=True, **kwargs)
-
+  print(len(train_loader))  # should be 600
 
   class Net(nn.Module):
     def __init__(self):
@@ -67,17 +56,12 @@ def run(write_to):
       print('min {} - max {}'.format(self.fc2.bias.min().data[0], self.fc2.bias.max().data[0]))
 
   model = Net()
-  if args.cuda:
-    model.cuda()
-
   optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
   def train(epoch):
-    model.train()
+    # model.train()
     tloss = 0.0
     for batch_idx, (data, target) in enumerate(train_loader):
-      if args.cuda:
-        data, target = data.cuda(), target.cuda()
       data, target = Variable(data), Variable(target)
       optimizer.zero_grad()
       output = model(data)
@@ -85,30 +69,11 @@ def run(write_to):
       tloss += loss.data[0]
       loss.backward()
       optimizer.step()
-    #    if ((batch_idx + 1) * len(data)) % args.log_interval == 0:
-    print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-      epoch, batch_idx * len(data), len(train_loader.dataset),
-      100. * batch_idx / len(train_loader), tloss / (batch_idx)))
+      if (batch_idx + 1) % (args.log_interval / args.batch_size) == 0:
+        print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+          epoch, batch_idx * len(data), len(train_loader.dataset),
+          100. * batch_idx / len(train_loader), tloss / (batch_idx)))
     return tloss / (batch_idx)
-
-  def test():
-    model.eval()
-    test_loss = 0
-    correct = 0
-    for data, target in test_loader:
-      if args.cuda:
-        data, target = data.cuda(), target.cuda()
-      data, target = Variable(data, volatile=True), Variable(target)
-      output = model(data)
-      test_loss += F.nll_loss(output, target, size_average=False).data[0] # sum up batch loss
-      pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
-      correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
-
-    test_loss /= len(test_loader.dataset)
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-      test_loss, correct, len(test_loader.dataset),
-      100. * correct / len(test_loader.dataset)))
-
 
   loopStart = time.time()
   loss_save = []
@@ -117,10 +82,6 @@ def run(write_to):
     loss_save.append(train(epoch))
     stop = time.time()
     print('Training completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
-    #start = time.time() * 1000
-    #test()
-    #stop = time.time() * 1000
-    #print('Testing completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/10000))
   loopEnd = time.time()
 
   prepareTime = loopStart - startTime
