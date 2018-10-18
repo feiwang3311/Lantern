@@ -2821,8 +2821,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()
     }
 
-    // Reference:
-    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
+    // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
     // NOTE: `sdot` fails when the cuBLAS pointer mode is host (as opposed to device).
     // Investigate performance impact.
     def sdot(n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
@@ -2837,8 +2836,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       Tensor(res, 1)
     }
 
-    // Reference:
-    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
+    // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
     def sgemv(m: Int, n: Int, matrix: Rep[Array[Float]], vector: Rep[Array[Float]], result: Rep[Array[Float]]) = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
@@ -2856,8 +2854,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       Tensor(res, m)
     }
 
-    // Reference:
-    // https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
+    // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
     def sgemm(m: Int, n: Int, k: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
@@ -3024,6 +3021,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
     }
 
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionForward
     def cudnnConvolutionForward(input: Tensor, filter: Tensor, res: Tensor, bias: Option[Tensor] = None,
                                 padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
       val zero = NewArray[Float](1); zero(0) = 0
