@@ -81,9 +81,9 @@ cd ..
 echo "Now let's run Dynet"
 cd Dynet
 echo "RUN: run dynet without autobatching"
-numactl -C 0 python3 treelstmDynet.py result_DynetNB.txt --dynet-mem 2048
+numactl -C 0 python3 treelstmDynet.py result_DynetNB.txt
 echo "RUN: run dynet with autobatching"
-numactl -C 0 python3 treelstmDynet.py result_DynetB.txt --dynet-autobatch 1 --dynet-mem 2048
+numactl -C 0 python3 treelstmDynet.py result_DynetB.txt --dynet-autobatch 1
 echo "Result: run sentiment in Dynet is successful"
 cd ..
 echo "Now let's run PyTorch"
