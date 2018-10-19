@@ -2618,7 +2618,7 @@ trait TensorDsl extends DslOps with Diff {
     f1(k2, temp)
   }
 
-  def FUNl(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
+  def FUNll(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
 
     val dims = x.x.shape.toSeq
 
@@ -2638,6 +2638,24 @@ trait TensorDsl extends DslOps with Diff {
     val temp = NewArray[Array[Float]](2)
     temp(0) = x.x.data; temp(1) = x.d.data
     f1(i, k2, temp)
+  }
+
+  def FUNl(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
+
+    val dims = x.x.shape.toSeq
+
+    val f1 = fun { (i: Rep[Int], t1: Rep[((Array[Float], Array[Float])) => Unit], x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
+      val t2: (TensorR => Unit) = { (x: TensorR) =>
+        t1(x.x.data, x.d.data)
+      }
+      val t3: (TensorR => Unit) = f(i)(t2)
+      t3(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
+    }
+
+    val k2: Rep[((Array[Float], Array[Float])) => Unit] = fun { (x1: Rep[Array[Float]], x2: Rep[Array[Float]]) =>
+      k1(new TensorR(Tensor(x1, dims: _*), Tensor(x2, dims: _*)))
+    }
+    f1(i, k2, x.x.data, x.d.data)
   }
 
   @virtualize
@@ -2693,6 +2711,41 @@ trait TensorDsl extends DslOps with Diff {
     }
     f1(i, k2, arrays)
   }
+
+  // type Fun6Array = ((Array[Float], Array[Float], Array[Float], Array[Float], Array[Float], Array[Float])) => Unit
+  // type RAF = Rep[Array[Float]]
+
+  // def FUNlx(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit)):
+  // (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit) = {i: Rep[Int] => k1: (ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
+
+  //   val length = x.length
+  //   val dims = x.map(_.x.shape.toSeq)
+  //   x.length match {
+  //     case 3 =>
+  //       val f1 = fun { (i: Rep[Int], t1: Rep[Fun6Array], x0: RAF, x1: RAF, x2: RAF, x3: RAF, x4: RAF, x5: RAF) =>
+  //         val t2 = { x: ArrayBuffer[TensorR] =>
+  //           t1((x(0).x.data, x(0).d.data, x(1).x.data, x(1).d.data, x(2).x.data, x(2).d.data))
+  //         }
+  //         val t3: (ArrayBuffer[TensorR] => Unit) = f(i)(t2)
+  //         val tensors = ArrayBuffer(
+  //           new TensorR(Tensor(x0, dims(0): _*), Tensor(x1, dims(0): _*)),
+  //           new TensorR(Tensor(x2, dims(1): _*), Tensor(x3, dims(1): _*)),
+  //           new TensorR(Tensor(x4, dims(2): _*), Tensor(x5, dims(2): _*)),
+  //         )
+  //         t3(tensors)
+  //       }
+  //       val k2: Rep[Fun6Array] = fun { (x0: RAF, x1: RAF, x2: RAF, x3: RAF, x4: RAF, x5: RAF) =>
+  //         val tensors = ArrayBuffer(
+  //           new TensorR(Tensor(x0, dims(0): _*), Tensor(x1, dims(0): _*)),
+  //           new TensorR(Tensor(x2, dims(1): _*), Tensor(x3, dims(1): _*)),
+  //           new TensorR(Tensor(x4, dims(2): _*), Tensor(x5, dims(2): _*)),
+  //         )
+  //         k1(tensors)
+  //       }
+  //       f1(i, k2, x(0).x.data, x(0).d.data, x(1).x.data, x(1).d.data, x(2).x.data, x(2).d.data)
+  //     case 2 => ???
+  //   }
+  // }
 
   @virtualize
   def LOOPLM(start: Rep[Int])(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
