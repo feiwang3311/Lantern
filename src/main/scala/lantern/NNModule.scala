@@ -209,25 +209,48 @@ trait NNModule extends TensorDsl {
     def show() = module.forEachNamedParameter{case (name, (tr, ot)) => tr.d.printHead(5, name)}
   }
   case class SGD(val module: Module, val learning_rate: Float, val gradClip: Float = 1.0f, val descent: Boolean = true) extends Optim {
+    @virtualize
     def step_func = { case (tr, _) =>
-      tr.clip_grad(gradClip)
-      if (descent)
-        tr.x -= tr.d * learning_rate
-      else
-        tr.x += tr.d * learning_rate
-      tr.clear_grad()
+      tr.d.changeTo { i =>
+        val temp = var_new(tr.d.data(i))
+        if (temp > gradClip) temp = gradClip
+        if (temp < -gradClip) temp = -gradClip
+        if (descent)
+          tr.x.data(i) -= learning_rate * temp
+        else
+          tr.x.data(i) += learning_rate * temp
+        0.0f
+      }
+      // tr.clip_grad(gradClip)
+      // if (descent)
+      //   tr.x -= tr.d * learning_rate
+      // else
+      //   tr.x += tr.d * learning_rate
+      // tr.clear_grad()
     }
   }
   case class Adagrad(val module: Module, val learning_rate: Float, val gradClip: Float = 1.0f, val descent: Boolean = true) extends Optim {
     module.enrichParameter()
+    @virtualize
     def step_func = { case (tr, Some(t)) =>
-      tr.clip_grad(gradClip)
-      t += tr.d * tr.d
-      if (descent)
-        tr.x -= tr.d * learning_rate / (t + 1e-8f).sqrt()
-      else
-        tr.x += tr.d * learning_rate / (t + 1e-8f).sqrt()
-      tr.clear_grad()
+      tr.d.changeTo { i =>
+        val temp = var_new(tr.d.data(i))
+        if (temp > gradClip) temp = gradClip
+        if (temp < -gradClip) temp = -gradClip
+        t.data(i) += temp * temp
+        if (descent)
+          tr.x.data(i) -= learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
+        else
+          tr.x.data(i) += learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
+        0.0f
+      }
+      // tr.clip_grad(gradClip)
+      // t += tr.d * tr.d
+      // if (descent)
+      //   tr.x -= tr.d * learning_rate / (t + 1e-8f).sqrt()
+      // else
+      //   tr.x += tr.d * learning_rate / (t + 1e-8f).sqrt()
+      // tr.clear_grad()
     }
   }
 

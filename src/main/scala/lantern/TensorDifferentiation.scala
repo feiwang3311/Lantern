@@ -751,8 +751,9 @@ trait TensorDsl extends DslOps with Diff {
     @virtualize
     def clipAt(bound: Float) = {
       for (i <- DataLoop(scalarCount)) {
-        if (data(i) > bound) data(i) = bound
-        if (data(i) < -1.0f * bound) data(i) = -1.0f * bound
+        val temp = data(i)
+        if (temp > bound) data(i) = bound
+        if (temp < -1.0f * bound) data(i) = -1.0f * bound
       }
     }
 
@@ -762,6 +763,10 @@ trait TensorDsl extends DslOps with Diff {
 
     def mapInPlace(op: Rep[Float] => Rep[Float]) = {
       for (i <- DataLoop(scalarCount)) this.data(i) = op(this.data(i))
+    }
+
+    def changeTo(gen: Rep[Int] => Rep[Float]) = {
+      for (i <- DataLoop(scalarCount)) this.data(i) = gen(i)
     }
 
     def map(op: Rep[Float] => Rep[Float]) = {
@@ -1767,6 +1772,46 @@ trait TensorDsl extends DslOps with Diff {
         this.map(x => (x - m)/s)
       }
     }
+
+    // fused ops
+    def linearTanh(x: Tensor, b: Tensor) = {
+      // this is W. We want (W.dot(x)+b).tanh()
+      assert(this.rank == 2 && x.rank == 1 && b.rank == 1, "limited generalization")
+      generateRawComment("forward for linearTanh")
+      // val res_dot = backend.mallocArray[Float](this.shape(0))
+      // val res_add = backend.mallocArray[Float](this.shape(0))
+      val res_tanh = backend.mallocArray[Float](this.shape(0))
+      val offSet = var_new(0)
+      for (i <- DataLoop(this.shape(0))) {
+        val sum = var_new(0.0f)
+        for (j <- DataLoop(this.shape(1))) {
+          sum += this.data(offSet + j) * x.data(j)
+        }
+        // res_dot(i) = sum
+        // res_add(i) = b.data(i) + sum
+        res_tanh(i) = Math.tanh(b.data(i) + sum).toFloat
+        offSet += this.shape(1)
+      }
+      (Tensor(res_tanh, this.shape(0)))
+    }
+
+    def linear2Tanh(x: Tensor, W2: Tensor, x2: Tensor, b: Tensor) = {
+      // this is W. We want (W.dot(x) + W2.dot(x2) + b).tanh()
+      assert(this.rank == 2 && x.rank == 1 && W2.rank == 2 && x2.rank == 1 && b.rank == 1, "limited generalization")
+      generateRawComment("forward for linear2Tanh")
+      val res_tanh = backend.mallocArray[Float](this.shape(0))
+      val offSet = var_new(0)
+      for (i <- DataLoop(this.shape(0))) {
+        val sum = var_new(0.0f)
+        for (j <- DataLoop(this.shape(1))) {
+          sum += this.data(offSet + j) * x.data(j)
+          sum += W2.data(offSet + j) * x2.data(j)
+        }
+        res_tanh(i) = Math.tanh(b.data(i) + sum).toFloat
+        offSet += this.shape(1)
+      }
+      Tensor(res_tanh, this.shape(0))
+    }
   }
 
   object Tensor {
@@ -1854,7 +1899,8 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, 1)
     }
 
-    def zeros(dims: Int*): Tensor = fill(dims, 0.0f)
+    def zeros(dims: Int*): Tensor = // fill(dims, 0.0f)
+      new Tensor(backend.mallocArray[Float](dims.product), dims)
     def zeros_like(that: Tensor) = zeros(that.shape: _*)
     def ones(dims: Int*) = fill(dims, 1.0f)
     def ones_like(that: Tensor) = ones(that.shape: _*)
@@ -1913,6 +1959,40 @@ trait TensorDsl extends DslOps with Diff {
 
     def clip_grad(bound: Float) = {
       d.clipAt(bound)
+    }
+
+    // fused ops
+    def linearTanh(x: TensorR, b: TensorR) = shift { k: (TensorR => Unit) =>
+      val y = TensorR(this.x.linearTanh(x.x, b.x)); k(y)
+      generateRawComment("back prop for linearTanh")
+      val offSet = var_new(0)
+      for (i <- DataLoop(this.x.shape(0))) {
+        val d_res_add = (1.0f - y.x.data(i) * y.x.data(i)) * y.d.data(i)
+        b.d.data(i) += d_res_add
+        for (j <- DataLoop(this.x.shape(1))) {
+          x.d.data(j) += d_res_add * this.x.data(offSet + j)
+          this.d.data(offSet + j) += d_res_add * x.x.data(j)
+        }
+        offSet += this.x.shape(1)
+      }
+    }
+
+    def linear2Tanh(x: TensorR, W2: TensorR, x2: TensorR, b: TensorR) = shift { k: (TensorR => Unit) =>
+      val y = TensorR(this.x.linear2Tanh(x.x, W2.x, x2.x, b.x)); k(y)
+      generateRawComment("back prop for linear2Tanh")
+      val offSet = var_new(0)
+      for (i <- DataLoop(this.x.shape(0))) {
+        val d_res_add = (1.0f - y.x.data(i) * y.x.data(i)) * y.d.data(i)
+        b.d.data(i) += d_res_add
+        for (j <- DataLoop(this.x.shape(1))) {
+          val idx = offSet + j
+          x.d.data(j) += d_res_add * this.x.data(idx)
+          this.d.data(idx) += d_res_add * x.x.data(j)
+          x2.d.data(j) += d_res_add * W2.x.data(idx)
+          W2.d.data(idx) += d_res_add * x2.x.data(j)
+        }
+        offSet += this.x.shape(1)
+      }
     }
 
     def backpropElementWiseOpWithBroadCast(that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
@@ -2657,7 +2737,7 @@ trait TensorDsl extends DslOps with Diff {
     f1(k2, temp)
   }
 
-  def FUNl(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
+  def FUNll(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
 
     val dims = x.x.shape.toSeq
 
@@ -2677,6 +2757,24 @@ trait TensorDsl extends DslOps with Diff {
     val temp = NewArray[Array[Float]](2)
     temp(0) = x.x.data; temp(1) = x.d.data
     f1(i, k2, temp)
+  }
+
+  def FUNl(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
+
+    val dims = x.x.shape.toSeq
+
+    val f1 = fun { (i: Rep[Int], t1: Rep[((Array[Float], Array[Float])) => Unit], x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
+      val t2: (TensorR => Unit) = { (x: TensorR) =>
+        t1(x.x.data, x.d.data)
+      }
+      val t3: (TensorR => Unit) = f(i)(t2)
+      t3(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
+    }
+
+    val k2: Rep[((Array[Float], Array[Float])) => Unit] = fun { (x1: Rep[Array[Float]], x2: Rep[Array[Float]]) =>
+      k1(new TensorR(Tensor(x1, dims: _*), Tensor(x2, dims: _*)))
+    }
+    f1(i, k2, x.x.data, x.d.data)
   }
 
   @virtualize
@@ -2732,6 +2830,41 @@ trait TensorDsl extends DslOps with Diff {
     }
     f1(i, k2, arrays)
   }
+
+  // type Fun6Array = ((Array[Float], Array[Float], Array[Float], Array[Float], Array[Float], Array[Float])) => Unit
+  // type RAF = Rep[Array[Float]]
+
+  // def FUNlx(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit)):
+  // (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit) = {i: Rep[Int] => k1: (ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
+
+  //   val length = x.length
+  //   val dims = x.map(_.x.shape.toSeq)
+  //   x.length match {
+  //     case 3 =>
+  //       val f1 = fun { (i: Rep[Int], t1: Rep[Fun6Array], x0: RAF, x1: RAF, x2: RAF, x3: RAF, x4: RAF, x5: RAF) =>
+  //         val t2 = { x: ArrayBuffer[TensorR] =>
+  //           t1((x(0).x.data, x(0).d.data, x(1).x.data, x(1).d.data, x(2).x.data, x(2).d.data))
+  //         }
+  //         val t3: (ArrayBuffer[TensorR] => Unit) = f(i)(t2)
+  //         val tensors = ArrayBuffer(
+  //           new TensorR(Tensor(x0, dims(0): _*), Tensor(x1, dims(0): _*)),
+  //           new TensorR(Tensor(x2, dims(1): _*), Tensor(x3, dims(1): _*)),
+  //           new TensorR(Tensor(x4, dims(2): _*), Tensor(x5, dims(2): _*)),
+  //         )
+  //         t3(tensors)
+  //       }
+  //       val k2: Rep[Fun6Array] = fun { (x0: RAF, x1: RAF, x2: RAF, x3: RAF, x4: RAF, x5: RAF) =>
+  //         val tensors = ArrayBuffer(
+  //           new TensorR(Tensor(x0, dims(0): _*), Tensor(x1, dims(0): _*)),
+  //           new TensorR(Tensor(x2, dims(1): _*), Tensor(x3, dims(1): _*)),
+  //           new TensorR(Tensor(x4, dims(2): _*), Tensor(x5, dims(2): _*)),
+  //         )
+  //         k1(tensors)
+  //       }
+  //       f1(i, k2, x(0).x.data, x(0).d.data, x(1).x.data, x(1).d.data, x(2).x.data, x(2).d.data)
+  //     case 2 => ???
+  //   }
+  // }
 
   @virtualize
   def LOOPLM(start: Rep[Int])(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
@@ -2790,6 +2923,7 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   def resetMallocAddr(addr: Rep[Long]) = {
+    unchecked[Unit]("memset((void*)", addr, ", 0, ", getMallocAddr() - addr, ")")
     unchecked[Unit]("mallocAddr = (void*)", addr)
   }
 }
