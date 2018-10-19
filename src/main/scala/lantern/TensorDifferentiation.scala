@@ -185,14 +185,29 @@ trait TensorDsl extends DslOps with Diff {
     // Allocate an array with the specified length.
     def mallocArray[T: Manifest](length: Int): Rep[Array[T]]
 
+    // Copy data from one array to another.
+    // NOTE: This function is intentionally not defined generically to simplify the codegen implementation.
+    // The only user of this function is currently `copyTensorData`.
+    def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit
+
+    // Copy data from one tensor to another.
+    def copyTensorData(dest: Tensor, src: Tensor): Unit = {
+      assert(dest.scalarCount == src.scalarCount,
+        s"Tensors do not have same scalar count: ${dest.scalarCount}, ${src.scalarCount}")
+      copyFloatArray(dest.data, src.data, dest.scalarCount)
+    }
+
+    // Initialize a tensor with the specified dimensions and scalar values.
+    def makeTensor(dims: Seq[Int], scalars: Float*): Tensor
+
     // Initialize a tensor with the specified dimensions and repeated value.
     def fill(dims: Seq[Int], value: Rep[Float]): Tensor
 
     // Initialize a tensor with the specified bias tensor at the specified dimension.
     def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor
 
-    // Initialize a tensor with the specified dimensions and scalar values.
-    def makeTensor(dims: Seq[Int], scalars: Float*): Tensor
+    // Fill a tensor in-place with the specified value.
+    def fillInPlace(x: Tensor, value: Rep[Float])
 
     // Compute vector-vector dot product, i.e. inner product.
     // [V] dot [V] => [1] (scalar)
@@ -213,11 +228,6 @@ trait TensorDsl extends DslOps with Diff {
         case (2, 2) => matrixMatrixDot(x, y)
         case _ => throw new IllegalArgumentException(s"Incompatible shapes: ${x.shape}, ${y.shape}")
       }
-
-    // TODO: Add more ops:
-    // - Convolution and pooling.
-    // - Activation functions (e.g. relu).
-    // - Fused multiply add operations?
 
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
@@ -262,6 +272,19 @@ trait TensorDsl extends DslOps with Diff {
       */
     // NOTE: cuDNN accepts only two padding arguments: [padVertical, padHorizontal].
     def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor
+
+    @virtualize
+    def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
+                          padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
+
+    // TODO: Add more ops:
+    // - Reduction operators (e.g. sum).
+    //   - Reduction op GPU implementations are non-trivial.
+    //   - Roll out own reduction op kernels? There may be significant boilerplate.
+    //   - Use thrust library reduction ops? Need to consider device_vector initialization overhead.
+    // - Pooling, dropout.
+    // - Activation functions (e.g. relu).
+    // - Fused multiply add operations?
   }
 
   /**
@@ -272,6 +295,15 @@ trait TensorDsl extends DslOps with Diff {
     override def setup() {}
     override def cleanup() {}
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewArray[T](length)
+
+    override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit = {
+      for (i <- DataLoop(length)) dest(i) = src(i)
+    }
+
+    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+      // less memory copy
+      Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
+    }
 
     override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
       val scalarCount = dims.product
@@ -302,9 +334,8 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, dims: _*)
     }
 
-    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
-      // less memory copy
-      Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
+    override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
+      for (i <- DataLoop(x.scalarCount)) x.data(i) = value
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -590,6 +621,110 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // Gradient of `conv2D_batch`.
+    @virtualize
+    override def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
+                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      // NOTE: Strides/paddings may be in the wrong order.
+      assert(dilations._1 == 1 && dilations._2 == 1, "Currently, only dilations of 1 are supported")
+
+      // back propagate
+      val strideRow = strides._1
+      val strideCol = strides._2
+
+      if (padding._1 + padding._2 == 0) {
+        for (batch <- DataLoop(res.d.shape(0))) {
+          val offOutputD = var_new(batch * res.d.shape.strides(0)) // offset for the output, based on batch, step by 1
+          val offFilter = var_new(0) // offset for filter, step by filter strides(1) -- which filter
+          // looping for the output
+          for (kOut <- DataLoop(res.d.shape(1))) {
+            val sum = var_new(0.0f) // collector of bias gradient
+            val offInputR = var_new(batch * input.x.shape.strides(0)) // offset of input, based on batch, step by input.strides(2) * strideRow
+            for (row <- DataLoop(res.d.shape(2))) {
+              val offInputC = var_new(offInputR) // offset of input, based on offInputR, step by strideCol
+              for (col <- DataLoop(res.d.shape(3))) {
+                val dCurr: Rep[Float] = res.d.data(offOutputD)
+                sum += dCurr // collect bias gradient
+
+                // looping for the filter
+                val offInputP = var_new(offInputC) // offset of input, based on offInputC, step by input.strides(2)
+                val offFilterR = var_new(offFilter) // offset of filter, based on offFilter, step by 1
+                for (pane <- DataLoop(filter.x.shape(1))) {
+                  val offInputKR = var_new(offInputP) // offset of input, step by input.strides(3) -- row
+                  for (kR <- DataLoop(filter.x.shape(2))) {
+                    for (kC <- DataLoop(filter.x.shape(3))) {
+                      if (!input.isInput) input.d.data(offInputKR + kC) = input.d.data(offInputKR + kC) + dCurr * filter.x.data(offFilterR)
+                      filter.d.data(offFilterR) = filter.d.data(offFilterR) + dCurr * input.x.data(offInputKR + kC)
+                      offFilterR += 1
+                    }
+                    offInputKR += input.x.shape.strides(2)
+                  }
+                  offInputP += input.x.shape.strides(1)
+                }
+
+                offInputC += strideCol
+                offOutputD += 1
+              }
+              offInputR += strideRow * input.x.shape.strides(2)
+            }
+            bias match {
+              case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum // give value of collector to the bias gradient
+              case None => ()
+            }
+            offFilter += filter.x.shape.strides(0)
+          }
+        }
+      } else {
+        for (batch <- DataLoop(input.x.shape(0))) {
+          val offOutputD = var_new(batch * res.d.shape.strides(0)) // offset for the output, based on batch, step by 1
+          val offFilter = var_new(0) // offset for the filter, step by filter strides(1) -- which filter
+          val offInputD = batch * input.x.shape.strides(0) // fixed offset for the input, based on batch
+          // looping for the output
+          for (kOut <- DataLoop(res.d.shape(1))) {
+            val InputR = var_new(-padding._1) // Row of input, starting from -pads
+            val sum = var_new(0.0f) // collector of bias gradient
+            for (row <- DataLoop(res.d.shape(2))) {
+              val InputC = var_new(-padding._1) // Col of input, starting from -pads
+              for (col <- DataLoop(res.d.shape(3))) {
+                val dCurr: Rep[Float] = res.d.data(offOutputD)
+                sum += dCurr // collect the bias gradient
+
+                // looping for the filter
+                val offFilterR = var_new(offFilter) // offset if filter, based on offFilter, step by 1
+                // offset of input based on batch, pane, and index of output
+                val InputI_pane = var_new[Int](offInputD + InputR * input.x.shape.strides(2) + InputC)
+                for (pane <- DataLoop(filter.d.shape(1))) {
+                  val InputI_kR = var_new[Int](InputI_pane) // offset of input based on InputI_pane and row
+                  for (kR <- DataLoop(filter.d.shape(2))) {
+                    for (kC <- DataLoop(filter.d.shape(3))) {
+                      if (InputR + kR < 0 || InputR + kR >= input.x.shape(2) || InputC + kC < 0 || InputC + kC >= input.x.shape(3)) ()
+                      else {
+                        val InputI = InputI_kR + kC
+                        if (!input.isInput) input.d.data(InputI) = input.d.data(InputI) + dCurr * filter.x.data(offFilterR)
+                        filter.d.data(offFilterR) = filter.d.data(offFilterR) + dCurr * input.x.data(InputI)
+                      }
+                      offFilterR += 1
+                    }
+                    InputI_kR += input.x.shape.strides(2)
+                  }
+                  InputI_pane += input.x.shape.strides(1)
+                }
+
+                InputC += strideCol
+                offOutputD += 1
+              }
+              InputR += strideRow
+            }
+            bias match {
+              case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum
+              case None => ()
+            }
+            offFilter += filter.x.shape.strides(0)
+          }
+        }
+      }
+      ()
+    }
   }
   object BackendCPU {
     def apply() = new BackendCPU
@@ -678,13 +813,12 @@ trait TensorDsl extends DslOps with Diff {
     def /=(that: Rep[Float]): Unit = backend./=(this, that)
     def /= (that: Tensor): Unit = backend./=(this, that)
 
-    def setAsOne() = { this.mapInPlace(x => 1.0f); () }
-    def clear() = { this.changeTo(i => 0.0f); () }
+    def fillInPlace(value: Rep[Float]): Unit = backend.fillInPlace(this, value)
+    def setAsOne() = fillInPlace(1)
+    def clear() = fillInPlace(0)
 
-    def copy_data(that: Tensor) = {
-      assert(this.scalarCount == that.scalarCount, "dimensions of vector do not match copy_data!")
-      for (i <- DataLoop(scalarCount)) this.data(i) = that.data(i)
-    }
+    // Copy data from another tensor, in-place.
+    def copy_data(src: Tensor) = backend.copyTensorData(this, src)
 
     // `dot` represents the following:
     // - vector-vector dot product.
@@ -2177,112 +2311,17 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // conv with batch, bias, and pads
-    def convBBP(kernel: TensorR, bias: Option[TensorR], stride: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
+    def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
       assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
       assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
       assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
       val y = bias match {
-        case Some(bias) => TensorR(x conv2D_batch(kernel.x, Some(bias.x), stride, pads))
-        case None => TensorR(x conv2D_batch(kernel.x, None, stride, pads))
+        case Some(bias) => TensorR(x conv2D_batch(kernel.x, Some(bias.x), strides, pads))
+        case None => TensorR(x conv2D_batch(kernel.x, None, strides, pads))
       }
       k(y)
 
-      // back propagate
-      val strideRow = stride.head
-      val strideCol = stride.last
-
-      if (pads.sum == 0) {
-        for (batch <- DataLoop(y.d.shape(0))) {
-          val offOutputD = var_new(batch * y.d.shape.strides(0))     // offset for the output, based on batch, step by 1
-          val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
-          // looping for the output
-          for (kOut <- DataLoop(y.d.shape(1))) {
-            val sum = var_new(0.0f)                            // collector of bias gradient
-            val offInputR = var_new(batch * this.x.shape.strides(0)) // offset of input, based on batch, step by input.strides(2) * strideRow
-            for (row <- DataLoop(y.d.shape(2))) {
-              val offInputC = var_new(offInputR)               // offset of input, based on offInputR, step by strideCol
-              for (col <- DataLoop(y.d.shape(3))) {
-                val dCurr: Rep[Float] = y.d.data(offOutputD)
-                sum += dCurr                                   // collect bias gradient
-
-                // looping for the kernel
-                val offInputP = var_new(offInputC)             // offset of input, based on offInputC, step by input.strides(2)
-                val offKernelR = var_new(offKernel)            // offset of kernel, based on offKernel, step by 1
-                for (pane <- DataLoop(kernel.x.shape(1))) {
-                  val offInputKR = var_new(offInputP)          // offset of input, step by input.strides(3) -- row
-                  for (kR <- DataLoop(kernel.x.shape(2))) {
-                    for (kC <- DataLoop(kernel.x.shape(3))) {
-                      if (!this.isInput) this.d.data(offInputKR + kC) = this.d.data(offInputKR + kC) + dCurr * kernel.x.data(offKernelR)
-                      kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
-                      offKernelR += 1
-                    }
-                    offInputKR += this.x.shape.strides(2)
-                  }
-                  offInputP += this.x.shape.strides(1)
-                }
-
-                offInputC += strideCol
-                offOutputD += 1
-              }
-              offInputR += strideRow * this.x.shape.strides(2)
-            }
-            bias match {
-              case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum        // give value of collector to the bias gradient
-              case None => ()
-            }
-            offKernel += kernel.x.shape.strides(0)
-          }
-        }
-      } else {
-        for (batch <- DataLoop(this.x.shape(0))) {
-          val offOutputD = var_new(batch * y.d.shape.strides(0))     // offset for the output, based on batch, step by 1
-          val offKernel  = var_new(0)                          // offset for the kernel, step by kernel strides(1) -- which kernel
-          val offInputD  = batch * this.x.shape.strides(0)           // fixed offset for the input, based on batch
-          // looping for the output
-          for (kOut <- DataLoop(y.d.shape(1))) {
-            val InputR = var_new(-pads.head)                   // Row of input, starting from -pads
-            val sum = var_new(0.0f)                            // collector of bias gradient
-            for (row <- DataLoop(y.d.shape(2))) {
-              val InputC = var_new(-pads.head)                 // Col of input, starting from -pads
-              for (col <- DataLoop(y.d.shape(3))) {
-                val dCurr: Rep[Float] = y.d.data(offOutputD)
-                sum += dCurr                                   // collect the bias gradient
-
-                // looping for the kernel
-                val offKernelR = var_new(offKernel)            // offset if kernel, based on offKernel, step by 1
-                // offset of input based on batch, pane, and index of output
-                val InputI_pane = var_new[Int](offInputD + InputR * this.x.shape.strides(2) + InputC)
-                for (pane <- DataLoop(kernel.d.shape(1))) {
-                  val InputI_kR = var_new[Int](InputI_pane)    // offset of input based on InputI_pane and row
-                  for (kR <- DataLoop(kernel.d.shape(2))) {
-                    for (kC <- DataLoop(kernel.d.shape(3))) {
-                      if (InputR+kR < 0 || InputR+kR >= this.x.shape(2) || InputC+kC < 0 || InputC+kC >= this.x.shape(3)) ()
-                      else {
-                        val InputI = InputI_kR + kC
-                        if (!this.isInput) this.d.data(InputI) = this.d.data(InputI) + dCurr * kernel.x.data(offKernelR)
-                        kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(InputI)
-                      }
-                      offKernelR += 1
-                    }
-                    InputI_kR += this.x.shape.strides(2)
-                  }
-                  InputI_pane += this.x.shape.strides(1)
-                }
-
-                InputC += strideCol
-                offOutputD += 1
-              }
-              InputR += strideRow
-            }
-            bias match {
-              case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum
-              case None => ()
-            }
-            offKernel += kernel.x.shape.strides(0)
-          }
-        }
-      }
-      ()
+      backend.conv2D_batch_grad(this, kernel, y, bias, (pads.head, pads.head), (strides.head, strides.last), dilations = (1, 1))
     }
 
     @virtualize  // conv with bias and pads
@@ -2855,9 +2894,11 @@ trait TensorDsl extends DslOps with Diff {
 
   def gradR(f: TensorR => TensorR @diff)(x: Tensor): Tensor = {
     val x1 = new TensorR(x, Tensor.zeros(x.shape(0)))
-    reset { val y = f(x1)
+    reset {
+      val y = f(x1)
       y.d.setAsOne()
-    () }
+      ()
+    }
     x1.d
   }
 
@@ -2869,10 +2910,11 @@ trait TensorDsl extends DslOps with Diff {
     val result = Tensor.zeros(1)                  // this should be the loss
     reset {
       val y = f(x1)
-      assert(y.x.scalarCount == 1, s"lossFun must return a Tensor of size 1, got ${y.x.scalarCount}")
+      assert(y.x.scalarCount == 1, s"Loss function must return a Tensor of size 1, got ${y.x.scalarCount}")
       y.d.setAsOne()
       result.copy_data(y.x)
-    () }
+      ()
+    }
     result
   }
 
@@ -2893,6 +2935,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
   protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
     unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
+
+  protected def cudaMemcpyDeviceToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
+    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToDevice))")
 
   // NOTE: `cudaMemset` is not very useful because it only works with an integer array/value.
   protected def cudaMemset(array: Rep[Array[Int]], value: Rep[Int], n: Int): Rep[Unit] =
@@ -2926,6 +2971,12 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
   }
   implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
 
+  class TensorRTransferOps(t: TensorR) {
+    def toCPU(): TensorR = new TensorR(t.x.toCPU(), t.d.toCPU())
+    def toGPU(): TensorR = new TensorR(t.x.toGPU(), t.d.toGPU())
+  }
+  implicit def tensorRToTransferOps(t: TensorR) = new TensorRTransferOps(t)
+
   /**
     * cuBLAS tensor operation backend. WIP.
     */
@@ -2943,7 +2994,15 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewGPUArray[T](length)
 
+    override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
+      cudaMemcpyDeviceToDevice(dest, src, length)
+
+    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+      BackendCPU().makeTensor(dims, scalars: _*).toGPU()
+    }
+
     override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
+      // TOOO: Compare performance with GPU allocation + `fillInPlace`.
       BackendCPU().fill(dims, value).toGPU()
     }
 
@@ -2951,8 +3010,15 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       BackendCPU().fillWithBias(dims, bias.toCPU(), dim).toGPU()
     }
 
-    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
-      BackendCPU().makeTensor(dims, scalars: _*).toGPU()
+    override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
+      // TODO: Consider different grid/block parameters.
+      unchecked[Unit](s"arrayFill<<<${x.scalarCount}, 1>>>(", x.data, ", ", value, ")")
+    }
+
+    override def copyTensorData(dest: Tensor, src: Tensor): Unit = {
+      assert(dest.scalarCount == src.scalarCount,
+        s"Tensors do not have same shape: ${dest.shape.seq}, ${src.shape.seq}")
+      cudaMemcpyDeviceToDevice(dest.data, src.data, dest.scalarCount)
     }
 
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
@@ -3128,6 +3194,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // TODO: Implement cuBLAS `conv2D_batch` in terms of primitive ops.
     // Reuse CPU implementation?
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = ???
+    override def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
+                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
   }
 
   object BackendCublas {
@@ -3204,18 +3272,18 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
           |    ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
           |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
           |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
           |
           |// Algorithm.
           |cudnnConvolutionFwdAlgo_t algo;
@@ -3238,6 +3306,153 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    ", one, ", in_desc, ", input.data, ", filt_desc, ", filter.data, ",\n" +
           "    conv_desc, algo, ws_data, ws_size,\n" +
           "    ", zero, ", out_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias
+    // This is effectively the gradient of `cudnnAddBiasTensor`.
+    def cudnnConvolutionBackwardBias(biasGrad: Tensor, resGrad: Tensor): Unit = {
+      assert(biasGrad.rank == 1, "Bias gradient must have rank 1")
+      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t grad_bias_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_bias_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    1, ${biasGrad.shape(0)}, 1, 1));
+          |
+          |cudnnTensorDescriptor_t grad_out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnConvolutionBackwardBias(\n" +
+          "    cudnnHandle, ", one, ", grad_out_desc, ", resGrad.data, ",\n",
+          "    ", zero, ", grad_bias_desc, ", biasGrad.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardData
+    def cudnnConvolutionBackwardData(inputGrad: Tensor, filter: Tensor, resGrad: Tensor,
+                                     padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnFilterDescriptor_t filt_desc;
+          |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+          |CUDNN_CALL(cudnnSetFilter4dDescriptor(
+          |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+          |    ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t grad_in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${inputGrad.shape(0)}, ${inputGrad.shape(1)}, ${inputGrad.shape(2)}, ${inputGrad.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t grad_out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |
+          |cudnnConvolutionDescriptor_t conv_desc;
+          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |    conv_desc,
+          |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
+          |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |
+          |// Algorithm.
+          |cudnnConvolutionBwdDataAlgo_t algo;
+          |CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+          |    cudnnHandle,
+          |    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+          |    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+          |
+          |// Workspace.
+          |size_t ws_size;
+          |CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+          |    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+          |float *ws_data;
+          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnConvolutionBackwardData(\n" +
+          "    cudnnHandle,\n" +
+          "    ", one, ", filt_desc, ", filter.data, ", grad_out_desc, ", resGrad.data, ",\n" +
+          "    conv_desc, algo, ws_data, ws_size,\n" +
+          "    ", zero, ", grad_in_desc, ", inputGrad.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardFilter
+    def cudnnConvolutionBackwardFilter(filterGrad: Tensor, input: Tensor, resGrad: Tensor,
+                                       padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnFilterDescriptor_t grad_filt_desc;
+          |CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
+          |CUDNN_CALL(cudnnSetFilter4dDescriptor(
+          |    grad_filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+          |    ${filterGrad.shape(0)}, ${filterGrad.shape(1)}, ${filterGrad.shape(2)}, ${filterGrad.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t grad_out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |
+          |cudnnConvolutionDescriptor_t conv_desc;
+          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |    conv_desc,
+          |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
+          |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |
+          |// Algorithm.
+          |cudnnConvolutionBwdFilterAlgo_t algo;
+          |CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
+          |    cudnnHandle,
+          |    in_desc, grad_out_desc, conv_desc, grad_filt_desc,
+          |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
+          |
+          |// Workspace.
+          |size_t ws_size;
+          |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
+          |    cudnnHandle, in_desc, grad_out_desc, conv_desc, grad_filt_desc, algo, &ws_size));
+          |float *ws_data;
+          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnConvolutionBackwardFilter(\n" +
+          "    cudnnHandle,\n" +
+          "    ", one, ", in_desc, ", input.data, ", grad_out_desc, ", resGrad.data, ",\n" +
+          "    conv_desc, algo, ws_data, ws_size,\n" +
+          "    ", zero, ", grad_filt_desc, ", filterGrad.data, "));\n" +
           "}"): _*
       )
     }
@@ -3277,6 +3492,25 @@ trait TensorDslCudnn extends TensorDslCublas {
         case Some(bias) => cudnnAddBiasTensor(bias, res)
       }
       res
+    }
+
+    @virtualize
+    override def conv2D_batch_grad(input: TensorR, filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
+                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      // Peephole-optimization: use uninitialized arrays rather than allocating to zero.
+      val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
+      val filterGrad = Tensor(mallocArray[Float](filter.d.scalarCount), filter.d.shape: _*)
+      cudnnConvolutionBackwardData(inputGrad, filter.x, res.d, padding, strides, dilations)
+      cudnnConvolutionBackwardFilter(filterGrad, input.x, res.d, padding, strides, dilations)
+      input.d += inputGrad
+      filter.d += filterGrad
+      bias match {
+        case None =>
+        case Some(bias) =>
+          val biasGrad = Tensor(mallocArray[Float](bias.d.scalarCount), bias.d.shape: _*)
+          cudnnConvolutionBackwardBias(biasGrad, res.d)
+          bias.d += biasGrad
+      }
     }
   }
 
