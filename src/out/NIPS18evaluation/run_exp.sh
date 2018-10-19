@@ -9,12 +9,14 @@ echo "Note: make sure you are using the most updated .cpp file!"
 # pip3 install matplotlib
 # cd ..
 
+export OPENBLAS_NUM_THREADS=1
+
 source evaluationRNN/tensorflow-dev/bin/activate
 cd evaluationRNN
 echo "Note: Let's run vanilla RNN experiment first"
 echo "RUN: run Lantern"
 g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
-numactl -C 0 ./Lantern result_Lantern.txt
+OPENBLAS_NUM_THREADS=1 numactl -C 0 ./Lantern result_Lantern.txt
 echo "RUN: run PyTorch"
 numactl -C 0 python3 min-char-rnn-pytorch.py result_PyTorch.txt
 echo "RUN: run TensorFlow"
@@ -28,7 +30,7 @@ cd evaluationLSTM
 echo "Note: Let's run LSTM experiment now"
 echo "RUN: run Lantern"
 g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
-numactl -C 0 ./Lantern result_Lantern.txt
+OPENBLAS_NUM_THREADS=1 numactl -C 0 ./Lantern result_Lantern.txt
 echo "RUN: run PyTorch"
 numactl -C 0 python3 min-char-lstm-pytorch.py result_PyTorch.txt
 echo "RUN: run TensorFlow"
@@ -58,7 +60,7 @@ cd Lantern
 echo "Note: Let's run Lantern now with batch size 100"
 g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
 echo "RUN: Lantern CNN"
-numactl -C 0 ./Lantern result_Lantern.txt
+OPENBLAS_NUM_THREADS=1 numactl -C 0 ./Lantern result_Lantern.txt
 echo "Result: Lantern CNN successful"
 cd ..
 echo "RUN: copy the result files and do plotting"
@@ -75,7 +77,7 @@ echo "Now let's run Lantern"
 cd Lantern
 echo "RUN: run Lantern"
 g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
-numactl -C 0 ./Lantern result_Lantern.txt
+OPENBLAS_NUM_THREADS=1 numactl -C 0 ./Lantern result_Lantern.txt
 echo "Result: run sentiment in Lantern is successful"
 cd ..
 echo "Now let's run Dynet"
