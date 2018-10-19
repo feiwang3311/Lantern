@@ -616,8 +616,9 @@ trait TensorDsl extends DslOps with Diff {
     @virtualize
     def clipAt(bound: Float) = {
       for (i <- DataLoop(scalarCount)) {
-        if (data(i) > bound) data(i) = bound
-        if (data(i) < -1.0f * bound) data(i) = -1.0f * bound
+        val temp = data(i)
+        if (temp > bound) data(i) = bound
+        if (temp < -1.0f * bound) data(i) = -1.0f * bound
       }
     }
 
@@ -627,6 +628,10 @@ trait TensorDsl extends DslOps with Diff {
 
     def mapInPlace(op: Rep[Float] => Rep[Float]) = {
       for (i <- DataLoop(scalarCount)) this.data(i) = op(this.data(i))
+    }
+
+    def changeTo(gen: Rep[Int] => Rep[Float]) = {
+      for (i <- DataLoop(scalarCount)) this.data(i) = gen(i)
     }
 
     def map(op: Rep[Float] => Rep[Float]) = {
@@ -674,7 +679,7 @@ trait TensorDsl extends DslOps with Diff {
     def /= (that: Tensor): Unit = backend./=(this, that)
 
     def setAsOne() = { this.mapInPlace(x => 1.0f); () }
-    def clear() = { this.mapInPlace(x => 0.0f); () }
+    def clear() = { this.changeTo(i => 0.0f); () }
 
     def copy_data(that: Tensor) = {
       assert(this.scalarCount == that.scalarCount, "dimensions of vector do not match copy_data!")
@@ -1633,6 +1638,46 @@ trait TensorDsl extends DslOps with Diff {
         this.map(x => (x - m)/s)
       }
     }
+
+    // fused ops
+    def linearTanh(x: Tensor, b: Tensor) = {
+      // this is W. We want (W.dot(x)+b).tanh()
+      assert(this.rank == 2 && x.rank == 1 && b.rank == 1, "limited generalization")
+      generateRawComment("forward for linearTanh")
+      // val res_dot = backend.mallocArray[Float](this.shape(0))
+      // val res_add = backend.mallocArray[Float](this.shape(0))
+      val res_tanh = backend.mallocArray[Float](this.shape(0))
+      val offSet = var_new(0)
+      for (i <- DataLoop(this.shape(0))) {
+        val sum = var_new(0.0f)
+        for (j <- DataLoop(this.shape(1))) {
+          sum += this.data(offSet + j) * x.data(j)
+        }
+        // res_dot(i) = sum
+        // res_add(i) = b.data(i) + sum
+        res_tanh(i) = Math.tanh(b.data(i) + sum).toFloat
+        offSet += this.shape(1)
+      }
+      (Tensor(res_tanh, this.shape(0)))
+    }
+
+    def linear2Tanh(x: Tensor, W2: Tensor, x2: Tensor, b: Tensor) = {
+      // this is W. We want (W.dot(x) + W2.dot(x2) + b).tanh()
+      assert(this.rank == 2 && x.rank == 1 && W2.rank == 2 && x2.rank == 1 && b.rank == 1, "limited generalization")
+      generateRawComment("forward for linear2Tanh")
+      val res_tanh = backend.mallocArray[Float](this.shape(0))
+      val offSet = var_new(0)
+      for (i <- DataLoop(this.shape(0))) {
+        val sum = var_new(0.0f)
+        for (j <- DataLoop(this.shape(1))) {
+          sum += this.data(offSet + j) * x.data(j)
+          sum += W2.data(offSet + j) * x2.data(j)
+        }
+        res_tanh(i) = Math.tanh(b.data(i) + sum).toFloat
+        offSet += this.shape(1)
+      }
+      Tensor(res_tanh, this.shape(0))
+    }
   }
 
   object Tensor {
@@ -1720,7 +1765,8 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, 1)
     }
 
-    def zeros(dims: Int*): Tensor = fill(dims, 0.0f)
+    def zeros(dims: Int*): Tensor = // fill(dims, 0.0f)
+      new Tensor(backend.mallocArray[Float](dims.product), dims)
     def zeros_like(that: Tensor) = zeros(that.shape: _*)
     def ones(dims: Int*) = fill(dims, 1.0f)
     def ones_like(that: Tensor) = ones(that.shape: _*)
@@ -1779,6 +1825,40 @@ trait TensorDsl extends DslOps with Diff {
 
     def clip_grad(bound: Float) = {
       d.clipAt(bound)
+    }
+
+    // fused ops
+    def linearTanh(x: TensorR, b: TensorR) = shift { k: (TensorR => Unit) =>
+      val y = TensorR(this.x.linearTanh(x.x, b.x)); k(y)
+      generateRawComment("back prop for linearTanh")
+      val offSet = var_new(0)
+      for (i <- DataLoop(this.x.shape(0))) {
+        val d_res_add = (1.0f - y.x.data(i) * y.x.data(i)) * y.d.data(i)
+        b.d.data(i) += d_res_add
+        for (j <- DataLoop(this.x.shape(1))) {
+          x.d.data(j) += d_res_add * this.x.data(offSet + j)
+          this.d.data(offSet + j) += d_res_add * x.x.data(j)
+        }
+        offSet += this.x.shape(1)
+      }
+    }
+
+    def linear2Tanh(x: TensorR, W2: TensorR, x2: TensorR, b: TensorR) = shift { k: (TensorR => Unit) =>
+      val y = TensorR(this.x.linear2Tanh(x.x, W2.x, x2.x, b.x)); k(y)
+      generateRawComment("back prop for linear2Tanh")
+      val offSet = var_new(0)
+      for (i <- DataLoop(this.x.shape(0))) {
+        val d_res_add = (1.0f - y.x.data(i) * y.x.data(i)) * y.d.data(i)
+        b.d.data(i) += d_res_add
+        for (j <- DataLoop(this.x.shape(1))) {
+          val idx = offSet + j
+          x.d.data(j) += d_res_add * this.x.data(idx)
+          this.d.data(idx) += d_res_add * x.x.data(j)
+          x2.d.data(j) += d_res_add * W2.x.data(idx)
+          W2.d.data(idx) += d_res_add * x2.x.data(j)
+        }
+        offSet += this.x.shape(1)
+      }
     }
 
     def backpropElementWiseOpWithBroadCast(that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
@@ -2801,6 +2881,7 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   def resetMallocAddr(addr: Rep[Long]) = {
+    unchecked[Unit]("memset((void*)", addr, ", 0, ", getMallocAddr() - addr, ")")
     unchecked[Unit]("mallocAddr = (void*)", addr)
   }
 }

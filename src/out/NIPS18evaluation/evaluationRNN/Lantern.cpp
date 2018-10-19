@@ -45,7 +45,7 @@ long hash(char *str0, int len) {
 }
 
 int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
-void *mallocBase = malloc(HEAP_SIZE);
+void *mallocBase = calloc(HEAP_SIZE, 1);
 void *mallocAddr = mallocBase;
 void *waterMark = mallocBase;
 void *myMalloc(size_t bytes) {
@@ -107,1786 +107,1223 @@ x14[x16] = x19;
 
 }
 float* x23 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x24=0; x24 < 1300; x24++) {
-x23[x24] = 0.0f;
+float* x24 = (float*)myMalloc(2500 * sizeof(float));;
+for(int x26=0; x26 < 2500; x26++) {
+float x27 = (float)rand()/RAND_MAX;
+float x28 = x27 - 0.5f;
+float x29 = x28 * 0.14142136f;
+x24[x26] = x29;
 
 }
-float* x28 = (float*)myMalloc(2500 * sizeof(float));;
-for(int x30=0; x30 < 2500; x30++) {
-float x31 = (float)rand()/RAND_MAX;
-float x32 = x31 - 0.5f;
-float x33 = x32 * 0.14142136f;
-x28[x30] = x33;
+float* x33 = (float*)myMalloc(2500 * sizeof(float));;
+float* x34 = (float*)myMalloc(50 * sizeof(float));;
+float* x35 = (float*)myMalloc(50 * sizeof(float));;
+float* x36 = (float*)myMalloc(1300 * sizeof(float));;
+for(int x37=0; x37 < 1300; x37++) {
+float x38 = (float)rand()/RAND_MAX;
+float x39 = x38 - 0.5f;
+float x40 = x39 * 0.14142136f;
+x36[x37] = x40;
 
 }
-float* x37 = (float*)myMalloc(2500 * sizeof(float));;
-for(int x38=0; x38 < 2500; x38++) {
-x37[x38] = 0.0f;
-
-}
-float* x42 = (float*)myMalloc(50 * sizeof(float));;
-for(int x44=0; x44 < 50; x44++) {
-x42[x44] = 0.0f;
-
-}
-float* x48 = (float*)myMalloc(50 * sizeof(float));;
-for(int x49=0; x49 < 50; x49++) {
-x48[x49] = 0.0f;
-
-}
-float* x53 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x54=0; x54 < 1300; x54++) {
-float x55 = (float)rand()/RAND_MAX;
-float x56 = x55 - 0.5f;
-float x57 = x56 * 0.14142136f;
-x53[x54] = x57;
-
-}
-float* x61 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x62=0; x62 < 1300; x62++) {
-x61[x62] = 0.0f;
-
-}
-float* x66 = (float*)myMalloc(26 * sizeof(float));;
-for(int x68=0; x68 < 26; x68++) {
-x66[x68] = 0.0f;
-
-}
-float* x72 = (float*)myMalloc(26 * sizeof(float));;
-for(int x73=0; x73 < 26; x73++) {
-x72[x73] = 0.0f;
-
-}
-float* x77 = (float*)myMalloc(26 * sizeof(float));;
-for(int x78=0; x78 < 26; x78++) {
-x77[x78] = 0.0f;
-
-}
-float* x82 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x83=0; x83 < 1300; x83++) {
-x82[x83] = 0.0f;
-
-}
-float* x87 = (float*)myMalloc(2500 * sizeof(float));;
-for(int x88=0; x88 < 2500; x88++) {
-x87[x88] = 0.0f;
-
-}
-float* x92 = (float*)myMalloc(50 * sizeof(float));;
-for(int x93=0; x93 < 50; x93++) {
-x92[x93] = 0.0f;
-
-}
-float* x97 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x98=0; x98 < 1300; x98++) {
-x97[x98] = 0.0f;
-
-}
-double* x102 = (double*)myMalloc(51 * sizeof(double));;
-double x103 = ((double)clock() / CLOCKS_PER_SEC);
-int64_t x104 = (long)mallocAddr;
-int32_t x105 = 0;
-x105 -= 400;
-for(int x108=0; x108 < 5001; x108++) {
-float* x141 = (float*)myMalloc(1 * sizeof(float));;
-float* x146 = (float*)myMalloc(10400 * sizeof(float));;
-float* x168 = (float*)myMalloc(10400 * sizeof(float));;
-int* x118 = (int32_t*)myMalloc(400 * sizeof(int32_t));;
-function<void(int32_t,float**)> x490 = [&](int32_t x491,float** x492) {
-float** x494 = x492;
-float* x495 = x494[0];
-float* x496 = x494[1];
-float* x497 = x494[2];
-float* x498 = x494[3];
-int32_t x493 = x491;
-bool x499 = x493 < 20;
-if (x499) {
-int32_t x500 = x493 * 520;
-float* x501 = x146+x500;
-float* x502 = x168+x500;
+float* x44 = (float*)myMalloc(1300 * sizeof(float));;
+float* x45 = (float*)myMalloc(26 * sizeof(float));;
+float* x46 = (float*)myMalloc(26 * sizeof(float));;
+float* x47 = (float*)myMalloc(26 * sizeof(float));;
+float* x48 = (float*)myMalloc(1300 * sizeof(float));;
+float* x49 = (float*)myMalloc(2500 * sizeof(float));;
+float* x50 = (float*)myMalloc(50 * sizeof(float));;
+float* x51 = (float*)myMalloc(1300 * sizeof(float));;
+double* x52 = (double*)myMalloc(51 * sizeof(double));;
+double x53 = ((double)clock() / CLOCKS_PER_SEC);
+int64_t x54 = (long)mallocAddr;
+int32_t x55 = 0;
+x55 -= 400;
+for(int x58=0; x58 < 5001; x58++) {
+float* x82 = (float*)myMalloc(1 * sizeof(float));;
+float* x83 = (float*)myMalloc(10400 * sizeof(float));;
+float* x100 = (float*)myMalloc(10400 * sizeof(float));;
+int* x68 = (int32_t*)myMalloc(400 * sizeof(int32_t));;
+function<void(int32_t,float**)> x351 = [&](int32_t x352,float** x353) {
+float** x355 = x353;
+float* x356 = x355[0];
+float* x357 = x355[1];
+float* x358 = x355[2];
+float* x359 = x355[3];
+int32_t x354 = x352;
+bool x360 = x354 < 20;
+if (x360) {
+int32_t x361 = x354 * 520;
+float* x362 = x83+x361;
+float* x363 = x100+x361;
 // dot: WrappedArray(20, 26), List(26, 50)
-float* x504 = (float*)myMalloc(1000 * sizeof(float));;
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,50,26,1,x501,26,x14,50,0,x504,50);
-float* x506 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x507=0; x507 < 1000; x507++) {
-x506[x507] = 0.0f;
-
-}
+float* x365 = (float*)myMalloc(1000 * sizeof(float));;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,50,26,1,x362,26,x14,50,0,x365,50);
+float* x367 = (float*)myMalloc(1000 * sizeof(float));;
 // dot: List(20, 50), List(50, 50)
-float* x512 = (float*)myMalloc(1000 * sizeof(float));;
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,50,50,1,x497,50,x28,50,0,x512,50);
-float* x514 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x515=0; x515 < 1000; x515++) {
-x514[x515] = 0.0f;
+float* x369 = (float*)myMalloc(1000 * sizeof(float));;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,50,50,1,x358,50,x24,50,0,x369,50);
+float* x371 = (float*)myMalloc(1000 * sizeof(float));;
+float* x372 = (float*)myMalloc(1000 * sizeof(float));;
+int32_t x373 = 0;
+int32_t x374 = 0;
+int32_t x375 = 0;
+for(int x376=0; x376 < 20; x376++) {
+int32_t x377 = x374;
+int32_t x378 = x375;
+int32_t x379 = x373;
+int32_t x380 = x379;
+int32_t x381 = x377;
+int32_t x382 = x378;
+for(int x383=0; x383 < 50; x383++) {
+int32_t x384 = x380;
+int32_t x385 = x381;
+float x386 = x365[x385];
+int32_t x387 = x382;
+float x388 = x369[x387];
+float x389 = x386 + x388;
+x372[x384] = x389;
+x380 += 1;
+x381 += 1;
+x382 += 1;
 
 }
-float* x519 = (float*)myMalloc(1000 * sizeof(float));;
-int32_t x520 = 0;
-int32_t x521 = 0;
-int32_t x522 = 0;
-for(int x523=0; x523 < 20; x523++) {
-int32_t x524 = x521;
-int32_t x525 = x522;
-int32_t x526 = x520;
-int32_t x527 = x526;
-int32_t x528 = x524;
-int32_t x529 = x525;
-for(int x530=0; x530 < 50; x530++) {
-int32_t x531 = x527;
-int32_t x532 = x528;
-float x533 = x504[x532];
-int32_t x534 = x529;
-float x535 = x512[x534];
-float x536 = x533 + x535;
-x519[x531] = x536;
-x527 += 1;
-x528 += 1;
-x529 += 1;
+x373 += 50;
+x374 += 50;
+x375 += 50;
 
 }
-x520 += 50;
-x521 += 50;
-x522 += 50;
+float* x401 = (float*)myMalloc(1000 * sizeof(float));;
+float* x402 = (float*)myMalloc(1000 * sizeof(float));;
+int32_t x403 = 0;
+int32_t x404 = 0;
+int32_t x405 = 0;
+for(int x406=0; x406 < 20; x406++) {
+int32_t x407 = x404;
+int32_t x408 = x405;
+int32_t x409 = x403;
+int32_t x410 = x409;
+int32_t x411 = x407;
+int32_t x412 = x408;
+for(int x413=0; x413 < 50; x413++) {
+int32_t x414 = x410;
+int32_t x415 = x411;
+float x416 = x372[x415];
+int32_t x417 = x412;
+float x418 = x34[x417];
+float x419 = x416 + x418;
+x402[x414] = x419;
+x410 += 1;
+x411 += 1;
+x412 += 1;
 
 }
-float* x548 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x549=0; x549 < 1000; x549++) {
-x548[x549] = 0.0f;
+x403 += 50;
+x404 += 50;
 
 }
-float* x553 = (float*)myMalloc(1000 * sizeof(float));;
-int32_t x554 = 0;
-int32_t x555 = 0;
+float* x430 = (float*)myMalloc(1000 * sizeof(float));;
+float* x431 = (float*)myMalloc(1000 * sizeof(float));;
+for(int x432=0; x432 < 1000; x432++) {
+float x433 = x402[x432];
+double x434 = (double)x433;
+double x435 = tanh(x434);
+float x436 = (float)x435;
+x431[x432] = x436;
+
+}
+float* x440 = (float*)myMalloc(1000 * sizeof(float));;
+// dot: List(20, 50), List(50, 26)
+float* x442 = (float*)myMalloc(520 * sizeof(float));;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,26,50,1,x431,50,x36,26,0,x442,26);
+float* x444 = (float*)myMalloc(520 * sizeof(float));;
+float* x445 = (float*)myMalloc(520 * sizeof(float));;
+int32_t x446 = 0;
+int32_t x447 = 0;
+int32_t x448 = 0;
+for(int x449=0; x449 < 20; x449++) {
+int32_t x450 = x447;
+int32_t x451 = x448;
+int32_t x452 = x446;
+int32_t x453 = x452;
+int32_t x454 = x450;
+int32_t x455 = x451;
+for(int x456=0; x456 < 26; x456++) {
+int32_t x457 = x453;
+int32_t x458 = x454;
+float x459 = x442[x458];
+int32_t x460 = x455;
+float x461 = x45[x460];
+float x462 = x459 + x461;
+x445[x457] = x462;
+x453 += 1;
+x454 += 1;
+x455 += 1;
+
+}
+x446 += 26;
+x447 += 26;
+
+}
+float* x473 = (float*)myMalloc(520 * sizeof(float));;
+int* x474 = (int32_t*)myMalloc(20 * sizeof(int32_t));;
+for(int x475=0; x475 < 20; x475++) {
+int32_t x476 = x475 * 20;
+int32_t x477 = x354 + x476;
+int32_t x478 = x68[x477];
+x474[x475] = x478;
+
+}
+float* x482 = (float*)myMalloc(20 * sizeof(float));;
+int32_t x483 = 0;
+for(int x484=0; x484 < 20; x484++) {
+float x485 = -3.4028235E38f;
+for(int x486=0; x486 < 26; x486++) {
+int32_t x487 = x483;
+float x488 = x445[x487];
+float x489 = x485;
+bool x490 = x488 > x489;
+if (x490) {
+float x491 = x445[x487];
+x485 = x491;
+} else {
+}
+x483 += 1;
+
+}
+float x498 = x485;
+x482[x484] = x498;
+
+}
+float* x502 = (float*)myMalloc(520 * sizeof(float));;
+int32_t x503 = 0;
+for(int x504=0; x504 < 20; x504++) {
+for(int x505=0; x505 < 26; x505++) {
+int32_t x506 = x503;
+float x507 = x445[x506];
+float x508 = x482[x504];
+float x509 = x507 - x508;
+double x510 = (double)x509;
+double x511 = exp(x510);
+float x512 = (float)x511;
+x502[x506] = x512;
+x503 += 1;
+
+}
+
+}
+float* x519 = (float*)myMalloc(20 * sizeof(float));;
+for(int x520=0; x520 < 20; x520++) {
+int32_t x521 = x520;
+int32_t x522 = x520 * 26;
+int32_t x523 = x522;
+for(int x524=0; x524 < 26; x524++) {
+int32_t x525 = x521;
+float x526 = x519[x525];
+int32_t x527 = x523;
+float x528 = x502[x527];
+float x529 = x526 + x528;
+x519[x525] = x529;
+x523 += 1;
+
+}
+
+}
+x503 = 0;
+for(int x537=0; x537 < 20; x537++) {
+float x538 = x482[x537];
+float x539 = x519[x537];
+double x540 = (double)x539;
+double x541 = log(x540);
+float x542 = (float)x541;
+float x543 = x538 + x542;
+for(int x544=0; x544 < 26; x544++) {
+int32_t x545 = x503;
+float x546 = x445[x545];
+float x547 = x546 - x543;
+x502[x545] = x547;
+x503 += 1;
+
+}
+
+}
+float* x554 = (float*)myMalloc(520 * sizeof(float));;
+float* x555 = (float*)myMalloc(20 * sizeof(float));;
 int32_t x556 = 0;
 for(int x557=0; x557 < 20; x557++) {
-int32_t x558 = x555;
-int32_t x559 = x556;
-int32_t x560 = x554;
-int32_t x561 = x560;
-int32_t x562 = x558;
-int32_t x563 = x559;
-for(int x564=0; x564 < 50; x564++) {
-int32_t x565 = x561;
-int32_t x566 = x562;
-float x567 = x519[x566];
-int32_t x568 = x563;
-float x569 = x42[x568];
-float x570 = x567 + x569;
-x553[x565] = x570;
-x561 += 1;
-x562 += 1;
-x563 += 1;
+int32_t x558 = x556;
+int32_t x559 = x474[x557];
+int32_t x560 = x558 + x559;
+float x561 = x502[x560];
+float x562 = -1.0f * x561;
+x555[x557] = x562;
+x556 += 26;
 
 }
-x554 += 50;
-x555 += 50;
+float* x567 = (float*)myMalloc(20 * sizeof(float));;
+float x568 = 0.0f;
+for(int x569=0; x569 < 20; x569++) {
+float x570 = x568;
+float x571 = x555[x569];
+float x572 = x570 + x571;
+x568 = x572;
 
 }
-float* x581 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x582=0; x582 < 1000; x582++) {
-x581[x582] = 0.0f;
+float x576 = x568;
+float* x577 = (float*)myMalloc(1 * sizeof(float));;
+x577[0] = x576;
+float* x579 = (float*)myMalloc(1 * sizeof(float));;
+float* x580 = (float*)myMalloc(1 * sizeof(float));;
+int32_t x581 = 0;
+int32_t x582 = 0;
+int32_t x583 = 0;
+int32_t x584 = x581;
+int32_t x585 = x582;
+float x586 = x356[x585];
+int32_t x587 = x583;
+float x588 = x577[x587];
+float x589 = x586 + x588;
+x580[x584] = x589;
+x581 += 1;
+float* x592 = (float*)myMalloc(1 * sizeof(float));;
+float** x594 = (float**)myMalloc(4 * sizeof(float*));;
+x594[0] = x580;
+x594[1] = x592;
+x594[2] = x431;
+x594[3] = x440;
+int32_t x601 = 0;
+int32_t x602 = 0;
+int32_t x603 = 0;
+int32_t x604 = x601;
+int32_t x607 = x602;
+int32_t x609 = x603;
+x603 += 1;
+int32_t x628 = 0;
+float* x641 = (float*)myMalloc(20 * sizeof(float));;
+int32_t x658 = 0;
+int32_t x678 = 0;
+int32_t x679 = 0;
+int32_t x680 = 0;
+int32_t x726 = 0;
+int32_t x727 = 0;
+int32_t x728 = 0;
+int32_t x761 = 0;
+int32_t x762 = 0;
+int32_t x763 = 0;
+int32_t x593 = x354 + 1;
+x351(x593,x594);
+float x605 = x357[x604];
+float x606 = x356[x604];
+float x608 = x577[x607];
+float x610 = x592[x609];
+float x611 = x605 + x610;
+x357[x604] = x611;
+float x613 = x579[x607];
+float x614 = x356[x604];
+float x615 = x577[x607];
+float x616 = x592[x609];
+float x617 = x613 + x616;
+x579[x607] = x617;
+// += tensor of dim 0
+float x621 = x579[0];
+for(int x622=0; x622 < 20; x622++) {
+float x623 = x567[x622];
+float x624 = x623 + x621;
+x567[x622] = x624;
 
 }
-float* x586 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x587=0; x587 < 1000; x587++) {
-float x588 = x553[x587];
-double x589 = (double)x588;
-double x590 = tanh(x589);
-float x591 = (float)x590;
-x586[x587] = x591;
+for(int x629=0; x629 < 20; x629++) {
+int32_t x630 = x628;
+int32_t x631 = x474[x629];
+int32_t x632 = x630 + x631;
+float x633 = x554[x632];
+float x634 = x567[x629];
+float x635 = -1.0f * x634;
+float x636 = x633 + x635;
+x554[x632] = x636;
+x628 += 26;
 
 }
-float* x595 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x596=0; x596 < 1000; x596++) {
-x595[x596] = 0.0f;
-
-}
-// dot: List(20, 50), List(50, 26)
-float* x601 = (float*)myMalloc(520 * sizeof(float));;
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,26,50,1,x586,50,x53,26,0,x601,26);
-float* x603 = (float*)myMalloc(520 * sizeof(float));;
-for(int x604=0; x604 < 520; x604++) {
-x603[x604] = 0.0f;
-
-}
-float* x608 = (float*)myMalloc(520 * sizeof(float));;
-int32_t x609 = 0;
-int32_t x610 = 0;
-int32_t x611 = 0;
-for(int x612=0; x612 < 20; x612++) {
-int32_t x613 = x610;
-int32_t x614 = x611;
-int32_t x615 = x609;
-int32_t x616 = x615;
-int32_t x617 = x613;
-int32_t x618 = x614;
-for(int x619=0; x619 < 26; x619++) {
-int32_t x620 = x616;
-int32_t x621 = x617;
-float x622 = x601[x621];
-int32_t x623 = x618;
-float x624 = x66[x623];
-float x625 = x622 + x624;
-x608[x620] = x625;
-x616 += 1;
-x617 += 1;
-x618 += 1;
-
-}
-x609 += 26;
-x610 += 26;
-
-}
-float* x636 = (float*)myMalloc(520 * sizeof(float));;
-for(int x637=0; x637 < 520; x637++) {
-x636[x637] = 0.0f;
-
-}
-int* x641 = (int32_t*)myMalloc(20 * sizeof(int32_t));;
 for(int x642=0; x642 < 20; x642++) {
-int32_t x643 = x642 * 20;
-int32_t x644 = x493 + x643;
-int32_t x645 = x118[x644];
-x641[x642] = x645;
-
-}
-float* x649 = (float*)myMalloc(20 * sizeof(float));;
-int32_t x650 = 0;
-for(int x651=0; x651 < 20; x651++) {
-float x652 = -3.4028235E38f;
-for(int x653=0; x653 < 26; x653++) {
-int32_t x654 = x650;
-float x655 = x608[x654];
-float x656 = x652;
-bool x657 = x655 > x656;
-if (x657) {
-float x658 = x608[x654];
-x652 = x658;
-} else {
-}
-x650 += 1;
-
-}
-float x665 = x652;
-x649[x651] = x665;
-
-}
-float* x669 = (float*)myMalloc(520 * sizeof(float));;
-for(int x670=0; x670 < 520; x670++) {
-x669[x670] = 0.0f;
-
-}
-int32_t x674 = 0;
-for(int x675=0; x675 < 20; x675++) {
-for(int x676=0; x676 < 26; x676++) {
-int32_t x677 = x674;
-float x678 = x608[x677];
-float x679 = x649[x675];
-float x680 = x678 - x679;
-double x681 = (double)x680;
-double x682 = exp(x681);
-float x683 = (float)x682;
-x669[x677] = x683;
-x674 += 1;
+int32_t x643 = x642;
+int32_t x644 = x642 * 26;
+int32_t x645 = x644;
+for(int x646=0; x646 < 26; x646++) {
+int32_t x647 = x643;
+float x648 = x641[x647];
+int32_t x649 = x645;
+float x650 = x554[x649];
+float x651 = x648 + x650;
+x641[x647] = x651;
+x645 += 1;
 
 }
 
 }
-float* x690 = (float*)myMalloc(20 * sizeof(float));;
-for(int x691=0; x691 < 20; x691++) {
-x690[x691] = 0.0f;
-
-}
-for(int x695=0; x695 < 20; x695++) {
-int32_t x696 = x695;
-int32_t x697 = x695 * 26;
-int32_t x698 = x697;
-for(int x699=0; x699 < 26; x699++) {
-int32_t x700 = x696;
-float x701 = x690[x700];
-int32_t x702 = x698;
-float x703 = x669[x702];
-float x704 = x701 + x703;
-x690[x700] = x704;
-x698 += 1;
-
-}
-
-}
-x674 = 0;
-for(int x712=0; x712 < 20; x712++) {
-float x713 = x649[x712];
-float x714 = x690[x712];
-double x715 = (double)x714;
-double x716 = log(x715);
-float x717 = (float)x716;
-float x718 = x713 + x717;
-for(int x719=0; x719 < 26; x719++) {
-int32_t x720 = x674;
-float x721 = x608[x720];
-float x722 = x721 - x718;
-x669[x720] = x722;
-x674 += 1;
+for(int x659=0; x659 < 20; x659++) {
+for(int x660=0; x660 < 26; x660++) {
+int32_t x661 = x658;
+float x662 = x473[x661];
+float x663 = x554[x661];
+float x664 = x502[x661];
+float x668 = x641[x659];
+double x665 = (double)x664;
+double x666 = exp(x665);
+float x667 = (float)x666;
+float x669 = x667 * x668;
+float x670 = x663 - x669;
+float x671 = x662 + x670;
+x473[x661] = x671;
+x658 += 1;
 
 }
 
 }
-float* x729 = (float*)myMalloc(520 * sizeof(float));;
-for(int x730=0; x730 < 520; x730++) {
-x729[x730] = 0.0f;
+for(int x681=0; x681 < 20; x681++) {
+int32_t x682 = x678;
+int32_t x683 = x679;
+int32_t x684 = x680;
+int32_t x685 = x682;
+int32_t x686 = x683;
+int32_t x687 = x684;
+for(int x688=0; x688 < 26; x688++) {
+int32_t x689 = x685;
+float x690 = x444[x689];
+float x691 = x442[x689];
+int32_t x692 = x686;
+float x693 = x45[x692];
+int32_t x694 = x687;
+float x695 = x473[x694];
+float x696 = x690 + x695;
+x444[x689] = x696;
+float x698 = x46[x692];
+float x699 = x442[x689];
+float x700 = x45[x692];
+float x701 = x473[x694];
+float x702 = x698 + x701;
+x46[x692] = x702;
+x687 += 1;
+x685 += 1;
+x686 += 1;
 
 }
-float* x734 = (float*)myMalloc(20 * sizeof(float));;
-int32_t x735 = 0;
-for(int x736=0; x736 < 20; x736++) {
-int32_t x737 = x735;
-int32_t x738 = x641[x736];
-int32_t x739 = x737 + x738;
-float x740 = x669[x739];
-float x741 = -1.0f * x740;
-x734[x736] = x741;
-x735 += 26;
+x680 += 26;
+x678 += 26;
 
 }
-float* x746 = (float*)myMalloc(20 * sizeof(float));;
-for(int x747=0; x747 < 20; x747++) {
-x746[x747] = 0.0f;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,50,26,1,x444,26,x36,26,1,x440,50);
+cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 50,26,20,1,x431,50,x444,26,1,x44,26);
+for(int x715=0; x715 < 1000; x715++) {
+float x716 = x430[x715];
+float x717 = x431[x715];
+float x720 = x440[x715];
+float x718 = x717 * x717;
+float x719 = 1.0f - x718;
+float x721 = x719 * x720;
+float x722 = x716 + x721;
+x430[x715] = x722;
 
 }
-float x751 = 0.0f;
-for(int x752=0; x752 < 20; x752++) {
-float x753 = x751;
-float x754 = x734[x752];
-float x755 = x753 + x754;
-x751 = x755;
+for(int x729=0; x729 < 20; x729++) {
+int32_t x730 = x726;
+int32_t x731 = x727;
+int32_t x732 = x728;
+int32_t x733 = x730;
+int32_t x734 = x731;
+int32_t x735 = x732;
+for(int x736=0; x736 < 50; x736++) {
+int32_t x737 = x733;
+float x738 = x401[x737];
+float x739 = x372[x737];
+int32_t x740 = x734;
+float x741 = x34[x740];
+int32_t x742 = x735;
+float x743 = x430[x742];
+float x744 = x738 + x743;
+x401[x737] = x744;
+float x746 = x35[x740];
+float x747 = x372[x737];
+float x748 = x34[x740];
+float x749 = x430[x742];
+float x750 = x746 + x749;
+x35[x740] = x750;
+x735 += 1;
+x733 += 1;
+x734 += 1;
 
 }
-float x759 = x751;
-float* x760 = (float*)myMalloc(1 * sizeof(float));;
-x760[0] = x759;
-float* x762 = (float*)myMalloc(1 * sizeof(float));;
-for(int x763=0; x763 < 1; x763++) {
-x762[x763] = 0.0f;
+x728 += 50;
+x726 += 50;
 
 }
-float* x767 = (float*)myMalloc(1 * sizeof(float));;
-int32_t x768 = 0;
-int32_t x769 = 0;
-int32_t x770 = 0;
-int32_t x771 = x768;
-int32_t x772 = x769;
-float x773 = x495[x772];
-int32_t x774 = x770;
-float x775 = x760[x774];
-float x776 = x773 + x775;
-x767[x771] = x776;
+for(int x764=0; x764 < 20; x764++) {
+int32_t x765 = x761;
+int32_t x766 = x762;
+int32_t x767 = x763;
+int32_t x768 = x765;
+int32_t x769 = x766;
+int32_t x770 = x767;
+for(int x771=0; x771 < 50; x771++) {
+int32_t x772 = x768;
+float x773 = x367[x772];
+float x774 = x365[x772];
+int32_t x775 = x769;
+float x776 = x369[x775];
+int32_t x777 = x770;
+float x778 = x401[x777];
+float x779 = x773 + x778;
+x367[x772] = x779;
+float x781 = x371[x775];
+float x782 = x365[x772];
+float x783 = x369[x775];
+float x784 = x401[x777];
+float x785 = x781 + x784;
+x371[x775] = x785;
+x770 += 1;
 x768 += 1;
-float* x779 = (float*)myMalloc(1 * sizeof(float));;
-for(int x780=0; x780 < 1; x780++) {
-x779[x780] = 0.0f;
+x769 += 1;
 
 }
-float** x785 = (float**)myMalloc(4 * sizeof(float*));;
-x785[0] = x767;
-x785[1] = x779;
-x785[2] = x586;
-x785[3] = x595;
-int32_t x792 = 0;
-int32_t x793 = 0;
-int32_t x794 = 0;
-int32_t x795 = x792;
-int32_t x798 = x793;
-int32_t x800 = x794;
-x794 += 1;
-int32_t x819 = 0;
-float* x832 = (float*)myMalloc(20 * sizeof(float));;
-int32_t x853 = 0;
-int32_t x873 = 0;
-int32_t x874 = 0;
-int32_t x875 = 0;
-int32_t x921 = 0;
-int32_t x922 = 0;
-int32_t x923 = 0;
-int32_t x956 = 0;
-int32_t x957 = 0;
-int32_t x958 = 0;
-int32_t x784 = x493 + 1;
-x490(x784,x785);
-float x796 = x496[x795];
-float x797 = x495[x795];
-float x799 = x760[x798];
-float x801 = x779[x800];
-float x802 = x796 + x801;
-x496[x795] = x802;
-float x804 = x762[x798];
-float x805 = x495[x795];
-float x806 = x760[x798];
-float x807 = x779[x800];
-float x808 = x804 + x807;
-x762[x798] = x808;
-// += tensor of dim 0
-float x812 = x762[0];
-for(int x813=0; x813 < 20; x813++) {
-float x814 = x746[x813];
-float x815 = x814 + x812;
-x746[x813] = x815;
+x763 += 50;
+x761 += 50;
+x762 += 50;
 
 }
-for(int x820=0; x820 < 20; x820++) {
-int32_t x821 = x819;
-int32_t x822 = x641[x820];
-int32_t x823 = x821 + x822;
-float x824 = x729[x823];
-float x825 = x746[x820];
-float x826 = -1.0f * x825;
-float x827 = x824 + x826;
-x729[x823] = x827;
-x819 += 26;
-
-}
-for(int x833=0; x833 < 20; x833++) {
-x832[x833] = 0.0f;
-
-}
-for(int x837=0; x837 < 20; x837++) {
-int32_t x838 = x837;
-int32_t x839 = x837 * 26;
-int32_t x840 = x839;
-for(int x841=0; x841 < 26; x841++) {
-int32_t x842 = x838;
-float x843 = x832[x842];
-int32_t x844 = x840;
-float x845 = x729[x844];
-float x846 = x843 + x845;
-x832[x842] = x846;
-x840 += 1;
-
-}
-
-}
-for(int x854=0; x854 < 20; x854++) {
-for(int x855=0; x855 < 26; x855++) {
-int32_t x856 = x853;
-float x857 = x636[x856];
-float x858 = x729[x856];
-float x859 = x669[x856];
-float x863 = x832[x854];
-double x860 = (double)x859;
-double x861 = exp(x860);
-float x862 = (float)x861;
-float x864 = x862 * x863;
-float x865 = x858 - x864;
-float x866 = x857 + x865;
-x636[x856] = x866;
-x853 += 1;
-
-}
-
-}
-for(int x876=0; x876 < 20; x876++) {
-int32_t x877 = x873;
-int32_t x878 = x874;
-int32_t x879 = x875;
-int32_t x880 = x877;
-int32_t x881 = x878;
-int32_t x882 = x879;
-for(int x883=0; x883 < 26; x883++) {
-int32_t x884 = x880;
-float x885 = x603[x884];
-float x886 = x601[x884];
-int32_t x887 = x881;
-float x888 = x66[x887];
-int32_t x889 = x882;
-float x890 = x636[x889];
-float x891 = x885 + x890;
-x603[x884] = x891;
-float x893 = x72[x887];
-float x894 = x601[x884];
-float x895 = x66[x887];
-float x896 = x636[x889];
-float x897 = x893 + x896;
-x72[x887] = x897;
-x882 += 1;
-x880 += 1;
-x881 += 1;
-
-}
-x875 += 26;
-x873 += 26;
-
-}
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,50,26,1,x603,26,x53,26,1,x595,50);
-cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 50,26,20,1,x586,50,x603,26,1,x61,26);
-for(int x910=0; x910 < 1000; x910++) {
-float x911 = x581[x910];
-float x912 = x586[x910];
-float x915 = x595[x910];
-float x913 = x912 * x912;
-float x914 = 1.0f - x913;
-float x916 = x914 * x915;
-float x917 = x911 + x916;
-x581[x910] = x917;
-
-}
-for(int x924=0; x924 < 20; x924++) {
-int32_t x925 = x921;
-int32_t x926 = x922;
-int32_t x927 = x923;
-int32_t x928 = x925;
-int32_t x929 = x926;
-int32_t x930 = x927;
-for(int x931=0; x931 < 50; x931++) {
-int32_t x932 = x928;
-float x933 = x548[x932];
-float x934 = x519[x932];
-int32_t x935 = x929;
-float x936 = x42[x935];
-int32_t x937 = x930;
-float x938 = x581[x937];
-float x939 = x933 + x938;
-x548[x932] = x939;
-float x941 = x48[x935];
-float x942 = x519[x932];
-float x943 = x42[x935];
-float x944 = x581[x937];
-float x945 = x941 + x944;
-x48[x935] = x945;
-x930 += 1;
-x928 += 1;
-x929 += 1;
-
-}
-x923 += 50;
-x921 += 50;
-
-}
-for(int x959=0; x959 < 20; x959++) {
-int32_t x960 = x956;
-int32_t x961 = x957;
-int32_t x962 = x958;
-int32_t x963 = x960;
-int32_t x964 = x961;
-int32_t x965 = x962;
-for(int x966=0; x966 < 50; x966++) {
-int32_t x967 = x963;
-float x968 = x506[x967];
-float x969 = x504[x967];
-int32_t x970 = x964;
-float x971 = x512[x970];
-int32_t x972 = x965;
-float x973 = x548[x972];
-float x974 = x968 + x973;
-x506[x967] = x974;
-float x976 = x514[x970];
-float x977 = x504[x967];
-float x978 = x512[x970];
-float x979 = x548[x972];
-float x980 = x976 + x979;
-x514[x970] = x980;
-x965 += 1;
-x963 += 1;
-x964 += 1;
-
-}
-x958 += 50;
-x956 += 50;
-x957 += 50;
-
-}
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,50,50,1,x514,50,x28,50,1,x498,50);
-cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 50,50,20,1,x497,50,x514,50,1,x37,50);
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,26,50,1,x506,50,x14,50,1,x502,26);
-cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 26,50,20,1,x501,26,x506,50,1,x23,50);
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,50,50,1,x371,50,x24,50,1,x359,50);
+cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 50,50,20,1,x358,50,x371,50,1,x33,50);
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,26,50,1,x367,50,x14,50,1,x363,26);
+cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 26,50,20,1,x362,26,x367,50,1,x23,50);
 } else {
-float x997 = 0.0f;
-float x998 = x997;
-float x999 = x495[0];
-float x1000 = x998 + x999;
-x997 = x1000;
-float x1002 = x997;
-float* x1003 = (float*)myMalloc(1 * sizeof(float));;
-x1003[0] = x1002;
-float* x1005 = (float*)myMalloc(1 * sizeof(float));;
-for(int x1006=0; x1006 < 1; x1006++) {
-x1005[x1006] = 0.0f;
-
-}
-float x1010 = x1005[0];
-x1005[0] = 1.0f;
-float x1012 = x1003[0];
-x141[0] = x1012;
+float x802 = 0.0f;
+float x803 = x802;
+float x804 = x356[0];
+float x805 = x803 + x804;
+x802 = x805;
+float x807 = x802;
+float* x808 = (float*)myMalloc(1 * sizeof(float));;
+x808[0] = x807;
+float* x810 = (float*)myMalloc(1 * sizeof(float));;
+float x811 = x810[0];
+x810[0] = 1.0f;
+float x813 = x808[0];
+x82[0] = x813;
 // += tensor of dim 0
-float x1015 = x1005[0];
-float x1016 = x496[0];
-float x1017 = x1016 + x1015;
-x496[0] = x1017;
+float x816 = x810[0];
+float x817 = x357[0];
+float x818 = x817 + x816;
+x357[0] = x818;
 }
 };
-x105 += 400;
-int32_t x110 = x105;
-int32_t x111 = x110 + 400;
-int32_t x112 = x111 + 1;
-bool x113 = x112 >= x3;
-if (x113) {
-x105 = 0;
+x55 += 400;
+int32_t x60 = x55;
+int32_t x61 = x60 + 400;
+int32_t x62 = x61 + 1;
+bool x63 = x62 >= x3;
+if (x63) {
+x55 = 0;
 } else {
 }
-int* x117 = (int32_t*)myMalloc(400 * sizeof(int32_t));;
-for(int x120=0; x120 < 400; x120++) {
-int32_t x121 = x105;
-int32_t x122 = x121 + x120;
-int32_t x123 = x5[x122];
-x117[x120] = x123;
-int32_t x125 = x122 + 1;
-int32_t x126 = x5[x125];
-x118[x120] = x126;
+int* x67 = (int32_t*)myMalloc(400 * sizeof(int32_t));;
+for(int x70=0; x70 < 400; x70++) {
+int32_t x71 = x55;
+int32_t x72 = x71 + x70;
+int32_t x73 = x5[x72];
+x67[x70] = x73;
+int32_t x75 = x72 + 1;
+int32_t x76 = x5[x75];
+x68[x70] = x76;
 
 }
-float* x130 = (float*)myMalloc(1 * sizeof(float));;
-for(int x132=0; x132 < 1; x132++) {
-x130[x132] = 0.0f;
-
-}
-float* x136 = (float*)myMalloc(1 * sizeof(float));;
-for(int x137=0; x137 < 1; x137++) {
-x136[x137] = 0.0f;
-
-}
-for(int x142=0; x142 < 1; x142++) {
-x141[x142] = 0.0f;
-
-}
-for(int x148=0; x148 < 10400; x148++) {
-x146[x148] = 0.0f;
-
-}
-for(int x153=0; x153 < 20; x153++) {
-int32_t x155 = x153 * 26;
-int32_t x156 = x155 * 20;
-for(int x154=0; x154 < 20; x154++) {
-int32_t x159 = x154 * 20;
-int32_t x160 = x159 + x153;
-int32_t x161 = x117[x160];
-int32_t x157 = x154 * 26;
-int32_t x158 = x156 + x157;
-int32_t x162 = x158 + x161;
-x146[x162] = 1.0f;
+float* x80 = (float*)myMalloc(1 * sizeof(float));;
+float* x81 = (float*)myMalloc(1 * sizeof(float));;
+for(int x85=0; x85 < 20; x85++) {
+int32_t x87 = x85 * 26;
+int32_t x88 = x87 * 20;
+for(int x86=0; x86 < 20; x86++) {
+int32_t x91 = x86 * 20;
+int32_t x92 = x91 + x85;
+int32_t x93 = x67[x92];
+int32_t x89 = x86 * 26;
+int32_t x90 = x88 + x89;
+int32_t x94 = x90 + x93;
+x83[x94] = 1.0f;
 
 }
 
 }
-for(int x169=0; x169 < 10400; x169++) {
-x168[x169] = 0.0f;
-
-}
-float* x173 = (float*)myMalloc(1 * sizeof(float));;
-for(int x174=0; x174 < 1; x174++) {
-x173[x174] = 0.0f;
-
-}
-float* x178 = (float*)myMalloc(1 * sizeof(float));;
-for(int x179=0; x179 < 1; x179++) {
-x178[x179] = 0.0f;
-
-}
-float* x183 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x185=0; x185 < 1000; x185++) {
-x183[x185] = 0.0f;
-
-}
-float* x189 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x190=0; x190 < 1000; x190++) {
-x189[x190] = 0.0f;
-
-}
-float** x1259 = (float**)myMalloc(4 * sizeof(float*));;
-x1259[0] = x173;
-x1259[1] = x178;
-x1259[2] = x183;
-x1259[3] = x189;
-function<void(int32_t,float**)> x194 = [&](int32_t x195,float** x196) {
-float** x198 = x196;
-float* x199 = x198[0];
-float* x200 = x198[1];
-float* x201 = x198[2];
-float* x202 = x198[3];
-int32_t x197 = x195;
-bool x203 = x197 < 20;
-if (x203) {
-int32_t x204 = x197 * 520;
-float* x205 = x146+x204;
-float* x206 = x168+x204;
+float* x101 = (float*)myMalloc(1 * sizeof(float));;
+float* x102 = (float*)myMalloc(1 * sizeof(float));;
+float* x103 = (float*)myMalloc(1000 * sizeof(float));;
+float* x104 = (float*)myMalloc(1000 * sizeof(float));;
+float** x1052 = (float**)myMalloc(4 * sizeof(float*));;
+x1052[0] = x101;
+x1052[1] = x102;
+x1052[2] = x103;
+x1052[3] = x104;
+function<void(int32_t,float**)> x105 = [&](int32_t x106,float** x107) {
+float** x109 = x107;
+float* x110 = x109[0];
+float* x111 = x109[1];
+float* x112 = x109[2];
+float* x113 = x109[3];
+int32_t x108 = x106;
+bool x114 = x108 < 20;
+if (x114) {
+int32_t x115 = x108 * 520;
+float* x116 = x83+x115;
+float* x117 = x100+x115;
 // dot: WrappedArray(20, 26), List(26, 50)
-float* x208 = (float*)myMalloc(1000 * sizeof(float));;
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,50,26,1,x205,26,x14,50,0,x208,50);
-float* x210 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x211=0; x211 < 1000; x211++) {
-x210[x211] = 0.0f;
-
-}
+float* x119 = (float*)myMalloc(1000 * sizeof(float));;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,50,26,1,x116,26,x14,50,0,x119,50);
+float* x121 = (float*)myMalloc(1000 * sizeof(float));;
 // dot: WrappedArray(20, 50), List(50, 50)
-float* x216 = (float*)myMalloc(1000 * sizeof(float));;
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,50,50,1,x201,50,x28,50,0,x216,50);
-float* x218 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x219=0; x219 < 1000; x219++) {
-x218[x219] = 0.0f;
+float* x123 = (float*)myMalloc(1000 * sizeof(float));;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,50,50,1,x112,50,x24,50,0,x123,50);
+float* x125 = (float*)myMalloc(1000 * sizeof(float));;
+float* x126 = (float*)myMalloc(1000 * sizeof(float));;
+int32_t x127 = 0;
+int32_t x128 = 0;
+int32_t x129 = 0;
+for(int x130=0; x130 < 20; x130++) {
+int32_t x131 = x128;
+int32_t x132 = x129;
+int32_t x133 = x127;
+int32_t x134 = x133;
+int32_t x135 = x131;
+int32_t x136 = x132;
+for(int x138=0; x138 < 50; x138++) {
+int32_t x139 = x134;
+int32_t x140 = x135;
+float x141 = x119[x140];
+int32_t x142 = x136;
+float x143 = x123[x142];
+float x144 = x141 + x143;
+x126[x139] = x144;
+x134 += 1;
+x135 += 1;
+x136 += 1;
 
 }
-float* x223 = (float*)myMalloc(1000 * sizeof(float));;
-int32_t x224 = 0;
-int32_t x225 = 0;
-int32_t x226 = 0;
-for(int x227=0; x227 < 20; x227++) {
-int32_t x228 = x225;
-int32_t x229 = x226;
-int32_t x230 = x224;
-int32_t x231 = x230;
-int32_t x232 = x228;
-int32_t x233 = x229;
-for(int x234=0; x234 < 50; x234++) {
-int32_t x235 = x231;
-int32_t x236 = x232;
-float x237 = x208[x236];
-int32_t x238 = x233;
-float x239 = x216[x238];
-float x240 = x237 + x239;
-x223[x235] = x240;
-x231 += 1;
-x232 += 1;
-x233 += 1;
+x127 += 50;
+x128 += 50;
+x129 += 50;
 
 }
-x224 += 50;
-x225 += 50;
-x226 += 50;
+float* x156 = (float*)myMalloc(1000 * sizeof(float));;
+float* x157 = (float*)myMalloc(1000 * sizeof(float));;
+int32_t x158 = 0;
+int32_t x159 = 0;
+int32_t x160 = 0;
+for(int x161=0; x161 < 20; x161++) {
+int32_t x162 = x159;
+int32_t x163 = x160;
+int32_t x164 = x158;
+int32_t x165 = x164;
+int32_t x166 = x162;
+int32_t x167 = x163;
+for(int x168=0; x168 < 50; x168++) {
+int32_t x169 = x165;
+int32_t x170 = x166;
+float x171 = x126[x170];
+int32_t x172 = x167;
+float x173 = x34[x172];
+float x174 = x171 + x173;
+x157[x169] = x174;
+x165 += 1;
+x166 += 1;
+x167 += 1;
 
 }
-float* x252 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x253=0; x253 < 1000; x253++) {
-x252[x253] = 0.0f;
+x158 += 50;
+x159 += 50;
 
 }
-float* x257 = (float*)myMalloc(1000 * sizeof(float));;
-int32_t x258 = 0;
-int32_t x259 = 0;
+float* x185 = (float*)myMalloc(1000 * sizeof(float));;
+float* x186 = (float*)myMalloc(1000 * sizeof(float));;
+for(int x188=0; x188 < 1000; x188++) {
+float x189 = x157[x188];
+double x190 = (double)x189;
+double x191 = tanh(x190);
+float x192 = (float)x191;
+x186[x188] = x192;
+
+}
+float* x196 = (float*)myMalloc(1000 * sizeof(float));;
+// dot: List(20, 50), List(50, 26)
+float* x198 = (float*)myMalloc(520 * sizeof(float));;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,26,50,1,x186,50,x36,26,0,x198,26);
+float* x200 = (float*)myMalloc(520 * sizeof(float));;
+float* x201 = (float*)myMalloc(520 * sizeof(float));;
+int32_t x202 = 0;
+int32_t x203 = 0;
+int32_t x204 = 0;
+for(int x205=0; x205 < 20; x205++) {
+int32_t x206 = x203;
+int32_t x207 = x204;
+int32_t x208 = x202;
+int32_t x209 = x208;
+int32_t x210 = x206;
+int32_t x211 = x207;
+for(int x213=0; x213 < 26; x213++) {
+int32_t x214 = x209;
+int32_t x215 = x210;
+float x216 = x198[x215];
+int32_t x217 = x211;
+float x218 = x45[x217];
+float x219 = x216 + x218;
+x201[x214] = x219;
+x209 += 1;
+x210 += 1;
+x211 += 1;
+
+}
+x202 += 26;
+x203 += 26;
+
+}
+float* x230 = (float*)myMalloc(520 * sizeof(float));;
+int* x231 = (int32_t*)myMalloc(20 * sizeof(int32_t));;
+for(int x232=0; x232 < 20; x232++) {
+int32_t x233 = x232 * 20;
+int32_t x234 = x108 + x233;
+int32_t x235 = x68[x234];
+x231[x232] = x235;
+
+}
+float* x239 = (float*)myMalloc(20 * sizeof(float));;
+int32_t x240 = 0;
+for(int x241=0; x241 < 20; x241++) {
+float x242 = -3.4028235E38f;
+for(int x243=0; x243 < 26; x243++) {
+int32_t x244 = x240;
+float x245 = x201[x244];
+float x246 = x242;
+bool x247 = x245 > x246;
+if (x247) {
+float x248 = x201[x244];
+x242 = x248;
+} else {
+}
+x240 += 1;
+
+}
+float x255 = x242;
+x239[x241] = x255;
+
+}
+float* x259 = (float*)myMalloc(520 * sizeof(float));;
 int32_t x260 = 0;
 for(int x261=0; x261 < 20; x261++) {
-int32_t x262 = x259;
+for(int x262=0; x262 < 26; x262++) {
 int32_t x263 = x260;
-int32_t x264 = x258;
-int32_t x265 = x264;
-int32_t x266 = x262;
-int32_t x267 = x263;
-for(int x268=0; x268 < 50; x268++) {
-int32_t x269 = x265;
-int32_t x270 = x266;
-float x271 = x223[x270];
-int32_t x272 = x267;
-float x273 = x42[x272];
-float x274 = x271 + x273;
-x257[x269] = x274;
-x265 += 1;
-x266 += 1;
-x267 += 1;
-
-}
-x258 += 50;
-x259 += 50;
-
-}
-float* x285 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x286=0; x286 < 1000; x286++) {
-x285[x286] = 0.0f;
-
-}
-float* x290 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x291=0; x291 < 1000; x291++) {
-float x292 = x257[x291];
-double x293 = (double)x292;
-double x294 = tanh(x293);
-float x295 = (float)x294;
-x290[x291] = x295;
-
-}
-float* x299 = (float*)myMalloc(1000 * sizeof(float));;
-for(int x300=0; x300 < 1000; x300++) {
-x299[x300] = 0.0f;
-
-}
-// dot: List(20, 50), List(50, 26)
-float* x305 = (float*)myMalloc(520 * sizeof(float));;
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 20,26,50,1,x290,50,x53,26,0,x305,26);
-float* x307 = (float*)myMalloc(520 * sizeof(float));;
-for(int x309=0; x309 < 520; x309++) {
-x307[x309] = 0.0f;
-
-}
-float* x313 = (float*)myMalloc(520 * sizeof(float));;
-int32_t x314 = 0;
-int32_t x315 = 0;
-int32_t x316 = 0;
-for(int x317=0; x317 < 20; x317++) {
-int32_t x318 = x315;
-int32_t x319 = x316;
-int32_t x320 = x314;
-int32_t x321 = x320;
-int32_t x322 = x318;
-int32_t x323 = x319;
-for(int x324=0; x324 < 26; x324++) {
-int32_t x325 = x321;
-int32_t x326 = x322;
-float x327 = x305[x326];
-int32_t x328 = x323;
-float x329 = x66[x328];
-float x330 = x327 + x329;
-x313[x325] = x330;
-x321 += 1;
-x322 += 1;
-x323 += 1;
-
-}
-x314 += 26;
-x315 += 26;
-
-}
-float* x341 = (float*)myMalloc(520 * sizeof(float));;
-for(int x342=0; x342 < 520; x342++) {
-x341[x342] = 0.0f;
-
-}
-int* x346 = (int32_t*)myMalloc(20 * sizeof(int32_t));;
-for(int x347=0; x347 < 20; x347++) {
-int32_t x348 = x347 * 20;
-int32_t x349 = x197 + x348;
-int32_t x350 = x118[x349];
-x346[x347] = x350;
-
-}
-float* x354 = (float*)myMalloc(20 * sizeof(float));;
-int32_t x355 = 0;
-for(int x356=0; x356 < 20; x356++) {
-float x357 = -3.4028235E38f;
-for(int x358=0; x358 < 26; x358++) {
-int32_t x359 = x355;
-float x360 = x313[x359];
-float x361 = x357;
-bool x362 = x360 > x361;
-if (x362) {
-float x363 = x313[x359];
-x357 = x363;
-} else {
-}
-x355 += 1;
-
-}
-float x370 = x357;
-x354[x356] = x370;
-
-}
-float* x374 = (float*)myMalloc(520 * sizeof(float));;
-for(int x375=0; x375 < 520; x375++) {
-x374[x375] = 0.0f;
-
-}
-int32_t x379 = 0;
-for(int x380=0; x380 < 20; x380++) {
-for(int x381=0; x381 < 26; x381++) {
-int32_t x382 = x379;
-float x383 = x313[x382];
-float x384 = x354[x380];
-float x385 = x383 - x384;
-double x386 = (double)x385;
-double x387 = exp(x386);
-float x388 = (float)x387;
-x374[x382] = x388;
-x379 += 1;
+float x264 = x201[x263];
+float x265 = x239[x261];
+float x266 = x264 - x265;
+double x267 = (double)x266;
+double x268 = exp(x267);
+float x269 = (float)x268;
+x259[x263] = x269;
+x260 += 1;
 
 }
 
 }
-float* x395 = (float*)myMalloc(20 * sizeof(float));;
-for(int x396=0; x396 < 20; x396++) {
-x395[x396] = 0.0f;
-
-}
-for(int x400=0; x400 < 20; x400++) {
-int32_t x401 = x400;
-int32_t x402 = x400 * 26;
-int32_t x403 = x402;
-for(int x404=0; x404 < 26; x404++) {
-int32_t x405 = x401;
-float x406 = x395[x405];
-int32_t x407 = x403;
-float x408 = x374[x407];
-float x409 = x406 + x408;
-x395[x405] = x409;
-x403 += 1;
+float* x276 = (float*)myMalloc(20 * sizeof(float));;
+for(int x277=0; x277 < 20; x277++) {
+int32_t x278 = x277;
+int32_t x279 = x277 * 26;
+int32_t x280 = x279;
+for(int x281=0; x281 < 26; x281++) {
+int32_t x282 = x278;
+float x283 = x276[x282];
+int32_t x284 = x280;
+float x285 = x259[x284];
+float x286 = x283 + x285;
+x276[x282] = x286;
+x280 += 1;
 
 }
 
 }
-x379 = 0;
-for(int x417=0; x417 < 20; x417++) {
-float x418 = x354[x417];
-float x419 = x395[x417];
-double x420 = (double)x419;
-double x421 = log(x420);
-float x422 = (float)x421;
-float x423 = x418 + x422;
-for(int x424=0; x424 < 26; x424++) {
-int32_t x425 = x379;
-float x426 = x313[x425];
-float x427 = x426 - x423;
-x374[x425] = x427;
-x379 += 1;
+x260 = 0;
+for(int x294=0; x294 < 20; x294++) {
+float x295 = x239[x294];
+float x296 = x276[x294];
+double x297 = (double)x296;
+double x298 = log(x297);
+float x299 = (float)x298;
+float x300 = x295 + x299;
+for(int x301=0; x301 < 26; x301++) {
+int32_t x302 = x260;
+float x303 = x201[x302];
+float x304 = x303 - x300;
+x259[x302] = x304;
+x260 += 1;
 
 }
 
 }
-float* x434 = (float*)myMalloc(520 * sizeof(float));;
-for(int x435=0; x435 < 520; x435++) {
-x434[x435] = 0.0f;
+float* x311 = (float*)myMalloc(520 * sizeof(float));;
+float* x312 = (float*)myMalloc(20 * sizeof(float));;
+int32_t x313 = 0;
+for(int x314=0; x314 < 20; x314++) {
+int32_t x315 = x313;
+int32_t x316 = x231[x314];
+int32_t x317 = x315 + x316;
+float x318 = x259[x317];
+float x319 = -1.0f * x318;
+x312[x314] = x319;
+x313 += 26;
 
 }
-float* x439 = (float*)myMalloc(20 * sizeof(float));;
-int32_t x440 = 0;
-for(int x441=0; x441 < 20; x441++) {
-int32_t x442 = x440;
-int32_t x443 = x346[x441];
-int32_t x444 = x442 + x443;
-float x445 = x374[x444];
-float x446 = -1.0f * x445;
-x439[x441] = x446;
-x440 += 26;
+float* x324 = (float*)myMalloc(20 * sizeof(float));;
+float x325 = 0.0f;
+for(int x326=0; x326 < 20; x326++) {
+float x327 = x325;
+float x328 = x312[x326];
+float x329 = x327 + x328;
+x325 = x329;
 
 }
-float* x451 = (float*)myMalloc(20 * sizeof(float));;
-for(int x452=0; x452 < 20; x452++) {
-x451[x452] = 0.0f;
-
-}
-float x456 = 0.0f;
-for(int x457=0; x457 < 20; x457++) {
-float x458 = x456;
-float x459 = x439[x457];
-float x460 = x458 + x459;
-x456 = x460;
-
-}
-float x464 = x456;
-float* x465 = (float*)myMalloc(1 * sizeof(float));;
-x465[0] = x464;
-float* x467 = (float*)myMalloc(1 * sizeof(float));;
-for(int x468=0; x468 < 1; x468++) {
-x467[x468] = 0.0f;
-
-}
-float* x472 = (float*)myMalloc(1 * sizeof(float));;
-int32_t x473 = 0;
-int32_t x474 = 0;
-int32_t x475 = 0;
-int32_t x476 = x473;
-int32_t x477 = x474;
-float x478 = x199[x477];
-int32_t x479 = x475;
-float x480 = x465[x479];
-float x481 = x478 + x480;
-x472[x476] = x481;
-x473 += 1;
-float* x484 = (float*)myMalloc(1 * sizeof(float));;
-for(int x485=0; x485 < 1; x485++) {
-x484[x485] = 0.0f;
-
-}
-float** x1022 = (float**)myMalloc(4 * sizeof(float*));;
-x1022[0] = x472;
-x1022[1] = x484;
-x1022[2] = x290;
-x1022[3] = x299;
-int32_t x489 = x197 + 1;
-x490(x489,x1022);
-int32_t x1029 = 0;
-int32_t x1030 = 0;
-int32_t x1031 = 0;
-int32_t x1032 = x1029;
-float x1033 = x200[x1032];
-float x1034 = x199[x1032];
-int32_t x1035 = x1030;
-float x1036 = x465[x1035];
-int32_t x1037 = x1031;
-float x1038 = x484[x1037];
-float x1039 = x1033 + x1038;
-x200[x1032] = x1039;
-float x1041 = x467[x1035];
-float x1042 = x199[x1032];
-float x1043 = x465[x1035];
-float x1044 = x484[x1037];
-float x1045 = x1041 + x1044;
-x467[x1035] = x1045;
-x1031 += 1;
+float x333 = x325;
+float* x334 = (float*)myMalloc(1 * sizeof(float));;
+x334[0] = x333;
+float* x336 = (float*)myMalloc(1 * sizeof(float));;
+float* x337 = (float*)myMalloc(1 * sizeof(float));;
+int32_t x338 = 0;
+int32_t x339 = 0;
+int32_t x340 = 0;
+int32_t x341 = x338;
+int32_t x342 = x339;
+float x343 = x110[x342];
+int32_t x344 = x340;
+float x345 = x334[x344];
+float x346 = x343 + x345;
+x337[x341] = x346;
+x338 += 1;
+float* x349 = (float*)myMalloc(1 * sizeof(float));;
+float** x823 = (float**)myMalloc(4 * sizeof(float*));;
+x823[0] = x337;
+x823[1] = x349;
+x823[2] = x186;
+x823[3] = x196;
+int32_t x350 = x108 + 1;
+x351(x350,x823);
+int32_t x830 = 0;
+int32_t x831 = 0;
+int32_t x832 = 0;
+int32_t x833 = x830;
+float x834 = x111[x833];
+float x835 = x110[x833];
+int32_t x836 = x831;
+float x837 = x334[x836];
+int32_t x838 = x832;
+float x839 = x349[x838];
+float x840 = x834 + x839;
+x111[x833] = x840;
+float x842 = x336[x836];
+float x843 = x110[x833];
+float x844 = x334[x836];
+float x845 = x349[x838];
+float x846 = x842 + x845;
+x336[x836] = x846;
+x832 += 1;
 // += tensor of dim 0
-float x1049 = x467[0];
-for(int x1050=0; x1050 < 20; x1050++) {
-float x1051 = x451[x1050];
-float x1052 = x1051 + x1049;
-x451[x1050] = x1052;
+float x850 = x336[0];
+for(int x851=0; x851 < 20; x851++) {
+float x852 = x324[x851];
+float x853 = x852 + x850;
+x324[x851] = x853;
 
 }
-int32_t x1056 = 0;
-for(int x1057=0; x1057 < 20; x1057++) {
-int32_t x1058 = x1056;
-int32_t x1059 = x346[x1057];
-int32_t x1060 = x1058 + x1059;
-float x1061 = x434[x1060];
-float x1062 = x451[x1057];
-float x1063 = -1.0f * x1062;
-float x1064 = x1061 + x1063;
-x434[x1060] = x1064;
-x1056 += 26;
+int32_t x857 = 0;
+for(int x858=0; x858 < 20; x858++) {
+int32_t x859 = x857;
+int32_t x860 = x231[x858];
+int32_t x861 = x859 + x860;
+float x862 = x311[x861];
+float x863 = x324[x858];
+float x864 = -1.0f * x863;
+float x865 = x862 + x864;
+x311[x861] = x865;
+x857 += 26;
 
 }
-float* x1069 = (float*)myMalloc(20 * sizeof(float));;
-for(int x1070=0; x1070 < 20; x1070++) {
-x1069[x1070] = 0.0f;
-
-}
-for(int x1074=0; x1074 < 20; x1074++) {
-int32_t x1075 = x1074;
-int32_t x1076 = x1074 * 26;
-int32_t x1077 = x1076;
-for(int x1078=0; x1078 < 26; x1078++) {
-int32_t x1079 = x1075;
-float x1080 = x1069[x1079];
-int32_t x1081 = x1077;
-float x1082 = x434[x1081];
-float x1083 = x1080 + x1082;
-x1069[x1079] = x1083;
-x1077 += 1;
+float* x870 = (float*)myMalloc(20 * sizeof(float));;
+for(int x871=0; x871 < 20; x871++) {
+int32_t x872 = x871;
+int32_t x873 = x871 * 26;
+int32_t x874 = x873;
+for(int x875=0; x875 < 26; x875++) {
+int32_t x876 = x872;
+float x877 = x870[x876];
+int32_t x878 = x874;
+float x879 = x311[x878];
+float x880 = x877 + x879;
+x870[x876] = x880;
+x874 += 1;
 
 }
 
 }
-int32_t x1090 = 0;
-for(int x1091=0; x1091 < 20; x1091++) {
-for(int x1092=0; x1092 < 26; x1092++) {
-int32_t x1093 = x1090;
-float x1094 = x341[x1093];
-float x1095 = x434[x1093];
-float x1096 = x374[x1093];
-float x1100 = x1069[x1091];
-double x1097 = (double)x1096;
-double x1098 = exp(x1097);
-float x1099 = (float)x1098;
-float x1101 = x1099 * x1100;
-float x1102 = x1095 - x1101;
-float x1103 = x1094 + x1102;
-x341[x1093] = x1103;
-x1090 += 1;
+int32_t x887 = 0;
+for(int x888=0; x888 < 20; x888++) {
+for(int x889=0; x889 < 26; x889++) {
+int32_t x890 = x887;
+float x891 = x230[x890];
+float x892 = x311[x890];
+float x893 = x259[x890];
+float x897 = x870[x888];
+double x894 = (double)x893;
+double x895 = exp(x894);
+float x896 = (float)x895;
+float x898 = x896 * x897;
+float x899 = x892 - x898;
+float x900 = x891 + x899;
+x230[x890] = x900;
+x887 += 1;
 
 }
 
 }
-int32_t x1110 = 0;
-int32_t x1111 = 0;
-int32_t x1112 = 0;
-for(int x1113=0; x1113 < 20; x1113++) {
-int32_t x1114 = x1110;
-int32_t x1115 = x1111;
-int32_t x1116 = x1112;
-int32_t x1117 = x1114;
-int32_t x1118 = x1115;
-int32_t x1119 = x1116;
-for(int x1120=0; x1120 < 26; x1120++) {
-int32_t x1121 = x1117;
-float x1122 = x307[x1121];
-float x1123 = x305[x1121];
-int32_t x1124 = x1118;
-float x1125 = x66[x1124];
-int32_t x1126 = x1119;
-float x1127 = x341[x1126];
-float x1128 = x1122 + x1127;
-x307[x1121] = x1128;
-float x1130 = x72[x1124];
-float x1131 = x305[x1121];
-float x1132 = x66[x1124];
-float x1133 = x341[x1126];
-float x1134 = x1130 + x1133;
-x72[x1124] = x1134;
-x1119 += 1;
-x1117 += 1;
-x1118 += 1;
+int32_t x907 = 0;
+int32_t x908 = 0;
+int32_t x909 = 0;
+for(int x910=0; x910 < 20; x910++) {
+int32_t x911 = x907;
+int32_t x912 = x908;
+int32_t x913 = x909;
+int32_t x914 = x911;
+int32_t x915 = x912;
+int32_t x916 = x913;
+for(int x917=0; x917 < 26; x917++) {
+int32_t x918 = x914;
+float x919 = x200[x918];
+float x920 = x198[x918];
+int32_t x921 = x915;
+float x922 = x45[x921];
+int32_t x923 = x916;
+float x924 = x230[x923];
+float x925 = x919 + x924;
+x200[x918] = x925;
+float x927 = x46[x921];
+float x928 = x198[x918];
+float x929 = x45[x921];
+float x930 = x230[x923];
+float x931 = x927 + x930;
+x46[x921] = x931;
+x916 += 1;
+x914 += 1;
+x915 += 1;
 
 }
-x1112 += 26;
-x1110 += 26;
+x909 += 26;
+x907 += 26;
 
 }
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,50,26,1,x307,26,x53,26,1,x299,50);
-cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 50,26,20,1,x290,50,x307,26,1,x61,26);
-for(int x1147=0; x1147 < 1000; x1147++) {
-float x1148 = x285[x1147];
-float x1149 = x290[x1147];
-float x1152 = x299[x1147];
-float x1150 = x1149 * x1149;
-float x1151 = 1.0f - x1150;
-float x1153 = x1151 * x1152;
-float x1154 = x1148 + x1153;
-x285[x1147] = x1154;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,50,26,1,x200,26,x36,26,1,x196,50);
+cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 50,26,20,1,x186,50,x200,26,1,x44,26);
+for(int x944=0; x944 < 1000; x944++) {
+float x945 = x185[x944];
+float x946 = x186[x944];
+float x949 = x196[x944];
+float x947 = x946 * x946;
+float x948 = 1.0f - x947;
+float x950 = x948 * x949;
+float x951 = x945 + x950;
+x185[x944] = x951;
 
 }
-int32_t x1158 = 0;
-int32_t x1159 = 0;
-int32_t x1160 = 0;
-for(int x1161=0; x1161 < 20; x1161++) {
-int32_t x1162 = x1158;
-int32_t x1163 = x1159;
-int32_t x1164 = x1160;
-int32_t x1165 = x1162;
-int32_t x1166 = x1163;
-int32_t x1167 = x1164;
-for(int x1168=0; x1168 < 50; x1168++) {
-int32_t x1169 = x1165;
-float x1170 = x252[x1169];
-float x1171 = x223[x1169];
-int32_t x1172 = x1166;
-float x1173 = x42[x1172];
-int32_t x1174 = x1167;
-float x1175 = x285[x1174];
-float x1176 = x1170 + x1175;
-x252[x1169] = x1176;
-float x1178 = x48[x1172];
-float x1179 = x223[x1169];
-float x1180 = x42[x1172];
-float x1181 = x285[x1174];
-float x1182 = x1178 + x1181;
-x48[x1172] = x1182;
-x1167 += 1;
-x1165 += 1;
-x1166 += 1;
+int32_t x955 = 0;
+int32_t x956 = 0;
+int32_t x957 = 0;
+for(int x958=0; x958 < 20; x958++) {
+int32_t x959 = x955;
+int32_t x960 = x956;
+int32_t x961 = x957;
+int32_t x962 = x959;
+int32_t x963 = x960;
+int32_t x964 = x961;
+for(int x965=0; x965 < 50; x965++) {
+int32_t x966 = x962;
+float x967 = x156[x966];
+float x968 = x126[x966];
+int32_t x969 = x963;
+float x970 = x34[x969];
+int32_t x971 = x964;
+float x972 = x185[x971];
+float x973 = x967 + x972;
+x156[x966] = x973;
+float x975 = x35[x969];
+float x976 = x126[x966];
+float x977 = x34[x969];
+float x978 = x185[x971];
+float x979 = x975 + x978;
+x35[x969] = x979;
+x964 += 1;
+x962 += 1;
+x963 += 1;
 
 }
-x1160 += 50;
-x1158 += 50;
+x957 += 50;
+x955 += 50;
 
 }
-int32_t x1193 = 0;
-int32_t x1194 = 0;
-int32_t x1195 = 0;
-for(int x1196=0; x1196 < 20; x1196++) {
-int32_t x1197 = x1193;
-int32_t x1198 = x1194;
-int32_t x1199 = x1195;
-int32_t x1200 = x1197;
-int32_t x1201 = x1198;
-int32_t x1202 = x1199;
-for(int x1203=0; x1203 < 50; x1203++) {
-int32_t x1204 = x1200;
-float x1205 = x210[x1204];
-float x1206 = x208[x1204];
-int32_t x1207 = x1201;
-float x1208 = x216[x1207];
-int32_t x1209 = x1202;
-float x1210 = x252[x1209];
-float x1211 = x1205 + x1210;
-x210[x1204] = x1211;
-float x1213 = x218[x1207];
-float x1214 = x208[x1204];
-float x1215 = x216[x1207];
-float x1216 = x252[x1209];
-float x1217 = x1213 + x1216;
-x218[x1207] = x1217;
-x1202 += 1;
-x1200 += 1;
-x1201 += 1;
+int32_t x990 = 0;
+int32_t x991 = 0;
+int32_t x992 = 0;
+for(int x993=0; x993 < 20; x993++) {
+int32_t x994 = x990;
+int32_t x995 = x991;
+int32_t x996 = x992;
+int32_t x997 = x994;
+int32_t x998 = x995;
+int32_t x999 = x996;
+for(int x1000=0; x1000 < 50; x1000++) {
+int32_t x1001 = x997;
+float x1002 = x121[x1001];
+float x1003 = x119[x1001];
+int32_t x1004 = x998;
+float x1005 = x123[x1004];
+int32_t x1006 = x999;
+float x1007 = x156[x1006];
+float x1008 = x1002 + x1007;
+x121[x1001] = x1008;
+float x1010 = x125[x1004];
+float x1011 = x119[x1001];
+float x1012 = x123[x1004];
+float x1013 = x156[x1006];
+float x1014 = x1010 + x1013;
+x125[x1004] = x1014;
+x999 += 1;
+x997 += 1;
+x998 += 1;
 
 }
-x1195 += 50;
-x1193 += 50;
-x1194 += 50;
+x992 += 50;
+x990 += 50;
+x991 += 50;
 
 }
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,50,50,1,x218,50,x28,50,1,x202,50);
-cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 50,50,20,1,x201,50,x218,50,1,x37,50);
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,26,50,1,x210,50,x14,50,1,x206,26);
-cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 26,50,20,1,x205,26,x210,50,1,x23,50);
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,50,50,1,x125,50,x24,50,1,x113,50);
+cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 50,50,20,1,x112,50,x125,50,1,x33,50);
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 20,26,50,1,x121,50,x14,50,1,x117,26);
+cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, 26,50,20,1,x116,26,x121,50,1,x23,50);
 } else {
-float x1234 = 0.0f;
-float x1235 = x1234;
-float x1236 = x199[0];
-float x1237 = x1235 + x1236;
-x1234 = x1237;
-float x1239 = x1234;
-float* x1240 = (float*)myMalloc(1 * sizeof(float));;
-x1240[0] = x1239;
-float* x1242 = (float*)myMalloc(1 * sizeof(float));;
-for(int x1243=0; x1243 < 1; x1243++) {
-x1242[x1243] = 0.0f;
-
-}
-float x1247 = x1242[0];
-x1242[0] = 1.0f;
-float x1249 = x1240[0];
-x141[0] = x1249;
+float x1031 = 0.0f;
+float x1032 = x1031;
+float x1033 = x110[0];
+float x1034 = x1032 + x1033;
+x1031 = x1034;
+float x1036 = x1031;
+float* x1037 = (float*)myMalloc(1 * sizeof(float));;
+x1037[0] = x1036;
+float* x1039 = (float*)myMalloc(1 * sizeof(float));;
+float x1040 = x1039[0];
+x1039[0] = 1.0f;
+float x1042 = x1037[0];
+x82[0] = x1042;
 // += tensor of dim 0
-float x1252 = x1242[0];
-float x1253 = x200[0];
-float x1254 = x1253 + x1252;
-x200[0] = x1254;
+float x1045 = x1039[0];
+float x1046 = x111[0];
+float x1047 = x1046 + x1045;
+x111[0] = x1047;
 }
 };
-x194(0,x1259);
-float x1266 = x141[0];
-int32_t x1267 = x108 % 100;
-bool x1268 = x1267 == 0;
-if (x1268) {
-printf("iter %d, loss %f\n",x108,x1266);
-int32_t x1270 = x108 / 100;
-double x1271 = (double)x1266;
-x102[x1270] = x1271;
+x105(0,x1052);
+float x1059 = x82[0];
+int32_t x1060 = x58 % 100;
+bool x1061 = x1060 == 0;
+if (x1061) {
+printf("iter %d, loss %f\n",x58,x1059);
+int32_t x1063 = x58 / 100;
+double x1064 = (double)x1059;
+x52[x1063] = x1064;
 } else {
 }
-for(int x1275=0; x1275 < 26; x1275++) {
-float x1276 = x72[x1275];
-bool x1277 = x1276 > 5.0f;
-if (x1277) {
-x72[x1275] = 5.0f;
+for(int x1068=0; x1068 < 26; x1068++) {
+float x1069 = x46[x1068];
+float x1070 = x1069;
+float x1071 = x1070;
+bool x1072 = x1071 > 5.0f;
+if (x1072) {
+x1070 = 5.0f;
 } else {
 }
-float x1281 = x72[x1275];
-bool x1282 = x1281 < -5.0f;
-if (x1282) {
-x72[x1275] = -5.0f;
+float x1076 = x1070;
+bool x1077 = x1076 < -5.0f;
+if (x1077) {
+x1070 = -5.0f;
 } else {
 }
+float x1081 = x47[x1068];
+float x1082 = x1070;
+float x1083 = x1082 * x1082;
+float x1084 = x1081 + x1083;
+x47[x1068] = x1084;
+float x1086 = x45[x1068];
+float x1088 = x47[x1068];
+float x1087 = 0.1f * x1082;
+double x1089 = (double)x1088;
+double x1090 = x1089 + 9.99999993922529E-9;
+double x1091 = sqrt(x1090);
+float x1092 = (float)x1091;
+float x1093 = x1087 / x1092;
+float x1094 = x1086 - x1093;
+x45[x1068] = x1094;
+x46[x1068] = 0.0f;
 
 }
-float* x1288 = (float*)myMalloc(26 * sizeof(float));;
-int32_t x1289 = 0;
-int32_t x1290 = 0;
-int32_t x1291 = 0;
-for(int x1292=0; x1292 < 26; x1292++) {
-int32_t x1293 = x1289;
-int32_t x1294 = x1290;
-float x1295 = x72[x1294];
-int32_t x1296 = x1291;
-float x1297 = x72[x1296];
-float x1298 = x1295 * x1297;
-x1288[x1293] = x1298;
-x1289 += 1;
-x1290 += 1;
-x1291 += 1;
-
-}
-for(int x1305=0; x1305 < 26; x1305++) {
-float x1306 = x77[x1305];
-float x1307 = x1288[x1305];
-float x1308 = x1306 + x1307;
-x77[x1305] = x1308;
-
-}
-float* x1312 = (float*)myMalloc(26 * sizeof(float));;
-for(int x1313=0; x1313 < 26; x1313++) {
-float x1314 = x72[x1313];
-float x1315 = x1314 * 0.1f;
-x1312[x1313] = x1315;
-
-}
-float* x1319 = (float*)myMalloc(26 * sizeof(float));;
-for(int x1320=0; x1320 < 26; x1320++) {
-float x1321 = x77[x1320];
-float x1322 = x1321 + 1.0E-8f;
-x1319[x1320] = x1322;
-
-}
-float* x1326 = (float*)myMalloc(26 * sizeof(float));;
-for(int x1327=0; x1327 < 26; x1327++) {
-float x1328 = x1319[x1327];
-double x1329 = (double)x1328;
-double x1330 = sqrt(x1329);
-float x1331 = (float)x1330;
-x1326[x1327] = x1331;
-
-}
-float* x1335 = (float*)myMalloc(26 * sizeof(float));;
-int32_t x1336 = 0;
-int32_t x1337 = 0;
-int32_t x1338 = 0;
-for(int x1339=0; x1339 < 26; x1339++) {
-int32_t x1340 = x1336;
-int32_t x1341 = x1337;
-float x1342 = x1312[x1341];
-int32_t x1343 = x1338;
-float x1344 = x1326[x1343];
-float x1345 = x1342 / x1344;
-x1335[x1340] = x1345;
-x1336 += 1;
-x1337 += 1;
-x1338 += 1;
-
-}
-for(int x1352=0; x1352 < 26; x1352++) {
-float x1353 = x66[x1352];
-float x1354 = x1335[x1352];
-float x1355 = x1353 - x1354;
-x66[x1352] = x1355;
-
-}
-for(int x1359=0; x1359 < 26; x1359++) {
-float x1360 = x72[x1359];
-x72[x1359] = 0.0f;
-
-}
-for(int x1364=0; x1364 < 1300; x1364++) {
-float x1365 = x61[x1364];
-bool x1366 = x1365 > 5.0f;
-if (x1366) {
-x61[x1364] = 5.0f;
+for(int x1099=0; x1099 < 1300; x1099++) {
+float x1100 = x44[x1099];
+float x1101 = x1100;
+float x1102 = x1101;
+bool x1103 = x1102 > 5.0f;
+if (x1103) {
+x1101 = 5.0f;
 } else {
 }
-float x1370 = x61[x1364];
-bool x1371 = x1370 < -5.0f;
-if (x1371) {
-x61[x1364] = -5.0f;
+float x1107 = x1101;
+bool x1108 = x1107 < -5.0f;
+if (x1108) {
+x1101 = -5.0f;
 } else {
 }
+float x1112 = x48[x1099];
+float x1113 = x1101;
+float x1114 = x1113 * x1113;
+float x1115 = x1112 + x1114;
+x48[x1099] = x1115;
+float x1117 = x36[x1099];
+float x1119 = x48[x1099];
+float x1118 = 0.1f * x1113;
+double x1120 = (double)x1119;
+double x1121 = x1120 + 9.99999993922529E-9;
+double x1122 = sqrt(x1121);
+float x1123 = (float)x1122;
+float x1124 = x1118 / x1123;
+float x1125 = x1117 - x1124;
+x36[x1099] = x1125;
+x44[x1099] = 0.0f;
 
 }
-float* x1377 = (float*)myMalloc(1300 * sizeof(float));;
-int32_t x1378 = 0;
-int32_t x1379 = 0;
-int32_t x1380 = 0;
-for(int x1381=0; x1381 < 50; x1381++) {
-int32_t x1382 = x1379;
-int32_t x1383 = x1380;
-int32_t x1384 = x1378;
-int32_t x1385 = x1384;
-int32_t x1386 = x1382;
-int32_t x1387 = x1383;
-for(int x1388=0; x1388 < 26; x1388++) {
-int32_t x1389 = x1385;
-int32_t x1390 = x1386;
-float x1391 = x61[x1390];
-int32_t x1392 = x1387;
-float x1393 = x61[x1392];
-float x1394 = x1391 * x1393;
-x1377[x1389] = x1394;
-x1385 += 1;
-x1386 += 1;
-x1387 += 1;
-
-}
-x1378 += 26;
-x1379 += 26;
-x1380 += 26;
-
-}
-for(int x1406=0; x1406 < 1300; x1406++) {
-float x1407 = x82[x1406];
-float x1408 = x1377[x1406];
-float x1409 = x1407 + x1408;
-x82[x1406] = x1409;
-
-}
-float* x1413 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x1414=0; x1414 < 1300; x1414++) {
-float x1415 = x61[x1414];
-float x1416 = x1415 * 0.1f;
-x1413[x1414] = x1416;
-
-}
-float* x1420 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x1421=0; x1421 < 1300; x1421++) {
-float x1422 = x82[x1421];
-float x1423 = x1422 + 1.0E-8f;
-x1420[x1421] = x1423;
-
-}
-float* x1427 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x1428=0; x1428 < 1300; x1428++) {
-float x1429 = x1420[x1428];
-double x1430 = (double)x1429;
-double x1431 = sqrt(x1430);
-float x1432 = (float)x1431;
-x1427[x1428] = x1432;
-
-}
-float* x1436 = (float*)myMalloc(1300 * sizeof(float));;
-int32_t x1437 = 0;
-int32_t x1438 = 0;
-int32_t x1439 = 0;
-for(int x1440=0; x1440 < 50; x1440++) {
-int32_t x1441 = x1438;
-int32_t x1442 = x1439;
-int32_t x1443 = x1437;
-int32_t x1444 = x1443;
-int32_t x1445 = x1441;
-int32_t x1446 = x1442;
-for(int x1447=0; x1447 < 26; x1447++) {
-int32_t x1448 = x1444;
-int32_t x1449 = x1445;
-float x1450 = x1413[x1449];
-int32_t x1451 = x1446;
-float x1452 = x1427[x1451];
-float x1453 = x1450 / x1452;
-x1436[x1448] = x1453;
-x1444 += 1;
-x1445 += 1;
-x1446 += 1;
-
-}
-x1437 += 26;
-x1438 += 26;
-x1439 += 26;
-
-}
-for(int x1465=0; x1465 < 1300; x1465++) {
-float x1466 = x53[x1465];
-float x1467 = x1436[x1465];
-float x1468 = x1466 - x1467;
-x53[x1465] = x1468;
-
-}
-for(int x1472=0; x1472 < 1300; x1472++) {
-float x1473 = x61[x1472];
-x61[x1472] = 0.0f;
-
-}
-for(int x1477=0; x1477 < 2500; x1477++) {
-float x1478 = x37[x1477];
-bool x1479 = x1478 > 5.0f;
-if (x1479) {
-x37[x1477] = 5.0f;
+for(int x1130=0; x1130 < 2500; x1130++) {
+float x1131 = x33[x1130];
+float x1132 = x1131;
+float x1133 = x1132;
+bool x1134 = x1133 > 5.0f;
+if (x1134) {
+x1132 = 5.0f;
 } else {
 }
-float x1483 = x37[x1477];
-bool x1484 = x1483 < -5.0f;
-if (x1484) {
-x37[x1477] = -5.0f;
+float x1138 = x1132;
+bool x1139 = x1138 < -5.0f;
+if (x1139) {
+x1132 = -5.0f;
 } else {
 }
+float x1143 = x49[x1130];
+float x1144 = x1132;
+float x1145 = x1144 * x1144;
+float x1146 = x1143 + x1145;
+x49[x1130] = x1146;
+float x1148 = x24[x1130];
+float x1150 = x49[x1130];
+float x1149 = 0.1f * x1144;
+double x1151 = (double)x1150;
+double x1152 = x1151 + 9.99999993922529E-9;
+double x1153 = sqrt(x1152);
+float x1154 = (float)x1153;
+float x1155 = x1149 / x1154;
+float x1156 = x1148 - x1155;
+x24[x1130] = x1156;
+x33[x1130] = 0.0f;
 
 }
-float* x1490 = (float*)myMalloc(2500 * sizeof(float));;
-int32_t x1491 = 0;
-int32_t x1492 = 0;
-int32_t x1493 = 0;
-for(int x1494=0; x1494 < 50; x1494++) {
-int32_t x1495 = x1492;
-int32_t x1496 = x1493;
-int32_t x1497 = x1491;
-int32_t x1498 = x1497;
-int32_t x1499 = x1495;
-int32_t x1500 = x1496;
-for(int x1501=0; x1501 < 50; x1501++) {
-int32_t x1502 = x1498;
-int32_t x1503 = x1499;
-float x1504 = x37[x1503];
-int32_t x1505 = x1500;
-float x1506 = x37[x1505];
-float x1507 = x1504 * x1506;
-x1490[x1502] = x1507;
-x1498 += 1;
-x1499 += 1;
-x1500 += 1;
-
-}
-x1491 += 50;
-x1492 += 50;
-x1493 += 50;
-
-}
-for(int x1519=0; x1519 < 2500; x1519++) {
-float x1520 = x87[x1519];
-float x1521 = x1490[x1519];
-float x1522 = x1520 + x1521;
-x87[x1519] = x1522;
-
-}
-float* x1526 = (float*)myMalloc(2500 * sizeof(float));;
-for(int x1527=0; x1527 < 2500; x1527++) {
-float x1528 = x37[x1527];
-float x1529 = x1528 * 0.1f;
-x1526[x1527] = x1529;
-
-}
-float* x1533 = (float*)myMalloc(2500 * sizeof(float));;
-for(int x1534=0; x1534 < 2500; x1534++) {
-float x1535 = x87[x1534];
-float x1536 = x1535 + 1.0E-8f;
-x1533[x1534] = x1536;
-
-}
-float* x1540 = (float*)myMalloc(2500 * sizeof(float));;
-for(int x1541=0; x1541 < 2500; x1541++) {
-float x1542 = x1533[x1541];
-double x1543 = (double)x1542;
-double x1544 = sqrt(x1543);
-float x1545 = (float)x1544;
-x1540[x1541] = x1545;
-
-}
-float* x1549 = (float*)myMalloc(2500 * sizeof(float));;
-int32_t x1550 = 0;
-int32_t x1551 = 0;
-int32_t x1552 = 0;
-for(int x1553=0; x1553 < 50; x1553++) {
-int32_t x1554 = x1551;
-int32_t x1555 = x1552;
-int32_t x1556 = x1550;
-int32_t x1557 = x1556;
-int32_t x1558 = x1554;
-int32_t x1559 = x1555;
-for(int x1560=0; x1560 < 50; x1560++) {
-int32_t x1561 = x1557;
-int32_t x1562 = x1558;
-float x1563 = x1526[x1562];
-int32_t x1564 = x1559;
-float x1565 = x1540[x1564];
-float x1566 = x1563 / x1565;
-x1549[x1561] = x1566;
-x1557 += 1;
-x1558 += 1;
-x1559 += 1;
-
-}
-x1550 += 50;
-x1551 += 50;
-x1552 += 50;
-
-}
-for(int x1578=0; x1578 < 2500; x1578++) {
-float x1579 = x28[x1578];
-float x1580 = x1549[x1578];
-float x1581 = x1579 - x1580;
-x28[x1578] = x1581;
-
-}
-for(int x1585=0; x1585 < 2500; x1585++) {
-float x1586 = x37[x1585];
-x37[x1585] = 0.0f;
-
-}
-for(int x1590=0; x1590 < 50; x1590++) {
-float x1591 = x48[x1590];
-bool x1592 = x1591 > 5.0f;
-if (x1592) {
-x48[x1590] = 5.0f;
+for(int x1161=0; x1161 < 50; x1161++) {
+float x1162 = x35[x1161];
+float x1163 = x1162;
+float x1164 = x1163;
+bool x1165 = x1164 > 5.0f;
+if (x1165) {
+x1163 = 5.0f;
 } else {
 }
-float x1596 = x48[x1590];
-bool x1597 = x1596 < -5.0f;
-if (x1597) {
-x48[x1590] = -5.0f;
+float x1169 = x1163;
+bool x1170 = x1169 < -5.0f;
+if (x1170) {
+x1163 = -5.0f;
 } else {
 }
+float x1174 = x50[x1161];
+float x1175 = x1163;
+float x1176 = x1175 * x1175;
+float x1177 = x1174 + x1176;
+x50[x1161] = x1177;
+float x1179 = x34[x1161];
+float x1181 = x50[x1161];
+float x1180 = 0.1f * x1175;
+double x1182 = (double)x1181;
+double x1183 = x1182 + 9.99999993922529E-9;
+double x1184 = sqrt(x1183);
+float x1185 = (float)x1184;
+float x1186 = x1180 / x1185;
+float x1187 = x1179 - x1186;
+x34[x1161] = x1187;
+x35[x1161] = 0.0f;
 
 }
-float* x1603 = (float*)myMalloc(50 * sizeof(float));;
-int32_t x1604 = 0;
-int32_t x1605 = 0;
-int32_t x1606 = 0;
-for(int x1607=0; x1607 < 50; x1607++) {
-int32_t x1608 = x1604;
-int32_t x1609 = x1605;
-float x1610 = x48[x1609];
-int32_t x1611 = x1606;
-float x1612 = x48[x1611];
-float x1613 = x1610 * x1612;
-x1603[x1608] = x1613;
-x1604 += 1;
-x1605 += 1;
-x1606 += 1;
-
-}
-for(int x1620=0; x1620 < 50; x1620++) {
-float x1621 = x92[x1620];
-float x1622 = x1603[x1620];
-float x1623 = x1621 + x1622;
-x92[x1620] = x1623;
-
-}
-float* x1627 = (float*)myMalloc(50 * sizeof(float));;
-for(int x1628=0; x1628 < 50; x1628++) {
-float x1629 = x48[x1628];
-float x1630 = x1629 * 0.1f;
-x1627[x1628] = x1630;
-
-}
-float* x1634 = (float*)myMalloc(50 * sizeof(float));;
-for(int x1635=0; x1635 < 50; x1635++) {
-float x1636 = x92[x1635];
-float x1637 = x1636 + 1.0E-8f;
-x1634[x1635] = x1637;
-
-}
-float* x1641 = (float*)myMalloc(50 * sizeof(float));;
-for(int x1642=0; x1642 < 50; x1642++) {
-float x1643 = x1634[x1642];
-double x1644 = (double)x1643;
-double x1645 = sqrt(x1644);
-float x1646 = (float)x1645;
-x1641[x1642] = x1646;
-
-}
-float* x1650 = (float*)myMalloc(50 * sizeof(float));;
-int32_t x1651 = 0;
-int32_t x1652 = 0;
-int32_t x1653 = 0;
-for(int x1654=0; x1654 < 50; x1654++) {
-int32_t x1655 = x1651;
-int32_t x1656 = x1652;
-float x1657 = x1627[x1656];
-int32_t x1658 = x1653;
-float x1659 = x1641[x1658];
-float x1660 = x1657 / x1659;
-x1650[x1655] = x1660;
-x1651 += 1;
-x1652 += 1;
-x1653 += 1;
-
-}
-for(int x1667=0; x1667 < 50; x1667++) {
-float x1668 = x42[x1667];
-float x1669 = x1650[x1667];
-float x1670 = x1668 - x1669;
-x42[x1667] = x1670;
-
-}
-for(int x1674=0; x1674 < 50; x1674++) {
-float x1675 = x48[x1674];
-x48[x1674] = 0.0f;
-
-}
-for(int x1679=0; x1679 < 1300; x1679++) {
-float x1680 = x23[x1679];
-bool x1681 = x1680 > 5.0f;
-if (x1681) {
-x23[x1679] = 5.0f;
+for(int x1192=0; x1192 < 1300; x1192++) {
+float x1193 = x23[x1192];
+float x1194 = x1193;
+float x1195 = x1194;
+bool x1196 = x1195 > 5.0f;
+if (x1196) {
+x1194 = 5.0f;
 } else {
 }
-float x1685 = x23[x1679];
-bool x1686 = x1685 < -5.0f;
-if (x1686) {
-x23[x1679] = -5.0f;
+float x1200 = x1194;
+bool x1201 = x1200 < -5.0f;
+if (x1201) {
+x1194 = -5.0f;
 } else {
 }
+float x1205 = x51[x1192];
+float x1206 = x1194;
+float x1207 = x1206 * x1206;
+float x1208 = x1205 + x1207;
+x51[x1192] = x1208;
+float x1210 = x14[x1192];
+float x1212 = x51[x1192];
+float x1211 = 0.1f * x1206;
+double x1213 = (double)x1212;
+double x1214 = x1213 + 9.99999993922529E-9;
+double x1215 = sqrt(x1214);
+float x1216 = (float)x1215;
+float x1217 = x1211 / x1216;
+float x1218 = x1210 - x1217;
+x14[x1192] = x1218;
+x23[x1192] = 0.0f;
 
 }
-float* x1692 = (float*)myMalloc(1300 * sizeof(float));;
-int32_t x1693 = 0;
-int32_t x1694 = 0;
-int32_t x1695 = 0;
-for(int x1696=0; x1696 < 26; x1696++) {
-int32_t x1697 = x1694;
-int32_t x1698 = x1695;
-int32_t x1699 = x1693;
-int32_t x1700 = x1699;
-int32_t x1701 = x1697;
-int32_t x1702 = x1698;
-for(int x1703=0; x1703 < 50; x1703++) {
-int32_t x1704 = x1700;
-int32_t x1705 = x1701;
-float x1706 = x23[x1705];
-int32_t x1707 = x1702;
-float x1708 = x23[x1707];
-float x1709 = x1706 * x1708;
-x1692[x1704] = x1709;
-x1700 += 1;
-x1701 += 1;
-x1702 += 1;
+int64_t x1223 = (long)mallocAddr;
+int64_t x1224 = x1223 - x54;
+memset((void*)x54, 0, x1224);
+mallocAddr = (void*)x54;
 
 }
-x1693 += 50;
-x1694 += 50;
-x1695 += 50;
+double x1229 = ((double)clock() / CLOCKS_PER_SEC);
+int64_t x1232 = (long)fopen(x0, "w");
+fprintf((FILE *)x1232, "unit: %s\n", "100 iteration");
+for(int x1235=0; x1235 < 51; x1235++) {
+double x1236 = x52[x1235];
+fprintf((FILE *)x1232, "%lf\n", x1236);
 
 }
-for(int x1721=0; x1721 < 1300; x1721++) {
-float x1722 = x97[x1721];
-float x1723 = x1692[x1721];
-float x1724 = x1722 + x1723;
-x97[x1721] = x1724;
-
-}
-float* x1728 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x1729=0; x1729 < 1300; x1729++) {
-float x1730 = x23[x1729];
-float x1731 = x1730 * 0.1f;
-x1728[x1729] = x1731;
-
-}
-float* x1735 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x1736=0; x1736 < 1300; x1736++) {
-float x1737 = x97[x1736];
-float x1738 = x1737 + 1.0E-8f;
-x1735[x1736] = x1738;
-
-}
-float* x1742 = (float*)myMalloc(1300 * sizeof(float));;
-for(int x1743=0; x1743 < 1300; x1743++) {
-float x1744 = x1735[x1743];
-double x1745 = (double)x1744;
-double x1746 = sqrt(x1745);
-float x1747 = (float)x1746;
-x1742[x1743] = x1747;
-
-}
-float* x1751 = (float*)myMalloc(1300 * sizeof(float));;
-int32_t x1752 = 0;
-int32_t x1753 = 0;
-int32_t x1754 = 0;
-for(int x1755=0; x1755 < 26; x1755++) {
-int32_t x1756 = x1753;
-int32_t x1757 = x1754;
-int32_t x1758 = x1752;
-int32_t x1759 = x1758;
-int32_t x1760 = x1756;
-int32_t x1761 = x1757;
-for(int x1762=0; x1762 < 50; x1762++) {
-int32_t x1763 = x1759;
-int32_t x1764 = x1760;
-float x1765 = x1728[x1764];
-int32_t x1766 = x1761;
-float x1767 = x1742[x1766];
-float x1768 = x1765 / x1767;
-x1751[x1763] = x1768;
-x1759 += 1;
-x1760 += 1;
-x1761 += 1;
-
-}
-x1752 += 50;
-x1753 += 50;
-x1754 += 50;
-
-}
-for(int x1780=0; x1780 < 1300; x1780++) {
-float x1781 = x14[x1780];
-float x1782 = x1751[x1780];
-float x1783 = x1781 - x1782;
-x14[x1780] = x1783;
-
-}
-for(int x1787=0; x1787 < 1300; x1787++) {
-float x1788 = x23[x1787];
-x23[x1787] = 0.0f;
-
-}
-mallocAddr = (void*)x104;
-
-}
-double x1795 = ((double)clock() / CLOCKS_PER_SEC);
-int64_t x1798 = (long)fopen(x0, "w");
-fprintf((FILE *)x1798, "unit: %s\n", "100 iteration");
-for(int x1801=0; x1801 < 51; x1801++) {
-double x1802 = x102[x1801];
-fprintf((FILE *)x1798, "%lf\n", x1802);
-
-}
-double x1796 = x103 - x1;
-double x1797 = x1795 - x103;
-fprintf((FILE *)x1798, "run time: %lf %lf\n", x1796, x1797);
-fclose((FILE*)x1798);
+double x1230 = x53 - x1;
+double x1231 = x1229 - x53;
+fprintf((FILE *)x1232, "run time: %lf %lf\n", x1230, x1231);
+fclose((FILE*)x1232);
 }
 /*****************************************
   End of C Generated Code                  

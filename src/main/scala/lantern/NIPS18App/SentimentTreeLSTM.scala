@@ -231,10 +231,18 @@ object SentimentTreeLSTM {
           val pars = ArrayBuffer(tWi, tbi, tWo, tbo, tWu, tbu, tU0i, tU1i, tbbi, tU00f, tU01f, tU10f, tU11f, tbbf, tU0o, tU1o, tbbo, tU0u, tU1u, tbbu, tWhy, tby)
           val mems = ArrayBuffer(mWi, mbi, mWo, mbo, mWu, mbu, mU0i, mU1i, mbbi, mU00f, mU01f, mU10f, mU11f, mbbf, mU0o, mU1o, mbbo, mU0u, mU1u, mbbu, mWhy, mby)
           for ((par, mem) <- pars.zip(mems)) {
-            par.clip_grad(5.0f)
-            mem += par.d * par.d
-            par.x -= par.d * lr / (mem + hp).sqrt()
-            par.clear_grad()
+            par.d.changeTo { i =>
+              val temp = var_new(par.d.data(i))
+              // if (temp > 5.0f) temp = 5.0f
+              // if (temp < -5.0f) temp = -5.0f
+              mem.data(i) += temp * temp
+              par.x.data(i) -= lr * temp / Math.sqrt(mem.data(i) + hp).toFloat
+              0.0f
+            }
+            // par.clip_grad(5.0f)
+            // mem += par.d * par.d
+            // par.x -= par.d * lr / (mem + hp).sqrt()
+            // par.clear_grad()
           }
 
           resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer */

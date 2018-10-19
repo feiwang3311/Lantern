@@ -398,7 +398,7 @@ trait DslGenBase extends CGenNumericOpsExtra
         |}
         |
         |int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
-        |void *mallocBase = malloc(HEAP_SIZE);
+        |void *mallocBase = calloc(HEAP_SIZE, 1);
         |void *mallocAddr = mallocBase;
         |void *waterMark = mallocBase;
         |void *myMalloc(size_t bytes) {

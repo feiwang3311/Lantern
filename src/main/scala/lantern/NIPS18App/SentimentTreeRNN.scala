@@ -91,22 +91,18 @@ object SentimentTreeRNN {
           IFm (lchs(i) < 0) {
             val embedding_tensor = TensorR(Tensor(word_embedding_data(words(i)), word_embedding_size))
             val hidden = (tWu.dot(embedding_tensor) + tbu).tanh()
+            // val hidden = tWu.linearTanh(embedding_tensor, tbu)
             val pred1 = (tWhy.dot(hidden) + tby)
             val loss = pred1.logSoftmax().nllLoss(scores(i))
-            val out = ArrayBuffer[TensorR]()
-            out.append(loss)
-            out.append(hidden)
-            out
+            ArrayBuffer(loss, hidden)
           } {
             val lossl = l(0); val hiddenl = l(1);
             val lossr = r(0); val hiddenr = r(1);
             val hidden = (tU0u.dot(hiddenl) + tU1u.dot(hiddenr) + tbbu).tanh()
+            // val hidden = tU0u.linear2Tanh(hiddenl, tU1u, hiddenr, tbbu)
             val pred1 = (tWhy.dot(hidden) + tby)
             val loss = lossl + lossr + pred1.logSoftmax().nllLoss(scores(i))
-            val out = ArrayBuffer[TensorR]()
-            out.append(loss)
-            out.append(hidden)
-            out
+            ArrayBuffer(loss, hidden)
           }
         }
         outBuffer(0)
@@ -148,10 +144,19 @@ object SentimentTreeRNN {
           val pars = ArrayBuffer(tWu, tbu, tU0u, tU1u, tbbu, tWhy, tby)
           val mems = ArrayBuffer(mWu, mbu, mU0u, mU1u, mbbu, mWhy, mby)
           for ((par, mem) <- pars.zip(mems)) {
-            par.clip_grad(5.0f)
-            mem += par.d * par.d
-            par.x -= par.d * lr / (mem + hp).sqrt()
-            par.clear_grad()
+            par.d.changeTo { i =>
+              val temp = var_new(par.d.data(i))
+              // if (temp > 5.0f) temp = 5.0f
+              // if (temp < -5.0f) temp = -5.0f
+              mem.data(i) += temp * temp
+              par.x.data(i) -= lr * temp / Math.sqrt(mem.data(i) + hp).toFloat
+              0.0f
+            }
+            // par.clip_grad(5.0f)
+            // mem.mutate{i => val temp = par.d.data(i); temp * temp}
+            // par.x.mutate(i => -lr * par.d.data(i) / Math.sqrt(mem.data(i) + hp).toFloat)
+            // // par.x -= par.d * lr / (mem + hp).sqrt()
+            // par.clear_grad()
           }
 
           resetMallocAddr(addr)  // reset malloc_addr to the value when we remember allocation pointer */
