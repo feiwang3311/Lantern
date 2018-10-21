@@ -2989,7 +2989,6 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnConvolutionBackwardBias(biasGrad: Tensor, resGrad: Tensor): Unit = {
       assert(biasGrad.rank == 1, "Bias gradient must have rank 1")
       assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
-      val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -3010,7 +3009,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         Seq(
           "CUDNN_CALL(cudnnConvolutionBackwardBias(\n" +
           "    cudnnHandle, ", one, ", grad_out_desc, ", resGrad.data, ",\n",
-          "    ", zero, ", grad_bias_desc, ", biasGrad.data, "));\n" +
+          "    ", one, ", grad_bias_desc, ", biasGrad.data, "));\n" +
           "}"): _*
       )
     }
@@ -3019,7 +3018,6 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnConvolutionBackwardData(inputGrad: Tensor, filter: Tensor, resGrad: Tensor,
                                      padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
       assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
-      val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -3068,7 +3066,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    cudnnHandle,\n" +
           "    ", one, ", filt_desc, ", filter.data, ", grad_out_desc, ", resGrad.data, ",\n" +
           "    conv_desc, algo, ws_data, ws_size,\n" +
-          "    ", zero, ", grad_in_desc, ", inputGrad.data, "));\n" +
+          "    ", one, ", grad_in_desc, ", inputGrad.data, "));\n" +
           "}"): _*
       )
     }
@@ -3077,7 +3075,6 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnConvolutionBackwardFilter(filterGrad: Tensor, input: Tensor, resGrad: Tensor,
                                        padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
       assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
-      val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -3126,7 +3123,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    cudnnHandle,\n" +
           "    ", one, ", in_desc, ", input.data, ", grad_out_desc, ", resGrad.data, ",\n" +
           "    conv_desc, algo, ws_data, ws_size,\n" +
-          "    ", zero, ", grad_filt_desc, ", filterGrad.data, "));\n" +
+          "    ", one, ", grad_filt_desc, ", filterGrad.data, "));\n" +
           "}"): _*
       )
     }
@@ -3171,19 +3168,12 @@ trait TensorDslCudnn extends TensorDslCublas {
     @virtualize
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
-      // Peephole-optimization: use uninitialized arrays rather than allocating to zero.
-      val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
-      val filterGrad = Tensor(mallocArray[Float](filter.d.scalarCount), filter.d.shape: _*)
-      cudnnConvolutionBackwardData(inputGrad, filter.x, res.d, padding, strides, dilations)
-      cudnnConvolutionBackwardFilter(filterGrad, input.x, res.d, padding, strides, dilations)
-      input.d += inputGrad
-      filter.d += filterGrad
+      cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations)
+      cudnnConvolutionBackwardFilter(filter.d, input.x, res.d, padding, strides, dilations)
       bias match {
         case None =>
         case Some(bias) =>
-          val biasGrad = Tensor(mallocArray[Float](bias.d.scalarCount), bias.d.shape: _*)
-          cudnnConvolutionBackwardBias(biasGrad, res.d)
-          bias.d += biasGrad
+          cudnnConvolutionBackwardBias(bias.d, res.d)
       }
     }
 
@@ -3254,10 +3244,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           "CUDNN_CALL(cudnnActivationBackward(\n" +
           "    cudnnHandle, act_desc,\n" +
           "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ", x_desc, ", input.x.data, ",\n",
-          "    ", zero, ", x_desc, ", inputGrad.data, "));\n" +
+          "    ", one, ", x_desc, ", input.d.data, "));\n" +
           "}"): _*
       )
-      input.d += inputGrad
     }
 
     override def relu(x: Tensor): Tensor = {
