@@ -735,7 +735,7 @@ trait TensorDsl extends DslOps with Diff {
 
     override def sigmoid(x: Tensor) = x.map(s => 1.0f / (Math.exp(-1.0f * s).toFloat + 1.0f))
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
-      input.d.add_oneMinusSquare_mult(res.x, res.d)
+      input.d.add_oneMinusThenMult_mult(res.x, res.d)
     }
   }
 

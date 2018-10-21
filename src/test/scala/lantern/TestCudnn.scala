@@ -115,11 +115,11 @@ class TestCudnn extends LanternFunSuite {
         val strides = Seq(1,1)
         val pads = Seq(0,0,0,0)
 
-        def loss(x: TensorR) = {
+        def conv(x: TensorR) = {
           input.convBBP(kernel, Some(bias), strides, pads)
         }
-        gradR(loss)(Tensor.zeros(1))
-        gradR(loss)(Tensor.zeros(1))
+        gradR(conv)(Tensor.zeros(1))
+        gradR(conv)(Tensor.zeros(1))
 
         backend = BackendCPU()
         val expect_input_grad = Tensor.fromData(Seq(1,1,4,4),
