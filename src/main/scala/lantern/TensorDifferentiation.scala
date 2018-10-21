@@ -281,7 +281,7 @@ trait TensorDsl extends DslOps with Diff {
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
 
-    // Activation function.
+    // Activation functions.
     def relu(x: Tensor): Tensor
     def tanh(x: Tensor): Tensor
     def sigmoid(x: Tensor): Tensor
@@ -296,7 +296,6 @@ trait TensorDsl extends DslOps with Diff {
     //   - Roll out own reduction op kernels? There may be significant boilerplate.
     //   - Use thrust library reduction ops? Need to consider device_vector initialization overhead.
     // - Pooling, dropout.
-    // - Activation functions (e.g. relu).
     // - Fused multiply add operations?
   }
 
