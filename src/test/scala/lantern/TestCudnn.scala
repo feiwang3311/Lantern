@@ -189,4 +189,45 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(sigmoid)
   }
+
+  testGPU("maxPool2D_batch") {
+    val conv2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-maxpool"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9)
+        val kernel = Seq(2,2)
+        val strides = Seq(1,1)
+        val (output, _) = input.maxPool2D_batch(kernel, strides, None)
+
+        backend = BackendCPU()
+        val expect_output = Tensor.fromData(Seq(1,1,2,2), 5, 6, 8, 9)
+        Tensor.assertEqual(expect_output, output.toCPU(), "expect and output are")
+      }
+    }
+    runTest(conv2D)
+  }
+
+  testGPU("maxPool2D_batch_grad") {
+    val conv2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-maxpool-grad"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = TensorR(Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9))
+        val kernel = Seq(2,2)
+        val strides = Seq(1,1)
+        def lossFun(dummy: TensorR) = {
+          input.maxPoolBK(kernel, strides, None)
+        }
+        gradR(lossFun)(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expect_input_grad = Tensor.fromData(Seq(1,1,3,3), 0,0,0,0,1,1,0,1,1)
+        Tensor.assertEqual(expect_input_grad, input.d.toCPU(), "expect and output are")
+      }
+    }
+    runTest(conv2D)
+  }
 }

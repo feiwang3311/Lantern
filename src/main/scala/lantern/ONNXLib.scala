@@ -472,7 +472,7 @@ trait ONNXLib extends TensorDsl {
             val pads = atts("pads")                     // pads may be zero
             val kernel_shape = atts("kernel_shape")
 
-            val (out, _) = in.maxPool_k_batch(kernel_shape, strides, Some(pads))
+            val (out, _) = in.maxPool2D_batch(kernel_shape, strides, Some(pads))
             intermediate_map_tensor += (output -> out)
           }
 

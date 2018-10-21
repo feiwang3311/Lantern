@@ -339,7 +339,7 @@ class ONNXTest extends LanternFunSuite {
               assert(kernel_shape.size == 2, "kernel_shape should be length 2")
 
               // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-              val (out, dummy) = input1.maxPool_k_batch(kernel_shape, strides, None)
+              val (out, dummy) = input1.maxPool2D_batch(kernel_shape, strides, None)
               intermediate_map_tensor += (outputs.head -> out)
             }
 
