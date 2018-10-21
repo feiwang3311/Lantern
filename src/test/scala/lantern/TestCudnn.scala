@@ -156,25 +156,37 @@ class TestCudnn extends LanternFunSuite {
     runTest(relu)
   }
 
-  testGPU("relu-grad") {
-    val relu = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cudnn-relu-grad"
+  testGPU("tanh") {
+    val tanh = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-tanh"
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
-        // TODO: Test NaN values.
-        val input = TensorR(Tensor.fromData(Seq(1,1,2,3), -1, 2, -3, 4, -5, 6))
-
-        def relu(x: TensorR) = {
-          input.relu()
-        }
-        gradR(relu)(Tensor.zeros(1))
-
+        val input = Tensor.randinit(Seq(1,1,2,3))
+        val result = input.tanh()
+        val grad = gradR(x => x.tanh())(input)
+        val expected = Tensor.ones(1) - result * result
         backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(1,1,2,3), 0, 1, 0, 1, 0, 1)
-        Tensor.assertEqual(expected, input.d.toCPU())
+        Tensor.assertEqual(expected.toCPU(), grad.toCPU())
       }
     }
-    runTest(relu)
+    runTest(tanh)
+  }
+
+  testGPU("sigmoid") {
+    val sigmoid = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-sigmoid"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.randinit(Seq(1,1,2,3))
+        val result = input.sigmoid()
+        val grad = gradR(x => x.sigmoid())(input)
+        val expected = (Tensor.ones(1) - result) * result
+        backend = BackendCPU()
+        Tensor.assertEqual(expected.toCPU(), grad.toCPU())
+      }
+    }
+    runTest(sigmoid)
   }
 }

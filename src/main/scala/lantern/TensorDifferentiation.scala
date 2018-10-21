@@ -209,6 +209,10 @@ trait TensorDsl extends DslOps with Diff {
     // Fill a tensor in-place with the specified value.
     def fillInPlace(x: Tensor, value: Rep[Float])
 
+    // Initialize a tensor with scalars sampled from a zero-centered uniform distribution.
+    // By default, the uniform distribution is over [-0.5, 0.5].
+    def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor
+
     // Compute vector-vector dot product, i.e. inner product.
     // [V] dot [V] => [1] (scalar)
     def vectorVectorDot(x: Tensor, y: Tensor): Tensor
@@ -344,6 +348,14 @@ trait TensorDsl extends DslOps with Diff {
 
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       for (i <- DataLoop(x.scalarCount)) x.data(i) = value
+    }
+
+    override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
+      // TODO: Handle `seed`.
+      val scalarCount = dims.product
+      val res = mallocArray[Float](scalarCount)
+      for (i <- (0 until scalarCount): Rep[Range]) res(i) = (Random.rand() - 0.5f) * scale
+      new Tensor(res, dims)
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -1722,12 +1734,8 @@ trait TensorDsl extends DslOps with Diff {
     def randinit(dim0: Int): Tensor = randinit(Seq(dim0), 1.0f, None)
     def randinit(dim0: Int, seed: Option[Int]): Tensor = randinit(Seq(dim0), 1.0f, seed)
     def randinit(dim0: Int, dim1: Int, scale: Float): Tensor = randinit(Seq(dim0, dim1), scale, None)
-    def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
-      val scalarCount = dims.product
-      val res = backend.mallocArray[Float](scalarCount)
-      for (i <- (0 until scalarCount): Rep[Range]) res(i) = (Random.rand() - 0.5f) * scale
-      new Tensor(res, dims)
-    }
+    def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor =
+      backend.randinit(dims, scale, seed)
 
     def randn(dim0: Int, dim1: Int = 1, scale: Float = 1.0f, offset: Int = 0) = {
       val res = backend.mallocArray[Float](dim0 * dim1)
@@ -2657,23 +2665,24 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
       cudaMemcpyDeviceToDevice(dest, src, length)
 
-    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor =
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()
-    }
 
-    override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
-      // TOOO: Compare performance with GPU allocation + `fillInPlace`.
+    // TOOO: Compare performance with GPU allocation + `fillInPlace`.
+    override def fill(dims: Seq[Int], value: Rep[Float]): Tensor =
       BackendCPU().fill(dims, value).toGPU()
-    }
 
-    override def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor = {
+    override def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor =
       BackendCPU().fillWithBias(dims, bias.toCPU(), dim).toGPU()
-    }
 
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       // TODO: Consider different grid/block parameters.
       unchecked[Unit](s"arrayFill<<<${x.scalarCount}, 1>>>(", x.data, ", ", value, ")")
     }
+
+    // TODO: Implement random initialization using cuRAND API.
+    override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor =
+      BackendCPU().randinit(dims, scale, seed).toGPU()
 
     override def copyTensorData(dest: Tensor, src: Tensor): Unit = {
       assert(dest.scalarCount == src.scalarCount,
@@ -3219,8 +3228,10 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value): Unit = {
       assert(input.x.rank == 4, "Currently, activation functions only support tensors of rank 4")
-      assert(input.x.shape == res.x.shape && input.d.shape == res.d.shape,
-        "Currently, input and result shapes must all be the same")
+      assert(input.x.shape == res.x.shape,
+        "Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
+      assert(input.d.shape == res.d.shape,
+        s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
