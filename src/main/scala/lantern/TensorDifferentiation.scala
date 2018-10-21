@@ -301,7 +301,6 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
-      // less memory copy
       Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
     }
 
@@ -358,13 +357,6 @@ trait TensorDsl extends DslOps with Diff {
         "cblas_sgemv(CblasRowMajor, CblasNoTrans, ",
         dim1, ",", dim2, ",", 1, ",",
         x.data, ",", dim2, ",", y.data, ",", 1, ",", 0, ",", res, ",", 1, ")")
-      // for (i <- DataLoop(dim1)) {
-      //   val value = var_new(0.0f)
-      //   for (j <- DataLoop(dim2)) {
-      //     value += x.data(i * dim2 + j) * y.data(j)
-      //   }
-      //   res(i) = readVar(value)
-      // }
       Tensor(res, dim1)
     }
 
@@ -475,8 +467,106 @@ trait TensorDsl extends DslOps with Diff {
       else throw new IllegalArgumentException("dimensions of vector do not match /=!")
     }
 
-    // 2-D convolution that supports batches. Uses `conv2D_inplace` as subroutine.
+    type RAF = Rep[Array[Float]]
+    def memsetFloatZero(where: RAF, howmany: Rep[Int]) = {
+      unchecked[Unit]("memset(", where, ", 0, 4 * ", howmany, ");")
+    }
+    def memcpyFloat(dst: RAF, src: RAF, howmany: Rep[Int]) = {
+      unchecked[Unit]("memcpy(", dst, ", ", src, ", 4 * ", howmany, ");")
+    }
+
+    // @virtualize
+    def unfoldedCopy(finput: RAF, input: RAF, kW: Int, kH: Int, dW: Int, dH: Int, padW: Int, padH: Int,
+    nInputPlane: Int, inputWidth: Int, inputHeight: Int, outputWidth: Int, outputHeight: Int) {
+      for (k <- (0 until nInputPlane * kH * kW): Rep[Range]) {
+        val nip = k / (kH * kW)
+        val rest = k % (kH * kW)
+        val kh = rest / kW
+        val kw = rest % kW
+        val dst = slice(finput, nip*kH*kW*outputHeight*outputWidth + kh*kW*outputHeight*outputWidth + kw*outputWidth*outputWidth)
+        val src = slice(input,  nip*inputHeight*inputWidth)
+        if (padW > 0 || padH > 0) {
+          for (y <- (0 until outputHeight): Rep[Range]) {
+            val iy = y * dH - padH + kh
+            __ifThenElse ((iy < 0 || iy >= inputHeight), {
+              memsetFloatZero(slice(dst, y*outputWidth), outputWidth); ()
+            }, {
+              if (dW == 1) {
+                val ix = 0 - padW + kw;
+                val lpad = __ifThenElse ((padW-kw > 0), padW-kw, 0)
+                val rpad = __ifThenElse ((padW-(kW-kw-1) > 0), padW-(kW-kw-1), 0)
+                __ifThenElse ((outputWidth-rpad-lpad <= 0), {
+                  memsetFloatZero(slice(dst, y*outputWidth), outputWidth)
+                }, {
+                  __ifThenElse ((lpad > 0), memsetFloatZero(slice(dst, y*outputWidth), lpad), ())
+                  memcpyFloat(slice(dst, y*outputWidth+lpad), slice(src, iy*inputWidth+ix+lpad), outputWidth-rpad-lpad)
+                  __ifThenElse ((rpad > 0), memsetFloatZero(slice(dst, y*outputWidth+outputWidth-rpad), rpad), ())
+                })
+              } else {
+                for (x <- (0 until outputWidth): Rep[Range]) {
+                  val ix = x * dW - padW + kw
+                  __ifThenElse ((ix < 0 || ix >= inputWidth), memsetFloatZero(slice(dst, y*outputWidth+x), 1),
+                    memcpyFloat(slice(dst, y*outputWidth+x), slice(src, iy*inputWidth+ix), 1))
+                }
+              }
+            })
+          }
+        } else {
+          for (y <- (0 until outputHeight): Rep[Range]) {
+            val iy = y * dH + kh
+            val ix = kw
+            if (dW == 1) memcpyFloat(slice(dst, y*outputWidth), slice(src, iy*inputWidth+ix), outputWidth)
+            else for (x <- (0 until outputWidth): Rep[Range])
+              memcpyFloat(slice(dst, y*outputWidth+x), slice(src, iy*inputWidth+ix+x*dW), 1)
+          }
+        }
+      }
+    }
+
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = {
+      val ((dH:Int) :: (dW:Int) :: Nil) = strides.take(2).toList
+      val ((padH:Int) :: (_:Int) :: (padW:Int) :: (_:Int) :: Nil) = pads.take(4).toList
+      val nOutputPlane = kernel.shape(0)
+      val kH = kernel.shape(2)
+      val kW = kernel.shape(3)
+      val batchSize = input.shape(0)
+      val nInputPlane = input.shape(1)
+      val inputHeight = input.shape(2)
+      val inputWidth = input.shape(3)
+      val outputHeight = (inputHeight + 2*padH - kH) / dH + 1
+      val outputWidth  = (inputWidth + 2*padW - kW) / dW + 1
+      val output = bias match {
+          case Some(bias) => Tensor.fillWithBias(Seq(input.shape(0), kernel.shape(0), outputHeight, outputWidth), bias, 1)
+          case None => Tensor.zeros(input.shape(0), kernel.shape(0), outputHeight, outputWidth)
+        }
+      val finput = Tensor.zeros(batchSize, kW * kH * nInputPlane, outputHeight * outputWidth)
+      for (t <- (0 until batchSize): Rep[Range]) {
+        val input_t = input(t).data
+        val output_t = output(t).data
+        val finput_t = finput(t).data
+        ConvOutputFrame(input_t, output_t, kernel.data, finput_t, kW, kH, dW, dH, padW, padH, nInputPlane, inputWidth, inputHeight, nOutputPlane, outputWidth, outputHeight)
+      }
+      output
+    }
+
+    def ConvOutputFrame(input: RAF, output: RAF, weight: RAF, finput: RAF, kW: Int, kH: Int, dW: Int, dH: Int, padW: Int, padH: Int,
+      nInputPlane: Int, inputWidth: Int, inputHeight: Int, nOutputPlane: Int, outputWidth: Int, outputHeight: Int) {
+
+      unfoldedCopy(finput, input, kW, kH, dW, dH, padW, padH, nInputPlane, inputWidth, inputHeight, outputWidth, outputHeight)
+      // addmm(output, 1, output, 1, weight, finput)
+      // finput viewed as: kW*kH*nInputPlane, outputHeight * outputWidth
+      // input  viewed as: nInputPlane, inputWidth, inputHeight
+      val dim1 = nOutputPlane
+      val dim2 = kW * kH *nInputPlane
+      val dim3 = outputHeight * outputWidth
+      unchecked[Unit](
+        "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+        dim1, ",", dim3, ",", dim2, ",", 1, ",",
+        weight, ",", dim2, ",", finput, ",", dim3, ",", 1, ",", output, ",", dim3, ")")
+    }
+
+    // 2-D convolution that supports batches. Uses `conv2D_inplace` as subroutine.
+    def conv2D_batch_deprecate(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = {
       // TODO: Dedupe assertions/shape calculations with cuDNN implementation.
       assert(input.rank == 4, "Input must be 4-D (first dimension is batch size)")
       assert(kernel.rank == 4, "Kernel must be 4-D")
@@ -628,7 +718,13 @@ trait TensorDsl extends DslOps with Diff {
       // NOTE: Strides/paddings may be in the wrong order.
       assert(dilations._1 == 1 && dilations._2 == 1, "Currently, only dilations of 1 are supported")
 
-      // back propagate
+      // // IMPORTANT: input TensprR has x and d, where x is the unfolded copy, while d is the original
+      // // back-propagate to inputs
+      // if (!input.isInput) ConvGradInput(res.d, input.d, filter.x, strides._1, strides._2, padding._1, padding._2)
+      // // back-propagate to weights
+      // ???
+
+      // back propagate deprecated
       val strideRow = strides._1
       val strideCol = strides._2
 
@@ -725,7 +821,81 @@ trait TensorDsl extends DslOps with Diff {
       }
       ()
     }
+
+    def ConvGradInput(gradOutput: Tensor, gradInput: Tensor, weight: Tensor, dH: Int, dW: Int, padH: Int, padW: Int) = {
+      val batchSize = gradInput.shape(0)
+      val inputHeight = gradInput.shape(2)
+      val inputWidth = gradInput.shape(3)
+      val nOutputPlane = weight.shape(0)
+      val nInputPlane = weight.shape(1)
+      val kH = weight.shape(2)
+      val kW = weight.shape(3)
+      val outputHeight = gradOutput.shape(2)
+      val outputWidth = gradOutput.shape(3)
+      val tweight = weight.resize(nOutputPlane, nInputPlane * kH * kW).trans()
+      val fgradInput = Tensor.zeros(batchSize, kW * kH * nInputPlane, outputHeight * outputWidth)
+      for (t <- DataLoop(batchSize)) {
+        val gradInput_t = gradInput(t).data
+        val gradOutput_t = gradOutput(t).data
+        val fgradInput_t = fgradInput(t).data
+        val dim1 = kW * kH * nInputPlane
+        val dim2 = nOutputPlane
+        val dim3 = outputHeight * outputWidth
+        unchecked[Unit](
+          "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+          dim1, ",", dim3, ",", dim2, ",", 1, ",",
+          tweight.data, ",", dim2, ",", gradOutput_t, ",", dim3, ",", 0, ",", fgradInput_t, ",", dim3, ")")
+        unfoldedAcc(fgradInput_t, gradInput_t, kW, kH, dW, dH, padW, padH, nInputPlane, inputWidth, inputHeight, outputWidth, outputHeight)
+      }
+    }
+
+    def unfoldedAcc(finput: RAF, input: RAF, kW: Int, kH: Int, dW: Int, dH: Int, padW: Int, padH: Int, nInputPlane: Int, inputWidth: Int, inputHeight: Int, outputWidth: Int, outputHeight: Int) {
+      for (nip <- (0 until nInputPlane): Rep[Range]) {
+        for (kh <- (0 until kH): Rep[Range]) {
+          for (kw <- (0 until kW): Rep[Range]) {
+            val src = slice(finput, nip*kH*kW*outputHeight*outputWidth + kh*kW*outputHeight*outputWidth + kw*outputHeight*outputWidth)
+            val dst = slice(input, nip*inputHeight*inputWidth)
+            if (padW > 0 || padH > 0) {
+              for (y <- (0 until outputHeight): Rep[Range]) {
+                val iy: Rep[Int] = y * dH - padH + kh
+                __ifThenElse ((iy < 0 || iy >= inputHeight), (), {
+                  if (dW == 1) {
+                    val ix: Rep[Int] = 0 - padW + kw
+                    val lpad: Rep[Int] = __ifThenElse((padW-kw > 0), padW-kw, 0)
+                    val rpad: Rep[Int] = __ifThenElse((padW-(kW-kw-1) > 0), padW-(kW-kw-1), 0)
+                    val dst_slice = slice(dst, iy*inputWidth+ix+lpad)
+                    val src_slice = slice(src, y*outputWidth+lpad)
+                    for (i <- 0 until (outputWidth - lpad - rpad)) dst_slice(i) += src_slice(i)
+                  } else {
+                    for (x <- (0 until outputWidth): Rep[Range]) {
+                      val ix = x*dW - padW + kw
+                      __ifThenElse ((ix < 0 || ix >= inputWidth), (), dst(iy*inputWidth+ix) += src(y*outputWidth+x))
+                    }
+                  }
+                  ()
+                })
+              }
+            } else {
+              for (y <- (0 until outputHeight): Rep[Range]) {
+                val iy = y*dH + kh
+                val ix = kw
+                if (dW == 1) {
+                  val dst_slice = slice(dst, iy*inputWidth+ix)
+                  val src_slice = slice(src, y*outputWidth)
+                  for (i <- (0 until outputWidth): Rep[Range]) dst_slice(i) += src_slice(i)
+                } else {
+                  for (x <- (0 until outputWidth): Rep[Range]) {
+                    dst(iy*inputWidth+ix+x*dW) += src(y*outputWidth+x)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
+
   object BackendCPU {
     def apply() = new BackendCPU
   }
@@ -1961,7 +2131,7 @@ trait TensorDsl extends DslOps with Diff {
       d.clipAt(bound)
     }
 
-    // fused ops
+    // fused ops (but slower!)
     def linearTanh(x: TensorR, b: TensorR) = shift { k: (TensorR => Unit) =>
       val y = TensorR(this.x.linearTanh(x.x, b.x)); k(y)
       generateRawComment("back prop for linearTanh")
@@ -1977,6 +2147,7 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // fused ops (but slower!)
     def linear2Tanh(x: TensorR, W2: TensorR, x2: TensorR, b: TensorR) = shift { k: (TensorR => Unit) =>
       val y = TensorR(this.x.linear2Tanh(x.x, W2.x, x2.x, b.x)); k(y)
       generateRawComment("back prop for linear2Tanh")
