@@ -839,14 +839,13 @@ trait TensorDsl extends DslOps with Diff {
       for (t <- (0 until batchSize): Rep[Range]) {
         val gradOutput_t = gradOutput(t).data
         val finput_t = finput(t).data
-        val tfinput = Tensor(finput_t, kW * kH * nInputPlane, outputHeight * outputWidth).trans()  // TODO (Fei Wang): can be optimized by doing trans in gemm
         val dim1 = nOutputPlane
         val dim2 = outputWidth * outputHeight
         val dim3 = kW * kH * nInputPlane
         unchecked[Unit](
-          "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+          "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
           dim1, ",", dim3, ",", dim2, ",", scale, ",",
-          gradOutput_t, ",", dim2, ",", tfinput.data, ",", dim3, ",", 1, ",", gradWeight.data, ",", dim3, ")")
+          gradOutput_t, ",", dim2, ",", finput_t, ",", dim2, ",", 1, ",", gradWeight.data, ",", dim3, ")")
         gradBias match {
           case None => ()
           case Some(gradBias) =>
@@ -872,7 +871,6 @@ trait TensorDsl extends DslOps with Diff {
       val kW = weight.shape(3)
       val outputHeight = gradOutput.shape(2)
       val outputWidth = gradOutput.shape(3)
-      val tweight = weight.resize(nOutputPlane, nInputPlane * kH * kW).trans()
       for (t <- DataLoop(batchSize)) {
         val gradInput_t = gradInput(t).data
         val gradOutput_t = gradOutput(t).data
@@ -881,9 +879,9 @@ trait TensorDsl extends DslOps with Diff {
         val dim2 = nOutputPlane
         val dim3 = outputHeight * outputWidth
         unchecked[Unit](
-          "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+          "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
           dim1, ",", dim3, ",", dim2, ",", 1, ",",
-          tweight.data, ",", dim2, ",", gradOutput_t, ",", dim3, ",", 0, ",", fgradInput_t, ",", dim3, ")")
+          weight.data, ",", dim1, ",", gradOutput_t, ",", dim3, ",", 0, ",", fgradInput_t, ",", dim3, ")")
         unfoldedAcc(fgradInput_t, gradInput_t, kW, kH, dW, dH, padW, padH, nInputPlane, inputWidth, inputHeight, outputWidth, outputHeight)
       }
     }
@@ -2308,24 +2306,14 @@ trait TensorDsl extends DslOps with Diff {
             this.x.data, ",", dim2, ",", y.d.data, ",", 1, ",", 1, ",", that.d.data, ",", 1, ")")
         case (2, 2) => val dim1 = this.x.shape(0); val dim2 = this.x.shape(1); val dim3 = that.x.shape(1)
           // use cblas_sgemm
-          // this.d += y.d dot that.x.trans()
           unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
             dim1, ",", dim2, ",", dim3, ",", 1, ",",
             y.d.data, ",", dim3, ",", that.x.data, ",", dim3, ",", 1, ",", this.d.data, ",", dim2, ")")
-          // that.d += this.x.trans() dot y.d
           unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
             dim2, ",", dim3, ",", dim1, ",", 1, ",",
             this.x.data, ",", dim2, ",", y.d.data, ",", dim3, ",", 1, ",", that.d.data, ",", dim3, ")")
-          // for (i <- DataLoop(dim1)) {
-          //   for (j <- DataLoop(dim3)) {
-          //     for (k <- DataLoop(dim2)) {
-          //       this.d.data(i * dim2 + k) += that.x.data(k * dim3 + j) * y.d.data(i * dim3 + j)
-          //       that.d.data(k * dim3 + j) += this.x.data(i * dim2 + k) * y.d.data(i * dim3 + j)
-          //     }
-          //   }
-          // }
       }
     }
 
