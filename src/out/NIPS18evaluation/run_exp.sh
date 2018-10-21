@@ -83,9 +83,9 @@ cd ..
 echo "Now let's run Dynet"
 cd Dynet
 echo "RUN: run dynet without autobatching"
-numactl -C 0 python3 treelstmDynet.py result_DynetNB.txt
+numactl -C 0 python3 treelstmDynet.py result_DyNetNB.txt
 echo "RUN: run dynet with autobatching"
-numactl -C 0 python3 treelstmDynet.py result_DynetB.txt --dynet-autobatch 1
+numactl -C 0 python3 treelstmDynet.py result_DyNetB.txt --dynet-autobatch 1
 echo "Result: run sentiment in Dynet is successful"
 cd ..
 echo "Now let's run PyTorch"
@@ -115,9 +115,9 @@ echo "RUN: copy the result files and do plotting"
 cp Lantern/result_Lantern.txt result_Lantern.txt
 cp PyTorch/result_PyTorch.txt result_PyTorch.txt
 cp TensorFold/result_TensorFold20.txt result_TensorFold20.txt
-cp Dynet/result_DynetNB.txt result_DynetNB.txt
-cp Dynet/result_DynetB.txt result_DynetB.txt
-python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_DynetNB.txt result_DynetB.txt # result_TensorFold1.txt
+cp Dynet/result_DyNetNB.txt result_DyNetNB.txt
+cp Dynet/result_DyNetB.txt result_DyNetB.txt
+python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_DyNetNB.txt result_DyNetB.txt # result_TensorFold1.txt
 echo "RESULT: run TreeLSTM experiment successful"
 cd ..
 deactivate

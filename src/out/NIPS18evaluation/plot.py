@@ -32,9 +32,9 @@ def getColor(label):
     return 'y'
   if label == 'TensorFold' or label == 'TensorFold20':
     return 'm'
-  if label == 'Dynet' or label == 'DynetB':
+  if label == 'DyNet' or label == 'DyNetB':
     return 'g'
-  if label == 'DynetNB':
+  if label == 'DyNetNB':
     return 'c'
   else:
     print("NOTE: color not defined for label: %s" % label)
