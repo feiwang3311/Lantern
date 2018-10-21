@@ -277,9 +277,14 @@ trait TensorDsl extends DslOps with Diff {
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
 
-    // ReLU activation function.
+    // Activation function.
     def relu(x: Tensor): Tensor
+    def tanh(x: Tensor): Tensor
+    def sigmoid(x: Tensor): Tensor
+
     def relu_grad(input: TensorR, res: TensorR): Unit
+    def tanh_grad(input: TensorR, res: TensorR): Unit
+    def sigmoid_grad(input: TensorR, res: TensorR): Unit
 
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
@@ -711,6 +716,16 @@ trait TensorDsl extends DslOps with Diff {
         input.d.data(i) = if (input.x.data(i) < 0.0f) 0.0f else res.d.data(i)
       }
     }
+
+    override def tanh(x: Tensor) = x.map(s => Math.tanh(s).toFloat)
+    override def tanh_grad(input: TensorR, res: TensorR): Unit = {
+      input.d.add_oneMinusSquare_mult(res.x, res.d)
+    }
+
+    override def sigmoid(x: Tensor) = x.map(s => 1.0f / (Math.exp(-1.0f * s).toFloat + 1.0f))
+    override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
+      input.d.add_oneMinusSquare_mult(res.x, res.d)
+    }
   }
 
   object BackendCPU {
@@ -878,12 +893,14 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, this.shape.reverse)
     }
 
-    def tanh() = this.map(x => Math.tanh(x).toFloat)
     def exp() = this.map(x => Math.exp(x).toFloat)
     def log() = this.map(x => Math.log(x).toFloat)
     def sqrt() = this.map(x => Math.sqrt(x).toFloat)
-    def sigmoid() = this.map(x => 1.0f / (Math.exp(-1.0f * x).toFloat + 1.0f))
     def square() = this.map(x => x * x)
+
+    def relu() = backend.relu(this)
+    def tanh() = backend.tanh(this)
+    def sigmoid() = backend.sigmoid(this)
 
     // NOTE: sum all elements
     def sum() = Tensor.scalar(this.fold(0.0f)(_ + _))
@@ -1531,9 +1548,6 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def relu(): Tensor = backend.relu(this)
-
-    @virtualize
     def concat(dim: Int, others: Tensor*) = {
       assert(others.size >= 1, "there should be at least one tensor in others")
       assert(dim >= 0 && dim < this.rank, "dim should be within range of this.nbDims")
@@ -2002,11 +2016,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    def tanh(): TensorR @diff = shift { (k : TensorR => Unit) =>
-      val y = TensorR(x.tanh()); k(y)
-      this.d.add_oneMinusSquare_mult(y.x, y.d)
-    }
-
     def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.exp()); k(y)
       this.d.add_mult(y.x, y.d)
@@ -2015,11 +2024,6 @@ trait TensorDsl extends DslOps with Diff {
     def log(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.log()); k(y)
       this.d.add_div(y.d, x)
-    }
-
-    def sigmoid(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.sigmoid()); k(y)
-      this.d.add_oneMinusThenMult_mult(y.x, y.d)
     }
 
     def sqrt(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2031,6 +2035,21 @@ trait TensorDsl extends DslOps with Diff {
     def square(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.square()); k(y)
       this.d.mutate { (i: Rep[Int]) => y.d.data(i) * this.x.data(i) * 2.0f }
+    }
+
+    def relu(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(this.x.relu()); k(y)
+      backend.relu_grad(this, y)
+    }
+
+    def tanh(): TensorR @diff = shift { (k : TensorR => Unit) =>
+      val y = TensorR(x.tanh()); k(y)
+      backend.tanh_grad(this, y)
+    }
+
+    def sigmoid(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.sigmoid()); k(y)
+      backend.sigmoid_grad(this, y)
     }
 
     def sum(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2278,14 +2297,6 @@ trait TensorDsl extends DslOps with Diff {
       k(ty)
 
       this.d += noise * ty.d
-    }
-
-    @virtualize
-    def relu(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(this.x.relu())
-      k(y)
-
-      backend.relu_grad(this, y)
     }
 
     def print(msg: String = "", derivative: Boolean = false): Unit = {
@@ -2542,7 +2553,7 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   def gradR(f: TensorR => TensorR @diff)(x: Tensor): Tensor = {
-    val x1 = new TensorR(x, Tensor.zeros(x.shape(0)))
+    val x1 = new TensorR(x, Tensor.zeros_like(x))
     reset {
       val y = f(x1)
       y.d.setAsOne()
@@ -2846,7 +2857,11 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
     override def relu(x: Tensor): Tensor = ???
+    override def tanh(x: Tensor): Tensor = ???
+    override def sigmoid(x: Tensor): Tensor = ???
     override def relu_grad(input: TensorR, res: TensorR): Unit = ???
+    override def tanh_grad(input: TensorR, res: TensorR): Unit = ???
+    override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
   }
 
   object BackendCublas {
@@ -3240,6 +3255,20 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
     override def relu_grad(input: TensorR, res: TensorR): Unit = {
       cudnnActivationBackward(input, res, Activation.Relu)
+    }
+
+    override def tanh(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Tanh)
+    }
+    override def tanh_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Tanh)
+    }
+
+    override def sigmoid(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Sigmoid)
+    }
+    override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Sigmoid)
     }
   }
 

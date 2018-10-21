@@ -135,7 +135,6 @@ class TestCudnn extends LanternFunSuite {
     runTest(conv2D)
   }
 
-  // TODO: Use `gradR_loss` and merge with "relu_grad" test when `sum` is supported on GPU.
   testGPU("relu") {
     val relu = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-relu"
@@ -144,11 +143,14 @@ class TestCudnn extends LanternFunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         // TODO: Test NaN values.
         val input = Tensor.fromData(Seq(1,1,2,3), -1, 2, -3, 4, -5, 6)
-        val result = input.relu().toCPU()
+        val result = input.relu()
+        val grad = gradR(x => x.relu())(input)
 
         backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(1,1,2,3), 0, 2, 0, 4, 0, 6)
-        Tensor.assertEqual(expected, result)
+        val expectedRes = Tensor.fromData(Seq(1,1,2,3), 0, 2, 0, 4, 0, 6)
+        val expectedGrad = Tensor.fromData(Seq(1,1,2,3), 0, 1, 0, 1, 0, 1)
+        Tensor.assertEqual(expectedRes, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
       }
     }
     runTest(relu)
