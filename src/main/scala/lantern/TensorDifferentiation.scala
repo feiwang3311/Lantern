@@ -126,7 +126,7 @@ trait TensorDsl extends DslOps with Diff {
 
   case class Dimensions(val dims: Seq[Int]) {
     def apply(idx: Int) = {
-      if (idx >= dims.length) ???
+      if (idx >= dims.length) throw new IndexOutOfBoundsException(s"$idx exceeds ${dims.length}")
       else dims(idx)
     }
     def last = dims.last
@@ -276,6 +276,10 @@ trait TensorDsl extends DslOps with Diff {
     @virtualize
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
+
+    // ReLU activation function.
+    def relu(x: Tensor): Tensor
+    def relu_grad(input: TensorR, res: TensorR): Unit
 
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
@@ -688,6 +692,25 @@ trait TensorDsl extends DslOps with Diff {
         }
       }
     }
+
+    @virtualize
+    override def relu(x: Tensor): Tensor = {
+      val res = backend.mallocArray[Float](x.scalarCount)
+      for (i <- 0 until x.scalarCount: Rep[Range]) {
+        if (x.data(i) < 0.0f)
+          res(i) = 0.0f
+        else
+          res(i) = x.data(i)
+      }
+      Tensor(res, x.shape.seq : _*)
+    }
+
+    @virtualize
+    override def relu_grad(input: TensorR, res: TensorR): Unit = {
+      for (i <- 0 until input.x.scalarCount: Rep[Range]) {
+        input.d.data(i) = if (input.x.data(i) < 0.0f) 0.0f else res.d.data(i)
+      }
+    }
   }
 
   object BackendCPU {
@@ -821,6 +844,8 @@ trait TensorDsl extends DslOps with Diff {
             }
           }
           Tensor(res, dim1, dim2)
+        case _ => throw new IllegalArgumentException(
+          s"Only vector-vector, matrix-vector, and matrix-matrix multiplication are allowed (actual shapes: ${this.shape}, ${that.shape})")
       }
     }
 
@@ -1506,19 +1531,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def relu(inPlace: Boolean = false) = {
-      assert(!inPlace)
-
-      val res = backend.mallocArray[Float](this.scalarCount)
-      for (i <- 0 until this.scalarCount: Rep[Range]) {
-        if (this.data(i) < 0.0f)
-          res(i) = 0.0f
-        else
-          res(i) = this.data(i)
-      }
-
-      Tensor(res, this.shape.seq : _*)
-    }
+    def relu(): Tensor = backend.relu(this)
 
     @virtualize
     def concat(dim: Int, others: Tensor*) = {
@@ -2269,12 +2282,10 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def relu(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(this.x.relu(false))
+      val y = TensorR(this.x.relu())
       k(y)
 
-      for (i <- 0 until this.x.scalarCount: Rep[Range]) {
-        this.d.data(i) = if (this.x.data(i) < 0.0f) 0.0f else y.d.data(i)
-      }
+      backend.relu_grad(this, y)
     }
 
     def print(msg: String = "", derivative: Boolean = false): Unit = {
@@ -2829,11 +2840,13 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
 
-    // TODO: Implement cuBLAS `conv2D_batch` in terms of primitive ops.
+    // TODO: Implement these functions in terms of primitive ops.
     // Reuse CPU implementation?
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = ???
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
+    override def relu(x: Tensor): Tensor = ???
+    override def relu_grad(input: TensorR, res: TensorR): Unit = ???
   }
 
   object BackendCublas {
@@ -3149,6 +3162,84 @@ trait TensorDslCudnn extends TensorDslCublas {
           cudnnConvolutionBackwardBias(biasGrad, res.d)
           bias.d += biasGrad
       }
+    }
+
+    object Activation extends Enumeration {
+      val Sigmoid = Value("CUDNN_ACTIVATION_SIGMOID")
+      val Relu = Value("CUDNN_ACTIVATION_RELU")
+      val Tanh = Value("CUDNN_ACTIVATION_TANH")
+      val ClippedRelu = Value("CUDNN_ACTIVATION_CLIPPED_RELU")
+      val Elu = Value("CUDNN_ACTIVATION_ELU")
+    }
+
+    def cudnnActivationForward(x: Tensor, activation: Activation.Value): Tensor = {
+      assert(x.rank == 4, "Currently, activation functions only support tensors of rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |
+          |cudnnActivationDescriptor_t act_desc;
+          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
+          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
+          |                                        /*mode=*/ ${activation.toString},
+          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
+          |                                        /*relu_coef=*/ 0));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnActivationForward(\n" +
+          "    cudnnHandle, act_desc,\n" +
+          "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+      res
+    }
+
+    def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value): Unit = {
+      assert(input.x.rank == 4, "Currently, activation functions only support tensors of rank 4")
+      assert(input.x.shape == res.x.shape && input.d.shape == res.d.shape,
+        "Currently, input and result shapes must all be the same")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |
+          |cudnnActivationDescriptor_t act_desc;
+          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
+          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
+          |                                        /*mode=*/ ${activation.toString},
+          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
+          |                                        /*relu_coef=*/ 0));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnActivationBackward(\n" +
+          "    cudnnHandle, act_desc,\n" +
+          "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ", x_desc, ", input.x.data, ",\n",
+          "    ", zero, ", x_desc, ", inputGrad.data, "));\n" +
+          "}"): _*
+      )
+      input.d += inputGrad
+    }
+
+    override def relu(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Relu)
+    }
+    override def relu_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Relu)
     }
   }
 

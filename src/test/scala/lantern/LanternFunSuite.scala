@@ -24,7 +24,6 @@ class LanternFunSuite extends FunSuite {
   // - The existence of a GPU (perhaps run `nvidia-smi`).
   def isGPUAvailable: Boolean = sys.env.get("LANTERN_RUN_GPU").isDefined
 
-
   // Utility function wrapping `test` that checks whether GPU is available.
   def testGPU(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */)(implicit pos: source.Position) {
     if (isGPUAvailable)

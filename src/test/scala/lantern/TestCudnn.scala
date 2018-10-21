@@ -115,11 +115,11 @@ class TestCudnn extends LanternFunSuite {
         val strides = Seq(1,1)
         val pads = Seq(0,0,0,0)
 
-        def lossFun(x: TensorR) = {
+        def loss(x: TensorR) = {
           input.convBBP(kernel, Some(bias), strides, pads)
         }
-        gradR(lossFun)(Tensor.zeros(1))
-        gradR(lossFun)(Tensor.zeros(1))
+        gradR(loss)(Tensor.zeros(1))
+        gradR(loss)(Tensor.zeros(1))
 
         backend = BackendCPU()
         val expect_input_grad = Tensor.fromData(Seq(1,1,4,4),
@@ -133,5 +133,46 @@ class TestCudnn extends LanternFunSuite {
       }
     }
     runTest(conv2D)
+  }
+
+  // TODO: Use `gradR_loss` and merge with "relu_grad" test when `sum` is supported on GPU.
+  testGPU("relu") {
+    val relu = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-relu"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // TODO: Test NaN values.
+        val input = Tensor.fromData(Seq(1,1,2,3), -1, 2, -3, 4, -5, 6)
+        val result = input.relu().toCPU()
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(1,1,2,3), 0, 2, 0, 4, 0, 6)
+        Tensor.assertEqual(expected, result)
+      }
+    }
+    runTest(relu)
+  }
+
+  testGPU("relu-grad") {
+    val relu = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-relu-grad"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // TODO: Test NaN values.
+        val input = TensorR(Tensor.fromData(Seq(1,1,2,3), -1, 2, -3, 4, -5, 6))
+
+        def relu(x: TensorR) = {
+          input.relu()
+        }
+        gradR(relu)(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(1,1,2,3), 0, 1, 0, 1, 0, 1)
+        Tensor.assertEqual(expected, input.d.toCPU())
+      }
+    }
+    runTest(relu)
   }
 }
