@@ -467,6 +467,8 @@ trait TensorDsl extends DslOps with Diff {
       else throw new IllegalArgumentException("dimensions of vector do not match /=!")
     }
 
+    // implementation of Conv2D following Pytorch's idea (transform conv2d into matrix-matrix-dot, and use OpenBLAS)
+    // https://github.com/pytorch/pytorch/blob/0a8c8c1dbead2f845e524ae32c19167d80363148/aten/src/THNN/generic/SpatialConvolutionMM.c
     type RAF = Rep[Array[Float]]
     def memsetFloatZero(where: RAF, howmany: Rep[Int]) = {
       unchecked[Unit]("memset(", where, ", 0, 4 * ", howmany, ");")
@@ -475,7 +477,6 @@ trait TensorDsl extends DslOps with Diff {
       unchecked[Unit]("memcpy(", dst, ", ", src, ", 4 * ", howmany, ");")
     }
 
-    // @virtualize
     def unfoldedCopy(finput: RAF, input: RAF, kW: Int, kH: Int, dW: Int, dH: Int, padW: Int, padH: Int,
     nInputPlane: Int, inputWidth: Int, inputHeight: Int, outputWidth: Int, outputHeight: Int) {
       for (k <- (0 until nInputPlane * kH * kW): Rep[Range]) {
@@ -553,7 +554,6 @@ trait TensorDsl extends DslOps with Diff {
       nInputPlane: Int, inputWidth: Int, inputHeight: Int, nOutputPlane: Int, outputWidth: Int, outputHeight: Int) {
 
       unfoldedCopy(finput, input, kW, kH, dW, dH, padW, padH, nInputPlane, inputWidth, inputHeight, outputWidth, outputHeight)
-      // addmm(output, 1, output, 1, weight, finput)
       // finput viewed as: kW*kH*nInputPlane, outputHeight * outputWidth
       // input  viewed as: nInputPlane, inputWidth, inputHeight
       val dim1 = nOutputPlane
@@ -563,152 +563,6 @@ trait TensorDsl extends DslOps with Diff {
         "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
         dim1, ",", dim3, ",", dim2, ",", 1, ",",
         weight, ",", dim2, ",", finput, ",", dim3, ",", 1, ",", output, ",", dim3, ")")
-    }
-
-    // 2-D convolution that supports batches. Uses `conv2D_inplace` as subroutine.
-    def conv2D_batch_deprecate(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): Tensor = {
-      // TODO: Dedupe assertions/shape calculations with cuDNN implementation.
-      assert(input.rank == 4, "Input must be 4-D (first dimension is batch size)")
-      assert(kernel.rank == 4, "Kernel must be 4-D")
-      bias match {
-        case Some(bias) =>
-          assert(bias.rank == 1, s"Bias should be 1-D, got ${bias.shape}")
-          assert(bias.shape(0) == kernel.shape(0), "Bias length must equal number of out-channels")
-        case None => ()
-      }
-      assert(kernel.shape(1) == input.shape(1), "In-channel count mismatch: input.shape[1] should match kernel.shape[1]")
-      assert(input.shape(2) >= kernel.shape(2) && input.shape(3) >= kernel.shape(3), "Image too small for conv")
-
-      assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
-      assert(pads.size == 4, "Pads should have length 4: [padTop, padBottom, padLeft, padRight]")
-      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
-      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
-      assert(strideRow >= 1, "Row stride must be at least 1")
-      assert(strideCol >= 1, "Column stride must be at least 1")
-      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "All paddings must be equal (for now)")
-
-      val resWidth = convSize(input.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
-      val resHeight = convSize(input.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
-      val res = bias match {
-        case Some(bias) => Tensor.fillWithBias(Seq(input.shape(0), kernel.shape(0), resWidth, resHeight), bias, 1)
-        case None => Tensor.zeros(input.shape(0), kernel.shape(0), resWidth, resHeight)
-      }
-
-      for (i <- DataLoop(input.shape(0))) {
-        val ptrInput = slice(input.data, i * input.shape.strides(0))
-        val ptrOutput = slice(res.data, i * res.shape.strides(0))
-        conv2D_inplace(
-          Tensor(ptrOutput, res.shape.drop(1): _*),
-          Tensor(ptrInput, input.shape.drop(1): _*),
-          kernel, strides, pads)
-      }
-      res
-    }
-
-    @virtualize
-    def conv2D_inplace(res: Tensor, input: Tensor, kernel: Tensor, strides: Seq[Int], pads: Seq[Int]): Unit = {
-      val totalPads = pads.sum
-      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
-      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
-      val resWidth = res.shape(1)
-      val resHeight = res.shape(2)
-
-      val offOut = var_new(0)                         // offset for the res by channel
-      val offWeight1 = var_new(0)                     // offset for the kernel by channel (dim_0)
-      for (outPane <- DataLoop(kernel.shape(0))) {
-        val offWeight2 = var_new(offWeight1)          // offset for the kernel for each z-dim of a given channel
-        val offInput = var_new(0)                     // offset for this for each channel of input
-        val ptrOutput = slice(res.data, offOut)           // res, restarting from the start of this output channel (2D)
-        for (inPane <- DataLoop(input.shape(0))) {
-          val ptrInput = slice(input.data, offInput)       // input, restarting from the start of this input channel (2D)
-          val ptrWeight = slice(kernel.data, offWeight2)  // kernel, restarting from the start of this input channel (2D)
-
-          if (totalPads == 0) conv2D1(
-            Tensor(ptrOutput, resHeight, resWidth),
-            Tensor(ptrInput, input.shape(1), input.shape(2)),
-            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
-            strideRow, strideCol)
-          else conv2D2(
-            Tensor(ptrOutput, resHeight, resWidth),
-            Tensor(ptrInput, input.shape(1), input.shape(2)),
-            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
-            strideRow, strideCol, padUp, padDown, padLeft, padRight)
-
-          offWeight2 += kernel.shape.strides(1)
-          offInput += input.shape.strides(0)
-        }
-        offWeight1 += kernel.shape.strides(0)
-        offOut += res.shape.strides(0)
-      }
-    }
-
-    // Taken from Torch: THTensorConv.cpp#198L
-    // https://github.com/pytorch/pytorch/blob/master/aten/src/TH/generic/THTensorConv.cpp
-    @virtualize  // subroutine of conv ops (don't handle padding)
-    def conv2D1(res: Tensor, input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int): Unit = {
-      assert(res.rank == 2 && input.rank == 2 && kernel.rank == 2)
-
-      // looping for the output
-      val offOutput = var_new(0)                 // offset of the output, move one by one in second loop
-      val offInputR = var_new(0)                 // offset of the input, move by each row * strideRow
-      for (outRow <- DataLoop(res.shape(0))) {
-        val offInputC = var_new(offInputR)       // offset of the input, built on offInputR, move by each strideCol
-        for (outCol <- DataLoop(res.shape(1))) {
-
-          // looping for the kernel
-          val sum = var_new(0.0f)
-          val offKernel = var_new(0)             // offset of the kernel, move by kernel.strides(1) i.e. by row of kernel
-          val offInput = var_new(offInputC)      // offset of the input, built on offInputC, move by row of input
-          for (kernelRow <- DataLoop(kernel.shape(0))) {
-            val ptrInput = slice(input.data, offInput)
-            val ptrKernel = slice(kernel.data, offKernel)
-            for (kernelCol <- DataLoop(kernel.shape(1))) {
-              sum +=  ptrInput(kernelCol) * ptrKernel(kernelCol)
-            }
-            offKernel += kernel.shape.strides(0)
-            offInput += input.shape.strides(0)
-          }
-          res.data(offOutput) = res.data(offOutput) + sum
-          offOutput += 1
-          offInputC += strideCol
-        }
-        offInputR += strideRow * input.shape.strides(0)
-      }
-    }
-
-    @virtualize  // subroutine of conv ops (handle padding)
-    def conv2D2(res: Tensor, input: Tensor, kernel: Tensor, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int): Unit = {
-      assert(res.rank == 2 && input.rank == 2 && kernel.rank == 2)
-
-      // looping for the output
-      val offOutput = var_new(0)                    // offset of the output, move one by one in second loop
-      val InputR = var_new(-padLeft)
-      for (outRow <- DataLoop(res.shape(0))) {
-        val InputC = var_new(-padUp)
-        for (outCol <- DataLoop(res.shape(1))) {
-
-          // looping for the kernel
-          val sum = var_new(0.0f)
-          val offKernel = var_new(0)                // offset of the kernel, move by row of kernel
-          for (kernelRow <- DataLoop(kernel.shape(0))) {
-            for (kernelCol <- DataLoop(kernel.shape(1))) {
-              val iR = InputR + kernelRow
-              val iC = InputC + kernelCol
-              if (iR < 0 || iC < 0 || iR >= input.shape(0) || iC >= input.shape(1)) ()
-              else {
-                sum += kernel.data(offKernel) * input.data(iR * input.shape.strides(0) + iC)
-              }
-              offKernel += 1
-            }
-          }
-          res.data(offOutput) = res.data(offOutput) + sum
-
-          // stepping of the offsets of the looping for the output
-          offOutput += 1
-          InputC += strideCol
-        }
-        InputR += strideRow
-      }
     }
 
     // Gradient of `conv2D_batch`.
@@ -729,103 +583,6 @@ trait TensorDsl extends DslOps with Diff {
         case None => ConvGradParam(finputR.x, res.d, filter.d, None, strides._1, strides._2, padding._1, padding._2)
         case Some(bias) => ConvGradParam(finputR.x, res.d, filter.d, Some(bias.d), strides._1, strides._2, padding._1, padding._2)
       }
-
-      // // back propagate deprecated
-      // val strideRow = strides._1
-      // val strideCol = strides._2
-
-      // if (padding._1 + padding._2 == 0) {
-      //   for (batch <- DataLoop(res.d.shape(0))) {
-      //     val offOutputD = var_new(batch * res.d.shape.strides(0)) // offset for the output, based on batch, step by 1
-      //     val offFilter = var_new(0) // offset for filter, step by filter strides(1) -- which filter
-      //     // looping for the output
-      //     for (kOut <- DataLoop(res.d.shape(1))) {
-      //       val sum = var_new(0.0f) // collector of bias gradient
-      //       val offInputR = var_new(batch * input.x.shape.strides(0)) // offset of input, based on batch, step by input.strides(2) * strideRow
-      //       for (row <- DataLoop(res.d.shape(2))) {
-      //         val offInputC = var_new(offInputR) // offset of input, based on offInputR, step by strideCol
-      //         for (col <- DataLoop(res.d.shape(3))) {
-      //           val dCurr: Rep[Float] = res.d.data(offOutputD)
-      //           sum += dCurr // collect bias gradient
-
-      //           // looping for the filter
-      //           val offInputP = var_new(offInputC) // offset of input, based on offInputC, step by input.strides(2)
-      //           val offFilterR = var_new(offFilter) // offset of filter, based on offFilter, step by 1
-      //           for (pane <- DataLoop(filter.x.shape(1))) {
-      //             val offInputKR = var_new(offInputP) // offset of input, step by input.strides(3) -- row
-      //             for (kR <- DataLoop(filter.x.shape(2))) {
-      //               for (kC <- DataLoop(filter.x.shape(3))) {
-      //                 if (!input.isInput) input.d.data(offInputKR + kC) = input.d.data(offInputKR + kC) + dCurr * filter.x.data(offFilterR)
-      //                 filter.d.data(offFilterR) = filter.d.data(offFilterR) + dCurr * input.x.data(offInputKR + kC)
-      //                 offFilterR += 1
-      //               }
-      //               offInputKR += input.x.shape.strides(2)
-      //             }
-      //             offInputP += input.x.shape.strides(1)
-      //           }
-
-      //           offInputC += strideCol
-      //           offOutputD += 1
-      //         }
-      //         offInputR += strideRow * input.x.shape.strides(2)
-      //       }
-      //       bias match {
-      //         case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum // give value of collector to the bias gradient
-      //         case None => ()
-      //       }
-      //       offFilter += filter.x.shape.strides(0)
-      //     }
-      //   }
-      // } else {
-      //   for (batch <- DataLoop(input.x.shape(0))) {
-      //     val offOutputD = var_new(batch * res.d.shape.strides(0)) // offset for the output, based on batch, step by 1
-      //     val offFilter = var_new(0) // offset for the filter, step by filter strides(1) -- which filter
-      //     val offInputD = batch * input.x.shape.strides(0) // fixed offset for the input, based on batch
-      //     // looping for the output
-      //     for (kOut <- DataLoop(res.d.shape(1))) {
-      //       val InputR = var_new(-padding._1) // Row of input, starting from -pads
-      //       val sum = var_new(0.0f) // collector of bias gradient
-      //       for (row <- DataLoop(res.d.shape(2))) {
-      //         val InputC = var_new(-padding._1) // Col of input, starting from -pads
-      //         for (col <- DataLoop(res.d.shape(3))) {
-      //           val dCurr: Rep[Float] = res.d.data(offOutputD)
-      //           sum += dCurr // collect the bias gradient
-
-      //           // looping for the filter
-      //           val offFilterR = var_new(offFilter) // offset if filter, based on offFilter, step by 1
-      //           // offset of input based on batch, pane, and index of output
-      //           val InputI_pane = var_new[Int](offInputD + InputR * input.x.shape.strides(2) + InputC)
-      //           for (pane <- DataLoop(filter.d.shape(1))) {
-      //             val InputI_kR = var_new[Int](InputI_pane) // offset of input based on InputI_pane and row
-      //             for (kR <- DataLoop(filter.d.shape(2))) {
-      //               for (kC <- DataLoop(filter.d.shape(3))) {
-      //                 if (InputR + kR < 0 || InputR + kR >= input.x.shape(2) || InputC + kC < 0 || InputC + kC >= input.x.shape(3)) ()
-      //                 else {
-      //                   val InputI = InputI_kR + kC
-      //                   if (!input.isInput) input.d.data(InputI) = input.d.data(InputI) + dCurr * filter.x.data(offFilterR)
-      //                   filter.d.data(offFilterR) = filter.d.data(offFilterR) + dCurr * input.x.data(InputI)
-      //                 }
-      //                 offFilterR += 1
-      //               }
-      //               InputI_kR += input.x.shape.strides(2)
-      //             }
-      //             InputI_pane += input.x.shape.strides(1)
-      //           }
-
-      //           InputC += strideCol
-      //           offOutputD += 1
-      //         }
-      //         InputR += strideRow
-      //       }
-      //       bias match {
-      //         case Some(bias) => bias.d.data(kOut) = bias.d.data(kOut) + sum
-      //         case None => ()
-      //       }
-      //       offFilter += filter.x.shape.strides(0)
-      //     }
-      //   }
-      // }
-      // ()
     }
 
     def ConvGradParam(finput: Tensor, gradOutput: Tensor, gradWeight: Tensor, gradBias: Option[Tensor], dH: Int, dW: Int, padH: Int, padW: Int, scale: Float = 1.0f) = {
@@ -1095,13 +852,6 @@ trait TensorDsl extends DslOps with Diff {
       }
       new Tensor(res, this.shape.reverse)
     }
-
-    // def transpose(dims: Int*) = {
-    //   assert(dims.size == this.rank, "transpose parameters should be the same as rank")
-
-    //   val res = Tensor.zeros(this)
-    //   for ()
-    // }
 
     def tanh() = this.map(x => Math.tanh(x).toFloat)
     def exp() = this.map(x => Math.exp(x).toFloat)
@@ -1501,107 +1251,9 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    // @virtualize
-    // def batchNorm(epsilon: Rep[Float], gamma: Tensor, beta: Tensor): Tensor = {
-    //   assert(this.rank == 4, "For batchNormalization, the input needs to be 4D tensor")
-    //   assert(gamma.rank == 1 && gamma.shape(0) == this.shape(1), "gamma should be 1D, the same as number of feature maps")
-    //   assert(beta.rank == 1 && beta.shape(0) == this.shape(1), "beta should be 1D, the same as number of feature maps")
-    //   val shift = this - this.global_ave_batch().sum(dim = 0) / this.shape(0)
-    //   val vi = shift.square().global_ave_batch().sum(dim = 0) / this.shape(0)
-    //   val xhat = shift / (vi + epsilon).sqrt()
-    //   val y = xhat * gamma.resize(-1, 1, 1) + beta.resize(-1, 1, 1)
-    //   y
-    // }
-
     @virtualize
     def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) =
       backend.conv2D_batch(this, kernel, bias, strides, pads)
-
-    @virtualize  // conv op, with bias, with padding, use either conv2D1 or conv2D2 as subroutine, depending on whether padding is zero
-    def conv2D(kernel: Tensor, bias: Tensor, strides: Seq[Int], pads: Seq[Int]) = {
-      assert(this.rank == 3 && kernel.rank == 4, "For Conv, input should be 3-D and kernel should be 4-D: " + this.rank + "|" + kernel.rank)
-      assert(kernel.shape(1) == this.shape(0), "For Conv, input dim_0 should be the same as kernel dim_1")
-      assert(this.shape(1) >= kernel.shape(2) && this.shape(2) >= kernel.shape(3), "Image too small for Conv")
-
-      val totalPads = pads.sum
-      // TODO: (Fei Wang) not sure if the order is correct!!!
-      assert(pads.size == 4, "pads should have 4 values, up, down, left, right")
-      assert(strides.size == 2, "strides should have a strideRow and a strideCol")
-      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
-      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
-      assert(strideRow >= 1, "stride of row should be at least 1")
-      assert(strideCol >= 1, "stride of col should be at least 1")
-      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "For now, assume all values in pads are the same")
-
-      val resWidth = convSize(this.shape(1) + padLeft + padRight, kernel.shape(2), strideRow)
-      val resHeight = convSize(this.shape(2) + padUp + padDown, kernel.shape(3), strideCol)
-      val res = Tensor.fillWithBias(Seq(kernel.shape(0), resWidth, resHeight), bias, 0)
-
-      val offOut = var_new(0)                         // offset for the res by channel
-      val offWeight1 = var_new(0)                     // offset for the kernel by channel (dim_0)
-      for (outPane <- DataLoop(kernel.shape(0))) {
-        val offWeight2 = var_new(offWeight1)          // offset for the kernel for each z-dim of a given channel
-        val offInput = var_new(0)                     // offset for this for each channel of input
-        val ptrOutput = slice(res.data, offOut)           // res, restarting from the start of this output channel (2D)
-        for (inPane <- DataLoop(this.shape(0))) {
-          val ptrInput = slice(this.data, offInput)      // input, restarting from the start of this input channel (2D)
-          val ptrWeight = slice(kernel.data, offWeight2)  // kernel, restarting from the start of this input channel (2D)
-
-          if (totalPads == 0) BackendCPU().conv2D1(
-            Tensor(ptrOutput, resHeight, resWidth),
-            Tensor(ptrInput, this.shape(1), this.shape(2)),
-            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
-            strideRow, strideCol)
-          else BackendCPU().conv2D2(
-            Tensor(ptrOutput, resHeight, resWidth),
-            Tensor(ptrInput, this.shape(1), this.shape(2)),
-            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)),
-            strideRow, strideCol, padUp, padDown, padLeft, padRight)
-
-          offWeight2 += kernel.shape.strides(1)
-          offInput += this.shape.strides(0)
-        }
-        offWeight1 += kernel.shape.strides(0)
-        offOut += res.shape.strides(0)
-      }
-      res
-    }
-
-    @virtualize  // conv op, no bias, no padding, use conv2D1 as subroutine
-    def conv2D(kernel: Tensor, strideRow: Int, strideCol: Int): Tensor = {
-      assert(this.rank == 3 && kernel.rank == 4, "input should be 3-D and kernel should be 4-D for Conv")
-      assert(strideRow >= 1, "stride of row should be at least 1")
-      assert(strideCol >= 1, "stride of col should be at least 1")
-      assert(kernel.shape(1) == this.shape(0), "input dim_0 should be the same as kernel dim_1")
-      assert(this.shape(1) >= kernel.shape(2) && this.shape(2) >= kernel.shape(3), "Image too small for Conv")
-
-      val resHeight = convSize(this.shape(1), kernel.shape(2), strideRow)
-      val resWidth = convSize(this.shape(2), kernel.shape(3), strideCol)
-      val res = Tensor.zeros(kernel.shape(0), resHeight, resWidth)
-
-      val offOut = var_new(0)                      // offset for the res for each channel of the output
-      val offWeight1 = var_new(0)                  // offset for the kernel for each channel of the output
-      for (outPane <- DataLoop(kernel.shape(0))) {
-        val offWeight2 = var_new(offWeight1)       // offset for the kernel for each z-dim of a given channel
-        val offInput = var_new(0)                  // offset for this for each channel of input
-        val ptrOutput = slice(res.data, offOut)          // res, restarting from the start of this output channel (2D)
-        for (inPane <- DataLoop(this.shape(0))) {
-          val ptrInput = slice(this.data, offInput)     // input, restarting from the start of this input channel (2D)
-          val ptrWeight = slice(kernel.data, offWeight2) // kernel, restarting from the start of this input channel (2D)
-
-          BackendCPU().conv2D1(
-            Tensor(ptrOutput, resHeight, resWidth),
-            Tensor(ptrInput, this.shape(1), this.shape(2)),
-            Tensor(ptrWeight, kernel.shape(2), kernel.shape(3)), strideRow, strideCol)
-
-          offWeight2 += kernel.shape.strides(1)
-          offInput += this.shape.strides(0)
-        }
-        offWeight1 += kernel.shape.strides(0)
-        offOut += res.shape.strides(0)
-      }
-      res
-    }
 
     @virtualize
     def averagePool_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]): Tensor = {
@@ -1904,17 +1556,6 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, resDims: _*)
     }
 
-    // @virtualize
-    // def split(dim: Int, howmany: Int) = {
-    //   // TODO (Fei Wang): only support split at given dimensions into "howmany" equal size
-    //   assert(dim >= 0 && dim < this.rank, "dim should be within range of this.rank")
-    //   assert(this.shape(dim) % howmany == 0, "dim should be able to divide howmany")
-
-    //   val resDim = this.shape.updated(dim, this.shape(dim) / howmany)
-    //   val results = ArrayBuffer[Tensor]()
-    //   for (i <- 0 until howmany: Range) results.append(Tensor.zeros(resDim: _*))
-    // }
-
     @virtualize
     def global_ave_batch() = {
       assert(this.rank == 4, "assume this is Tensor with 4D (batch * channel * width * height")
@@ -2158,7 +1799,6 @@ trait TensorDsl extends DslOps with Diff {
   // so both field are val (not var) and can be updated by += -= *= /= setAsOne()
   // all instances of vectors will be shepherded by c++ smart pointers, alleviating the memory leak problem
   // type diff = cps[Unit]
-
   class TensorR(val x: Tensor, val d: Tensor) extends Serializable {
     var isInput: Boolean = false // true if it is an input (no need to compute gradient)
 
@@ -2526,153 +2166,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    @virtualize  // conv with bias and pads
-    def convBP(kernel: TensorR, bias: TensorR, strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
-
-      assert(this.isInput || this.d.scalarCount == this.x.scalarCount)
-      assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
-      val y = TensorR(x conv2D(kernel.x, bias.x, strides, pads))
-      k(y)
-
-      // back propagate
-      val strideRow = strides.head
-      val strideCol = strides.last
-
-      if (pads.sum == 0) {
-        val offOutputD = var_new(0)                          // offset for the output, step by 1
-        val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
-        // looping for the output
-        for (kOut <- 0 until y.d.shape(0): Rep[Range]) {
-          val offInputR = var_new(0)                         // offset of input, step by input.strides(2) * strideRow
-          val sum = var_new(0.0f)                            // collector of bias gradient
-          for (row <- 0 until y.d.shape(1): Rep[Range]) {
-            val offInputC = var_new(offInputR)               // offset of input, step by strideCol, based on offInputR
-            for (col <- 0 until y.d.shape(2): Rep[Range]) {
-              val dCurr: Rep[Float] = y.d.data(offOutputD)
-              sum += dCurr                                   // collect bias gradient
-
-              // looping for the kernel
-              val offInputP = var_new(offInputC)             // offset of input, step by input.strides(1), based on offInputC
-              val offKernelR = var_new(offKernel)            // offset of kernel, step by 1, based on offKernel
-              for (pane <- 0 until kernel.d.shape(1): Rep[Range]) {
-                val offInputKR = var_new(offInputP)                  // offset of input, step by input.strides(2) -- row
-                for (kR <- 0 until kernel.d.shape(2): Rep[Range]) {
-                  for (kC <- 0 until kernel.d.shape(3): Rep[Range]) {
-                    if (!this.isInput) this.d.data(offInputKR + kC) = this.d.data(offInputKR + kC) + dCurr * kernel.x.data(offKernelR)
-                    kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
-                    offKernelR += 1
-                  }
-                  offInputKR += this.x.shape.strides(1)
-                }
-                offInputP += this.x.shape.strides(0)
-              }
-
-              offInputC += strideCol
-              offOutputD += 1
-            }
-            offInputR += strideRow * this.x.shape.strides(1)
-          }
-          bias.d.data(kOut) = bias.d.data(kOut) + sum                            // give value of collector to the bias gradient
-          offKernel += kernel.x.shape.strides(0)
-        }
-      } else {
-        val offOutputD = var_new(0)                          // offset for the output, step by 1
-        val offKernel  = var_new(0)                          // offset for the kernel, step by kernel strides(1) -- which kernel
-        // looping for the output
-        for (kOut <- DataLoop(y.d.shape(0))) {
-          val InputR = var_new(-pads.head)                   // Row of input, starting from -pads
-          val sum = var_new(0.0f)                            // collector of bias gradient
-          for (row <- DataLoop(y.d.shape(1))) {
-            val InputC = var_new(-pads.head)                 // Col of input, starting from -pads
-            for (col <- DataLoop(y.d.shape(2))) {
-              val dCurr: Rep[Float] = y.d.data(offOutputD)
-              sum += dCurr                                   // collect the bias gradient
-
-              // looping for the kernel
-              val offKernelR = var_new(offKernel)            // offset of kernel, step by 1, based on offKernel
-              val InputI_pane = var_new[Int](InputR * this.x.shape.strides(1) + InputC)  // offset of input based on pane and index of output
-              for (pane <- DataLoop(kernel.d.shape(1))) {
-                val InputI_kR = var_new[Int](InputI_pane)                          // offset of input based on InputI_pane and row
-                for (kR <- DataLoop(kernel.d.shape(2))) {
-                  for (kC <- DataLoop(kernel.d.shape(3))) {
-                    if (InputR+kR < 0 || InputR+kR >= this.x.shape(1) || InputC+kC < 0 || InputC+kC >= this.x.shape(2)) ()
-                    else {
-                      val InputI = InputI_kR + kC                                  // offset of input based on pane and row and col
-                      if (!this.isInput) this.d.data(InputI) = this.d.data(InputI) + dCurr * kernel.x.data(offKernelR)
-                      kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(InputI)
-                      offKernelR += 1
-                    }
-                  }
-                  InputI_kR += this.x.shape.strides(1)
-                }
-                InputI_pane += this.x.shape.strides(0)
-              }
-
-              InputC += strideCol
-              offOutputD += 1
-            }
-            InputR += strideRow
-          }
-          bias.d.data(kOut) = bias.d.data(kOut) + sum
-          offKernel += kernel.x.shape.strides(0)
-        }
-      }
-
-      ()
-    }
-
-    @virtualize  // conv, no bias, no padding
-    def conv(kernel: TensorR, strideRow: Int, strideCol: Int, tot: Rep[Array[Long]]): TensorR @diff = shift { (k: TensorR => Unit) =>
-      assert(this.isInput || this.d.scalarCount == this.x.scalarCount)
-      // val timer = Timer2()
-      // timer.startTimer
-      val y = TensorR(x conv2D(kernel.x, strideRow, strideCol))
-      // tot(0) += timer.getElapsedTime
-      k(y)
-      //y.d.print("conv")
-
-      // val timerBwd = Timer2()
-      // TODO think about the loop order
-      val offOutputD = var_new(0)                          // offset for the output, step by 1
-      val offKernel = var_new(0)                           // offset for kernel, step by kernel strides(1) -- which kernel
-      assert(y.d.shape(0) == kernel.x.shape(0))
-      // timerBwd.startTimer
-
-      // looping for the output
-      for (kOut <- 0 until y.d.shape(0): Rep[Range]) {
-        val offInputR = var_new(0)                         // offset of input, step by input.strides(2) * strideRow
-        for (row <- 0 until y.d.shape(1): Rep[Range]) {
-          val offInputC = var_new(offInputR)               // offset of input, step by strideCol, based on offInputR
-          for (col <- 0 until y.d.shape(2): Rep[Range]) {
-            val dCurr: Rep[Float] = y.d.data(offOutputD)
-            val offInputP = var_new(offInputC)             // offset of input, step by input.strides(1), based on offInputC
-            val offKernelR = var_new(offKernel)            // offset of kernel, step by 1, based on offKernel
-
-            // looping for the kernel
-            for (pane <- 0 until kernel.d.shape(1): Rep[Range]) {
-              val offInputKR = var_new(offInputP)                  // offset of input, step by input.strides(2) -- row
-              for (kR <- 0 until kernel.d.shape(2): Rep[Range]) {
-                for (kC <- 0 until kernel.d.shape(3): Rep[Range]) {
-                  if (!this.isInput) this.d.data(offInputKR + kC) = this.d.data(offInputKR + kC) + dCurr * kernel.x.data(offKernelR)
-                  kernel.d.data(offKernelR) = kernel.d.data(offKernelR) + dCurr * this.x.data(offInputKR + kC)
-                  offKernelR += 1
-                }
-                offInputKR += this.x.shape.strides(1)
-              }
-              offInputP += this.x.shape.strides(0)
-            }
-
-            offInputC += strideCol
-            offOutputD += 1
-          }
-          offInputR += strideRow * this.x.shape.strides(1)
-        }
-        offKernel += kernel.x.shape.strides(0)
-      }
-      // tot(1) += timerBwd.getElapsedTime
-      ()
-    }
-
     @virtualize  // maxpool with kernel size potentially different from strides, and works with batch dimension! can have optional paddings
     def maxPoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (y, sidx) = this.x.maxPool_k_batch(kernels, strides, pads)
@@ -2939,28 +2432,6 @@ trait TensorDsl extends DslOps with Diff {
     f1(k2, temp)
   }
 
-  def FUNll(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
-
-    val dims = x.x.shape.toSeq
-
-    val f1 = fun { (i: Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
-      val t2: (TensorR => Unit) = { (x: TensorR) =>
-        val temp = NewArray[Array[Float]](2)
-        temp(0) = x.x.data; temp(1) = x.d.data
-        t1(temp)
-      }
-      val t3: (TensorR => Unit) = f(i)(t2)
-      t3(new TensorR(Tensor(xx(0), dims: _*), Tensor(xx(1), dims: _*)))
-    }
-
-    val k2: Rep[Array[Array[Float]] => Unit] = fun { (x: Rep[Array[Array[Float]]]) =>
-      k1(new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*)))
-    }
-    val temp = NewArray[Array[Float]](2)
-    temp(0) = x.x.data; temp(1) = x.d.data
-    f1(i, k2, temp)
-  }
-
   def FUNl(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
 
     val dims = x.x.shape.toSeq
@@ -3032,41 +2503,6 @@ trait TensorDsl extends DslOps with Diff {
     }
     f1(i, k2, arrays)
   }
-
-  // type Fun6Array = ((Array[Float], Array[Float], Array[Float], Array[Float], Array[Float], Array[Float])) => Unit
-  // type RAF = Rep[Array[Float]]
-
-  // def FUNlx(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit)):
-  // (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit) = {i: Rep[Int] => k1: (ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
-
-  //   val length = x.length
-  //   val dims = x.map(_.x.shape.toSeq)
-  //   x.length match {
-  //     case 3 =>
-  //       val f1 = fun { (i: Rep[Int], t1: Rep[Fun6Array], x0: RAF, x1: RAF, x2: RAF, x3: RAF, x4: RAF, x5: RAF) =>
-  //         val t2 = { x: ArrayBuffer[TensorR] =>
-  //           t1((x(0).x.data, x(0).d.data, x(1).x.data, x(1).d.data, x(2).x.data, x(2).d.data))
-  //         }
-  //         val t3: (ArrayBuffer[TensorR] => Unit) = f(i)(t2)
-  //         val tensors = ArrayBuffer(
-  //           new TensorR(Tensor(x0, dims(0): _*), Tensor(x1, dims(0): _*)),
-  //           new TensorR(Tensor(x2, dims(1): _*), Tensor(x3, dims(1): _*)),
-  //           new TensorR(Tensor(x4, dims(2): _*), Tensor(x5, dims(2): _*)),
-  //         )
-  //         t3(tensors)
-  //       }
-  //       val k2: Rep[Fun6Array] = fun { (x0: RAF, x1: RAF, x2: RAF, x3: RAF, x4: RAF, x5: RAF) =>
-  //         val tensors = ArrayBuffer(
-  //           new TensorR(Tensor(x0, dims(0): _*), Tensor(x1, dims(0): _*)),
-  //           new TensorR(Tensor(x2, dims(1): _*), Tensor(x3, dims(1): _*)),
-  //           new TensorR(Tensor(x4, dims(2): _*), Tensor(x5, dims(2): _*)),
-  //         )
-  //         k1(tensors)
-  //       }
-  //       f1(i, k2, x(0).x.data, x(0).d.data, x(1).x.data, x(1).d.data, x(2).x.data, x(2).d.data)
-  //     case 2 => ???
-  //   }
-  // }
 
   @virtualize
   def LOOPLM(start: Rep[Int])(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
