@@ -126,7 +126,7 @@ trait TensorDsl extends DslOps with Diff {
 
   case class Dimensions(val dims: Seq[Int]) {
     def apply(idx: Int) = {
-      if (idx >= dims.length) ???
+      if (idx >= dims.length) throw new IndexOutOfBoundsException(s"$idx exceeds ${dims.length}")
       else dims(idx)
     }
     def last = dims.last
@@ -209,6 +209,10 @@ trait TensorDsl extends DslOps with Diff {
     // Fill a tensor in-place with the specified value.
     def fillInPlace(x: Tensor, value: Rep[Float])
 
+    // Initialize a tensor with scalars sampled from a zero-centered uniform distribution.
+    // By default, the uniform distribution is over [-0.5, 0.5].
+    def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor
+
     // Compute vector-vector dot product, i.e. inner product.
     // [V] dot [V] => [1] (scalar)
     def vectorVectorDot(x: Tensor, y: Tensor): Tensor
@@ -277,13 +281,21 @@ trait TensorDsl extends DslOps with Diff {
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
 
+    // Activation functions.
+    def relu(x: Tensor): Tensor
+    def tanh(x: Tensor): Tensor
+    def sigmoid(x: Tensor): Tensor
+
+    def relu_grad(input: TensorR, res: TensorR): Unit
+    def tanh_grad(input: TensorR, res: TensorR): Unit
+    def sigmoid_grad(input: TensorR, res: TensorR): Unit
+
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
     //   - Roll out own reduction op kernels? There may be significant boilerplate.
     //   - Use thrust library reduction ops? Need to consider device_vector initialization overhead.
     // - Pooling, dropout.
-    // - Activation functions (e.g. relu).
     // - Fused multiply add operations?
   }
 
@@ -335,6 +347,14 @@ trait TensorDsl extends DslOps with Diff {
 
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       for (i <- DataLoop(x.scalarCount)) x.data(i) = value
+    }
+
+    override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
+      // TODO: Handle `seed`.
+      val scalarCount = dims.product
+      val res = mallocArray[Float](scalarCount)
+      for (i <- (0 until scalarCount): Rep[Range]) res(i) = (Random.rand() - 0.5f) * scale
+      new Tensor(res, dims)
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -688,6 +708,35 @@ trait TensorDsl extends DslOps with Diff {
         }
       }
     }
+
+    @virtualize
+    override def relu(x: Tensor): Tensor = {
+      val res = backend.mallocArray[Float](x.scalarCount)
+      for (i <- 0 until x.scalarCount: Rep[Range]) {
+        if (x.data(i) < 0.0f)
+          res(i) = 0.0f
+        else
+          res(i) = x.data(i)
+      }
+      Tensor(res, x.shape.seq : _*)
+    }
+
+    @virtualize
+    override def relu_grad(input: TensorR, res: TensorR): Unit = {
+      for (i <- 0 until input.x.scalarCount: Rep[Range]) {
+        input.d.data(i) = if (input.x.data(i) < 0.0f) 0.0f else res.d.data(i)
+      }
+    }
+
+    override def tanh(x: Tensor) = x.map(s => Math.tanh(s).toFloat)
+    override def tanh_grad(input: TensorR, res: TensorR): Unit = {
+      input.d.add_oneMinusSquare_mult(res.x, res.d)
+    }
+
+    override def sigmoid(x: Tensor) = x.map(s => 1.0f / (Math.exp(-1.0f * s).toFloat + 1.0f))
+    override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
+      input.d.add_oneMinusThenMult_mult(res.x, res.d)
+    }
   }
 
   object BackendCPU {
@@ -821,6 +870,8 @@ trait TensorDsl extends DslOps with Diff {
             }
           }
           Tensor(res, dim1, dim2)
+        case _ => throw new IllegalArgumentException(
+          s"Only vector-vector, matrix-vector, and matrix-matrix multiplication are allowed (actual shapes: ${this.shape}, ${that.shape})")
       }
     }
 
@@ -853,12 +904,14 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, this.shape.reverse)
     }
 
-    def tanh() = this.map(x => Math.tanh(x).toFloat)
     def exp() = this.map(x => Math.exp(x).toFloat)
     def log() = this.map(x => Math.log(x).toFloat)
     def sqrt() = this.map(x => Math.sqrt(x).toFloat)
-    def sigmoid() = this.map(x => 1.0f / (Math.exp(-1.0f * x).toFloat + 1.0f))
     def square() = this.map(x => x * x)
+
+    def relu() = backend.relu(this)
+    def tanh() = backend.tanh(this)
+    def sigmoid() = backend.sigmoid(this)
 
     // NOTE: sum all elements
     def sum() = Tensor.scalar(this.fold(0.0f)(_ + _))
@@ -1506,21 +1559,6 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def relu(inPlace: Boolean = false) = {
-      assert(!inPlace)
-
-      val res = backend.mallocArray[Float](this.scalarCount)
-      for (i <- 0 until this.scalarCount: Rep[Range]) {
-        if (this.data(i) < 0.0f)
-          res(i) = 0.0f
-        else
-          res(i) = this.data(i)
-      }
-
-      Tensor(res, this.shape.seq : _*)
-    }
-
-    @virtualize
     def concat(dim: Int, others: Tensor*) = {
       assert(others.size >= 1, "there should be at least one tensor in others")
       assert(dim >= 0 && dim < this.rank, "dim should be within range of this.nbDims")
@@ -1695,12 +1733,8 @@ trait TensorDsl extends DslOps with Diff {
     def randinit(dim0: Int): Tensor = randinit(Seq(dim0), 1.0f, None)
     def randinit(dim0: Int, seed: Option[Int]): Tensor = randinit(Seq(dim0), 1.0f, seed)
     def randinit(dim0: Int, dim1: Int, scale: Float): Tensor = randinit(Seq(dim0, dim1), scale, None)
-    def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
-      val scalarCount = dims.product
-      val res = backend.mallocArray[Float](scalarCount)
-      for (i <- (0 until scalarCount): Rep[Range]) res(i) = (Random.rand() - 0.5f) * scale
-      new Tensor(res, dims)
-    }
+    def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor =
+      backend.randinit(dims, scale, seed)
 
     def randn(dim0: Int, dim1: Int = 1, scale: Float = 1.0f, offset: Int = 0) = {
       val res = backend.mallocArray[Float](dim0 * dim1)
@@ -1989,11 +2023,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    def tanh(): TensorR @diff = shift { (k : TensorR => Unit) =>
-      val y = TensorR(x.tanh()); k(y)
-      this.d.add_oneMinusSquare_mult(y.x, y.d)
-    }
-
     def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.exp()); k(y)
       this.d.add_mult(y.x, y.d)
@@ -2002,11 +2031,6 @@ trait TensorDsl extends DslOps with Diff {
     def log(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.log()); k(y)
       this.d.add_div(y.d, x)
-    }
-
-    def sigmoid(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.sigmoid()); k(y)
-      this.d.add_oneMinusThenMult_mult(y.x, y.d)
     }
 
     def sqrt(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2018,6 +2042,21 @@ trait TensorDsl extends DslOps with Diff {
     def square(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.square()); k(y)
       this.d.mutate { (i: Rep[Int]) => y.d.data(i) * this.x.data(i) * 2.0f }
+    }
+
+    def relu(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(this.x.relu()); k(y)
+      backend.relu_grad(this, y)
+    }
+
+    def tanh(): TensorR @diff = shift { (k : TensorR => Unit) =>
+      val y = TensorR(x.tanh()); k(y)
+      backend.tanh_grad(this, y)
+    }
+
+    def sigmoid(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.sigmoid()); k(y)
+      backend.sigmoid_grad(this, y)
     }
 
     def sum(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2265,16 +2304,6 @@ trait TensorDsl extends DslOps with Diff {
       k(ty)
 
       this.d += noise * ty.d
-    }
-
-    @virtualize
-    def relu(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(this.x.relu(false))
-      k(y)
-
-      for (i <- 0 until this.x.scalarCount: Rep[Range]) {
-        this.d.data(i) = if (this.x.data(i) < 0.0f) 0.0f else y.d.data(i)
-      }
     }
 
     def print(msg: String = "", derivative: Boolean = false): Unit = {
@@ -2531,7 +2560,7 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   def gradR(f: TensorR => TensorR @diff)(x: Tensor): Tensor = {
-    val x1 = new TensorR(x, Tensor.zeros(x.shape(0)))
+    val x1 = new TensorR(x, Tensor.zeros_like(x))
     reset {
       val y = f(x1)
       y.d.setAsOne()
@@ -2635,23 +2664,24 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
       cudaMemcpyDeviceToDevice(dest, src, length)
 
-    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor =
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()
-    }
 
-    override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
-      // TOOO: Compare performance with GPU allocation + `fillInPlace`.
+    // TOOO: Compare performance with GPU allocation + `fillInPlace`.
+    override def fill(dims: Seq[Int], value: Rep[Float]): Tensor =
       BackendCPU().fill(dims, value).toGPU()
-    }
 
-    override def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor = {
+    override def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor =
       BackendCPU().fillWithBias(dims, bias.toCPU(), dim).toGPU()
-    }
 
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       // TODO: Consider different grid/block parameters.
       unchecked[Unit](s"arrayFill<<<${x.scalarCount}, 1>>>(", x.data, ", ", value, ")")
     }
+
+    // TODO: Implement random initialization using cuRAND API.
+    override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor =
+      BackendCPU().randinit(dims, scale, seed).toGPU()
 
     override def copyTensorData(dest: Tensor, src: Tensor): Unit = {
       assert(dest.scalarCount == src.scalarCount,
@@ -2829,11 +2859,17 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
 
-    // TODO: Implement cuBLAS `conv2D_batch` in terms of primitive ops.
+    // TODO: Implement these functions in terms of primitive ops.
     // Reuse CPU implementation?
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = ???
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
+    override def relu(x: Tensor): Tensor = ???
+    override def tanh(x: Tensor): Tensor = ???
+    override def sigmoid(x: Tensor): Tensor = ???
+    override def relu_grad(input: TensorR, res: TensorR): Unit = ???
+    override def tanh_grad(input: TensorR, res: TensorR): Unit = ???
+    override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
   }
 
   object BackendCublas {
@@ -3149,6 +3185,100 @@ trait TensorDslCudnn extends TensorDslCublas {
           cudnnConvolutionBackwardBias(biasGrad, res.d)
           bias.d += biasGrad
       }
+    }
+
+    object Activation extends Enumeration {
+      val Sigmoid = Value("CUDNN_ACTIVATION_SIGMOID")
+      val Relu = Value("CUDNN_ACTIVATION_RELU")
+      val Tanh = Value("CUDNN_ACTIVATION_TANH")
+      val ClippedRelu = Value("CUDNN_ACTIVATION_CLIPPED_RELU")
+      val Elu = Value("CUDNN_ACTIVATION_ELU")
+    }
+
+    def cudnnActivationForward(x: Tensor, activation: Activation.Value): Tensor = {
+      assert(x.rank == 4, "Currently, activation functions only support tensors of rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |
+          |cudnnActivationDescriptor_t act_desc;
+          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
+          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
+          |                                        /*mode=*/ ${activation.toString},
+          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
+          |                                        /*relu_coef=*/ 0));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnActivationForward(\n" +
+          "    cudnnHandle, act_desc,\n" +
+          "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+      res
+    }
+
+    def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value): Unit = {
+      assert(input.x.rank == 4, "Currently, activation functions only support tensors of rank 4")
+      assert(input.x.shape == res.x.shape,
+        "Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
+      assert(input.d.shape == res.d.shape,
+        s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |
+          |cudnnActivationDescriptor_t act_desc;
+          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
+          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
+          |                                        /*mode=*/ ${activation.toString},
+          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
+          |                                        /*relu_coef=*/ 0));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnActivationBackward(\n" +
+          "    cudnnHandle, act_desc,\n" +
+          "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ", x_desc, ", input.x.data, ",\n",
+          "    ", zero, ", x_desc, ", inputGrad.data, "));\n" +
+          "}"): _*
+      )
+      input.d += inputGrad
+    }
+
+    override def relu(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Relu)
+    }
+    override def relu_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Relu)
+    }
+
+    override def tanh(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Tanh)
+    }
+    override def tanh_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Tanh)
+    }
+
+    override def sigmoid(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Sigmoid)
+    }
+    override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Sigmoid)
     }
   }
 
