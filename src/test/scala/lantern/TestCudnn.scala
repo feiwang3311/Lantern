@@ -70,7 +70,7 @@ class TestCudnn extends LanternFunSuite {
         val bias = Tensor.ones(1)
         val strides = Seq(2, 2)
         val pads = Seq(0,0,0,0)
-        val result = input.conv2D_batch(kernel, None, strides, pads).toCPU()
+        val result = input.conv2D_batch(kernel, None, strides, pads)._1.toCPU()
 
         backend = BackendCPU()
         val expected = Tensor.fill(Seq(1,1,3,3), 27.0f)
@@ -92,7 +92,7 @@ class TestCudnn extends LanternFunSuite {
         val bias = Tensor.ones(1)
         val strides = Seq(2, 2)
         val pads = Seq(0,0,0,0)
-        val result = input.conv2D_batch(kernel, Some(bias), strides, pads).toCPU()
+        val result = input.conv2D_batch(kernel, Some(bias), strides, pads)._1.toCPU()
 
         backend = BackendCPU()
         val expected = Tensor.fill(Seq(1,1,3,3), 28.0f)

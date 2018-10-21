@@ -299,7 +299,7 @@ class ONNXTest extends LanternFunSuite {
               val pads = atts("pads")
               val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
-              val out = input1.conv2D_batch(input2, Some(input3), strides, pads)
+              val (out, finputOption) = input1.conv2D_batch(input2, Some(input3), strides, pads)
               intermediate_map_tensor += (outputs.head -> out)
             }
 
