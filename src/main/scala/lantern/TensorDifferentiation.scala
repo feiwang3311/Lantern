@@ -817,6 +817,8 @@ trait TensorDsl extends DslOps with Diff {
           input.d.data(offset) += res.d.data(offset) - Math.exp(res.x.data(offset)).toFloat * sum.data(batch)
           offset += 1
         }
+      }
+    }
 
     override def maxPool2D_batch(input: Tensor, kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): (Tensor, Option[Rep[Array[Int]]]) = {
       assert(input.rank == 4, "the input for maxPool (with batch) should have 4 dimensions")
@@ -1265,18 +1267,18 @@ trait TensorDsl extends DslOps with Diff {
       this.map(x => x - logsum)
     }
 
-    @virtualize
-    def nllLossB(target: Rep[Array[Int]]) = {
-      assert(this.rank == 2, "For nllLossB, input should be 2D and target should be 1D")
+    // @virtualize
+    // def nllLossB(target: Rep[Array[Int]]) = {
+    //   assert(this.rank == 2, "For nllLossB, input should be 2D and target should be 1D")
 
-      val res = backend.mallocArray[Float](this.shape(0))
-      val offset = var_new(0)
-      for (batch <- DataLoop(this.shape(0))) {
-        res(batch) = -1.0f * this.data(offset + target(batch))
-        offset += this.shape.strides(0)
-      }
-      Tensor(res, this.shape(0))
-    }
+    //   val res = backend.mallocArray[Float](this.shape(0))
+    //   val offset = var_new(0)
+    //   for (batch <- DataLoop(this.shape(0))) {
+    //     res(batch) = -1.0f * this.data(offset + target(batch))
+    //     offset += this.shape.strides(0)
+    //   }
+    //   Tensor(res, this.shape(0))
+    // }
 
     def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
 
