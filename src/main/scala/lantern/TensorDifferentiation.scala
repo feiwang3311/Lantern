@@ -290,6 +290,13 @@ trait TensorDsl extends DslOps with Diff {
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
 
+    // Softmax functions.
+    def softmax(x: Tensor): Tensor
+    def logSoftmax(x: Tensor): Tensor
+
+    def softmax_grad(input: TensorR, res: TensorR): Unit
+    def logSoftmax_grad(input: TensorR, res: TensorR): Unit
+
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -737,6 +744,70 @@ trait TensorDsl extends DslOps with Diff {
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
       input.d.add_oneMinusThenMult_mult(res.x, res.d)
     }
+
+    @virtualize
+    override def softmax(x: Tensor): Tensor = {
+      assert(x.rank == 2, "Softmax input must be 2-D: [batchSize, logits]")
+      val max = x.max2D(dim = 1)
+      val res = Tensor.zeros_like(x)
+      val offset = var_new(0)
+      for (batch <- DataLoop(x.shape(0))) {
+        for (i <- DataLoop(x.shape(1))) {
+          res.data(offset) = Math.exp(x.data(offset) - max.data(batch)).toFloat
+          offset += 1
+        }
+      }
+      val sum = res.sum(dim = 1)
+      offset = 0
+      for (batch <- DataLoop(res.shape(0))) {
+        for (i <- DataLoop(res.shape(1))) {
+          res.data(offset) = res.data(offset) / sum.data(batch)
+          offset += 1
+        }
+      }
+      res
+    }
+
+    @virtualize
+    override def logSoftmax(x: Tensor): Tensor = {
+      assert(x.rank == 2, "Log softmax input must be 2-D: [batchSize, logits]")
+
+      val max = x.max2D(dim = 1)
+      val res = Tensor.zeros_like(x)
+      // fill res with exp(x_i - max)
+      val offset = var_new(0)
+      for (batch <- DataLoop(x.shape(0))) {
+        for (i <- DataLoop(x.shape(1))) {
+          res.data(offset) = Math.exp(x.data(offset) - max.data(batch)).toFloat
+          offset += 1
+        }
+      }
+      val sum = res.sum(dim = 1)
+      offset = 0
+      for (batch <- DataLoop(res.shape(0))) {
+        val logsum = max.data(batch) + Math.log(sum.data(batch)).toFloat
+        for (i <- DataLoop(res.shape(1))) {
+          res.data(offset) = x.data(offset) - logsum
+          offset += 1
+        }
+      }
+      res
+    }
+
+    // TODO: Implement `softmax_grad` for CPU.
+    // Low-priority if softmax is not used in models.
+    override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
+
+    override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = {
+      val sum = res.d.sum(dim = 1)
+      val offset = var_new(0)
+      for (batch <- DataLoop(input.x.shape(0))) {
+        for (i <- DataLoop(input.x.shape(1))) {
+          input.d.data(offset) += res.d.data(offset) - Math.exp(res.x.data(offset)).toFloat * sum.data(batch)
+          offset += 1
+        }
+      }
+    }
   }
 
   object BackendCPU {
@@ -1006,63 +1077,8 @@ trait TensorDsl extends DslOps with Diff {
       iMax
     }
 
-    @virtualize  // batched log softmax
-    def logSoftmaxB() = {
-      assert(this.rank == 2, "logSoftmaxB should handle 2D tensors: batch * 1D")
-
-      val max = this.max2D(dim = 1)
-      val res = Tensor.zeros_like(this)
-      // fill res with exp(x_i - max)
-      val offset = var_new(0)
-      for (batch <- DataLoop(this.shape(0))) {
-        for (i <- DataLoop(this.shape(1))) {
-          res.data(offset) = Math.exp(this.data(offset) - max.data(batch)).toFloat
-          offset += 1
-        }
-      }
-      val sum = res.sum(dim = 1)
-      offset = 0
-      for (batch <- DataLoop(res.shape(0))) {
-        val logsum = max.data(batch) + Math.log(sum.data(batch)).toFloat
-        for (i <- DataLoop(res.shape(1))) {
-          res.data(offset) = this.data(offset) - logsum
-          offset += 1
-        }
-      }
-      res
-    }
-
     @virtualize
-    def logSoftmax() = {
-      assert(this.rank == 1, "TODO: logSoftmax only handles 1d vectors so far")
-
-      val m = this.max
-      val logsum = m + Math.log(this.fold(0.0f)((agg, x) => agg + Math.exp(x - m).toFloat)).toFloat
-      this.map(x => x - logsum)
-    }
-
-    @virtualize
-    def softmax_batch() = {
-      assert(this.rank == 2, "softmax input should be 2-D (batch * 1D logits)")
-      val max = this.max2D(dim = 1)
-      val res = Tensor.zeros_like(this)
-      val offset = var_new(0)
-      for (batch <- DataLoop(this.shape(0))) {
-        for (i <- DataLoop(this.shape(1))) {
-          res.data(offset) = Math.exp(this.data(offset) - max.data(batch)).toFloat
-          offset += 1
-        }
-      }
-      val sum = res.sum(dim = 1)
-      offset = 0
-      for (batch <- DataLoop(res.shape(0))) {
-        for (i <- DataLoop(res.shape(1))) {
-          res.data(offset) = res.data(offset) / sum.data(batch)
-          offset += 1
-        }
-      }
-      res
-    }
+    def softmax_batch() = backend.softmax(this)
 
     @virtualize
     def softmax() = {
@@ -1072,6 +1088,18 @@ trait TensorDsl extends DslOps with Diff {
       val normalized = this.map(x => x - m)
       val nor_exp = normalized.exp()
       nor_exp / nor_exp.sum()
+    }
+
+    @virtualize  // batched log softmax
+    def logSoftmaxB() = backend.logSoftmax(this)
+
+    @virtualize
+    def logSoftmax() = {
+      assert(this.rank == 1, "TODO: logSoftmax only handles 1d vectors so far")
+
+      val m = this.max
+      val logsum = m + Math.log(this.fold(0.0f)((agg, x) => agg + Math.exp(x - m).toFloat)).toFloat
+      this.map(x => x - logsum)
     }
 
     @virtualize
@@ -1093,6 +1121,11 @@ trait TensorDsl extends DslOps with Diff {
 
       // assertC(0 <= target && target < this.nbElem, "Incorrect target")
       Tensor.scalar(-1.0f * this.data(target))
+    }
+
+    def reshape(dims: Int*) = {
+      assert(scalarCount == dims.product, s"Invalid shape, scalar count mismatch: $shape, $dims")
+      Tensor(data, dims: _*)
     }
 
     def resize(dims: Int*) = {
@@ -2103,6 +2136,11 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    def softmax_batch(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.softmax_batch()); k(y)
+      backend.softmax_grad(this, y)
+    }
+
     def logSoftmax(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.logSoftmax()); k(y)
 
@@ -2114,16 +2152,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def logSoftmaxB(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.logSoftmaxB()); k(y)
-
-      // back propagate
-      val sum = y.d.sum(dim = 1)
-      val offset = var_new(0)
-      for (batch <- DataLoop(this.x.shape(0))) {
-        for (i <- DataLoop(this.x.shape(1))) {
-          this.d.data(offset) += y.d.data(offset) - Math.exp(y.x.data(offset)).toFloat * sum.data(batch)
-          offset += 1
-        }
-      }
+      backend.logSoftmax_grad(this, y)
     }
 
     def resize(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2864,12 +2893,18 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = ???
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
+
     override def relu(x: Tensor): Tensor = ???
     override def tanh(x: Tensor): Tensor = ???
     override def sigmoid(x: Tensor): Tensor = ???
     override def relu_grad(input: TensorR, res: TensorR): Unit = ???
     override def tanh_grad(input: TensorR, res: TensorR): Unit = ???
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
+
+    override def softmax(x: Tensor): Tensor = ???
+    override def logSoftmax(x: Tensor): Tensor = ???
+    override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
+    override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = ???
   }
 
   object BackendCublas {
@@ -3221,7 +3256,6 @@ trait TensorDslCudnn extends TensorDslCublas {
         "Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
       assert(input.d.shape == res.d.shape,
         s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
-      val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
       unchecked[Unit](
@@ -3269,6 +3303,92 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
       cudnnActivationBackward(input, res, Activation.Sigmoid)
     }
+
+    object SoftmaxMode extends Enumeration {
+      val Fast = Value("CUDNN_SOFTMAX_FAST")
+      val Accurate = Value("CUDNN_SOFTMAX_ACCURATE")
+      val Log = Value("CUDNN_SOFTMAX_LOG")
+    }
+
+    def cudnnSoftmaxForward(x: Tensor, mode: SoftmaxMode.Value): Tensor = {
+      assert(x.rank == 4, "Currently, softmax functions only support tensors of rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnSoftmaxForward(\n" +
+          s"    cudnnHandle, ${mode.toString}, CUDNN_SOFTMAX_MODE_CHANNEL,\n" +
+          "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+      res
+    }
+
+    def cudnnSoftmaxBackward(input: TensorR, res: TensorR, mode: SoftmaxMode.Value): Unit = {
+      assert(input.x.rank == 4, "Currently, softmax only support tensors of rank 4")
+      // NOTE: shape assertions are relaxed.
+      // Assume that {input/result * forward/backward} values all have the same shape.
+      // The shape of the input forward value is used in the generated code.
+      /*
+      assert(input.x.shape == res.x.shape,
+        s"Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
+      assert(input.d.shape == res.d.shape,
+        s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
+      */
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnSoftmaxBackward(\n" +
+          s"    cudnnHandle, ${mode.toString}, CUDNN_SOFTMAX_MODE_CHANNEL,\n" +
+          "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ",\n" +
+          "    ", one, ", x_desc, ", input.d.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    // NOTE: The `input.rank == 2` assertion currently matches the CPU implementation.
+    // Conceptually, softmax should support arbitrary rank tensors and an arbitrary reduction axis.
+    // This would require some shape padding/transformation.
+    def softmaxHelper(x: Tensor, mode: SoftmaxMode.Value): Tensor = {
+      assert(x.rank == 2, "Softmax input must be 2-D: [batchSize, logits]")
+      val tmpIn = x.reshape(x.shape(0), x.shape(1), 1, 1)
+      val tmpOut = cudnnSoftmaxForward(tmpIn, mode)
+      val res = tmpOut.reshape(x.shape: _*)
+      res
+    }
+
+    override def softmax(x: Tensor): Tensor = softmaxHelper(x, SoftmaxMode.Accurate)
+    override def logSoftmax(x: Tensor): Tensor = softmaxHelper(x, SoftmaxMode.Log)
+
+    // TODO: Relax rank assertions, see `softmaxHelper` above.
+    def softmaxBackwardHelper(input: TensorR, res: TensorR, mode: SoftmaxMode.Value): Unit = {
+      assert(input.x.rank == 2, "Softmax input must be 2-D: [batchSize, logits]")
+      val tmpInX = input.x.reshape(input.x.shape(0), input.x.shape(1), 1, 1)
+      val tmpIn = new TensorR(tmpInX, input.d)
+      cudnnSoftmaxBackward(tmpIn, res, mode)
+    }
+
+    override def softmax_grad(input: TensorR, res: TensorR): Unit =
+      softmaxBackwardHelper(input, res, SoftmaxMode.Accurate)
+    override def logSoftmax_grad(input: TensorR, res: TensorR): Unit =
+      softmaxBackwardHelper(input, res, SoftmaxMode.Log)
   }
 
   object BackendCudnn {
