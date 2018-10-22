@@ -1597,13 +1597,11 @@ trait TensorDsl extends DslOps with Diff {
       (res, savedIdx)
     }
 
-    def maxPool2D_batch(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
+    def maxPool2D_batch(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) =
       backend.maxPool2D_batch(this, kernels, strides, pads)
-    }
 
-    def dropout(prob: Float = 0.5f) = {
+    def dropout(prob: Float = 0.5f) =
       backend.dropout(this, prob)
-    }
 
     @virtualize
     def concat(dim: Int, others: Tensor*) = {
@@ -3244,7 +3242,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
-      assert(input.rank == 4, "maxPool2D input must have rank 4")
+      assert(input.rank == 4, "Currently, maxpool2D only supports inputs of rank 4")
       val mode = "CUDNN_POOLING_MAX"
       // val mode = "CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING"
       // val mode = "CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING"
@@ -3337,7 +3335,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
-      assert(input.rank == 4, "dropout input must have rank 4")
+      assert(input.rank == 4, "Currently, dropout only supports tensors of rank 4")
       val output = Tensor.zeros_like(input)
       val reserveSpace: Rep[Array[Float]] = unchecked[Array[Float]]("(float*)NULL")
       val sizeInBytes: Rep[Int] = unchecked[Int]("0")
