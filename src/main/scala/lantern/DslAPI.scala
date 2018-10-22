@@ -146,20 +146,7 @@ trait DslExp extends DslOps
   // }
 }
 
-trait GPUOps extends DslOps {
-  object NewGPUArray {
-    // Allocate an array of the specified size on the GPU.
-    def apply[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]] = gpu_array_new(scalarCount)
-  }
-  def gpu_array_new[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]]
-}
-
-trait GPUOpsExp extends DslExp {
-  case class GPUArrayNew[T: Manifest](scalarCount: Rep[Int]) extends Def[Array[T]] {
-    val m = manifest[T]
-  }
-  def gpu_array_new[T: Manifest](scalarCount: Exp[Int]) = reflectMutable(GPUArrayNew(scalarCount))
-}
+trait DslGPUExp extends DslExp with GPUOpsExp
 
 trait DslGenScala extends ScalaGenNumericOps
     with ScalaGenPrimitiveOps with ScalaGenBooleanOps with ScalaGenIfThenElse
@@ -441,26 +428,9 @@ trait DslGenC extends DslGenBase {
   import IR._
 }
 
-trait DslGenCublas extends DslGenBase {
-  val IR: DslExp
+trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
+  val IR: DslGPUExp
   import IR._
-
-  // Allocate GPU memory.
-  def getCudaMallocString(buffer: String, count: String, dataType: String): String =
-    "CUDA_CALL(cudaMalloc((void **)&" + buffer + ", " + count + " * sizeof(" + dataType + ")));"
-
-  // Allocate GPU memory from memory arena.
-  def getCudaMallocArenaString(count: String, dataType: String): String =
-    "(" + dataType + "*)myGpuMalloc(" + count + " * sizeof(" + dataType + "));"
-
-  // Allocate unified memory, accessible by CPU and GPU.
-  // FIXME: I encountered "bus error" when performing CPU ops on managed memory:
-  //     Thread 1 "snippet" received signal SIGBUS, Bus error.
-  //     Snippet (x0=<optimized out>) at snippet.cpp:144
-  //     144	float x32 = x30 - x31;
-  // I wonder if others can replicate this issue.
-  def getCudaMallocManagedString(buffer: String, count: String, dataType: String): String =
-    "CUDA_CALL(cudaMallocManaged((void **)&" + buffer + ", " + count + " * sizeof(" + dataType + ")));"
 
   override def templateHeaders: Seq[String] =
     super.templateHeaders ++ Seq("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
@@ -701,7 +671,7 @@ trait DslGenCublas extends DslGenBase {
 }
 
 trait DslGenCudnn extends DslGenCublas {
-  val IR: DslExp
+  val IR: DslGPUExp
   import IR._
 
   override def templateHeaders: Seq[String] = super.templateHeaders ++ Seq("<cudnn.h>")
@@ -777,20 +747,13 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
   }
 }
 
-abstract class DslDriverCuda[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with GPUOps with GPUOpsExp {
+abstract class DslDriverCuda[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslGPUExp {
   val nvccArguments: Seq[String] = Seq("--expt-extended-lambda")
 }
 
 abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverCuda[A, B] { self =>
   override val codegen = new DslGenCublas {
     val IR: self.type = self
-
-    override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-      case a@GPUArrayNew(n) =>
-        val dataType = remap(a.m)
-        emitValDef(sym, getCudaMallocArenaString(quote(n), dataType))
-      case _ => super.emitNode(sym,rhs)
-    }
   }
 
   override def eval(a: A) {
@@ -812,13 +775,6 @@ abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverCuda[A
 abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCuda[A, B] { self =>
   override val codegen = new DslGenCudnn {
     val IR: self.type = self
-
-    override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-      case a@GPUArrayNew(n) =>
-        val dataType = remap(a.m)
-        emitValDef(sym, getCudaMallocArenaString(quote(n), dataType))
-      case _ => super.emitNode(sym,rhs)
-    }
   }
 
   override def eval(a: A) {

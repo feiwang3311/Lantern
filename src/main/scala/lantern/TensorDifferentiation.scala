@@ -5,6 +5,7 @@ import org.scala_lang.virtualized.virtualize
 import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms._
+import scala.virtualization.lms.common._
 import scala.collection.mutable.ArrayBuffer
 import scala.math._
 
