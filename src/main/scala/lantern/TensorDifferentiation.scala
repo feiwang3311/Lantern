@@ -314,7 +314,6 @@ trait TensorDsl extends DslOps with Diff {
     //   - Reduction op GPU implementations are non-trivial.
     //   - Roll out own reduction op kernels? There may be significant boilerplate.
     //   - Use thrust library reduction ops? Need to consider device_vector initialization overhead.
-    // - Pooling, dropout.
     // - Fused multiply add operations?
   }
 
@@ -850,12 +849,15 @@ trait TensorDsl extends DslOps with Diff {
         val ptrIdx    = slice(savedIdx, i * res.shape.strides(0))
         val saveIdxBase = i * input.shape.strides(0)
         maxPool_k_inplace(Tensor(ptrInput, input.shape.drop(1): _*),
-          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*), ptrIdx, saveIdxBase)
+          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight,
+          Tensor(ptrOutput, res.shape.drop(1): _*), ptrIdx, saveIdxBase)
       }
       (res, Some(savedIdx))
     }
 
-    def maxPool_k_inplace(input: Tensor, kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor, savedIdx: Rep[Array[Int]], saveIdxBase: Rep[Int]): Unit = {
+    def maxPool_k_inplace(input: Tensor, kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int,
+                          padUp: Int, padDown: Int, padLeft: Int, padRight: Int,
+                          res: Tensor, savedIdx: Rep[Array[Int]], saveIdxBase: Rep[Int]): Unit = {
       val resWidth = res.shape(1)
       val resHeight = res.shape(2)
 
@@ -920,7 +922,8 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]],
+                                      kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
       sidx match {
         case None => ???
         case Some(sidx) =>
@@ -1267,19 +1270,6 @@ trait TensorDsl extends DslOps with Diff {
       val logsum = m + Math.log(this.fold(0.0f)((agg, x) => agg + Math.exp(x - m).toFloat)).toFloat
       this.map(x => x - logsum)
     }
-
-    // @virtualize
-    // def nllLossB(target: Rep[Array[Int]]) = {
-    //   assert(this.rank == 2, "For nllLossB, input should be 2D and target should be 1D")
-
-    //   val res = backend.mallocArray[Float](this.shape(0))
-    //   val offset = var_new(0)
-    //   for (batch <- DataLoop(this.shape(0))) {
-    //     res(batch) = -1.0f * this.data(offset + target(batch))
-    //     offset += this.shape.strides(0)
-    //   }
-    //   Tensor(res, this.shape(0))
-    // }
 
     def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
 
