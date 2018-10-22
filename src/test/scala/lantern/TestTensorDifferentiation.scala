@@ -874,12 +874,12 @@ class AdLMSVectorTest extends LanternFunSuite {
         val iCol = 20
         val input = Tensor.rand(iPane, iRow, iCol)
 
-        val (resAll, idxAll) = input.dropout(0.0f)
+        val (resAll, helper, size) = input.dropout(0.0f)
         // val (resNone, idxNone) = input.dropout(1.0f)
 
         Tensor.assertEqual(resAll, input, "DROPOUT 1")
         // Tensor.assertEqual(resNone, Tensor.zeros_like(input), "DROPOUT 2")
-
+        val idxAll = Tensor(helper, input.shape: _*)
         for (i <- 0 until input.scalarCount: Rep[Range]) {
           assertC(idxAll.data(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll.data(i))
           // assertC(idxNone.data(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone.data(i))

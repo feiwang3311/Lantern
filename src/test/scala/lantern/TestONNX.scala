@@ -372,13 +372,11 @@ class ONNXTest extends LanternFunSuite {
               val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
               assert (attributes.size == 1, "number of attributes for dropout node should be 1")
               val ratio: Float = attributes.head.getF
-              // val is_test: Int = (if (attributes.last.name == "is_test") attributes.last.getI else attributes.head.getI).toInt
 
-              // TODO: (Fei Wang) warning - the is_test is not considered by the implementation
-              val (out1, out2) = input1.dropout(ratio)
+              val (out, helper, size) = input1.dropout(ratio)
               // val (out1, out2) = dropout_fun(input1, ratio, is_test)
-              intermediate_map_tensor += (outputs.head -> out1)
-              intermediate_map_tensor += (outputs.last -> out2)
+              intermediate_map_tensor += (outputs.head -> out)
+              // intermediate_map_tensor += (outputs.last -> Tensor(helper, input1.shape: _*))
             }
 
             def handle_global_average_pool(node: onnx_ml.NodeProto) = {

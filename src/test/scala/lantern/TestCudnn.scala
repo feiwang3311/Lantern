@@ -191,7 +191,7 @@ class TestCudnn extends LanternFunSuite {
   }
 
   testGPU("maxPool2D_batch") {
-    val conv2D = new LanternDriverCudnn[String, Unit] {
+    val maxPool2D = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-maxpool"
 
       @virtualize
@@ -206,11 +206,11 @@ class TestCudnn extends LanternFunSuite {
         Tensor.assertEqual(expect_output, output.toCPU(), "expect and output are")
       }
     }
-    runTest(conv2D)
+    runTest(maxPool2D)
   }
 
   testGPU("maxPool2D_batch_grad") {
-    val conv2D = new LanternDriverCudnn[String, Unit] {
+    val maxPool2D = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-maxpool-grad"
 
       @virtualize
@@ -228,6 +228,44 @@ class TestCudnn extends LanternFunSuite {
         Tensor.assertEqual(expect_input_grad, input.d.toCPU(), "expect and output are")
       }
     }
-    runTest(conv2D)
+    runTest(maxPool2D)
+  }
+
+  testGPU("dropout_batch") {
+    val dropout = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-dropout"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9)
+        val prob = 0.0f
+        val (output, _, _) = input.dropout(prob)
+
+        backend = BackendCPU()
+        Tensor.assertEqual(input.toCPU(), output.toCPU(), "expect and output are")
+      }
+    }
+    runTest(dropout)
+  }
+
+  testGPU("dropout_batch_grad") {
+    val dropout = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-dropout-grad"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = TensorR(Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9))
+        val prob = 0.0f
+        def lossFun(dummy: TensorR) = {
+          input.dropout(prob)
+        }
+        gradR(lossFun)(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expect_input_grad = Tensor.fromData(Seq(1,1,3,3), 1,1,1,1,1,1,1,1,1)
+        Tensor.assertEqual(expect_input_grad, input.d.toCPU(), "expect and output are")
+      }
+    }
+    runTest(dropout)
   }
 }

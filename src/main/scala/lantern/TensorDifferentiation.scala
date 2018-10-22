@@ -294,6 +294,8 @@ trait TensorDsl extends DslOps with Diff {
 
     def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
 
+    def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
+    def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -850,6 +852,31 @@ trait TensorDsl extends DslOps with Diff {
           }
       }
     }
+
+    @virtualize
+    def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
+      assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
+
+      val res = backend.mallocArray[Float](input.scalarCount)
+      val mask = backend.mallocArray[Float](input.scalarCount)
+      val scale = 1.0f / (1.0f - prob)
+
+      for (i <- DataLoop(input.scalarCount)) {
+        if (Random.rand() > prob) {
+          res(i) = input.data(i) * scale
+          mask(i) = scale
+        } else {
+          res(i) = 0.0f
+          mask(i) = 0.0f
+        }
+      }
+      (Tensor(res, input.shape.seq : _*), mask, 0)
+    }
+
+    def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
+      input.d += Tensor(helper, input.x.shape: _*) * output.d  // TODO (Fei Wang): should optimized by fusing loops
+    }
+
   }
 
   object BackendCPU {
@@ -1523,26 +1550,8 @@ trait TensorDsl extends DslOps with Diff {
       backend.maxPool2D_batch(this, kernels, strides, pads)
     }
 
-    @virtualize
     def dropout(prob: Float = 0.5f) = {
-      assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
-
-      val res = backend.mallocArray[Float](this.scalarCount)
-      val mask = backend.mallocArray[Float](this.scalarCount)
-
-      val scale = 1.0f / (1.0f - prob)
-
-      for (i <- DataLoop(this.scalarCount)) {
-        if (Random.rand() > prob) {
-          res(i) = this.data(i) * scale
-          mask(i) = scale
-        } else {
-          res(i) = 0.0f
-          mask(i) = 0.0f
-        }
-      }
-
-      (Tensor(res, this.shape.seq : _*), Tensor(mask, this.shape.seq : _*))
+      backend.dropout(this, prob)
     }
 
     @virtualize
@@ -2274,12 +2283,10 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def dropout(prob: Float): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val (y, noise) = this.x.dropout(prob)
-      val ty = TensorR(y)
-
-      k(ty)
-
-      this.d += noise * ty.d
+      val (y, helper, size) = backend.dropout(this.x, prob)
+      val ty = TensorR(y); k(ty)
+      // back prop
+      backend.dropout_grad(this, ty, prob, helper, size)
     }
 
     def print(msg: String = "", derivative: Boolean = false): Unit = {
@@ -2848,6 +2855,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
     override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = ???
     override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
+    override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
+    override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
   }
 
@@ -3287,12 +3296,12 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    ${output.shape(0)}, ${output.shape(1)}, ${output.shape(2)}, ${output.shape(3)}));
           |
           |cudnnPoolingDescriptor_t poolingDesc;
-          |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc))
+          |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
           |CUDNN_CALL(cudnnSetPooling2dDescriptor(
           |    poolingDesc, ${mode}, ${nanOpt},
           |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
           |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
-          |))
+          |));
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnPoolingForward(\n" +
@@ -3327,12 +3336,12 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    ${output.x.shape(0)}, ${output.x.shape(1)}, ${output.x.shape(2)}, ${output.x.shape(3)}));
           |
           |cudnnPoolingDescriptor_t poolingDesc;
-          |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc))
+          |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
           |CUDNN_CALL(cudnnSetPooling2dDescriptor(
           |    poolingDesc, ${mode}, ${nanOpt},
           |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
           |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
-          |))
+          |));
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnPoolingBackward(\n" +
@@ -3343,6 +3352,101 @@ trait TensorDslCudnn extends TensorDslCublas {
           "}"): _*)
     }
 
+    override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
+      assert(input.rank == 4, "dropout input must have rank 4")
+      val output = Tensor.zeros_like(input)
+      val reserveSpace: Rep[Array[Float]] = unchecked[Array[Float]]("(float*)NULL")
+      val sizeInBytes: Rep[Int] = unchecked[Int]("0")
+      unchecked[Unit](
+        s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${output.shape(0)}, ${output.shape(1)}, ${output.shape(2)}, ${output.shape(3)}));
+          |
+          |size_t stateSizeInBytes;
+          |CUDNN_CALL(cudnnDropoutGetStatesSize(
+          |    cudnnHandle, &stateSizeInBytes
+          |));
+          |void* state; CUDA_CALL(cudaMalloc(&state, stateSizeInBytes));
+          |
+          |size_t sizeInBytes;
+          |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
+          |    in_desc, &sizeInBytes
+          |));
+          |void* reserveSpace; CUDA_CALL(cudaMalloc(&reserveSpace, sizeInBytes));
+          |
+          |""".stripMargin,
+
+          reserveSpace, " = (float*)reserveSpace;\n",
+          sizeInBytes, " = (int)sizeInBytes;\n",
+
+        s"""
+          |cudnnDropoutDescriptor_t dropoutDesc;
+          |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
+          |CUDNN_CALL(cudnnSetDropoutDescriptor(
+          |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
+          |));
+          |""".stripMargin,
+
+          "CUDNN_CALL(cudnnDropoutForward(\n" +
+          "    cudnnHandle, \n" +
+          "    dropoutDesc, \n" +
+          "    in_desc, ", input.data, ", out_desc, ", output.data, ", ", "reserveSpace, sizeInBytes));\n" +
+          "}")
+      (output, reserveSpace, sizeInBytes)
+    }
+
+    override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
+
+      unchecked[Unit](
+        s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${output.x.shape(0)}, ${output.x.shape(1)}, ${output.x.shape(2)}, ${output.x.shape(3)}));
+          |
+          |size_t stateSizeInBytes;
+          |CUDNN_CALL(cudnnDropoutGetStatesSize(
+          |    cudnnHandle, &stateSizeInBytes
+          |));
+          |void* state; CUDA_CALL(cudaMalloc(&state, stateSizeInBytes));
+          |
+          |size_t sizeInBytes;
+          |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
+          |    in_desc, &sizeInBytes
+          |));
+          |void* reserveSpace; CUDA_CALL(cudaMalloc(&reserveSpace, sizeInBytes));
+          |
+          |cudnnDropoutDescriptor_t dropoutDesc;
+          |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
+          |CUDNN_CALL(cudnnSetDropoutDescriptor(
+          |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
+          |));
+          |""".stripMargin,
+
+          "CUDNN_CALL(cudnnDropoutBackward(\n" +
+          "    cudnnHandle, \n" +
+          "    dropoutDesc, \n" +
+          "    out_desc, ", output.d.data, ", in_desc, ", input.d.data, ", (void*)", helper, ", (size_t)", size, "));\n" +
+          "}")
+    }
   }
 
   object BackendCudnn {
