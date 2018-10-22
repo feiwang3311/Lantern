@@ -430,7 +430,7 @@ trait DslGenBase extends CGenNumericOpsExtra
         |  Snippet(argv[1]);
         |  return 0;
         |}
-      """.stripMargin)
+        |""".stripMargin)
     }
     super.emitSource[A](args, body, functionName, out)
   }
@@ -697,8 +697,7 @@ trait DslGenCublas extends DslGenBase {
       |    *out = f(*in1, *in2);
       |  });
       |}
-      |
-    """.stripMargin
+      |""".stripMargin
 }
 
 trait DslGenCudnn extends DslGenCublas {
@@ -716,7 +715,7 @@ trait DslGenCudnn extends DslGenCublas {
       |    exit(stat); \
       |  } \
       |}
-    """.stripMargin
+      |""".stripMargin
 }
 
 abstract class DslDriverScala[A: Manifest, B: Manifest] extends DslOps with DslExp with CompileScala { self =>

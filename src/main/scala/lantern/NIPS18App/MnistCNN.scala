@@ -48,7 +48,7 @@ object MnistCNN {
       val net = MNIST()
       val opt = SGD(net, learning_rate = 0.0005f, gradClip = 1000.0f)
 
-      def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
+      def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (batchIndex: TensorR) =>
         val res = net(input).logSoftmaxB().nllLossB(target)
         res.sum()
       }
@@ -75,16 +75,16 @@ object MnistCNN {
         var trainLoss = var_new(0.0f)
         printf("Start training epoch %d\\n", epoch + 1)
         trainTimer.startTimer
-        train.foreachBatch(batch){ (dummy: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+        train.foreachBatch(batch) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
           imgIdx += batch
-          val inputR = TensorR(input , isInput=true)
+          val inputR = TensorR(input, isInput=true)
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.scalar(0.0f))
           trainLoss += loss.data(0)
 
           opt.step()
 
           // selective printing
-          if (imgIdx %  (train.length / 10) == 0) {
+          if (imgIdx % (train.length / 10) == 0) {
             printf(s"Train epoch %d: [%d/%d (%.0f%%)]\\tAverage Loss: %.6f\\n", epoch, imgIdx, train.length, 100.0 * imgIdx /train.length, trainLoss/imgIdx)
             unchecked[Unit]("fflush(stdout)")
           }
@@ -94,7 +94,6 @@ object MnistCNN {
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
 
         loss_save(epoch) = trainLoss / train.length
-
       }
 
       val totalTime = dataTimer.getElapsedTime / 1e6f
