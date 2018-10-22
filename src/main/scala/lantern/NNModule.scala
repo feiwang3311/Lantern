@@ -81,12 +81,12 @@ trait NNModule extends TensorDsl {
     def apply(in1: TensorR, in2: TensorR): TensorR @diff = in1.dot_trans(weight1) + in2.dot_trans(weight2) + bias
   }
 
-  case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val useBiase: Boolean = true, val pad: Int = 0, val name: String = "conv2d") extends Module {
+  case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val useBias: Boolean = true, val pad: Int = 0, val name: String = "conv2d") extends Module {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
     val scale: Float = 1.0f / sqrt(inChannel * kernelSize.head * kernelSize.last).toFloat
     val kernel = TensorR(Tensor.rand(Seq(outChannel, inChannel, kernelSize.head, kernelSize.last), scale))
-    val bias = if (useBiase) Some(TensorR(Tensor.zeros(outChannel))) else None
+    val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
     def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, Seq(pad, pad, pad, pad))
   }
 
@@ -208,6 +208,7 @@ trait NNModule extends TensorDsl {
     def step() = module.forEachPairParameter(step_func)
     def show() = module.forEachNamedParameter{case (name, (tr, ot)) => tr.d.printHead(5, name)}
   }
+
   case class SGD(val module: Module, val learning_rate: Float, val gradClip: Float = 1.0f, val descent: Boolean = true) extends Optim {
     @virtualize
     def step_func = { case (tr, _) =>
@@ -229,6 +230,7 @@ trait NNModule extends TensorDsl {
       // tr.clear_grad()
     }
   }
+
   case class Adagrad(val module: Module, val learning_rate: Float, val gradClip: Float = 1.0f, val descent: Boolean = true) extends Optim {
     module.enrichParameter()
     @virtualize
@@ -253,5 +255,14 @@ trait NNModule extends TensorDsl {
       // tr.clear_grad()
     }
   }
+}
 
+// FIXME: Eliminate explicit `backend` definition if possible.
+// `TensorDsl(Cublas|Cudnn)` already explicitly define `backend`.
+// Without the definitions here, however, `LanternDriver(Cublas|Cudnn).backend` is null.
+trait NNModuleCublas extends NNModule with TensorDslCublas {
+  backend = BackendCublas()
+}
+trait NNModuleCudnn extends NNModule with TensorDslCudnn {
+  backend = BackendCudnn()
 }

@@ -19,13 +19,14 @@ import java.io.File;
 object MnistCNN {
 
   val root_dir = "src/out/NIPS18evaluation/"
-  val file_dir = "evaluationCNN/Lantern/Lantern.cpp"
+  // val file_dir = "evaluationCNN/Lantern/Lantern.cpp"
+  val file_dir = "evaluationCNN/Lantern/Lantern.cu"
 
-  val mnist = new DslDriverC[String, Unit] with NNModule {
+  // val mnist = new LanternDriverC[String, Unit] {
+  val mnist = new LanternDriverCudnn[String, Unit] {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
-
       Random.srand(Some(42))
       val dataTimer = Timer2()
       dataTimer.startTimer
@@ -69,18 +70,17 @@ object MnistCNN {
 
       val addr = getMallocAddr() // remember current allocation pointer here
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
-
         val trainTimer = Timer2()
         var imgIdx = var_new(0)
         var trainLoss = var_new(0.0f)
         printf("Start training epoch %d\\n", epoch + 1)
         trainTimer.startTimer
+
         train.foreachBatch(batch) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
           imgIdx += batch
           val inputR = TensorR(input, isInput=true)
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.scalar(0.0f))
           trainLoss += loss.data(0)
-
           opt.step()
 
           // selective printing
