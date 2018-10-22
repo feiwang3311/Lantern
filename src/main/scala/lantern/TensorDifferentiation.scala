@@ -2619,12 +2619,30 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
       Tensor(res, t.shape: _*)
     }
+
+    // Move the underlying data of this tensor to the CPU.
+    def moveToCPU(): Unit = {
+      generateRawComment("'moveToCPU' invocation.")
+      val res = BackendCPU().mallocArray[Float](t.scalarCount)
+      cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
+      unchecked[Unit](t.data, " = ", res)
+    }
+
+    // Move the underlying data of this tensor to the GPU.
+    def moveToGPU(): Unit = {
+      generateRawComment("'moveToGPU' invocation.")
+      val res = BackendGPU.mallocArray[Float](t.scalarCount)
+      cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
+      unchecked[Unit](t.data, " = ", res)
+    }
   }
   implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
 
   class TensorRTransferOps(t: TensorR) {
     def toCPU(): TensorR = new TensorR(t.x.toCPU(), t.d.toCPU())
     def toGPU(): TensorR = new TensorR(t.x.toGPU(), t.d.toGPU())
+    def moveToCPU(): Unit = t.x.moveToCPU(); t.d.moveToCPU()
+    def moveToGPU(): Unit = t.x.moveToGPU(); t.d.moveToGPU()
   }
   implicit def tensorRToTransferOps(t: TensorR) = new TensorRTransferOps(t)
 
