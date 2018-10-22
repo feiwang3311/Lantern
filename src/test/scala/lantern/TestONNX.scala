@@ -339,7 +339,7 @@ class ONNXTest extends LanternFunSuite {
               assert(kernel_shape.size == 2, "kernel_shape should be length 2")
 
               // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-              val (out, dummy) = input1.maxPool_k_batch(kernel_shape, strides, None)
+              val (out, dummy) = input1.maxPool2D_batch(kernel_shape, strides, None)
               intermediate_map_tensor += (outputs.head -> out)
             }
 
@@ -372,13 +372,11 @@ class ONNXTest extends LanternFunSuite {
               val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
               assert (attributes.size == 1, "number of attributes for dropout node should be 1")
               val ratio: Float = attributes.head.getF
-              // val is_test: Int = (if (attributes.last.name == "is_test") attributes.last.getI else attributes.head.getI).toInt
 
-              // TODO: (Fei Wang) warning - the is_test is not considered by the implementation
-              val (out1, out2) = input1.dropout(ratio)
+              val (out, helper, size) = input1.dropout(ratio)
               // val (out1, out2) = dropout_fun(input1, ratio, is_test)
-              intermediate_map_tensor += (outputs.head -> out1)
-              intermediate_map_tensor += (outputs.last -> out2)
+              intermediate_map_tensor += (outputs.head -> out)
+              // intermediate_map_tensor += (outputs.last -> Tensor(helper, input1.shape: _*))
             }
 
             def handle_global_average_pool(node: onnx_ml.NodeProto) = {

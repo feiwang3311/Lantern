@@ -84,10 +84,10 @@ trait TensorDsl extends DslOps with Diff {
       @virtualize
       def foreach(f: (Rep[Int], Tensor, Rep[Int]) => Unit) = {
         var off = var_new(0)
-        for (img <- 0 until length: Rep[Range]) {
+        for (index <- 0 until length: Rep[Range]) {
           val dataPtr = slice(data, off)
           val t = Tensor(dataPtr, dims : _*)
-          f(img, t, target(img))
+          f(index, t, target(index))
           off += t.scalarCount
         }
         assertC(off == dLength, "Data length doesn't match\\n")
@@ -96,11 +96,11 @@ trait TensorDsl extends DslOps with Diff {
       @virtualize
       def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
         var off = var_new(0)
-        for (img <- 0 until (length / batchSize): Rep[Range]) {
+        for (batchIndex <- 0 until (length / batchSize): Rep[Range]) {
           val dataPtr = slice(data, off)
           val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
-          val targets = slice(target, img * batchSize)
-          f(img, t, targets)
+          val targets = slice(target, batchIndex * batchSize)
+          f(batchIndex, t, targets)
           off += t.scalarCount
         }
       }
@@ -108,6 +108,7 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
+  def convSize(size: Int, kernelSize: Int, strideSize: Int, pad: Int) = (size + 2 * pad - kernelSize) / strideSize + 1
   def mmax(a: Int, b: Int) = if (a >= b) a else b
 
   @virtualize
@@ -281,6 +282,12 @@ trait TensorDsl extends DslOps with Diff {
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
 
+    def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]])
+    def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
+
+    def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
+    def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
+
     // Activation functions.
     def relu(x: Tensor): Tensor
     def tanh(x: Tensor): Tensor
@@ -290,12 +297,16 @@ trait TensorDsl extends DslOps with Diff {
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
 
+
     // Softmax functions.
     def softmax(x: Tensor): Tensor
     def logSoftmax(x: Tensor): Tensor
 
     def softmax_grad(input: TensorR, res: TensorR): Unit
     def logSoftmax_grad(input: TensorR, res: TensorR): Unit
+    // Loss functions.
+    def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
+    def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit
 
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
@@ -718,7 +729,7 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     override def relu(x: Tensor): Tensor = {
-      val res = backend.mallocArray[Float](x.scalarCount)
+      val res = mallocArray[Float](x.scalarCount)
       for (i <- 0 until x.scalarCount: Rep[Range]) {
         if (x.data(i) < 0.0f)
           res(i) = 0.0f
@@ -806,6 +817,158 @@ trait TensorDsl extends DslOps with Diff {
           input.d.data(offset) += res.d.data(offset) - Math.exp(res.x.data(offset)).toFloat * sum.data(batch)
           offset += 1
         }
+
+    override def maxPool2D_batch(input: Tensor, kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): (Tensor, Option[Rep[Array[Int]]]) = {
+      assert(input.rank == 4, "the input for maxPool (with batch) should have 4 dimensions")
+      assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")
+      pads match {
+        case None => ()
+        case Some(paddings) => assert(paddings.size == 4, "paddings should be size 4 for maxPool_k_batch")
+      }
+      val (strideRow :: strideCol :: _) = strides.toList
+      val (kernelRow :: kernelCol :: _) = kernels.toList
+      val (padUp :: padDown :: padLeft :: padRight :: Nil) = pads match {
+        case None => List(0, 0, 0, 0)
+        case Some(paddings) => paddings.toList
+      }
+      assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
+      assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
+      assert(input.shape(2) >= kernelRow && input.shape(3) >= kernelCol, "Image too small for maxPool_k: " + input.shape + "|" + (kernelRow, kernelCol))
+      assert(padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
+
+      val resWidth = convSize(input.shape(2) + padUp + padDown, kernelRow, strideRow)
+      val resHeight = convSize(input.shape(3) + padLeft + padRight, kernelCol, strideCol)
+      val res = Tensor.fill(Seq(input.shape(0), input.shape(1), resWidth, resHeight), scala.Float.MinValue)
+      val savedIdx = NewArray[Int](res.scalarCount)
+
+      for (i <- DataLoop(input.shape(0))) {
+        val ptrInput  = slice(input.data, i * input.shape.strides(0))
+        val ptrOutput = slice(res.data, i * res.shape.strides(0))
+        val ptrIdx    = slice(savedIdx, i * res.shape.strides(0))
+        val saveIdxBase = i * input.shape.strides(0)
+        maxPool_k_inplace(Tensor(ptrInput, input.shape.drop(1): _*),
+          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*), ptrIdx, saveIdxBase)
+      }
+      (res, Some(savedIdx))
+    }
+
+    def maxPool_k_inplace(input: Tensor, kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor, savedIdx: Rep[Array[Int]], saveIdxBase: Rep[Int]): Unit = {
+      val resWidth = res.shape(1)
+      val resHeight = res.shape(2)
+
+      if (padUp == 0) {
+        // looping for the output
+        val offout = var_new[Int](0)                              // offset of res, by channel
+        val offin  = var_new[Int](0)                              // offset of input, by channel
+        for (outPane <- DataLoop(res.shape(0))) {
+          val offout_1 = var_new[Int](offout)                     // offset of res, built on offout, by row
+          val offin_1  = var_new[Int](offin)                      // offset of input, built on offin, by row
+          for (outRow <- DataLoop(res.shape(1))) {
+            val offout_2 = var_new[Int](offout_1)                 // offset of res, built on offout_1, by col
+            val offin_2  = var_new[Int](offin_1)                  // offset of input, built on offin_1, by col
+            for (outCol <- DataLoop(res.shape(2))) {
+
+              // looping for the kernel
+              val this_index_1 = var_new[Int](offin_2)            // offset of this (input) by row of kernel size
+              for (dummy1 <- DataLoop(kernelRow)) {
+                val this_index_2 = var_new[Int](this_index_1)     // offset of this (input), built on this_index_1, by col of kernel size
+                for (dummy <- DataLoop(kernelCol)) {
+                  __ifThenElse ((input.data(this_index_2) > res.data(offout_2)), {
+                    res.data(offout_2) = input.data(this_index_2)
+                    savedIdx(offout_2) = this_index_2 + saveIdxBase
+                  }, ())
+                  this_index_2 += 1
+                }
+                this_index_1 += input.shape.strides(1)
+              }
+
+              offout_2 += 1
+              offin_2  += strideCol
+            }
+            offout_1 += res.shape.strides(1)
+            offin_1  += strideRow * input.shape.strides(1)
+          }
+          offout += res.shape.strides(0)
+          offin  += input.shape.strides(0)
+        }
+      } else {
+        // looping for the output
+        for (resPane <- DataLoop(res.shape(0))) {
+          for (resRow <- DataLoop(res.shape(1))) {
+            for (resCol <- DataLoop(res.shape(2))) {
+              val resOff = resPane * res.shape.strides(0) + resRow * res.shape.strides(1) + resCol
+              // looping for the kernel
+              for (kRow <- DataLoop(kernelRow)) {
+                for (kCol <- DataLoop(kernelCol)) {
+                  val inRow = resRow * strideRow - padUp + kRow
+                  val inCol = resCol * strideCol - padUp + kCol
+                  __ifThenElse ((inRow < 0 || inRow >= input.shape(1) || inCol < 0 || inCol >= input.shape(2)), (), {
+                    val inOff = resPane * input.shape.strides(0) + inRow * input.shape.strides(1) + inCol
+                    __ifThenElse ((input.data(inOff) > res.data(resOff)), {
+                      res.data(resOff) = input.data(inOff)
+                      savedIdx(resOff) = inOff
+                    }, ())
+                  })
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+      sidx match {
+        case None => ???
+        case Some(sidx) =>
+          for (i <- DataLoop(output.d.scalarCount)) {
+            input.d.data(sidx(i)) += output.d.data(i)
+          }
+      }
+    }
+
+    @virtualize
+    def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
+      assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
+
+      val res = backend.mallocArray[Float](input.scalarCount)
+      val mask = backend.mallocArray[Float](input.scalarCount)
+      val scale = 1.0f / (1.0f - prob)
+
+      for (i <- DataLoop(input.scalarCount)) {
+        if (Random.rand() > prob) {
+          res(i) = input.data(i) * scale
+          mask(i) = scale
+        } else {
+          res(i) = 0.0f
+          mask(i) = 0.0f
+        }
+      }
+      (Tensor(res, input.shape.seq : _*), mask, 0)
+    }
+
+    def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
+      input.d += Tensor(helper, input.x.shape: _*) * output.d  // TODO (Fei Wang): should optimized by fusing loops
+    }
+
+    override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
+      assert(x.rank == 2, "Input must be a 2-D tensor")
+
+      val batchSize = x.shape(0)
+      val res = mallocArray[Float](batchSize)
+      val offset = var_new(0)
+      for (batch <- DataLoop(batchSize)) {
+        res(batch) = -1.0f * x.data(offset + target(batch))
+        offset += x.shape.strides(0)
+      }
+      Tensor(res, batchSize)
+    }
+
+    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+      val offset = var_new(0)
+      for (batch <- DataLoop(input.x.shape(0))) {
+        input.d.data(offset + target(batch)) += -1.0f * res.d.data(batch)
+        offset += input.x.shape.strides(0)
       }
     }
   }
@@ -1115,9 +1278,11 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, this.shape(0))
     }
 
+    def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
+
     @virtualize
     def nllLoss(target: Rep[Int]) = {
-      assert(this.rank == 1, "input for nllLoss has to be 1d")
+      assert(this.rank == 1, "Input must be a 1-D tensor")
 
       // assertC(0 <= target && target < this.nbElem, "Incorrect target")
       Tensor.scalar(-1.0f * this.data(target))
@@ -1439,156 +1604,12 @@ trait TensorDsl extends DslOps with Diff {
       (res, savedIdx)
     }
 
-    @virtualize
-    def maxPool_k_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]): (Tensor, Rep[Array[Int]]) = {
-      assert(this.rank == 4, "the input for maxPool (with batch) should have 4 dimensions")
-      assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")
-      paddings match {
-        case None => ()
-        case Some(paddings) => assert(paddings.size == 4, "paddings should be size 4 for maxPool_k_batch")
-      }
-      val (strideRow :: strideCol :: _) = strides.toList
-      val (kernelRow :: kernelCol :: _) = kernels.toList
-      val (padUp :: padDown :: padLeft :: padRight :: Nil) = paddings match {
-        case None => List(0, 0, 0, 0)
-        case Some(paddings) => paddings.toList
-      }
-      assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
-      assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
-      assert(this.shape(2) >= kernelRow && this.shape(3) >= kernelCol, "Image too small for maxPool_k: " + this.shape + "|" + (kernelRow, kernelCol))
-      assert(padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
-
-      val resWidth = convSize(this.shape(2) + padUp + padDown, kernelRow, strideRow)
-      val resHeight = convSize(this.shape(3) + padLeft + padRight, kernelCol, strideCol)
-      val res = Tensor.fill(Seq(this.shape(0), this.shape(1), resWidth, resHeight), scala.Float.MinValue)
-      val savedIdx = NewArray[Int](res.scalarCount)
-
-      for (i <- DataLoop(this.shape(0))) {
-        val ptrInput  = slice(this.data, i * this.shape.strides(0))
-        val ptrOutput = slice(res.data, i * res.shape.strides(0))
-        val ptrIdx    = slice(savedIdx, i * res.shape.strides(0))
-        val saveIdxBase = i * this.shape.strides(0)
-        Tensor(ptrInput, this.shape.drop(1): _*).maxPool_k_inplace(
-          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*), ptrIdx, saveIdxBase)
-      }
-      (res, savedIdx)
+    def maxPool2D_batch(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
+      backend.maxPool2D_batch(this, kernels, strides, pads)
     }
 
-    @virtualize
-    def maxPool_k_inplace(kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor, savedIdx: Rep[Array[Int]], saveIdxBase: Rep[Int]): Unit = {
-      val resWidth = res.shape(1)
-      val resHeight = res.shape(2)
-
-      if (padUp == 0) {
-        // looping for the output
-        val offout = var_new[Int](0)                              // offset of res, by channel
-        val offin  = var_new[Int](0)                              // offset of input, by channel
-        for (outPane <- DataLoop(res.shape(0))) {
-          val offout_1 = var_new[Int](offout)                     // offset of res, built on offout, by row
-          val offin_1  = var_new[Int](offin)                      // offset of input, built on offin, by row
-          for (outRow <- DataLoop(res.shape(1))) {
-            val offout_2 = var_new[Int](offout_1)                 // offset of res, built on offout_1, by col
-            val offin_2  = var_new[Int](offin_1)                  // offset of input, built on offin_1, by col
-            for (outCol <- DataLoop(res.shape(2))) {
-
-              // looping for the kernel
-              val this_index_1 = var_new[Int](offin_2)            // offset of this (input) by row of kernel size
-              for (dummy1 <- DataLoop(kernelRow)) {
-                val this_index_2 = var_new[Int](this_index_1)     // offset of this (input), built on this_index_1, by col of kernel size
-                for (dummy <- DataLoop(kernelCol)) {
-                  if (this.data(this_index_2) > res.data(offout_2)) {
-                    res.data(offout_2) = this.data(this_index_2)
-                    savedIdx(offout_2) = this_index_2 + saveIdxBase
-                  } else ()
-                  this_index_2 += 1
-                }
-                this_index_1 += this.shape.strides(1)
-              }
-
-              offout_2 += 1
-              offin_2  += strideCol
-            }
-            offout_1 += res.shape.strides(1)
-            offin_1  += strideRow * this.shape.strides(1)
-          }
-          offout += res.shape.strides(0)
-          offin  += this.shape.strides(0)
-        }
-      } else {
-        // looping for the output
-        for (resPane <- DataLoop(res.shape(0))) {
-          for (resRow <- DataLoop(res.shape(1))) {
-            for (resCol <- DataLoop(res.shape(2))) {
-              val resOff = resPane * res.shape.strides(0) + resRow * res.shape.strides(1) + resCol
-              // looping for the kernel
-              for (kRow <- DataLoop(kernelRow)) {
-                for (kCol <- DataLoop(kernelCol)) {
-                  val inRow = resRow * strideRow - padUp + kRow
-                  val inCol = resCol * strideCol - padUp + kCol
-                  if (inRow < 0 || inRow >= this.shape(1) || inCol < 0 || inCol >= this.shape(2)) ()
-                  else {
-                    val inOff = resPane * this.shape.strides(0) + inRow * this.shape.strides(1) + inCol
-                    if (this.data(inOff) > res.data(resOff)) {
-                      res.data(resOff) = this.data(inOff)
-                      savedIdx(resOff) = inOff
-                    } else ()
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    @virtualize
-    def maxPool_k(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]) = {
-      assert(this.rank == 3, "the input for maxPool should have 3 dimensions")
-      assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2 for maxPool_k")
-      paddings match {
-        case None => ()
-        case Some(paddings) => assert(paddings.size == 4, "paddings should be size 4 for maxPool_k")
-      }
-      val (strideRow :: strideCol :: Nil) = strides.toList
-      val (kernelRow :: kernelCol :: Nil) = kernels.toList
-      val (padUp :: padDown :: padLeft :: padRight :: Nil) = paddings match {
-        case None => List(0, 0, 0, 0)
-        case Some(paddings) => paddings.toList
-      }
-      assert (strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
-      assert (strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
-      assert (this.shape(1) >= kernelRow && this.shape(2) >= kernelCol, "Image too small for maxpool_k")
-      assert (padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
-
-      val resWidth = convSize(this.shape(1) + padUp + padDown, kernelRow, strideRow)
-      val resHeight = convSize(this.shape(2) + padLeft + padRight, kernelCol, strideCol)
-      val res = Tensor.fill(Seq(this.shape(0), resWidth, resHeight), scala.Float.MinValue)
-      val savedIdx = NewArray[Int](res.scalarCount)
-
-      this.maxPool_k_inplace(kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, res, savedIdx, 0)
-      (res, savedIdx)
-    }
-
-    @virtualize
     def dropout(prob: Float = 0.5f) = {
-      assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
-
-      val res = backend.mallocArray[Float](this.scalarCount)
-      val mask = backend.mallocArray[Float](this.scalarCount)
-
-      val scale = 1.0f / (1.0f - prob)
-
-      for (i <- DataLoop(this.scalarCount)) {
-        if (Random.rand() > prob) {
-          res(i) = this.data(i) * scale
-          mask(i) = scale
-        } else {
-          res(i) = 0.0f
-          mask(i) = 0.0f
-        }
-      }
-
-      (Tensor(res, this.shape.seq : _*), Tensor(mask, this.shape.seq : _*))
+      backend.dropout(this, prob)
     }
 
     @virtualize
@@ -2161,13 +2182,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.nllLossB(target)); k(y)
-
-      // back propagate
-      val offset = var_new(0)
-      for (batch <- DataLoop(this.x.shape(0))) {
-        this.d.data(offset + target(batch)) += -1.0f * y.d.data(batch)
-        offset += this.x.shape.strides(0)
-      }
+      backend.nllLoss_grad(this, y, target)
     }
 
     def nllLoss(target: Rep[Int]): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2222,8 +2237,8 @@ trait TensorDsl extends DslOps with Diff {
       assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
       assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
       val (output, finputOption) = bias match {
-        case Some(bias) => x.conv2D_batch(kernel.x, Some(bias.x), strides, pads)
-        case None =>       x.conv2D_batch(kernel.x, None, strides, pads)
+        case Some(bias) => backend.conv2D_batch(x, kernel.x, Some(bias.x), strides, pads)
+        case None =>       backend.conv2D_batch(x, kernel.x, None, strides, pads)
       }
       val y = TensorR(output); k(y)
 
@@ -2236,25 +2251,14 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize  // maxpool with kernel size potentially different from strides, and works with batch dimension! can have optional paddings
     def maxPoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val (y, sidx) = this.x.maxPool_k_batch(kernels, strides, pads)
+      val (y, sidx) = backend.maxPool2D_batch(x, kernels, strides, pads)
       val ty = TensorR(y)
       k(ty)
 
       // back propagate
-      for (i <- DataLoop(y.scalarCount)) {
-        this.d.data(sidx(i)) = ty.d.data(i)
-      }
-    }
-
-    @virtualize  // maxpool with kernel size potentially different from strides
-    def maxPoolK(kernels: Seq[Int], strides: Seq[Int]): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val (y, sidx) = this.x.maxPool_k(kernels, strides, None)
-      val ty = TensorR(y)
-      k(ty)
-
-      // back propagate
-      for (i <- DataLoop(y.scalarCount)) {
-        this.d.data(sidx(i)) += ty.d.data(i)
+      pads match {
+        case None => backend.maxPool2D_batch_grad(this, ty, sidx, kernels, strides, Seq(0, 0, 0, 0))
+        case Some(pads) => backend.maxPool2D_batch_grad(this, ty, sidx, kernels, strides, pads)
       }
     }
 
@@ -2327,12 +2331,10 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def dropout(prob: Float): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val (y, noise) = this.x.dropout(prob)
-      val ty = TensorR(y)
-
-      k(ty)
-
-      this.d += noise * ty.d
+      val (y, helper, size) = backend.dropout(this.x, prob)
+      val ty = TensorR(y); k(ty)
+      // back prop
+      backend.dropout_grad(this, ty, prob, helper, size)
     }
 
     def print(msg: String = "", derivative: Boolean = false): Unit = {
@@ -2664,12 +2666,30 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
       Tensor(res, t.shape: _*)
     }
+
+    // Move the underlying data of this tensor to the CPU.
+    def moveToCPU(): Unit = {
+      generateRawComment("'moveToCPU' invocation.")
+      val res = BackendCPU().mallocArray[Float](t.scalarCount)
+      cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
+      unchecked[Unit](t.data, " = ", res)
+    }
+
+    // Move the underlying data of this tensor to the GPU.
+    def moveToGPU(): Unit = {
+      generateRawComment("'moveToGPU' invocation.")
+      val res = BackendGPU.mallocArray[Float](t.scalarCount)
+      cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
+      unchecked[Unit](t.data, " = ", res)
+    }
   }
   implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
 
   class TensorRTransferOps(t: TensorR) {
     def toCPU(): TensorR = new TensorR(t.x.toCPU(), t.d.toCPU())
     def toGPU(): TensorR = new TensorR(t.x.toGPU(), t.d.toGPU())
+    def moveToCPU(): Unit = t.x.moveToCPU(); t.d.moveToCPU()
+    def moveToGPU(): Unit = t.x.moveToGPU(); t.d.moveToGPU()
   }
   implicit def tensorRToTransferOps(t: TensorR) = new TensorRTransferOps(t)
 
@@ -2893,6 +2913,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = ???
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
+    override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = ???
+    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
+    override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
+    override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
     override def relu(x: Tensor): Tensor = ???
     override def tanh(x: Tensor): Tensor = ???
@@ -2905,6 +2929,20 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def logSoftmax(x: Tensor): Tensor = ???
     override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
     override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = ???
+    // TODO: Implement using custom GPU kernel generation.
+    // All that's really necessary is GPU array indexing.
+    // Currently, this function calls the CPU implementation to unblock progress.
+    override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
+      assert(x.rank == 2, "Input must be a 2-D tensor")
+      BackendCPU().nllLoss(x.toCPU(), target).toGPU()
+    }
+
+    // TODO: Implement using custom GPU kernel generation.
+    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+      input.moveToCPU()
+      BackendCPU().nllLoss_grad(input, res, target)
+      input.moveToGPU()
+    }
   }
 
   object BackendCublas {
@@ -3211,6 +3249,191 @@ trait TensorDslCudnn extends TensorDslCublas {
           cudnnConvolutionBackwardBias(bias.d, res.d)
       }
     }
+
+    override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
+      assert(input.rank == 4, "maxPool2D input must have rank 4")
+      val mode = "CUDNN_POOLING_MAX"
+      // val mode = "CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING"
+      // val mode = "CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING"
+      // val mode = "CUDNN_POOLING_MAX_DETERMINISTIC"
+      val nanOpt = "CUDNN_NOT_PROPAGATE_NAN"
+      // val nanOpt = "CUDNN_PROPAGATE_NAN"
+      val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
+      val (verticalPadding, horizontalPadding) = pads match {
+        case None => (0, 0)
+        case Some(pads) => (pads(0), pads(2))
+      }
+      val (verticalStride :: horizontalStride :: Nil) = strides.take(2).toList
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      val (outputHeight, outputWidth) = pads match {
+        case None => (convSize(input.shape(2), kernel(0), strides(0)), convSize(input.shape(3), kernel(1), strides(1)))
+        case Some(pads) => (convSize(input.shape(2), kernel(0), strides(0), pads(0)), convSize(input.shape(3), kernel(1), strides(1), pads(2)))
+      }
+      val output = Tensor.zeros(input.shape(0), input.shape(1), outputHeight, outputWidth)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${output.shape(0)}, ${output.shape(1)}, ${output.shape(2)}, ${output.shape(3)}));
+          |
+          |cudnnPoolingDescriptor_t poolingDesc;
+          |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
+          |CUDNN_CALL(cudnnSetPooling2dDescriptor(
+          |    poolingDesc, ${mode}, ${nanOpt},
+          |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
+          |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
+          |));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnPoolingForward(\n" +
+          "    cudnnHandle, \n" +
+          "    poolingDesc, \n" +
+          "    ", one, ", in_desc, ", input.data, ", ", zero, ", out_desc, ", output.data, "));\n" +
+          "}"): _*)
+      (output, None)
+    }
+
+    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+      val mode = "CUDNN_POOLING_MAX"
+      val nanOpt = "CUDNN_NOT_PROPAGATE_NAN"
+      val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
+      val (verticalPadding, horizontalPadding) = (pads(0), pads(2))
+      val (verticalStride :: horizontalStride :: Nil) = strides.take(2).toList
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${output.x.shape(0)}, ${output.x.shape(1)}, ${output.x.shape(2)}, ${output.x.shape(3)}));
+          |
+          |cudnnPoolingDescriptor_t poolingDesc;
+          |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
+          |CUDNN_CALL(cudnnSetPooling2dDescriptor(
+          |    poolingDesc, ${mode}, ${nanOpt},
+          |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
+          |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
+          |));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnPoolingBackward(\n" +
+          "    cudnnHandle, \n" +
+          "    poolingDesc, \n" +
+          "    ", one, ", out_desc, ", output.x.data, ", out_desc, ", output.d.data, ", in_desc, ", input.x.data,
+          "  , ", zero, ", in_desc, ", input.d.data, "));\n" +
+          "}"): _*)
+    }
+
+    override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
+      assert(input.rank == 4, "dropout input must have rank 4")
+      val output = Tensor.zeros_like(input)
+      val reserveSpace: Rep[Array[Float]] = unchecked[Array[Float]]("(float*)NULL")
+      val sizeInBytes: Rep[Int] = unchecked[Int]("0")
+      unchecked[Unit](
+        s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${output.shape(0)}, ${output.shape(1)}, ${output.shape(2)}, ${output.shape(3)}));
+          |
+          |size_t stateSizeInBytes;
+          |CUDNN_CALL(cudnnDropoutGetStatesSize(
+          |    cudnnHandle, &stateSizeInBytes
+          |));
+          |void* state; CUDA_CALL(cudaMalloc(&state, stateSizeInBytes));
+          |
+          |size_t sizeInBytes;
+          |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
+          |    in_desc, &sizeInBytes
+          |));
+          |void* reserveSpace; CUDA_CALL(cudaMalloc(&reserveSpace, sizeInBytes));
+          |
+          |""".stripMargin,
+          reserveSpace, " = (float*)reserveSpace;\n",
+          sizeInBytes, " = (int)sizeInBytes;\n",
+        s"""
+          |cudnnDropoutDescriptor_t dropoutDesc;
+          |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
+          |CUDNN_CALL(cudnnSetDropoutDescriptor(
+          |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
+          |));
+          |""".stripMargin,
+
+          "CUDNN_CALL(cudnnDropoutForward(\n" +
+          "    cudnnHandle,\n" +
+          "    dropoutDesc,\n" +
+          "    in_desc, ", input.data, ", out_desc, ", output.data, ", ", "reserveSpace, sizeInBytes));\n" +
+          "}")
+      (output, reserveSpace, sizeInBytes)
+    }
+
+    override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
+      unchecked[Unit](
+        s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${output.x.shape(0)}, ${output.x.shape(1)}, ${output.x.shape(2)}, ${output.x.shape(3)}));
+          |
+          |size_t stateSizeInBytes;
+          |CUDNN_CALL(cudnnDropoutGetStatesSize(
+          |    cudnnHandle, &stateSizeInBytes
+          |));
+          |void* state; CUDA_CALL(cudaMalloc(&state, stateSizeInBytes));
+          |
+          |size_t sizeInBytes;
+          |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
+          |    in_desc, &sizeInBytes
+          |));
+          |void* reserveSpace; CUDA_CALL(cudaMalloc(&reserveSpace, sizeInBytes));
+          |
+          |cudnnDropoutDescriptor_t dropoutDesc;
+          |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
+          |CUDNN_CALL(cudnnSetDropoutDescriptor(
+          |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
+          |));
+          |""".stripMargin,
+          "CUDNN_CALL(cudnnDropoutBackward(\n" +
+          "    cudnnHandle,\n" +
+          "    dropoutDesc,\n" +
+          "    out_desc, ", output.d.data, ", in_desc, ", input.d.data, ", (void*)", helper, ", (size_t)", size, "));\n" +
+          "}")
+      }
 
     object Activation extends Enumeration {
       val Sigmoid = Value("CUDNN_ACTIVATION_SIGMOID")

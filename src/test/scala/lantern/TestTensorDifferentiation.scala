@@ -123,7 +123,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   test("softmax") {
     val softmax = new LanternDriverC[String, Unit] {
       override val fileName = "lantern-cpu-softmax"
-
+      
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
@@ -166,6 +166,30 @@ class AdLMSVectorTest extends LanternFunSuite {
       }
     }
     runTest(logSoftmax)
+  }
+
+  test("nll-loss") {
+    val nllLoss = new LanternDriverC[String, Unit] {
+      override val fileName = "lantern-cpu-nll-loss"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
+        val target: Rep[Array[Int]] = Array(1, 0)
+        val result = input.logSoftmaxB().nllLossB(target)
+        val grad = gradR(x => x.logSoftmaxB().nllLossB(target))(input)
+
+        result.print()
+        grad.print()
+        val expectedResult = Tensor.fromData(Seq(2), 1.4076058865f, 2.4076061249f)
+        val expectedGrad = Tensor.fromData(Seq(2, 3),
+          0.0900305808f, -0.7552714944f, 0.6652410030f,
+          -0.9099694490f, 0.2447284311f, 0.6652408242f)
+        Tensor.assertEqual(expectedResult, result)
+        Tensor.assertEqual(expectedGrad, grad)
+      }
+    }
+    runTest(nllLoss)
   }
 
   test("array2") {
@@ -922,12 +946,12 @@ class AdLMSVectorTest extends LanternFunSuite {
         val iCol = 20
         val input = Tensor.rand(iPane, iRow, iCol)
 
-        val (resAll, idxAll) = input.dropout(0.0f)
+        val (resAll, helper, size) = input.dropout(0.0f)
         // val (resNone, idxNone) = input.dropout(1.0f)
 
         Tensor.assertEqual(resAll, input, "DROPOUT 1")
         // Tensor.assertEqual(resNone, Tensor.zeros_like(input), "DROPOUT 2")
-
+        val idxAll = Tensor(helper, input.shape: _*)
         for (i <- 0 until input.scalarCount: Rep[Range]) {
           assertC(idxAll.data(i) == 1.0f, "idxAll incorrect %.3f != 1\\n", idxAll.data(i))
           // assertC(idxNone.data(i) == 0.0f, "idxNone incorrect %.3f != 0\\n", idxNone.data(i))

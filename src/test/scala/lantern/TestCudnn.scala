@@ -218,7 +218,7 @@ class TestCudnn extends LanternFunSuite {
   testGPU("log-softmax") {
     val logSoftmax = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-log-softmax"
-
+      
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
@@ -238,5 +238,110 @@ class TestCudnn extends LanternFunSuite {
       }
     }
     runTest(logSoftmax)
+  }
+
+  testGPU("maxPool2D_batch") {
+    val maxPool2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-maxpool"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9)
+        val kernel = Seq(2,2)
+        val strides = Seq(1,1)
+        val (output, _) = input.maxPool2D_batch(kernel, strides, None)
+
+        backend = BackendCPU()
+        val expect_output = Tensor.fromData(Seq(1,1,2,2), 5, 6, 8, 9)
+        Tensor.assertEqual(expect_output, output.toCPU(), "expect and output are")
+      }
+    }
+    runTest(maxPool2D)
+  }
+
+  testGPU("maxPool2D_batch_grad") {
+    val maxPool2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-maxpool-grad"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = TensorR(Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9))
+        val kernel = Seq(2,2)
+        val strides = Seq(1,1)
+        def lossFun(dummy: TensorR) = {
+          input.maxPoolBK(kernel, strides, None)
+        }
+        gradR(lossFun)(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expect_input_grad = Tensor.fromData(Seq(1,1,3,3), 0,0,0,0,1,1,0,1,1)
+        Tensor.assertEqual(expect_input_grad, input.d.toCPU(), "expect and output are")
+      }
+    }
+    runTest(maxPool2D)
+  }
+
+  testGPU("dropout_batch") {
+    val dropout = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-dropout"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9)
+        val prob = 0.0f
+        val (output, _, _) = input.dropout(prob)
+
+        backend = BackendCPU()
+        Tensor.assertEqual(input.toCPU(), output.toCPU(), "expect and output are")
+      }
+    }
+    runTest(dropout)
+  }
+
+  testGPU("dropout_batch_grad") {
+    val dropout = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-dropout-grad"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = TensorR(Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9))
+        val prob = 0.0f
+        def lossFun(dummy: TensorR) = {
+          input.dropout(prob)
+        }
+        gradR(lossFun)(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expect_input_grad = Tensor.fromData(Seq(1,1,3,3), 1,1,1,1,1,1,1,1,1)
+        Tensor.assertEqual(expect_input_grad, input.d.toCPU(), "expect and output are")
+      }
+    }
+    runTest(dropout)
+  }
+
+
+  testGPU("nll-loss") {
+    val nllLoss = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-nll-loss"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
+        val target: Rep[Array[Int]] = Array(1, 0)
+        val result = input.logSoftmaxB().nllLossB(target)
+        val grad = gradR(x => x.logSoftmaxB().nllLossB(target))(input)
+
+        backend = BackendCPU()
+        result.toCPU().print()
+        grad.toCPU().print()
+        val expectedResult = Tensor.fromData(Seq(2), 1.4076058865f, 2.4076061249f)
+        val expectedGrad = Tensor.fromData(Seq(2, 3),
+          0.0900305808f, -0.7552714944f, 0.6652410030f,
+          -0.9099694490f, 0.2447284311f, 0.6652408242f)
+        Tensor.assertEqual(expectedResult, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(nllLoss)
   }
 }
