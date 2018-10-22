@@ -297,6 +297,10 @@ trait TensorDsl extends DslOps with Diff {
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
 
+    // Loss functions.
+    def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
+    def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit
+
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -878,6 +882,26 @@ trait TensorDsl extends DslOps with Diff {
       input.d += Tensor(helper, input.x.shape: _*) * output.d  // TODO (Fei Wang): should optimized by fusing loops
     }
 
+    override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
+      assert(x.rank == 2, "Input must be a 2-D tensor")
+
+      val batchSize = x.shape(0)
+      val res = mallocArray[Float](batchSize)
+      val offset = var_new(0)
+      for (batch <- DataLoop(batchSize)) {
+        res(batch) = -1.0f * x.data(offset + target(batch))
+        offset += x.shape.strides(0)
+      }
+      Tensor(res, batchSize)
+    }
+
+    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+      val offset = var_new(0)
+      for (batch <- DataLoop(input.x.shape(0))) {
+        input.d.data(offset + target(batch)) += -1.0f * res.d.data(batch)
+        offset += input.x.shape.strides(0)
+      }
+    }
   }
 
   object BackendCPU {
@@ -1215,22 +1239,11 @@ trait TensorDsl extends DslOps with Diff {
       nor_exp / nor_exp.sum()
     }
 
-    @virtualize
-    def nllLossB(target: Rep[Array[Int]]) = {
-      assert(this.rank == 2, "For nllLossB, input should be 2D and target should be 1D")
-
-      val res = backend.mallocArray[Float](this.shape(0))
-      val offset = var_new(0)
-      for (batch <- DataLoop(this.shape(0))) {
-        res(batch) = -1.0f * this.data(offset + target(batch))
-        offset += this.shape.strides(0)
-      }
-      Tensor(res, this.shape(0))
-    }
+    def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
 
     @virtualize
     def nllLoss(target: Rep[Int]) = {
-      assert(this.rank == 1, "input for nllLoss has to be 1d")
+      assert(this.rank == 1, "Input must be a 1-D tensor")
 
       // assertC(0 <= target && target < this.nbElem, "Incorrect target")
       Tensor.scalar(-1.0f * this.data(target))
@@ -2129,13 +2142,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.nllLossB(target)); k(y)
-
-      // back propagate
-      val offset = var_new(0)
-      for (batch <- DataLoop(this.x.shape(0))) {
-        this.d.data(offset + target(batch)) += -1.0f * y.d.data(batch)
-        offset += this.x.shape.strides(0)
-      }
+      backend.nllLoss_grad(this, y, target)
     }
 
     def nllLoss(target: Rep[Int]): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2878,6 +2885,20 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def tanh_grad(input: TensorR, res: TensorR): Unit = ???
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
 
+    // TODO: Implement using custom GPU kernel generation.
+    // All that's really necessary is GPU array indexing.
+    // Currently, this function calls the CPU implementation to unblock progress.
+    override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
+      assert(x.rank == 2, "Input must be a 2-D tensor")
+      BackendCPU().nllLoss(x.toCPU(), target).toGPU()
+    }
+
+    // TODO: Implement using custom GPU kernel generation.
+    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+      input.moveToCPU()
+      BackendCPU().nllLoss_grad(input, res, target)
+      input.moveToGPU()
+    }
   }
 
   object BackendCublas {

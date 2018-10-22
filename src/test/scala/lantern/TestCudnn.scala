@@ -268,4 +268,30 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(dropout)
   }
+
+
+  testGPU("nll-loss") {
+    val nllLoss = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-nll-loss"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
+        val target: Rep[Array[Int]] = Array(1, 0)
+        val result = input.logSoftmaxB().nllLossB(target)
+        val grad = gradR(x => x.logSoftmaxB().nllLossB(target))(input)
+
+        backend = BackendCPU()
+        result.toCPU().print()
+        grad.toCPU().print()
+        val expectedResult = Tensor.fromData(Seq(2), 1.4076058865f, 2.4076061249f)
+        val expectedGrad = Tensor.fromData(Seq(2, 3),
+          0.0900305808f, -0.7552714944f, 0.6652410030f,
+          -0.9099694490f, 0.2447284311f, 0.6652408242f)
+        Tensor.assertEqual(expectedResult, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(nllLoss)
+  }
 }
