@@ -317,7 +317,7 @@ class AdLMSTest extends FunSuite {
   }
 
 
-  test("tranverse_array3") {
+  test("traverse_array3") {
     val gr10 = new DslDriverScala[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
@@ -343,7 +343,7 @@ class AdLMSTest extends FunSuite {
     }
   }
 
-  test("tranverse_array4") {
+  test("traverse_array4") {
     val gr11 = new DslDriverScala[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
@@ -385,7 +385,7 @@ class AdLMSTest extends FunSuite {
     System.out.println(gr112.code)
   }*/
 
-  test("tranverse_array5") {
+  test("traverse_array5") {
     val gr11 = new DslDriverScala[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
@@ -425,7 +425,7 @@ class AdLMSTest extends FunSuite {
   }
   **/
 
-  test("tranverse_array6") {
+  test("traverse_array6") {
     val gr11 = new DslDriverC[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val array = Array(4.0, 3.0, 1.5, 2.0)

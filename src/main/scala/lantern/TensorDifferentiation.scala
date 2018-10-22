@@ -84,10 +84,10 @@ trait TensorDsl extends DslOps with Diff {
       @virtualize
       def foreach(f: (Rep[Int], Tensor, Rep[Int]) => Unit) = {
         var off = var_new(0)
-        for (img <- 0 until length: Rep[Range]) {
+        for (index <- 0 until length: Rep[Range]) {
           val dataPtr = slice(data, off)
           val t = Tensor(dataPtr, dims : _*)
-          f(img, t, target(img))
+          f(index, t, target(index))
           off += t.scalarCount
         }
         assertC(off == dLength, "Data length doesn't match\\n")
@@ -96,11 +96,11 @@ trait TensorDsl extends DslOps with Diff {
       @virtualize
       def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
         var off = var_new(0)
-        for (img <- 0 until (length / batchSize): Rep[Range]) {
+        for (batchIndex <- 0 until (length / batchSize): Rep[Range]) {
           val dataPtr = slice(data, off)
           val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
-          val targets = slice(target, img * batchSize)
-          f(img, t, targets)
+          val targets = slice(target, batchIndex * batchSize)
+          f(batchIndex, t, targets)
           off += t.scalarCount
         }
       }
@@ -282,6 +282,12 @@ trait TensorDsl extends DslOps with Diff {
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
 
+    def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]])
+    def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
+
+    def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
+    def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
+
     // Activation functions.
     def relu(x: Tensor): Tensor
     def tanh(x: Tensor): Tensor
@@ -290,12 +296,7 @@ trait TensorDsl extends DslOps with Diff {
     def relu_grad(input: TensorR, res: TensorR): Unit
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
-    def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]])
 
-    def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
-
-    def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
-    def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -717,7 +718,7 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     override def relu(x: Tensor): Tensor = {
-      val res = backend.mallocArray[Float](x.scalarCount)
+      val res = mallocArray[Float](x.scalarCount)
       for (i <- 0 until x.scalarCount: Rep[Range]) {
         if (x.data(i) < 0.0f)
           res(i) = 0.0f
@@ -2847,16 +2848,17 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = ???
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
+    override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = ???
+    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
+    override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
+    override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
+
     override def relu(x: Tensor): Tensor = ???
     override def tanh(x: Tensor): Tensor = ???
     override def sigmoid(x: Tensor): Tensor = ???
     override def relu_grad(input: TensorR, res: TensorR): Unit = ???
     override def tanh_grad(input: TensorR, res: TensorR): Unit = ???
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
-    override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = ???
-    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
-    override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
-    override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
   }
 
@@ -3165,101 +3167,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
-    object Activation extends Enumeration {
-      val Sigmoid = Value("CUDNN_ACTIVATION_SIGMOID")
-      val Relu = Value("CUDNN_ACTIVATION_RELU")
-      val Tanh = Value("CUDNN_ACTIVATION_TANH")
-      val ClippedRelu = Value("CUDNN_ACTIVATION_CLIPPED_RELU")
-      val Elu = Value("CUDNN_ACTIVATION_ELU")
-    }
-
-    def cudnnActivationForward(x: Tensor, activation: Activation.Value): Tensor = {
-      assert(x.rank == 4, "Currently, activation functions only support tensors of rank 4")
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t x_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
-          |
-          |cudnnActivationDescriptor_t act_desc;
-          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
-          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
-          |                                        /*mode=*/ ${activation.toString},
-          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
-          |                                        /*relu_coef=*/ 0));
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnActivationForward(\n" +
-          "    cudnnHandle, act_desc,\n" +
-          "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
-          "}"): _*
-      )
-      res
-    }
-
-    def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value): Unit = {
-      assert(input.x.rank == 4, "Currently, activation functions only support tensors of rank 4")
-      assert(input.x.shape == res.x.shape,
-        "Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
-      assert(input.d.shape == res.d.shape,
-        s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t x_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
-          |
-          |cudnnActivationDescriptor_t act_desc;
-          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
-          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
-          |                                        /*mode=*/ ${activation.toString},
-          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
-          |                                        /*relu_coef=*/ 0));
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnActivationBackward(\n" +
-          "    cudnnHandle, act_desc,\n" +
-          "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ", x_desc, ", input.x.data, ",\n",
-          "    ", one, ", x_desc, ", input.d.data, "));\n" +
-          "}"): _*
-      )
-    }
-
-    override def relu(x: Tensor): Tensor = {
-      cudnnActivationForward(x, Activation.Relu)
-    }
-    override def relu_grad(input: TensorR, res: TensorR): Unit = {
-      cudnnActivationBackward(input, res, Activation.Relu)
-    }
-
-    override def tanh(x: Tensor): Tensor = {
-      cudnnActivationForward(x, Activation.Tanh)
-    }
-    override def tanh_grad(input: TensorR, res: TensorR): Unit = {
-      cudnnActivationBackward(input, res, Activation.Tanh)
-    }
-
-    override def sigmoid(x: Tensor): Tensor = {
-      cudnnActivationForward(x, Activation.Sigmoid)
-    }
-    override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
-      cudnnActivationBackward(input, res, Activation.Sigmoid)
-    }
-
     override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
-
       assert(input.rank == 4, "maxPool2D input must have rank 4")
       val mode = "CUDNN_POOLING_MAX"
       // val mode = "CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING"
@@ -3385,10 +3293,8 @@ trait TensorDslCudnn extends TensorDslCublas {
           |void* reserveSpace; CUDA_CALL(cudaMalloc(&reserveSpace, sizeInBytes));
           |
           |""".stripMargin,
-
           reserveSpace, " = (float*)reserveSpace;\n",
           sizeInBytes, " = (int)sizeInBytes;\n",
-
         s"""
           |cudnnDropoutDescriptor_t dropoutDesc;
           |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
@@ -3398,15 +3304,14 @@ trait TensorDslCudnn extends TensorDslCublas {
           |""".stripMargin,
 
           "CUDNN_CALL(cudnnDropoutForward(\n" +
-          "    cudnnHandle, \n" +
-          "    dropoutDesc, \n" +
+          "    cudnnHandle,\n" +
+          "    dropoutDesc,\n" +
           "    in_desc, ", input.data, ", out_desc, ", output.data, ", ", "reserveSpace, sizeInBytes));\n" +
           "}")
       (output, reserveSpace, sizeInBytes)
     }
 
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
-
       unchecked[Unit](
         s"""
           |{
@@ -3440,12 +3345,104 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
           |));
           |""".stripMargin,
-
           "CUDNN_CALL(cudnnDropoutBackward(\n" +
-          "    cudnnHandle, \n" +
-          "    dropoutDesc, \n" +
+          "    cudnnHandle,\n" +
+          "    dropoutDesc,\n" +
           "    out_desc, ", output.d.data, ", in_desc, ", input.d.data, ", (void*)", helper, ", (size_t)", size, "));\n" +
           "}")
+      }
+
+    object Activation extends Enumeration {
+      val Sigmoid = Value("CUDNN_ACTIVATION_SIGMOID")
+      val Relu = Value("CUDNN_ACTIVATION_RELU")
+      val Tanh = Value("CUDNN_ACTIVATION_TANH")
+      val ClippedRelu = Value("CUDNN_ACTIVATION_CLIPPED_RELU")
+      val Elu = Value("CUDNN_ACTIVATION_ELU")
+    }
+
+    def cudnnActivationForward(x: Tensor, activation: Activation.Value): Tensor = {
+      assert(x.rank == 4, "Currently, activation functions only support tensors of rank 4")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |
+          |cudnnActivationDescriptor_t act_desc;
+          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
+          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
+          |                                        /*mode=*/ ${activation.toString},
+          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
+          |                                        /*relu_coef=*/ 0));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnActivationForward(\n" +
+          "    cudnnHandle, act_desc,\n" +
+          "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+      res
+    }
+
+    def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value): Unit = {
+      assert(input.x.rank == 4, "Currently, activation functions only support tensors of rank 4")
+      assert(input.x.shape == res.x.shape,
+        "Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
+      assert(input.d.shape == res.d.shape,
+        s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |
+          |cudnnActivationDescriptor_t act_desc;
+          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
+          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
+          |                                        /*mode=*/ ${activation.toString},
+          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
+          |                                        /*relu_coef=*/ 0));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnActivationBackward(\n" +
+          "    cudnnHandle, act_desc,\n" +
+          "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ", x_desc, ", input.x.data, ",\n",
+          "    ", one, ", x_desc, ", input.d.data, "));\n" +
+          "}"): _*
+      )
+    }
+
+    override def relu(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Relu)
+    }
+    override def relu_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Relu)
+    }
+
+    override def tanh(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Tanh)
+    }
+    override def tanh_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Tanh)
+    }
+
+    override def sigmoid(x: Tensor): Tensor = {
+      cudnnActivationForward(x, Activation.Sigmoid)
+    }
+    override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnActivationBackward(input, res, Activation.Sigmoid)
     }
   }
 
