@@ -298,7 +298,6 @@ trait TensorDsl extends DslOps with Diff {
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
 
-
     // Softmax functions.
     def softmax(x: Tensor): Tensor
     def logSoftmax(x: Tensor): Tensor
@@ -408,15 +407,6 @@ trait TensorDsl extends DslOps with Diff {
         "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
         dim1, ",", dim3, ",", dim2, ",", 1, ",",
         x.data, ",", dim2, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
-      // for (i <- DataLoop(dim1)) {
-      //   for (j <- DataLoop(dim3)) {
-      //     val value = var_new(0.0f)
-      //     for (k <- DataLoop(dim2)) {
-      //       value += x.data(i * dim2 + k) * y.data(k * dim3 + j)
-      //     }
-      //     res(i * dim3 + j) = readVar(value)
-      //   }
-      // }
       Tensor(res, dim1, dim3)
     }
 
@@ -2025,6 +2015,7 @@ trait TensorDsl extends DslOps with Diff {
             this.x.data, ",", dim2, ",", y.d.data, ",", 1, ",", 1, ",", that.d.data, ",", 1, ")")
         case (2, 2) => val dim1 = this.x.shape(0); val dim2 = this.x.shape(1); val dim3 = that.x.shape(1)
           // use cblas_sgemm
+          generateRawComment("backprop of matrix-matrix-dot")
           unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
             dim1, ",", dim2, ",", dim3, ",", 1, ",",
@@ -2993,6 +2984,8 @@ trait TensorDslCudnn extends TensorDslCublas {
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionForward
     def cudnnConvolutionForward(input: Tensor, filter: Tensor, res: Tensor, bias: Option[Tensor] = None,
                                 padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+      assert(input.rank == 4, s"Convolution input must have rank 4, but got ${input.rank}")
+      assert(res.rank == 4, s"Convolution result must have rank 4, but got ${res.rank}")
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -3081,7 +3074,8 @@ trait TensorDslCudnn extends TensorDslCublas {
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardData
     def cudnnConvolutionBackwardData(inputGrad: Tensor, filter: Tensor, resGrad: Tensor,
                                      padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
-      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, but got ${resGrad.rank}")
+      assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -3229,10 +3223,11 @@ trait TensorDslCudnn extends TensorDslCublas {
       (res, None)
     }
 
-    @virtualize
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
-      cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations)
+      assert(input.x.rank == 4, s"convolution input values should be 4D, but got ${input.x.rank}")
+      assert(input.isInput || input.d.rank == 4, s"convolution input gradients is either ignored (for training data) or should be 4D, but got ${input.d.rank}")
+      if (!input.isInput) cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations)
       cudnnConvolutionBackwardFilter(filter.d, input.x, res.d, padding, strides, dilations)
       bias match {
         case None =>
@@ -3335,10 +3330,10 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
-      assert(input.rank == 4, "Currently, dropout only supports tensors of rank 4")
       val output = Tensor.zeros_like(input)
       val reserveSpace: Rep[Array[Float]] = unchecked[Array[Float]]("(float*)NULL")
       val sizeInBytes: Rep[Int] = unchecked[Int]("0")
+      val padShape = input.shape.padTo(4, 1) // pad the dimension to 4D
       unchecked[Unit](
         s"""
           |{
@@ -3346,13 +3341,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${output.shape(0)}, ${output.shape(1)}, ${output.shape(2)}, ${output.shape(3)}));
+          |    ${padShape(0)}, ${padShape(1)}, ${padShape(2)}, ${padShape(3)}));
           |
           |size_t stateSizeInBytes;
           |CUDNN_CALL(cudnnDropoutGetStatesSize(
@@ -3380,12 +3369,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           "CUDNN_CALL(cudnnDropoutForward(\n" +
           "    cudnnHandle,\n" +
           "    dropoutDesc,\n" +
-          "    in_desc, ", input.data, ", out_desc, ", output.data, ", ", "reserveSpace, sizeInBytes));\n" +
+          "    in_desc, ", input.data, ", in_desc, ", output.data, ", ", "reserveSpace, sizeInBytes));\n" +
           "}")
       (output, reserveSpace, sizeInBytes)
     }
 
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
+      val padShape = input.x.shape.padTo(4, 1) // pad the dimension to 4D
       unchecked[Unit](
         s"""
           |{
@@ -3393,13 +3383,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${output.x.shape(0)}, ${output.x.shape(1)}, ${output.x.shape(2)}, ${output.x.shape(3)}));
+          |    ${padShape(0)}, ${padShape(1)}, ${padShape(2)}, ${padShape(3)}));
           |
           |size_t stateSizeInBytes;
           |CUDNN_CALL(cudnnDropoutGetStatesSize(
@@ -3422,9 +3406,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           "CUDNN_CALL(cudnnDropoutBackward(\n" +
           "    cudnnHandle,\n" +
           "    dropoutDesc,\n" +
-          "    out_desc, ", output.d.data, ", in_desc, ", input.d.data, ", (void*)", helper, ", (size_t)", size, "));\n" +
+          "    in_desc, ", output.d.data, ", in_desc, ", input.d.data, ", (void*)", helper, ", (size_t)", size, "));\n" +
           "}")
-      }
+    }
 
     object Activation extends Enumeration {
       val Sigmoid = Value("CUDNN_ACTIVATION_SIGMOID")

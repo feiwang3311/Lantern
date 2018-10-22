@@ -287,7 +287,7 @@ class TestCudnn extends LanternFunSuite {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
-        val input = Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9)
+        val input = Tensor.fromData(Seq(3,3,1,1),1,2,3,4,5,6,7,8,9)
         val prob = 0.0f
         val (output, _, _) = input.dropout(prob)
 
