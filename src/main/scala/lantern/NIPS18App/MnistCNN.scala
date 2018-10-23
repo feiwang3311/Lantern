@@ -78,7 +78,8 @@ object MnistCNN {
 
         train.foreachBatch(batch) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
           imgIdx += batch
-          val inputR = TensorR(input, isInput=true)
+          // val inputR = TensorR(input, isInput=true)
+          val inputR = TensorR(input.toGPU(), isInput=true)
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.scalar(0.0f))
           trainLoss += loss.data(0)
           opt.step()

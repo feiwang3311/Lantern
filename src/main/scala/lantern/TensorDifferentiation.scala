@@ -311,6 +311,10 @@ trait TensorDsl extends DslOps with Diff {
     def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
     def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit
 
+    // Reduction operations.
+    def sum(x: Tensor): Tensor
+    def sum_grad(input: TensorR, res: TensorR): Unit
+
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -993,6 +997,14 @@ trait TensorDsl extends DslOps with Diff {
         offset += input.x.shape.strides(0)
       }
     }
+
+    override def sum(x: Tensor): Tensor = {
+      Tensor.scalar(x.fold(0.0f)(_ + _))
+    }
+
+    override def sum_grad(input: TensorR, res: TensorR): Unit = {
+      input.d += res.d
+    }
   }
 
   object BackendCPU {
@@ -1170,7 +1182,7 @@ trait TensorDsl extends DslOps with Diff {
     def sigmoid() = backend.sigmoid(this)
 
     // NOTE: sum all elements
-    def sum() = Tensor.scalar(this.fold(0.0f)(_ + _))
+    def sum() = backend.sum(this)
 
     @virtualize
     def sum(dim: Int) = {
@@ -2120,7 +2132,8 @@ trait TensorDsl extends DslOps with Diff {
 
     def sum(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = new TensorR(x.sum(), Tensor.zeros(1)); k(y)
-      this.d += y.d
+      generateRawComment("'sum' gradient.")
+      backend.sum_grad(this, y)
     }
 
     def sum(dim: Int): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2187,6 +2200,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.nllLossB(target)); k(y)
+      generateRawComment("'nllLossB' gradient.")
       backend.nllLoss_grad(this, y, target)
     }
 
@@ -2737,12 +2751,6 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor =
       BackendCPU().randinit(dims, scale, seed).toGPU()
 
-    override def copyTensorData(dest: Tensor, src: Tensor): Unit = {
-      assert(dest.scalarCount == src.scalarCount,
-        s"Tensors do not have same shape: ${dest.shape.seq}, ${src.shape.seq}")
-      cudaMemcpyDeviceToDevice(dest.data, src.data, dest.scalarCount)
-    }
-
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
     // NOTE: `sdot` fails when the cuBLAS pointer mode is host (as opposed to device).
     // Investigate performance impact.
@@ -2993,7 +3001,31 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
       input.moveToCPU()
       res.moveToCPU()
+
+      // TODO: Use `withBackend` when implemented.
+      val tmp = backend
+      backend = BackendCPU()
       BackendCPU().nllLoss_grad(input, res, target)
+      backend = tmp
+
+      input.moveToGPU()
+      res.moveToGPU()
+    }
+
+    override def sum(x: Tensor): Tensor = {
+      BackendCPU().sum(x.toCPU()).toGPU()
+    }
+
+    override def sum_grad(input: TensorR, res: TensorR): Unit = {
+      input.moveToCPU()
+      res.moveToCPU()
+
+      // TODO: Use `withBackend` when implemented.
+      val tmp = backend
+      backend = BackendCPU()
+      BackendCPU().sum_grad(input, res)
+      backend = tmp
+
       input.moveToGPU()
       res.moveToGPU()
     }
