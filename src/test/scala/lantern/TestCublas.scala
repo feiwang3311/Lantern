@@ -87,7 +87,7 @@ class TestCublas extends LanternFunSuite {
         val y1 = Tensor.fromData(Seq(2, 2), 4, 5, 6, 7)
         val y2 = Tensor.fromData(Seq(2, 2), 5, 7, 9, 11)
         val y3 = Tensor.fromData(Seq(2, 2), 2, 3, 4, 5)
-        val result = ((((x + y1) / y2) * y3) - y1).toCPU()
+        val result = ((((x + y1) / y2) * y3) - x).toCPU()
 
         backend = BackendCPU()
         val expected = Tensor.ones(2, 2)
