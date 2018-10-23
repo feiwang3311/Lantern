@@ -89,43 +89,10 @@ def plot(files, model):
   ax.set_ylim([0, max(loopTimes) * 1.2])
   ax.set_ylabel("seconds")
   if step_desc == "1 epoch":
-    ax.set_title("training time per {} in {}".format(step_desc, model))
+    ax.set_title("Training Time per Epoch in {}".format(model))
   else:
-    ax.set_title("training time of {} in {}".format(step_desc, model))
+    ax.set_title("Training Time of {} in {}".format(step_desc, model))
   pylab.savefig(save_dir + model + '.png')
-
-  # # plot
-  # plt.figure(1, figsize=(18, 6))
-  # plt.figure(1, figsize=(6, 6))
-  # # plt.subplot(121)
-  # # for i in range(len(labels)):
-  # #   plt.plot(losses[i], getColor(labels[i]) + '-', linewidth=2.0, label = labels[i])
-  # # plt.legend()
-  # # plt.title("training loss over " + step_desc)
-  # # plt.xlabel('number of ' + unit + 's')
-  # # plt.ylabel('loss')
-  # # #plt.text(60, .025, r'$\mu=100,\ \sigma=15$')
-  # # #plt.axis([40, 160, 0, 0.03])
-  # # #plt.grid(True)
-  # # ax = plt.subplot(122)
-  # width = 0.5
-  # space = 0.5
-  # start = space + 0.25
-  # bars = []
-  # for i in range(len(labels)):
-  #   plt.bar([start], [loopTimes[i]], width, bottom=[0], color=getColor(labels[i]))
-  #   # plt.bar([start], [prepareTimes[i]], width, bottom=[loopTimes[i]], color = 'k')
-  #   start = start + width + space
-  # # import matplotlib.patches as mpatches
-  # # black_patch = mpatches.Patch(color='black', label='preparation time')
-  # # mix_patch = mpatches.Patch()
-  # # plt.legend(handles=[black_patch], bbox_to_anchor=(0, 1), loc='upper left', ncol=1)
-  # plt.title("preparation time and iteration time of " + step_desc)
-  # plt.ylabel("seconds")
-  # plt.xticks((np.arange(len(labels)) + 1), labels)
-  # #plt.show()
-  # pylab.savefig(save_dir + model + '.png')
-
 
 if __name__ == "__main__":
   import sys
