@@ -50,8 +50,8 @@ object MnistCNN {
       val opt = SGD(net, learning_rate = 0.0005f, gradClip = 1000.0f)
 
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (batchIndex: TensorR) =>
-        val res = net(input).logSoftmaxB().nllLossB(target)
-        res.sum()
+        val res = net(input).logSoftmaxB()//.nllLossB(target)
+        res.nllLossB(target)
       }
 
       // Training
@@ -78,9 +78,8 @@ object MnistCNN {
 
         train.foreachBatch(batch) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
           imgIdx += batch
-          // val inputR = TensorR(input, isInput=true)
           val inputR = TensorR(input.toGPU(), isInput=true)
-          val loss = gradR_loss(lossFun(inputR, target))(Tensor.scalar(0.0f))
+          val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(4))
           trainLoss += loss.data(0)
           opt.step()
 

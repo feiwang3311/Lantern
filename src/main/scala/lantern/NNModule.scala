@@ -212,22 +212,24 @@ trait NNModule extends TensorDsl {
   case class SGD(val module: Module, val learning_rate: Float, val gradClip: Float = 1.0f, val descent: Boolean = true) extends Optim {
     @virtualize
     def step_func = { case (tr, _) =>
-      tr.d.changeTo { i =>
-        val temp = var_new(tr.d.data(i))
-        if (temp > gradClip) temp = gradClip
-        if (temp < -gradClip) temp = -gradClip
-        if (descent)
-          tr.x.data(i) -= learning_rate * temp
-        else
-          tr.x.data(i) += learning_rate * temp
-        0.0f
-      }
+      // tr.d.changeTo { i =>
+      //   val temp = var_new(tr.d.data(i))
+      //   if (temp > gradClip) temp = gradClip
+      //   if (temp < -gradClip) temp = -gradClip
+      //   if (descent)
+      //     tr.x.data(i) -= learning_rate * temp
+      //   else
+      //     tr.x.data(i) += learning_rate * temp
+      //   0.0f
+      // }
       // tr.clip_grad(gradClip)
-      // if (descent)
-      //   tr.x -= tr.d * learning_rate
-      // else
-      //   tr.x += tr.d * learning_rate
-      // tr.clear_grad()
+      if (descent)
+        backend.geam(tr.x, 1.0f, tr.d, -1.0f * learning_rate, tr.x)
+        // tr.x -= tr.d * learning_rate
+      else
+        backend.geam(tr.x, 1.0f, tr.d, learning_rate, tr.x)
+        // tr.x += tr.d * learning_rate
+      tr.clear_grad()
     }
   }
 

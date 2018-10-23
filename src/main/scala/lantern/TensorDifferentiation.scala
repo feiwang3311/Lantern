@@ -269,6 +269,8 @@ trait TensorDsl extends DslOps with Diff {
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
 
+    def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit
+
     /**
       * 2D convolution.
       * @param input Input with shape [batchSize, inChannels, iW, iH].
@@ -315,6 +317,7 @@ trait TensorDsl extends DslOps with Diff {
     def sum(x: Tensor): Tensor
     def sum_grad(input: TensorR, res: TensorR): Unit
 
+    def bias_grad(bias: TensorR, output: TensorR): Unit
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -524,6 +527,8 @@ trait TensorDsl extends DslOps with Diff {
         for (i <- DataLoop(x.scalarCount)) x.data(i) /= y.data(i)
       else throw new IllegalArgumentException("dimensions of vector do not match /=!")
     }
+
+    def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = { ??? }
 
     // implementation of Conv2D following Pytorch's idea (transform conv2d into matrix-matrix-dot, and use OpenBLAS)
     // https://github.com/pytorch/pytorch/blob/0a8c8c1dbead2f845e524ae32c19167d80363148/aten/src/THNN/generic/SpatialConvolutionMM.c
@@ -1005,6 +1010,8 @@ trait TensorDsl extends DslOps with Diff {
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       input.d += res.d
     }
+
+    override def bias_grad(bias: TensorR, output: TensorR): Unit = { ??? }
   }
 
   object BackendCPU {
@@ -1981,10 +1988,12 @@ trait TensorDsl extends DslOps with Diff {
     }
     def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x + that.x); k(y)
-      // this.d += y.d; that.d += y.d
-      val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
-      val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
-      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
+      generateRawComment("back prop for + op")
+      this.d += y.d // that.d += y.d
+      backend.bias_grad(that, y)
+      // val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      // val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      // backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     def - (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2377,7 +2386,7 @@ trait TensorDsl extends DslOps with Diff {
 
   object TensorR {
     def apply(a: Tensor, isInput: Boolean = false): TensorR = {
-      val d = if (isInput) Tensor.scalar(0.0f) else Tensor.zeros_like(a)
+      val d = if (isInput) Tensor.zeros(2) else Tensor.zeros_like(a)
       val res = new TensorR(a, d)
       res.isInput = isInput
       res
@@ -2624,7 +2633,10 @@ trait TensorDsl extends DslOps with Diff {
   // gradient of useful tensors are in closure, and can be accessed directly from outside of this function
   def gradR_loss(f: TensorR => TensorR @diff)(x: Tensor): Tensor = {
     val x1 = TensorR(x) // this should be a dummy tensor
-    val result = Tensor.zeros(1)                  // this should be the loss
+    // val result = Tensor.zeros(1)                  // this should be the loss
+    generateRawComment("allocate memory to save the final loss in CPU Tensor")
+    val res = BackendCPU().mallocArray[Float](1)
+    val result = Tensor(res, 1)
     reset {
       val y = f(x1)
       assert(y.x.scalarCount == 1, s"Loss function must return a Tensor of size 1, got ${y.x.scalarCount}")
@@ -2706,7 +2718,11 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
   class TensorRTransferOps(t: TensorR) {
     def toCPU(): TensorR = new TensorR(t.x.toCPU(), t.d.toCPU())
-    def toGPU(): TensorR = new TensorR(t.x.toGPU(), t.d.toGPU())
+    def toGPU(): TensorR = {
+      val temp = new TensorR(t.x.toGPU(), t.d.toGPU())
+      temp.isInput = t.isInput
+      temp
+    }
     def moveToCPU(): Unit = { t.x.moveToCPU(); t.d.moveToCPU() }
     def moveToGPU(): Unit = { t.x.moveToGPU(); t.d.moveToGPU() }
   }
@@ -2840,7 +2856,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
           generateRawComment("backprop of matrix-matrix-dot")
           unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
-            dim2, ",", dim3, ",", dim1, ",", one, ",",
+            dim2, ",", dim1, ",", dim3, ",", one, ",",
             y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
           unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
@@ -2967,6 +2983,18 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
 
+    override def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = {
+      assert(x.shape == y.shape && x.shape == output.shape, "TODO: only handle uniform shape (no transpose) for now")
+      val m = x.shape(0)
+      val n = x.shape.drop(1).product
+      val alpha1 = NewArray[Float](1); alpha1(0) = alpha
+      val beta1 = NewArray[Float](1); beta1(0) = beta
+      unchecked[Unit](
+        "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+        n, ",", m, ",", alpha1, ",",
+        x.data, ",", n, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
+    }
+
     // TODO: Implement these functions in terms of primitive ops.
     // Reuse CPU implementation?
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = ???
@@ -2994,7 +3022,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // Currently, this function calls the CPU implementation to unblock progress.
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
       assert(x.rank == 2, "Input must be a 2-D tensor")
-      BackendCPU().nllLoss(x.toCPU(), target).toGPU()
+      // BackendCPU().nllLoss(x.toCPU(), target).toGPU()
+      BackendCPU().nllLoss(x.toCPU(), target).sum()
     }
 
     // TODO: Implement using custom GPU kernel generation.
@@ -3029,6 +3058,19 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       input.moveToGPU()
       res.moveToGPU()
     }
+
+    // override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+    //   // transfrom target to one-hot encoding, and lift to GPU as input.d
+    //   val nbatch = input.x.shape(0)
+    //   val nchoice = input.x.shape(1)
+    //   val grad = BackendCPU().mallocArray[Float](nbatch * nchoice)
+    //   for (i <- DataLoop(nbatch)) {
+    //     grad(i * nchoice + target(i)) = 1.0f
+    //   }
+    //   cudaMemcpyHostToDevice(input.d.data, grad, nbatch * nchoice)
+    // }
+
+    override def bias_grad(bias: TensorR, output: TensorR): Unit = { ??? }
   }
 
   object BackendCublas {
@@ -3145,11 +3187,18 @@ trait TensorDslCudnn extends TensorDslCublas {
       )
     }
 
+    override def bias_grad(bias: TensorR, output: TensorR): Unit = {
+      cudnnConvolutionBackwardBias(bias.d, output.d)
+    }
+
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias
     // This is effectively the gradient of `cudnnAddBiasTensor`.
     def cudnnConvolutionBackwardBias(biasGrad: Tensor, resGrad: Tensor): Unit = {
       assert(biasGrad.rank == 1, "Bias gradient must have rank 1")
-      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      // assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      assert(resGrad.rank >= 2, "Convolution result gradient must have rank no less than 2")
+      assert(resGrad.shape(1) == biasGrad.shape(0), "Convolution result gradient shape(1) must equal to Bias gradient shape(0)")
+      val resGradShape = resGrad.shape.padTo(4, 1)
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -3164,7 +3213,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |    ${resGradShape(0)}, ${resGradShape(1)}, ${resGradShape(2)}, ${resGradShape(3)}));
           |
           |""".stripMargin) ++
         Seq(
