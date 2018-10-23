@@ -339,7 +339,7 @@ trait TensorDsl extends DslOps with Diff {
     override def fill(dims: Seq[Int], value: Rep[Float]): Tensor = {
       val scalarCount = dims.product
       val array = mallocArray[Float](scalarCount)
-      for (i <- (0 until scalarCount): Rep[Range]) array(i) = value
+      for (i <- DataLoop(scalarCount)) array(i) = value
       Tensor(array, dims: _*)
     }
 
@@ -373,7 +373,7 @@ trait TensorDsl extends DslOps with Diff {
       // TODO: Handle `seed`.
       val scalarCount = dims.product
       val res = mallocArray[Float](scalarCount)
-      for (i <- (0 until scalarCount): Rep[Range]) res(i) = (Random.rand() - 0.5f) * scale
+      for (i <- DataLoop(scalarCount)) res(i) = (Random.rand() - 0.5f) * scale
       new Tensor(res, dims)
     }
 
@@ -1836,11 +1836,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int) = backend.fillWithBias(dims, bias, dim)
 
-    def scalar(value: Rep[Float]) = {
-      val res = backend.mallocArray[Float](1)
-      res(0) = value
-      Tensor(res, 1)
-    }
+    def scalar(value: Rep[Float]) = fill(Seq(1), value)
 
     def zeros(dims: Int*): Tensor = // fill(dims, 0.0f)
       new Tensor(backend.mallocArray[Float](dims.product), dims)
@@ -1864,7 +1860,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def copy(tensor: Tensor) = {
       val res = backend.mallocArray[Float](tensor.scalarCount)
-      for (i <- (0 until tensor.scalarCount): Rep[Range]) res(i) = tensor.data(i)
+      for (i <- DataLoop(tensor.scalarCount)) res(i) = tensor.data(i)
       new Tensor(res, tensor.shape)
     }
 
