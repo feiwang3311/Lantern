@@ -306,6 +306,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def softmax_grad(input: TensorR, res: TensorR): Unit
     def logSoftmax_grad(input: TensorR, res: TensorR): Unit
+
     // Loss functions.
     def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
     def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit
@@ -949,7 +950,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
+    override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
 
       val res = backend.mallocArray[Float](input.scalarCount)
@@ -968,7 +969,7 @@ trait TensorDsl extends DslOps with Diff {
       (Tensor(res, input.shape.seq : _*), mask, 0)
     }
 
-    def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
+    override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
       input.d += Tensor(helper, input.x.shape: _*) * output.d  // TODO (Fei Wang): should optimized by fusing loops
     }
 
@@ -2696,8 +2697,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
   class TensorRTransferOps(t: TensorR) {
     def toCPU(): TensorR = new TensorR(t.x.toCPU(), t.d.toCPU())
     def toGPU(): TensorR = new TensorR(t.x.toGPU(), t.d.toGPU())
-    def moveToCPU(): Unit = t.x.moveToCPU(); t.d.moveToCPU()
-    def moveToGPU(): Unit = t.x.moveToGPU(); t.d.moveToGPU()
+    def moveToCPU(): Unit = { t.x.moveToCPU(); t.d.moveToCPU() }
+    def moveToGPU(): Unit = { t.x.moveToGPU(); t.d.moveToGPU() }
   }
   implicit def tensorRToTransferOps(t: TensorR) = new TensorRTransferOps(t)
 
@@ -2983,6 +2984,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def logSoftmax(x: Tensor): Tensor = ???
     override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
     override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = ???
+
     // TODO: Implement using custom GPU kernel generation.
     // All that's really necessary is GPU array indexing.
     // Currently, this function calls the CPU implementation to unblock progress.
@@ -2994,8 +2996,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // TODO: Implement using custom GPU kernel generation.
     override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
       input.moveToCPU()
+      res.moveToCPU()
       BackendCPU().nllLoss_grad(input, res, target)
       input.moveToGPU()
+      res.moveToGPU()
     }
   }
 

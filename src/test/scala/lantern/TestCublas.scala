@@ -91,7 +91,6 @@ class TestCublas extends LanternFunSuite {
 
         backend = BackendCPU()
         val expected = Tensor.ones(2, 2)
-        result.print()
         Tensor.assertEqual(result, expected)
       }
     }
@@ -116,7 +115,6 @@ class TestCublas extends LanternFunSuite {
           6, 7, 8, 9,
           7, 8, 9, 10,
           8, 9, 10, 11)
-        result.print()
         Tensor.assertEqual(result, expected)
       }
     }
@@ -139,7 +137,6 @@ class TestCublas extends LanternFunSuite {
 
         backend = BackendCPU()
         val expected = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
-        result.print()
         Tensor.assertEqual(result, expected)
       }
     }
@@ -161,7 +158,6 @@ class TestCublas extends LanternFunSuite {
 
         backend = BackendCPU()
         val expected = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
-        result.print()
         Tensor.assertEqual(result, expected)
       }
     }

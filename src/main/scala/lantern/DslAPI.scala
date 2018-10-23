@@ -748,7 +748,7 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
 }
 
 abstract class DslDriverCuda[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslGPUExp {
-  val nvccArguments: Seq[String] = Seq("--expt-extended-lambda")
+  val nvccArguments: Seq[String] = Seq("--expt-extended-lambda", "-Wno-deprecated-gpu-targets")
 }
 
 abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverCuda[A, B] { self =>
