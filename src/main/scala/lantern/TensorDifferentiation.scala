@@ -235,6 +235,8 @@ trait TensorDsl extends DslOps with Diff {
         case _ => throw new IllegalArgumentException(s"Incompatible shapes: ${x.shape}, ${y.shape}")
       }
 
+    def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit
+
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
     def +(x: Tensor, y: Tensor): Tensor
@@ -408,6 +410,29 @@ trait TensorDsl extends DslOps with Diff {
         dim1, ",", dim3, ",", dim2, ",", 1, ",",
         x.data, ",", dim2, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
       Tensor(res, dim1, dim3)
+    }
+
+    override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+      (x.x.rank, y.x.rank) match {
+        case (1, 1) => x.d.addMul(output.d.data(0), y.x); y.d.addMul(output.d.data(0), x.x)
+        case (2, 1) => x.d.add_cartesian(y.x, output.d); // that.d.add_composion(this.x, y.d)
+          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
+          unchecked[Unit](
+            "cblas_sgemv(CblasRowMajor, CblasTrans, ",
+            dim1, ",", dim2, ",", 1, ",",
+            x.x.data, ",", dim2, ",", output.d.data, ",", 1, ",", 1, ",", y.d.data, ",", 1, ")")
+        case (2, 2) =>
+          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
+          generateRawComment("backprop of matrix-matrix-dot")
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+            dim1, ",", dim2, ",", dim3, ",", 1, ",",
+            output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim2, ")")
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+            dim2, ",", dim3, ",", dim1, ",", 1, ",",
+            x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
+      }
     }
 
     def elementWiseOpWithBroadCast(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
@@ -2001,30 +2026,31 @@ trait TensorDsl extends DslOps with Diff {
     // - matrix-matrix multiplication.
     //   [M1 x M2] dot [M2 x M3] => [M1 x M3]
     def dot(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val res = x dot that.x
+      val res = backend.dot(x, that.x)
       val y = TensorR(res); k(y)
 
       // back-propagate
-      (this.x.rank, that.x.rank) match {
-        case (1, 1) => this.d.addMul(y.d.data(0), that.x); that.d.addMul(y.d.data(0), this.x)
-        case (2, 1) => this.d.add_cartesian(that.x, y.d); // that.d.add_composion(this.x, y.d)
-          val dim1 = this.x.shape(0); val dim2 = this.x.shape(1)
-          unchecked[Unit](
-            "cblas_sgemv(CblasRowMajor, CblasTrans, ",
-            dim1, ",", dim2, ",", 1, ",",
-            this.x.data, ",", dim2, ",", y.d.data, ",", 1, ",", 1, ",", that.d.data, ",", 1, ")")
-        case (2, 2) => val dim1 = this.x.shape(0); val dim2 = this.x.shape(1); val dim3 = that.x.shape(1)
-          // use cblas_sgemm
-          generateRawComment("backprop of matrix-matrix-dot")
-          unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
-            dim1, ",", dim2, ",", dim3, ",", 1, ",",
-            y.d.data, ",", dim3, ",", that.x.data, ",", dim3, ",", 1, ",", this.d.data, ",", dim2, ")")
-          unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
-            dim2, ",", dim3, ",", dim1, ",", 1, ",",
-            this.x.data, ",", dim2, ",", y.d.data, ",", dim3, ",", 1, ",", that.d.data, ",", dim3, ")")
-      }
+      backend.dot_grad(this, that, y)
+      // (this.x.rank, that.x.rank) match {
+      //   case (1, 1) => this.d.addMul(y.d.data(0), that.x); that.d.addMul(y.d.data(0), this.x)
+      //   case (2, 1) => this.d.add_cartesian(that.x, y.d); // that.d.add_composion(this.x, y.d)
+      //     val dim1 = this.x.shape(0); val dim2 = this.x.shape(1)
+      //     unchecked[Unit](
+      //       "cblas_sgemv(CblasRowMajor, CblasTrans, ",
+      //       dim1, ",", dim2, ",", 1, ",",
+      //       this.x.data, ",", dim2, ",", y.d.data, ",", 1, ",", 1, ",", that.d.data, ",", 1, ")")
+      //   case (2, 2) => val dim1 = this.x.shape(0); val dim2 = this.x.shape(1); val dim3 = that.x.shape(1)
+      //     // use cblas_sgemm
+      //     generateRawComment("backprop of matrix-matrix-dot")
+      //     unchecked[Unit](
+      //       "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+      //       dim1, ",", dim2, ",", dim3, ",", 1, ",",
+      //       y.d.data, ",", dim3, ",", that.x.data, ",", dim3, ",", 1, ",", this.d.data, ",", dim2, ")")
+      //     unchecked[Unit](
+      //       "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+      //       dim2, ",", dim3, ",", dim1, ",", 1, ",",
+      //       this.x.data, ",", dim2, ",", y.d.data, ",", dim3, ",", 1, ",", that.d.data, ",", dim3, ")")
+      // }
     }
 
     def dot_trans(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2724,15 +2750,17 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // NOTE: `sdot` fails when the cuBLAS pointer mode is host (as opposed to device).
     // Investigate performance impact.
     def sdot(n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      cublasSetPointerModeDevice()
+      // cublasSetPointerModeDevice()
       unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",", 1, ",", b, ",", 1, ",", result, "))")
-      cublasSetPointerModeHost()
+      // cublasSetPointerModeHost()
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
-      val res = mallocArray[Float](1)
+      // val res = mallocArray[Float](1)
+      val res = BackendCPU().mallocArray[Float](1)
       sdot(x.scalarCount, x.data, y.data, res)
-      Tensor(res, 1)
+      // Tensor(res, 1)
+      Tensor(res, 1).toGPU()  // TODO (Fei Wang): need optimization here!!
     }
 
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
@@ -2758,9 +2786,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
-        m, ",", n, ",", k, ",", one, ",",
-        a, ",", k, ",", b, ",", n, ",", zero, ",", result, ",", m, "))")
+        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+        n, ",", m, ",", k, ",", one, ",",
+        b, ",", n, ",", a, ",", k, ",", zero, ",", result, ",", n, "))")
     }
 
     override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = {
@@ -2770,6 +2798,50 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val res = mallocArray[Float](m * n)
       sgemm(m, n, k, x.data, y.data, res)
       Tensor(res, m, n)
+    }
+
+    override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+      // use CuBLAS instead
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      (x.x.rank, y.x.rank) match {
+        case (1, 1) =>
+          val dim = x.x.shape(0)
+          val scale = output.d.toCPU()
+          // x.d.addMul(output.d.data(0), y.x)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+            dim, ",", 1, ",", one, ",",
+            x.d.data, ",", dim, ",", scale.data, ", ", y.x.data, ", ", dim, ", ", x.d.data, ",", dim, "))")
+          // y.d.addMul(output.d.data(0), x.x)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+            dim, ",", 1, ",", one, ",",
+            y.d.data, ",", dim, ",", scale.data, ", ", x.x.data, ", ", dim, ", ", y.d.data, ",", dim, "))")
+        case (2, 1) =>
+          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
+          // that.d.add_composion(this.x, y.d)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
+            dim2, ",", dim1, ",", one, ",",
+            x.x.data, ",", dim2, ",", output.d.data, ",", 1, ",", one, ",", y.d.data, ",", 1, "))")
+          // x.d.add_cartesian(y.x, output.d);
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+            dim2, ", ", dim1, ", ", 1, ", ", one, ", ",
+            y.x.data, ", ", dim2, ", ", output.d.data, ", ", 1, ", ", one, ", ", x.d.data, ", ", dim2, "))")
+        case (2, 2) =>
+          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
+          generateRawComment("backprop of matrix-matrix-dot")
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+            dim2, ",", dim3, ",", dim1, ",", one, ",",
+            y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+            dim3, ",", dim2, ",", dim1, ",", one, ",",
+            output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", one, ",", y.d.data, ",", dim3, "))")
+      }
     }
 
     // Compute broadcasting strides.

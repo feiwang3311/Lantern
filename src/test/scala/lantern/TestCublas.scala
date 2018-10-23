@@ -12,11 +12,16 @@ class TestCublas extends LanternFunSuite {
       def snippet(x: Rep[String]): Rep[Unit] = {
         val v1 = Tensor.fromData(Seq(4), 1, 2, 3, 4)
         val v2 = Tensor.fromData(Seq(4), -1, -2, -3, -4)
-        val result = v1.dot(v2).toCPU()
+        val result = v1.dot(v2)
+        val v1r = TensorR(v1)
+        val v2r = TensorR(v2)
+        gradR(dummy => v1r dot v2r)(Tensor.zeros(1))
 
         backend = BackendCPU()
         val expected = Tensor.fromData(Seq(1), -30)
-        Tensor.assertEqual(result, expected)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(v1r.d.toCPU(), v2.toCPU())
+        Tensor.assertEqual(v2r.d.toCPU(), v1.toCPU())
       }
     }
     runTest(vvdot)
@@ -30,12 +35,18 @@ class TestCublas extends LanternFunSuite {
       def snippet(x: Rep[String]): Rep[Unit] = {
         val m = Tensor.fromData(Seq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
         val v = Tensor.fromData(Seq(4), -1, -2, -3, -4)
-        val result = m.dot(v).toCPU()
+        val result = m.dot(v)
+        val mm = TensorR(m)
+        val vv = TensorR(v)
+        gradR(dummy => mm dot vv)(Tensor.zeros(1))
 
         backend = BackendCPU()
         val expected = Tensor.fromData(Seq(2), -30, -70)
-        result.print()
-        Tensor.assertEqual(result, expected)
+        val expected1 = Tensor.fromData(Seq(2, 4), -1,-2,-3,-4,-1,-2,-3,-4)
+        val expected2 = Tensor.fromData(Seq(4), 6, 8, 10, 12)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm.d.toCPU(), expected1)
+        Tensor.assertEqual(vv.d.toCPU(), expected2)
       }
     }
     runTest(mvdot)
@@ -48,13 +59,19 @@ class TestCublas extends LanternFunSuite {
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val m1 = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
-        val m2 = Tensor.fromData(Seq(3, 1), 2, 3, 4)
-        val result = m1.dot(m2).toCPU()
+        val m2 = Tensor.fromData(Seq(3, 2), 2, 3, 4, 2, 3, 4)
+        val result = m1.dot(m2)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1 dot mm2)(Tensor.zeros(1))
 
         backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(2, 1), 20, 47)
-        result.print()
-        Tensor.assertEqual(result, expected)
+        val expected = Tensor.fromData(Seq(2, 2), 19, 19, 46, 46)
+        val expected1 = Tensor.fromData(Seq(2, 3), 5, 6, 7, 5, 6, 7)
+        val expected2 = Tensor.fromData(Seq(3, 2), 5, 5, 7, 7, 9, 9)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
       }
     }
     runTest(mmdot)
