@@ -324,8 +324,6 @@ class TestCudnn extends LanternFunSuite {
         val grad = gradR(x => x.logSoftmaxB().nllLossB(target))(input)
 
         backend = BackendCPU()
-        System.out.println(result.shape)
-        result.toCPU().print()
         val expectedResult = Tensor.fromData(Seq(2), 1.4076058865f, 2.4076061249f)
         val expectedGrad = Tensor.fromData(Seq(2, 3),
           0.0900305808f, -0.7552714944f, 0.6652410030f,
