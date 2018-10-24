@@ -984,7 +984,7 @@ trait TensorDsl extends DslOps with Diff {
 
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
       assert(x.rank == 2, "Input must be a 2-D tensor")
-
+      generateRawComment("nllLoss forward in CPU")
       val batchSize = x.shape(0)
       val res = mallocArray[Float](batchSize)
       val offset = var_new(0)
@@ -996,6 +996,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+      generateRawComment("nllLoss_grad implementation in CPU")
       val offset = var_new(0)
       for (batch <- DataLoop(input.x.shape(0))) {
         input.d.data(offset + target(batch)) += -1.0f * res.d.data(batch)
@@ -1004,6 +1005,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def sum(x: Tensor): Tensor = {
+      generateRawComment("CPU sum function called here")
       Tensor.scalar(x.fold(0.0f)(_ + _))
     }
 
@@ -2641,7 +2643,10 @@ trait TensorDsl extends DslOps with Diff {
       val y = f(x1)
       assert(y.x.scalarCount == 1, s"Loss function must return a Tensor of size 1, got ${y.x.scalarCount}")
       y.d.setAsOne()
-      result.copy_data(y.x)
+      generateRawComment(s"backend is $backend")
+      if (backend.isInstanceOf[BackendCPU]) BackendCPU().copyFloatArray(res, y.x.data, 1)
+      else unchecked[Unit]("CUDA_CALL(cudaMemcpy(", res, ", ", y.x.data, ", ", 1, " * sizeof(float), cudaMemcpyDeviceToHost))")
+      // result.copy_data(y.x)
       ()
     }
     result
@@ -2658,6 +2663,15 @@ trait TensorDsl extends DslOps with Diff {
 }
 
 trait TensorDslCublas extends TensorDsl with GPUOps {
+
+  def getCudaMallocAddr(): Rep[Long] = {
+    unchecked[Long]("(long)gpuMallocAddr")
+  }
+
+  def resetCudaMallocAddr(addr: Rep[Long]) = {
+    unchecked[Unit]("cudaMemset((void*)", addr, ", 0, ", getCudaMallocAddr() - addr, ")")
+    unchecked[Unit]("gpuMallocAddr = (void*)", addr)
+  }
 
   protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
     unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
@@ -2736,6 +2750,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       """cublasHandle_t cublasHandle;
         |CUBLAS_CALL(cublasCreate(&cublasHandle));
         |CUDA_CALL(cudaMalloc(&gpuMallocAddr, HEAP_SIZE));
+        |CUDA_CALL(cudaMemset(gpuMallocAddr, 0, HEAP_SIZE));
       """.stripMargin)
 
     override def cleanup(): Unit = generateRawCode(
@@ -3023,7 +3038,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
       assert(x.rank == 2, "Input must be a 2-D tensor")
       // BackendCPU().nllLoss(x.toCPU(), target).toGPU()
-      BackendCPU().nllLoss(x.toCPU(), target).sum()
+      generateRawComment("nllLoss realized in CPU instead")
+      BackendCPU().sum(BackendCPU().nllLoss(x.toCPU(), target))
     }
 
     // TODO: Implement using custom GPU kernel generation.
@@ -3032,10 +3048,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       res.moveToCPU()
 
       // TODO: Use `withBackend` when implemented.
-      val tmp = backend
-      backend = BackendCPU()
       BackendCPU().nllLoss_grad(input, res, target)
-      backend = tmp
 
       input.moveToGPU()
       res.moveToGPU()

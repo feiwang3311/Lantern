@@ -69,6 +69,9 @@ object MnistCNN {
       val loss_save = NewArray[Double](nbEpoch)
 
       val addr = getMallocAddr() // remember current allocation pointer here
+      val addrCuda = getCudaMallocAddr()
+
+      generateRawComment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         var imgIdx = var_new(0)
@@ -89,6 +92,7 @@ object MnistCNN {
             unchecked[Unit]("fflush(stdout)")
           }
           resetMallocAddr(addr)
+          resetCudaMallocAddr(addrCuda)
         }
         val delta = trainTimer.getElapsedTime
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
