@@ -272,7 +272,8 @@ trait TensorDsl extends DslOps with Diff {
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
 
-    def plus_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit
+    def plusBias(main: Tensor, bias: Tensor): Tensor
+    def plusBias_grad(main: TensorR, bias: TensorR): Unit
 
     def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit
 
@@ -483,7 +484,7 @@ trait TensorDsl extends DslOps with Diff {
         }
       }
     }
-    // markele
+
     def backpropElementWiseOpWithBroadCast(in1: TensorR, that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
       // assume y.x = elementWiseOpWithBroadCast(this.x, that.x, someOp)
       // assume that opThis returns the increment of this.d; opThat returns the increment of that.d
@@ -522,10 +523,39 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    override def plus_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit = {
-      val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
-      val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
-      backpropElementWiseOpWithBroadCast(in1, in2, out, opThis, opThat)
+    // x += y (with potentially broadcasting y, or reducing y (reverse of broadcasting x))
+    def inplaceElementWiseOpWithBroadCastOrReduce(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
+      Tensor.dimBroadcast(x.shape, y.shape) match {
+        case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
+        case Some((xShape, yShape, resShape)) => {
+
+          def inplace(offX: Rep[Int], offY: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
+            val offres = var_new[Int](offRes)
+            val offx = var_new[Int](offX)
+            val offy = var_new[Int](offY)
+            for (i <- DataLoop(resShape(dim))) {
+              if (dim == resShape.size - 1) {
+                x.data(offx) = op(x.data(offx), y.data(offy))
+              } else {
+                inplace(offx, offy, offres, dim + 1)
+              }
+              offres += resShape.strides(dim)
+              if (xShape(dim) > 1) offx += xShape.strides(dim)
+              if (yShape(dim) > 1) offy += yShape.strides(dim)
+            }
+          }
+          inplace(0, 0, 0, 0)
+        }
+      }
+    }
+
+    override def plusBias(main: Tensor, bias: Tensor): Tensor = {
+      this.inplaceElementWiseOpWithBroadCastOrReduce(main, bias, (_ + _))
+      main
+    }
+
+    override def plusBias_grad(main: TensorR, bias: TensorR): Unit = {
+      this.inplaceElementWiseOpWithBroadCastOrReduce(bias.d, main.d, (_ + _))
     }
 
     override def +(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s + y)
@@ -533,6 +563,7 @@ trait TensorDsl extends DslOps with Diff {
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s + y)
     override def +=(x: Tensor, y: Tensor): Unit = {
+      // TODO (Fei Wang): this need to be more general!!
       if (y.scalarCount == 1) {
         generateRawComment("+= tensor of dim 0")
         x += y.data(0) // broadcast
@@ -585,7 +616,11 @@ trait TensorDsl extends DslOps with Diff {
       else throw new IllegalArgumentException("dimensions of vector do not match /=!")
     }
 
-    def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = { ??? }
+    override def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = {
+      output.changeTo { i =>
+        x.data(i) * alpha + y.data(i) * beta
+      }
+    }
 
     // implementation of Conv2D following Pytorch's idea (transform conv2d into matrix-matrix-dot, and use OpenBLAS)
     // https://github.com/pytorch/pytorch/blob/0a8c8c1dbead2f845e524ae32c19167d80363148/aten/src/THNN/generic/SpatialConvolutionMM.c
@@ -1123,6 +1158,8 @@ trait TensorDsl extends DslOps with Diff {
       res
     }
 
+    def plusBias(that: Tensor): Tensor = backend.plusBias(this, that)
+
     // Elementwise addition.
     def +(that: Rep[Float]): Tensor = backend.+(this, that)
     def +(that: Tensor): Tensor = backend.+(this, that)
@@ -1394,6 +1431,18 @@ trait TensorDsl extends DslOps with Diff {
       printf("\\n")
     }
 
+    def printPane(msg: String = ""): Unit = {
+      assert(this.rank == 4, "printPane only applies to Tensors of rank 4")
+      printf(s"${msg} --> Pane # - ${this.shape(2)} x ${this.shape(3)}\\n")
+      for (k <- 0 until this.shape(2): Rep[Range]) {
+        for (l <- 0 until this.shape(3): Rep[Range]) {
+          printf(format, this.data(k * this.shape.strides(2) + l))
+        }
+        printf("\\n")
+      }
+      printf("\\n\\n")
+    }
+
     def print(msg: String = ""): Unit = {
       if (msg != "")
         printf(s"$msg (size ${this.shape.seq mkString " x "})\\n")
@@ -1402,7 +1451,7 @@ trait TensorDsl extends DslOps with Diff {
       else this.printRaw(this.shape.lastOption.getOrElse(1))
     }
 
-    val format = "%.10f "
+    val format = "%.5f "
     def print4D() = {
       val idx = var_new(1)
       for (i <- 0 until this.shape(0): Rep[Range]) {
@@ -2035,6 +2084,13 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // that is bias
+    def plusBias(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
+      backend.plusBias(this.x, that.x); k(this)  // note: plusBias is in-place
+      // generateRawComment("back prop for plusBias op")
+      backend.plusBias_grad(this, that)
+    }
+
     def + (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x + that); k(y)
       this.d += y.d
@@ -2042,8 +2098,9 @@ trait TensorDsl extends DslOps with Diff {
     def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x + that.x); k(y)
       generateRawComment("back prop for + op")
-      backend.plus_grad(this, that, y)
-      // backend.+=(this.d, y.d); backend.+=(that.d, y.d)
+      // TODO: this need to be fixed later !!!!! should support broadcasting in GPU
+      // backend.plusBias_grad(this, that, y)
+      backend.+=(this.d, y.d); backend.+=(that.d, y.d)
       // this.d += y.d; // that.d += y.d
       // backend.bias_grad(that, y)
       // val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
@@ -3052,7 +3109,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
 
-    override def plus_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit = { ??? }
+    override def plusBias(main: Tensor, bias: Tensor): Tensor = { ??? }
+    override def plusBias_grad(main: TensorR, bias: TensorR): Unit = { ??? }
 
     override def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = {
       assert(x.shape == y.shape && x.shape == output.shape, "TODO: only handle uniform shape (no transpose) for now")
@@ -3099,16 +3157,16 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     }
 
     // TODO: Implement using custom GPU kernel generation.
-    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
-      input.moveToCPU()
-      res.moveToCPU()
+    // override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+    //   input.moveToCPU()
+    //   res.moveToCPU()
 
-      // TODO: Use `withBackend` when implemented.
-      BackendCPU().nllLoss_grad(input, res, target)
+    //   // TODO: Use `withBackend` when implemented.
+    //   BackendCPU().nllLoss_grad(input, res, target)
 
-      input.moveToGPU()
-      res.moveToGPU()
-    }
+    //   input.moveToGPU()
+    //   res.moveToGPU()
+    // }
 
     override def sum(x: Tensor): Tensor = {
       BackendCPU().sum(x.toCPU()).toGPU()
@@ -3128,16 +3186,16 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       res.moveToGPU()
     }
 
-    // override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
-    //   // transfrom target to one-hot encoding, and lift to GPU as input.d
-    //   val nbatch = input.x.shape(0)
-    //   val nchoice = input.x.shape(1)
-    //   val grad = BackendCPU().mallocArray[Float](nbatch * nchoice)
-    //   for (i <- DataLoop(nbatch)) {
-    //     grad(i * nchoice + target(i)) = 1.0f
-    //   }
-    //   cudaMemcpyHostToDevice(input.d.data, grad, nbatch * nchoice)
-    // }
+    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+      // transfrom target to one-hot encoding, and lift to GPU as input.d
+      val nbatch = input.x.shape(0)
+      val nchoice = input.x.shape(1)
+      val grad = BackendCPU().mallocArray[Float](nbatch * nchoice)
+      for (i <- DataLoop(nbatch)) {
+        grad(i * nchoice + target(i)) = -1.0f
+      }
+      cudaMemcpyHostToDevice(input.d.data, grad, nbatch * nchoice)
+    }
 
     override def bias_grad(bias: TensorR, output: TensorR): Unit = { ??? }
   }
@@ -3170,8 +3228,13 @@ trait TensorDslCudnn extends TensorDslCublas {
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
     // Note: this function performs in-place addition for `res`.
     def cudnnAddBiasTensor(bias: Tensor, res: Tensor): Unit = {
-      assert(bias.rank == 1, "Bias must have rank 1")
-      assert(res.rank == 4, "Currently, only rank 4 tensors are supported")
+      val (biasShape, resShape) = if (bias.shape == res.shape) {
+        (bias.shape.padTo(4, 1), res.shape.padTo(4, 1))
+      } else {
+        assert(bias.rank == 1, "if not equal shape, bias must be rank 1")
+        assert(res.rank >= 2, "if not equal shape, res must be rank 2 or more")
+        (Seq(1, bias.shape(0), 1, 1), res.shape.padTo(4, 1))
+      }
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -3180,13 +3243,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&bias_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    1, ${bias.shape(0)}, 1, 1));
+          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |    ${resShape(0)}, ${resShape(1)}, ${resShape(2)}, ${resShape(3)}));
           |
           |""".stripMargin) ++
         Seq(
@@ -3229,7 +3292,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
-          |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
           |
           |// Algorithm.
           |cudnnConvolutionFwdAlgo_t algo;
@@ -3255,12 +3318,23 @@ trait TensorDslCudnn extends TensorDslCublas {
       )
     }
 
-    override def plus_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit = {
-      // TODO (Fei Wang): use bias_grad for now but we need TensorReduce op for this
-      assert(in1.x.shape == out.x.shape, "This implementation is not complete")
-      this.+=(in1.d, out.d)
-      cudnnConvolutionBackwardBias(in2.d, out.d)
+    override def plusBias(main: Tensor, bias: Tensor): Tensor = {
+      // use cudnnAddTensor (bias is the first parameter, main tensor is the second parameter, addition is in-place on main tensor)
+      cudnnAddBiasTensor(bias, main)
+      main
     }
+
+    override def plusBias_grad(main: TensorR, bias: TensorR): Unit = {
+      // use cudnnConvolutionBackwardBias (or TensorReduce) for bias.d += main.d
+      cudnnConvolutionBackwardBias(bias.d, main.d)
+    }
+
+    // override def plusBias_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit = {
+    //   // TODO (Fei Wang): use bias_grad for now but we need TensorReduce op for this
+    //   assert(in1.x.shape == out.x.shape, "This implementation is not complete")
+    //   this.+=(in1.d, out.d)
+    //   cudnnConvolutionBackwardBias(in2.d, out.d)
+    // }
 
     override def bias_grad(bias: TensorR, output: TensorR): Unit = {
       cudnnConvolutionBackwardBias(bias.d, output.d)
@@ -3331,7 +3405,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
-          |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
           |
           |// Algorithm.
           |cudnnConvolutionBwdDataAlgo_t algo;
@@ -3387,7 +3461,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
-          |    CUDNN_CONVOLUTION, CUDNN_DATA_FLOAT));
+          |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
           |
           |// Algorithm.
           |cudnnConvolutionBwdFilterAlgo_t algo;

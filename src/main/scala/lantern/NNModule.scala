@@ -53,7 +53,7 @@ trait NNModule extends TensorDsl {
     val scale: Float = 1.0f / sqrt(inSize).toFloat
     val weight = TensorR(Tensor.rand(Seq(inSize, outSize), scale))
     val bias = TensorR(Tensor.zeros(outSize))
-    def apply(in: TensorR): TensorR @diff = in.dot(weight) + bias
+    def apply(in: TensorR): TensorR @diff = in.dot(weight) plusBias bias
   }
 
   case class Linear1DTrans(val inSize: Int, val outSize: Int, val name: String = "linear1dtrans") extends Module {
@@ -207,6 +207,7 @@ trait NNModule extends TensorDsl {
     def zero_grad() = module.forEachParameter(_.clear_grad())
     def step() = module.forEachPairParameter(step_func)
     def show() = module.forEachNamedParameter{case (name, (tr, ot)) => tr.d.printHead(5, name)}
+    def perform(f: (String, (TensorR, Option[Tensor])) => Unit) = module.forEachNamedParameter(f)
   }
 
   case class SGD(val module: Module, val learning_rate: Float, val gradClip: Float = 1.0f, val descent: Boolean = true) extends Optim {

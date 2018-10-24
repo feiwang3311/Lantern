@@ -17,9 +17,12 @@ import java.io.PrintWriter;
 import java.io.File;
 
 object MnistCNN {
+
+  val root_dir = "src/out/NIPS18evaluation/"
+  val cpu_file_dir = "evaluationCNN/Lantern/Lantern.cpp"
+  val gpu_file_dir = "evaluationCNN/Lantern/Lantern.cu"
+
   val mnistCPU = new LanternDriverC[String, Unit] {
-    override val dir = "src/out/NIPS18evaluation"
-    override val fileName = "evaluationCNN/Lantern/Lantern.cpp"
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -36,21 +39,23 @@ object MnistCNN {
         val linear2 = Linear1D(inSize = 50, outSize = 10)
 
         def apply(in: TensorR): TensorR @diff = {
-          val step1 = conv1(in).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
+          val step0 = conv1(in)
+          val step1 = step0.relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
           val step2 = conv2(step1).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
           val step3 = linear1(step2.resize(-1, 320)).dropout(0.5f)
           linear2(step3)
         }
       }
       val net = MNIST()
-      val opt = SGD(net, learning_rate = 0.005f, gradClip = 1000.0f)
+      val opt = SGD(net, learning_rate = 0.0005f, gradClip = 1000.0f)
 
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (batchIndex: TensorR) =>
-        net(input).logSoftmaxB().nllLossB(target).sum()
+        val res = net(input).logSoftmaxB().nllLossB(target)
+        res.sum()
       }
 
       // Training
-      val nbEpoch = 100
+      val nbEpoch = 4
 
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
@@ -107,10 +112,8 @@ object MnistCNN {
     }
   }
 
-  // TODO: Unify CPU/GPU model code.
+
   val mnistGPU = new LanternDriverCudnn[String, Unit] {
-    override val dir = "src/out/NIPS18evaluation"
-    override val fileName = "evaluationCNN/Lantern/Lantern.cu"
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -127,22 +130,23 @@ object MnistCNN {
         val linear2 = Linear1D(inSize = 50, outSize = 10)
 
         def apply(in: TensorR): TensorR @diff = {
-          val step1 = conv1(in).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
-          val step2 = conv2(step1).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
-          val step3 = linear1(step2.resize(-1, 320)).dropout(0.5f)
+          val step0 = conv1(in)
+          val step1 = step0.relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
+          val step2 = conv2(step1).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None).resize(-1, 320)
+          val step3 = linear1(step2).dropout(0.5f)
           linear2(step3)
         }
       }
       val net = MNIST()
-      val opt = SGD(net, learning_rate = 0.005f, gradClip = 1000.0f)
+      val opt = SGD(net, learning_rate = 0.0005f, gradClip = 1000.0f)
 
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (batchIndex: TensorR) =>
-        // TODO: decouple `sum` operation from `nllLossB`.
-        net(input).logSoftmaxB().nllLossB(target)
+        val res = net(input).logSoftmaxB().nllLossB(target)
+        res
       }
 
       // Training
-      val nbEpoch = 100
+      val nbEpoch = 4
 
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
@@ -202,11 +206,11 @@ object MnistCNN {
   }
 
   def main(args: Array[String]) {
-    // Set `mnist` to either `mnistCPU` or `mnistGPU`.
-    val mnist = mnistCPU
-    val fileName = s"${mnist.dir}/${mnist.fileName}"
-    val cnnFile = new PrintWriter(fileName)
-    cnnFile.println(mnist.code)
-    cnnFile.flush()
+    val cpu_cnn_file = new PrintWriter(new File(root_dir + cpu_file_dir))
+    val gpu_cnn_file = new PrintWriter(new File(root_dir + gpu_file_dir))
+    cpu_cnn_file.println(mnistCPU.code)
+    cpu_cnn_file.flush()
+    gpu_cnn_file.println(mnistGPU.code)
+    gpu_cnn_file.flush()
   }
 }

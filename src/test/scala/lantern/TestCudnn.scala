@@ -58,22 +58,23 @@ class TestCudnn extends LanternFunSuite {
     runTest(mmdot)
   }
 
-  testGPU("conv2D") {
+  testGPU("conv2D_forward") {
     val conv2D = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-conv2d"
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
-        val input = Tensor.ones(1, 3, 8, 8)
-        val kernel = Tensor.ones(1, 3, 3, 3)
-        val bias = Tensor.ones(1)
+        val input = Tensor.fromData(Seq(1, 1, 4, 4), 1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8)
+        val kernel = Tensor.fromData(Seq(1, 1, 2, 2), 1,2,3,4)
+        val bias = Tensor.zeros(1)
         val strides = Seq(2, 2)
         val pads = Seq(0,0,0,0)
-        val result = input.conv2D_batch(kernel, None, strides, pads)._1.toCPU()
-
+        val (output, finputOption) = input.conv2D_batch(kernel, Some(bias), strides, pads)
+        // output.print("output")
+        // assert equal
         backend = BackendCPU()
-        val expected = Tensor.fill(Seq(1,1,3,3), 27.0f)
-        Tensor.assertEqual(expected, result)
+        val expect = Tensor.fromData(Seq(1,1,2,2), 44, 64, 44, 64)
+        Tensor.assertEqual(expect, output.toCPU(), "expect and output are")
       }
     }
     runTest(conv2D)

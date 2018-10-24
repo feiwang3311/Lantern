@@ -123,7 +123,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   test("softmax") {
     val softmax = new LanternDriverC[String, Unit] {
       override val fileName = "lantern-cpu-softmax"
-      
+
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
@@ -980,29 +980,23 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   val gen_dir = "/tmp/"
 
-  test("op_conv") {
+  test("op_conv_forward") {
     val deb = new LanternDriverC[String, Unit] {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
-        val input = Tensor.ones(1, 3, 8, 8)
-        val kernel = Tensor.ones(1, 3, 3, 3)
-        val bias = Tensor.ones(1)
+        val input = Tensor.fromData(Seq(1, 1, 4, 4), 1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8)
+        val kernel = Tensor.fromData(Seq(1, 1, 2, 2), 1,2,3,4)
+        val bias = Tensor.zeros(1)
         val strides = Seq(2, 2)
         val pads = Seq(0,0,0,0)
         val (output, finputOption) = input.conv2D_batch(kernel, Some(bias), strides, pads)
         // output.print("output")
         // assert equal
-        val expect = Tensor.fromData(Seq(1,1,3,3), 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f, 28.0f)
+        val expect = Tensor.fromData(Seq(1,1,2,2), 44, 64, 44, 64)
         Tensor.assertEqual(expect, output, "expect and output are")
       }
     }
-
-    val debug_file = new PrintWriter(new File(gen_dir + "conv.cpp"))
-    debug_file.println(deb.code)
-    debug_file.flush()
-
-    // test runtime assertion of the generated file
     runTest(deb)
   }
 
