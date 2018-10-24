@@ -24,9 +24,9 @@ class LanternFunSuite extends FunSuite {
   // One can force GPU code generation by defining the "LANTERN_RUN_GPU" environment variable.
   def isGPUAvailable: Boolean = {
     try {
-      ("nvcc --version": ProcessBuilder).! == 0
+      ("nvcc --version": ProcessBuilder).!!; true
     } catch {
-      case _ => sys.env.get("LANTERN_RUN_GPU").isDefined
+      case _: Throwable => sys.env.get("LANTERN_RUN_GPU").isDefined
     }
   }
 
