@@ -1,5 +1,6 @@
 package lantern
 
+import sys.process._
 import org.scalactic.source
 import org.scalatest.{FunSuite, Tag}
 
@@ -18,11 +19,16 @@ class LanternFunSuite extends FunSuite {
   }
   protected def currentTestName: String = _currentTestName.get()
 
-  // TODO: Edit this function to actually detect whether GPU codegen is possible.
-  // One idea: check for:
-  // - The existence of cuBLAS header files (<cuda_runtime.h>, <cublas_v2.h>).
-  // - The existence of a GPU (perhaps run `nvidia-smi`).
-  def isGPUAvailable: Boolean = sys.env.get("LANTERN_RUN_GPU").isDefined
+  // Returns true if GPU code generation is possible.
+  // Currently, checks if `nvcc` exists.
+  // One can force GPU code generation by defining the "LANTERN_RUN_GPU" environment variable.
+  def isGPUAvailable: Boolean = {
+    try {
+      ("nvcc --version": ProcessBuilder).! == 0
+    } catch {
+      case _ => sys.env.get("LANTERN_RUN_GPU").isDefined
+    }
+  }
 
   // Utility function wrapping `test` that checks whether GPU is available.
   def testGPU(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */)(implicit pos: source.Position) {
