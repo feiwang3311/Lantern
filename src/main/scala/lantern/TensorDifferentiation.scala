@@ -562,59 +562,25 @@ trait TensorDsl extends DslOps with Diff {
     override def +(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ + _)
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s + y)
-    override def +=(x: Tensor, y: Tensor): Unit = {
-      // TODO (Fei Wang): this need to be more general!!
-      if (y.scalarCount == 1) {
-        generateRawComment("+= tensor of dim 0")
-        x += y.data(0) // broadcast
-      }
-      else if (x.scalarCount == 1) ??? // x.data(0) = y.fold(x.data(0))((agg, s) => agg + s)
-      else if (x.shape == y.shape)
-        for (i <- DataLoop(x.scalarCount)) x.data(i) += y.data(i)
-      else throw new IllegalArgumentException(s"dimensions of vector do not match +=! ${x.shape.seq} != ${y.shape.seq}")
-    }
+    override def +=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ + _))
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s - y)
     override def -(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ - _)
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s - y)
-    override def -=(x: Tensor, y: Tensor): Unit = {
-      if (y.scalarCount == 1) x -= y.data(0) // broadcast
-      else if (x.scalarCount == 1) {
-        ???
-        // x.data(0) = y.fold(x.data(0))((agg, s) => agg - s)
-      }
-      else if (x.shape == y.shape)
-        for (i <- DataLoop(x.scalarCount)) x.data(i) -= y.data(i)
-      else throw new IllegalArgumentException("dimensions of vector do not match -=!")
-    }
+    override def -=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ + _))
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s * y)
     override def *(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ * _)
 
     override def *=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s * y)
-    override def *=(x: Tensor, y: Tensor): Unit = {
-      if (y.scalarCount == 1) x *= y.data(0) // broadcast
-      else if (x.scalarCount == 1) {
-        ???
-        // x.data(0) = y.fold(x.data(0))((agg, s) => agg * s)
-      }
-      else if (x.shape == y.shape)
-        for (i <- DataLoop(x.scalarCount)) x.data(i) *= y.data(i)
-      else throw new IllegalArgumentException("dimensions of vector do not match *=!")
-    }
+    override def *=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ * _))
 
     override def /(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s / y)
     override def /(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ / _)
 
     override def /=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s / y)
-    override def /=(x: Tensor, y: Tensor): Unit = {
-      if (y.scalarCount == 1) x /= y.data(0) // broadcast
-      else if (x.scalarCount == 1) ??? // x.data(0) = y.fold(x.data(0))((agg, s) => agg / s)
-      else if (x.shape == y.shape)
-        for (i <- DataLoop(x.scalarCount)) x.data(i) /= y.data(i)
-      else throw new IllegalArgumentException("dimensions of vector do not match /=!")
-    }
+    override def /=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ / _))
 
     override def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = {
       output.changeTo { i =>
@@ -2161,26 +2127,6 @@ trait TensorDsl extends DslOps with Diff {
 
       // back-propagate
       backend.dot_grad(this, that, y)
-      // (this.x.rank, that.x.rank) match {
-      //   case (1, 1) => this.d.addMul(y.d.data(0), that.x); that.d.addMul(y.d.data(0), this.x)
-      //   case (2, 1) => this.d.add_cartesian(that.x, y.d); // that.d.add_composion(this.x, y.d)
-      //     val dim1 = this.x.shape(0); val dim2 = this.x.shape(1)
-      //     unchecked[Unit](
-      //       "cblas_sgemv(CblasRowMajor, CblasTrans, ",
-      //       dim1, ",", dim2, ",", 1, ",",
-      //       this.x.data, ",", dim2, ",", y.d.data, ",", 1, ",", 1, ",", that.d.data, ",", 1, ")")
-      //   case (2, 2) => val dim1 = this.x.shape(0); val dim2 = this.x.shape(1); val dim3 = that.x.shape(1)
-      //     // use cblas_sgemm
-      //     generateRawComment("backprop of matrix-matrix-dot")
-      //     unchecked[Unit](
-      //       "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
-      //       dim1, ",", dim2, ",", dim3, ",", 1, ",",
-      //       y.d.data, ",", dim3, ",", that.x.data, ",", dim3, ",", 1, ",", this.d.data, ",", dim2, ")")
-      //     unchecked[Unit](
-      //       "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
-      //       dim2, ",", dim3, ",", dim1, ",", 1, ",",
-      //       this.x.data, ",", dim2, ",", y.d.data, ",", dim3, ",", 1, ",", that.d.data, ",", dim3, ")")
-      // }
     }
 
     def dot_trans(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
