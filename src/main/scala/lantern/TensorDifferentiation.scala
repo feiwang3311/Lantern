@@ -315,7 +315,7 @@ trait TensorDsl extends DslOps with Diff {
 
     // Reduction operations.
     def sum(x: Tensor): Tensor
-    def sum_grad(input: TensorR, res: TensorR): Unit
+    def sum_grad(input: TensorR, res: TensorR): Unit = { +=(input.d, res.d) }
 
     def bias_grad(bias: TensorR, output: TensorR): Unit
     // TODO: Add more ops:
@@ -1007,10 +1007,6 @@ trait TensorDsl extends DslOps with Diff {
     override def sum(x: Tensor): Tensor = {
       generateRawComment("CPU sum function called here")
       Tensor.scalar(x.fold(0.0f)(_ + _))
-    }
-
-    override def sum_grad(input: TensorR, res: TensorR): Unit = {
-      input.d += res.d
     }
 
     override def bias_grad(bias: TensorR, output: TensorR): Unit = { ??? }
@@ -3753,6 +3749,79 @@ trait TensorDslCudnn extends TensorDslCublas {
       softmaxBackwardHelper(input, res, SoftmaxMode.Accurate)
     override def logSoftmax_grad(input: TensorR, res: TensorR): Unit =
       softmaxBackwardHelper(input, res, SoftmaxMode.Log)
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnReduceTensorOp_t
+    object ReductionOp extends Enumeration {
+      val Add = Value("CUDNN_REDUCE_TENSOR_ADD")
+      val Mul = Value("CUDNN_REDUCE_TENSOR_MUL")
+      val Min = Value("CUDNN_REDUCE_TENSOR_MIN")
+      val Max = Value("CUDNN_REDUCE_TENSOR_MAX")
+      val Avg = Value("CUDNN_REDUCE_TENSOR_AVG")
+      // Maximum of absolute values.
+      val Amax = Value("CUDNN_REDUCE_TENSOR_AMAX")
+      // Addition of absolute values.
+      val Norm1 = Value("CUDNN_REDUCE_TENSOR_NORM1")
+      // Square root of sum of squares.
+      val Norm2 = Value("CUDNN_REDUCE_TENSOR_NORM2")
+      // Multiplication, ignoring zero elements.
+      val MulNoZeros = Value("CUDNN_REDUCE_TENSOR_MUL_NO_ZEROS")
+    }
+
+    // TODO: Relax rank 4 requirement after implementing tensor descriptor helper functions.
+    // `cudnnReduceTensor` supports tensors up to dimension 8.
+    def cudnnReduceTensor(x: Tensor, op: ReductionOp.Value, indices: Seq[Int], flatten: Boolean = true): Tensor = {
+      assert(x.rank == 4, "Currently, reduction only support tensors of rank 4")
+      assert(indices.forall(i => x.shape.indices.contains(i)),
+        s"Indices out of bounds: $indices, tensor shape is ${x.shape}")
+      val unflatShape = x.shape.zipWithIndex.map { case (dim, i) =>
+        if (indices.contains(i)) 1 else dim
+      }
+      val res = Tensor(mallocArray[Float](unflatShape.product), unflatShape: _*)
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |
+          |cudnnReduceTensorDescriptor_t reduce_desc;
+          |CUDNN_CALL(cudnnCreateReduceTensorDescriptor(&reduce_desc));
+          |CUDNN_CALL(cudnnSetReduceTensorDescriptor(
+          |    reduce_desc, ${op.toString}, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN,
+          |    CUDNN_REDUCE_TENSOR_NO_INDICES, CUDNN_32BIT_INDICES));
+          |
+          |void *indices;
+          |
+          |// Workspace.
+          |size_t ws_size;
+          |CUDNN_CALL(cudnnGetReductionWorkspaceSize(
+          |    cudnnHandle, reduce_desc, x_desc, out_desc, &ws_size));
+          |float *ws_data;
+          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnReduceTensor(\n" +
+          s"    cudnnHandle, reduce_desc, indices, 0, ws_data, ws_size,\n" +
+          "    ", one, ", x_desc, ", x.data, ", ", zero, ", out_desc, ", res.data, "));\n" +
+          "}"): _*
+      )
+      val resShape = x.shape.zipWithIndex.flatMap { case (dim, i) =>
+        if (indices.contains(i)) if (flatten) None else Some(1) else Some(dim)
+      }
+      Tensor(res.data, resShape: _*)
+    }
+
+    override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
   }
 
   object BackendCudnn {

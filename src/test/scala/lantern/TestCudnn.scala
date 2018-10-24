@@ -213,7 +213,7 @@ class TestCudnn extends LanternFunSuite {
   testGPU("log-softmax") {
     val logSoftmax = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-log-softmax"
-      
+
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
@@ -333,5 +333,25 @@ class TestCudnn extends LanternFunSuite {
       }
     }
     runTest(nllLoss)
+  }
+
+  testGPU("sum") {
+    val sum = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-sum"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(1, 1, 2, 3), 1, 2, 3, 4, 5, 6)
+        val result = input.sum()
+        val grad = gradR(x => x.sum())(input)
+
+        backend = BackendCPU()
+        val expectedResult = Tensor.scalar(10)
+        val expectedGrad = Tensor.fromData(Seq(1, 1, 2, 3), 1, 1, 1, 1, 1, 1)
+        Tensor.assertEqual(expectedResult, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(sum)
   }
 }
