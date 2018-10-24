@@ -1,3 +1,5 @@
+#/usr/bin/env bash
+
 DIR1=$HOME/onnx_models/resnet
 
 if [[ ! -d $DIR1 ]]
