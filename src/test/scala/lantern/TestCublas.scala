@@ -18,7 +18,7 @@ class TestCublas extends LanternFunSuite {
         gradR(dummy => v1r dot v2r)(Tensor.zeros(1))
 
         backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(1), -30)
+        val expected = Tensor.scalar(-30)
         Tensor.assertEqual(result.toCPU(), expected)
         Tensor.assertEqual(v1r.d.toCPU(), v2.toCPU())
         Tensor.assertEqual(v2r.d.toCPU(), v1.toCPU())
