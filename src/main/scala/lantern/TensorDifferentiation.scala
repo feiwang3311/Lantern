@@ -3223,8 +3223,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionForwardWorkspaceSize(
           |    cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, algo, &ws_size));
-          |float *ws_data;
-          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |void *ws_data = myGpuMalloc(ws_size);
           |""".stripMargin) ++
         Seq(
           "// Execute convolution.\n" +
@@ -3326,8 +3325,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
           |    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-          |float *ws_data;
-          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |void *ws_data = myGpuMalloc(ws_size);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnConvolutionBackwardData(\n" +
@@ -3383,8 +3381,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
           |    cudnnHandle, in_desc, grad_out_desc, conv_desc, grad_filt_desc, algo, &ws_size));
-          |float *ws_data;
-          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |void *ws_data = myGpuMalloc(ws_size);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnConvolutionBackwardFilter(\n" +
@@ -3557,13 +3554,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnDropoutGetStatesSize(
           |    cudnnHandle, &stateSizeInBytes
           |));
-          |void* state; CUDA_CALL(cudaMalloc(&state, stateSizeInBytes));
+          |void* state = myGpuMalloc(stateSizeInBytes);
           |
           |size_t sizeInBytes;
           |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
           |    in_desc, &sizeInBytes
           |));
-          |void* reserveSpace; CUDA_CALL(cudaMalloc(&reserveSpace, sizeInBytes));
+          |void* reserveSpace = myGpuMalloc(sizeInBytes);
           |
           |""".stripMargin,
           reserveSpace, " = (float*)reserveSpace;\n",
@@ -3599,13 +3596,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnDropoutGetStatesSize(
           |    cudnnHandle, &stateSizeInBytes
           |));
-          |void* state; CUDA_CALL(cudaMalloc(&state, stateSizeInBytes));
+          |void* state = myGpuMalloc(stateSizeInBytes);
           |
           |size_t sizeInBytes;
           |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
           |    in_desc, &sizeInBytes
           |));
-          |void* reserveSpace; CUDA_CALL(cudaMalloc(&reserveSpace, sizeInBytes));
+          |void* reserveSpace = myGpuMalloc(sizeInBytes);
           |
           |cudnnDropoutDescriptor_t dropoutDesc;
           |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
@@ -3854,8 +3851,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetReductionWorkspaceSize(
           |    cudnnHandle, reduce_desc, x_desc, out_desc, &ws_size));
-          |float *ws_data;
-          |CUDA_CALL(cudaMalloc(&ws_data, ws_size));
+          |void *ws_data = myGpuMalloc(ws_size);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnReduceTensor(\n" +
