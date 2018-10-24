@@ -2784,13 +2784,14 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def setup(): Unit = generateRawCode(
       """cublasHandle_t cublasHandle;
         |CUBLAS_CALL(cublasCreate(&cublasHandle));
-        |CUDA_CALL(cudaMalloc(&gpuMallocAddr, HEAP_SIZE));
-        |CUDA_CALL(cudaMemset(gpuMallocAddr, 0, HEAP_SIZE));
+        |CUDA_CALL(cudaMalloc(&gpuMallocBase, HEAP_SIZE));
+        |CUDA_CALL(cudaMemset(gpuMallocBase, 0, HEAP_SIZE));
+        |gpuMallocAddr = gpuMallocBase;
       """.stripMargin)
 
     override def cleanup(): Unit = generateRawCode(
       """CUBLAS_CALL(cublasDestroy(cublasHandle));
-        |CUDA_CALL(cudaFree(gpuMallocAddr));
+        |CUDA_CALL(cudaFree(gpuMallocBase));
       """.stripMargin)
 
     override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewGPUArray[T](length)
