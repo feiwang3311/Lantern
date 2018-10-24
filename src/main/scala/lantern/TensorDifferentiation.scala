@@ -1085,7 +1085,6 @@ trait TensorDsl extends DslOps with Diff {
     val scalarCount = shape.scalarCount
     val isScalar = scalarCount == 1
 
-    // assert(shape.strides.length >= 1, "There must be at least one stride")
     assert(scalarCount != 0, "Tensor cannot have scalar count 0")
 
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
