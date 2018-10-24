@@ -269,6 +269,8 @@ trait TensorDsl extends DslOps with Diff {
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
 
+    def plus_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit
+
     def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit
 
     /**
@@ -469,6 +471,41 @@ trait TensorDsl extends DslOps with Diff {
           res
         }
       }
+    }
+    // markele
+    def backpropElementWiseOpWithBroadCast(in1: TensorR, that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
+      // assume y.x = elementWiseOpWithBroadCast(this.x, that.x, someOp)
+      // assume that opThis returns the increment of this.d; opThat returns the increment of that.d
+      // both opThis and opThat takes this.x, that.x, and y.d as parameters
+      // TODO (Fei Wang): in some cases (if this, or that are inputs (x, y), there gradients are not initialized/useless)
+      Tensor.dimBroadcast(in1.x.shape, that.x.shape) match {
+        case None => throw new IllegalArgumentException(s"dimensions of tensors do not match! ${in1.x.shape.seq} != ${that.x.shape.seq}")
+        case Some((thisShape, thatShape, yShape)) => {
+          def inplace(offThis: Rep[Int], offThat: Rep[Int], offY: Rep[Int], dim: Int): Unit = {
+            val offthis = var_new[Int](offThis)
+            val offthat = var_new[Int](offThat)
+            val offy = var_new[Int](offY)
+            for (i <- DataLoop(yShape(dim))) {
+              if (dim == yShape.size - 1) {
+                in1.d.data(offthis) += opThis(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
+                that.d.data(offthat) += opThat(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
+              } else {
+                inplace(offthis, offthat, offy, dim + 1)
+              }
+              offy += yShape.strides(dim)
+              if (thisShape(dim) > 1) offthis += thisShape.strides(dim)
+              if (thatShape(dim) > 1) offthat += thatShape.strides(dim)
+            }
+          }
+          inplace(0, 0, 0, 0)
+        }
+      }
+    }
+
+    override def plus_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit = {
+      val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      backpropElementWiseOpWithBroadCast(in1, in2, out, opThis, opThat)
     }
 
     override def +(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s + y)
@@ -1987,8 +2024,10 @@ trait TensorDsl extends DslOps with Diff {
     def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x + that.x); k(y)
       generateRawComment("back prop for + op")
-      this.d += y.d // that.d += y.d
-      backend.bias_grad(that, y)
+      backend.plus_grad(this, that, y)
+      // backend.+=(this.d, y.d); backend.+=(that.d, y.d)
+      // this.d += y.d; // that.d += y.d
+      // backend.bias_grad(that, y)
       // val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
       // val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
       // backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
@@ -2994,6 +3033,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
 
+    override def plus_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit = { ??? }
+
     override def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = {
       assert(x.shape == y.shape && x.shape == output.shape, "TODO: only handle uniform shape (no transpose) for now")
       val m = x.shape(0)
@@ -3194,6 +3235,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    ", zero, ", out_desc, ", res.data, "));\n" +
           "}"): _*
       )
+    }
+
+    override def plus_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit = {
+      // TODO (Fei Wang): use bias_grad for now but we need TensorReduce op for this
+      assert(in1.x.shape == out.x.shape, "This implementation is not complete")
+      this.+=(in1.d, out.d)
+      cudnnConvolutionBackwardBias(in2.d, out.d)
     }
 
     override def bias_grad(bias: TensorR, output: TensorR): Unit = {
