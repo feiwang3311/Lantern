@@ -44,7 +44,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val length = 2
         val v1 = Tensor.fromData(Seq(4), 1, 2, 3, 4)
         val v2 = Tensor.fromData(Seq(4), -1, -2, -3, -4)
-        val expected = Tensor.fromData(Seq(1), -30)
+        val expected = Tensor.scalar(-30)
         Tensor.assertEqual(v1.dot(v2), expected)
       }
     }
@@ -207,10 +207,9 @@ class AdLMSVectorTest extends LanternFunSuite {
 
         // construct TensorR for closure
         val tv = TensorR(v)
-        val loss = gradR_loss(dummy => tv dot tv)(Tensor.zeros(1))
+        val loss = gradR_loss(dummy => tv dot tv)(Tensor.scalar(0))
         Tensor.assertEqual((v dot v), loss)
         Tensor.assertEqual(tv.d, grad)
-
       }
     }
     array2.eval("2.0f")
@@ -221,7 +220,6 @@ class AdLMSVectorTest extends LanternFunSuite {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
-
         val dim0 = 2
         val vector = Tensor.randinit(dim0, seed = Some(4))
 
@@ -233,7 +231,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         def model(dummy: TensorR): TensorR @diff = {
           ((ve dot ve) * half).sum()
         }
-        val loss = gradR_loss(model)(Tensor.zeros(1))
+        val loss = gradR_loss(model)(Tensor.scalar(0))
         Tensor.assertEqual(loss, ((vector dot vector) * Tensor.halves(dim0)).sum(), "1")
         Tensor.assertEqual(ve.d, vector * 2.0f ,"2")
         Tensor.assertEqual(half.d, Tensor.fill(Seq(2), (vector dot vector).data(0)), "3")
@@ -262,7 +260,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         def model(dummy: TensorR): TensorR @diff = {
           (ma dot ve).sum()
         }
-        val loss = gradR_loss(model)(Tensor.zeros(1))
+        val loss = gradR_loss(model)(Tensor.scalar(0))
         Tensor.assertEqual(loss, (matrix dot vector).sum(), "11")
         Tensor.assertEqual(ma.d, Tensor.expand(vector, dim0), "12")
         val sol = matrix.sum(dim = 0)
@@ -351,7 +349,7 @@ class AdLMSVectorTest extends LanternFunSuite {
          hprev_next.copy_data(outputs(1).x)  // update the hidden state with the result from LOOP
          outputs(0)                          // return the final loss
        }
-       val loss1 = gradR_loss(lossFun)(Tensor.zeros(1))
+       val loss1 = gradR_loss(lossFun)(Tensor.scalar(0))
 
        generateRawComment("Compute real value")
 
@@ -364,7 +362,7 @@ class AdLMSVectorTest extends LanternFunSuite {
        val dbh  = Tensor.zeros_like(bh)
        val dby  = Tensor.zeros_like(by)
        val dhnext = Tensor.zeros_like(hprev)
-       val sum_loss = Tensor.zeros(1)
+       val sum_loss = Tensor.scalar(0)
        val hprev_new = Tensor.zeros_like(hprev)
 
        def lossOneCycle(i: Int, hprev: Tensor): Unit = {
@@ -414,7 +412,6 @@ class AdLMSVectorTest extends LanternFunSuite {
       }
     }
     array2_3.eval("abc")
-
   }
 
   test("array2_4"){
@@ -435,11 +432,10 @@ class AdLMSVectorTest extends LanternFunSuite {
           val p1 = e1 / e1.sum()
           (p1 dot y1).log()
         }
-        val dummy = gradR(lossFun)(Tensor.zeros(1))
+        val dummy = gradR(lossFun)(Tensor.scalar(0))
         // FIXME: need a correct implementation of gradient to check with
       }
     }
-
     array2_4.eval("abc")
   }
 
@@ -611,7 +607,7 @@ class AdLMSVectorTest extends LanternFunSuite {
             val uuu = ins(1) * half
             ArrayBuffer[TensorR](vvv, uuu)
           })
-        y(1).sum() + y(0).sum()})(Tensor.zeros(1))
+        y(1).sum() + y(0).sum()})(Tensor.scalar(0))
 
         // save gradients
         val save_vv_grad = Tensor.zeros(length); save_vv_grad.copy_data(vv.d);   vv.clear_grad()
@@ -923,17 +919,13 @@ class AdLMSVectorTest extends LanternFunSuite {
           res.sum()
         }
 
-        val loss = gradR_loss(lossFun)(Tensor.zeros(1))
+        val loss = gradR_loss(lossFun)(Tensor.scalar(0))
 
         Tensor.assertEqual(loss, Tensor.scalar(iPane * (iRow/sR) * (iCol/sC) * 1.0f), "MAXPOOL BACK 1 - LOSS")
         Tensor.assertEqual(varInput.d, Tensor.fill(Seq(iPane, iRow, iCol), (i: Seq[Rep[Int]]) => if (i(1) % sR == 0 && i(2) % sC == 0) 1.0f else 0.0f), "MAXPOOL BACK 1 - D")
-
       }
-
     }
-
     maxpool_back_test1.eval("abc")
-
   }
 
   test("dropout_test1") {
@@ -981,17 +973,14 @@ class AdLMSVectorTest extends LanternFunSuite {
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
         Tensor.assertEqual(varInput.d, Tensor.ones_like(input), "DROPOUT BACK 1 - D")
-
       }
     }
-
     dropout_back_test1.eval("abc")
   }
 
-  val gene_dir = "/tmp/"
+  val gen_dir = "/tmp/"
 
   test("op_conv") {
-
     val deb = new LanternDriverC[String, Unit] {
 
       @virtualize
@@ -1009,7 +998,7 @@ class AdLMSVectorTest extends LanternFunSuite {
       }
     }
 
-    val debug_file = new PrintWriter(new File(gene_dir + "conv.cpp"))
+    val debug_file = new PrintWriter(new File(gen_dir + "conv.cpp"))
     debug_file.println(deb.code)
     debug_file.flush()
 
@@ -1018,7 +1007,6 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("op_conv_pad") {
-
     val deb = new LanternDriverC[String, Unit] {
 
       @virtualize
@@ -1134,7 +1122,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(expect_bias_grad, bias.d, "expect and bias.gradient are")
       }
     }
-    val debug_file = new PrintWriter(new File(gene_dir + "backprop_conv_pad.cpp"))
+    val debug_file = new PrintWriter(new File(gen_dir + "backprop_conv_pad.cpp"))
     debug_file.println(deb.code)
     debug_file.flush()
 

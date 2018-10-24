@@ -128,10 +128,13 @@ trait TensorDsl extends DslOps with Diff {
 
   case class Dimensions(val dims: Seq[Int]) {
     def apply(idx: Int) = {
-      if (idx >= dims.length) throw new IndexOutOfBoundsException(s"$idx exceeds ${dims.length}")
+      if (!dims.indices.contains(idx)) throw new IndexOutOfBoundsException(s"Index $idx out of bounds")
       else dims(idx)
     }
-    def last = dims.last
+    // `head` and `last` have default value 1 for scalar tensors.
+    def head = dims.headOption.getOrElse(1)
+    def last = dims.lastOption.getOrElse(1)
+    def get(idx: Int) = if (!dims.indices.contains(idx)) 1 else dims(idx)
     def reverse = Dimensions(dims.reverse)
 
     val (scalarCount +: strides) = (dims :\ Seq[Int](1)) {
@@ -394,7 +397,7 @@ trait TensorDsl extends DslOps with Diff {
       }
       val res = mallocArray[Float](1)
       res(0) = readVar(value)
-      Tensor(res, 1)
+      Tensor(res)
     }
 
     override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -456,6 +459,14 @@ trait TensorDsl extends DslOps with Diff {
             val offres = var_new[Int](offRes)
             val offx = var_new[Int](offX)
             val offy = var_new[Int](offY)
+
+            // Handle scalar tensor case.
+            // TODO: Unify with logic below.
+            if (resShape.isEmpty) {
+              resData(offres) = op(x.data(offx), y.data(offy))
+              return
+            }
+
             for (i <- DataLoop(resShape(dim))) {
               if (dim == resShape.size - 1) {
                 resData(offres) = op(x.data(offx), y.data(offy))
@@ -485,6 +496,15 @@ trait TensorDsl extends DslOps with Diff {
             val offthis = var_new[Int](offThis)
             val offthat = var_new[Int](offThat)
             val offy = var_new[Int](offY)
+
+            // Handle scalar tensor case.
+            // TODO: Unify with logic below.
+            if (yShape.isEmpty) {
+              in1.d.data(offthis) += opThis(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
+              that.d.data(offthat) += opThat(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
+              return
+            }
+
             for (i <- DataLoop(yShape(dim))) {
               if (dim == yShape.size - 1) {
                 in1.d.data(offthis) += opThis(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
@@ -1065,8 +1085,8 @@ trait TensorDsl extends DslOps with Diff {
     val scalarCount = shape.scalarCount
     val isScalar = scalarCount == 1
 
-    assert(shape.strides.length >= 1)
-    assert(scalarCount != 0, "Empty Tensor!!!")
+    // assert(shape.strides.length >= 1, "There must be at least one stride")
+    assert(scalarCount != 0, "Tensor cannot have scalar count 0")
 
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
     // def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i + 1) +: shape.tail)
@@ -1380,11 +1400,11 @@ trait TensorDsl extends DslOps with Diff {
         printf(s"$msg (size ${this.shape.seq mkString " x "})\\n")
       if (this.rank == 4) this.print4D
       else if (this.rank == 3) this.print3D
-      else this.printRaw(this.shape.last)
+      else this.printRaw(this.shape.lastOption.getOrElse(1))
     }
 
     val format = "%.10f "
-    def print4D = {
+    def print4D() = {
       val idx = var_new(1)
       for (i <- 0 until this.shape(0): Rep[Range]) {
         val idx1 = var_new(1)
@@ -1403,7 +1423,7 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    def print3D = {
+    def print3D() = {
       val idx = var_new(1)
       for (i <- 0 until this.shape(0): Rep[Range]) {
         printf(s"Pane #%d - ${this.shape(1)} x ${this.shape(2)}\\n", idx)
@@ -1436,7 +1456,7 @@ trait TensorDsl extends DslOps with Diff {
       assert(this.rank == 2 && that.shape == Dimensions(Seq(this.shape(1))) && y.shape == Dimensions(Seq(this.shape(0))) ||
         this.rank == 1 && that.shape == this.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
       val off = var_new(0)
-      val up = if (this.rank > 1) this.shape(0) else 1
+      val up = this.shape.head
       for (i <- DataLoop(up)) {
         for (j <- DataLoop(shape(1))) {
           this.data(off + j) = this.data(off + j) + that.data(j) * y.data(i)
@@ -1451,7 +1471,7 @@ trait TensorDsl extends DslOps with Diff {
       assert(that.rank == 2 && this.shape.seq == Seq(that.shape(1)) && y.shape.seq == Seq(that.shape(0))
         || that.rank == 1 && this.shape == that.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
       val off = var_new(0)
-      val up = if (that.rank > 1) that.shape(0) else 1
+      val up = that.shape.head
       for (i <- DataLoop(up)) {
         for (j <- DataLoop(that.shape(1))) {
           data(j) += that.data(off + j) * y.data(i)
@@ -1464,7 +1484,6 @@ trait TensorDsl extends DslOps with Diff {
     def addMul(that: Tensor, y: Tensor) = {
       assert(this.rank == 2 && that.rank == 2 && y.rank == 2, s"Dimensions: ${this.shape.seq} - ${that.shape.seq} - ${y.shape.seq}")
       assert(this.shape(0) == that.shape(0) && this.shape(1) == y.shape(1) && that.shape(1) == y.shape(0), s"Dimensions: ${this.shape.seq} + ${that.shape.seq} * ${y.shape.seq}")
-
       var offThis = var_new(0)
       var offThatR = var_new(0)
       var offYC = var_new(0)
@@ -1496,8 +1515,8 @@ trait TensorDsl extends DslOps with Diff {
     def add_mult(a: Tensor, b: Tensor) = {
       assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_mult")
 
-      val dims0M = mmax(shape(0), mmax(a.shape(0), b.shape(0)))
-      val dims1M = mmax(if (this.rank > 1) shape(1) else 1, mmax(if (a.rank > 1) a.shape(1) else 1, if (b.rank > 1) b.shape(1) else 1))
+      val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
+      val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
       for (i <- DataLoop(dims0M * dims1M)) {
         if (this.isScalar) { data(0) = data(0) + a.getAt(i) * b.getAt(i) }
         else { data(i) = data(i) + a.getAt(i) * b.getAt(i) }
@@ -1523,8 +1542,8 @@ trait TensorDsl extends DslOps with Diff {
 
     def add_div(a: Tensor, b: Tensor) = {
       assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_div")
-      val dims0M = mmax(shape(0), mmax(a.shape(0), b.shape(0)))
-      val dims1M = mmax(if (rank > 1) shape(1) else 1, mmax(if (a.rank > 1) a.shape(1) else 1, if (b.rank > 1) b.shape(1) else 1))
+      val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
+      val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
       for (i <- DataLoop(dims0M * dims1M)) {
         if (this.isScalar) { data(0) = data(0) + a.getAt(i) / b.getAt(i) }
         else { data(i) = data(i) + a.getAt(i) / b.getAt(i) }
@@ -1535,8 +1554,8 @@ trait TensorDsl extends DslOps with Diff {
       assert(Tensor.dimCompatible(a, b)    && Tensor.dimCompatible(a, c)    && Tensor.dimCompatible(c, b)    &&
         Tensor.dimCompatible(this, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, c),
         "dim not competible in minus_mult_div_square")
-      val dims0M = mmax(shape(0), mmax(a.shape(0), mmax(b.shape(0), c.shape(0))))
-      val dims1M = mmax(if (rank > 1) shape(1) else 1, mmax(if (a.rank > 1) a.shape(1) else 1, if (b.rank > 1) b.shape(1) else 1))
+      val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
+      val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
       for (i <- DataLoop(dims0M * dims1M)) {
         if (this.isScalar) { data(0) = data(0) - a.getAt(i) * b.getAt(i) / square(c.getAt(i)) }
         else { data(i) = data(i) - a.getAt(i) * b.getAt(i) / square(c.getAt(i)) }
@@ -1545,8 +1564,8 @@ trait TensorDsl extends DslOps with Diff {
 
     def add_oneMinusSquare_mult(a: Tensor, b: Tensor) = {
       assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_oneMinusSquare_mult")
-      val dims0M = mmax(shape(0), mmax(a.shape(0), b.shape(0)))
-      val dims1M = mmax(if (rank > 1) shape(1) else 1, mmax(if (a.rank > 1) a.shape(1) else 1, if (b.rank > 1) b.shape(1) else 1))
+      val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
+      val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
       for (i <- DataLoop(dims0M * dims1M)) {
         if (this.isScalar) { data(0) = data(0) + (1.0f - square(a.getAt(i))) * b.getAt(i) }
         else { data(i) = data(i) + (1.0f - square(a.getAt(i))) * b.getAt(i) }
@@ -1557,8 +1576,8 @@ trait TensorDsl extends DslOps with Diff {
 
     def add_oneMinusThenMult_mult(a: Tensor, b: Tensor) = {
       assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_oneMinusThenMult_mult")
-      val dims0M = mmax(shape(0), mmax(a.shape(0), b.shape(0)))
-      val dims1M = mmax(if (rank > 1) shape(1) else 1, mmax(if (a.rank > 1) a.shape(1) else 1, if (b.rank > 1) b.shape(1) else 1))
+      val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
+      val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
       for (i <- DataLoop(dims0M * dims1M)) {
         if (this.isScalar) { data(0) = data(0) + oneMinusThenMult(a.getAt(i)) * b.getAt(i) }
         else { data(i) = data(i) + oneMinusThenMult(a.getAt(i)) * b.getAt(i) }
@@ -1890,7 +1909,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int) = backend.fillWithBias(dims, bias, dim)
 
-    def scalar(value: Rep[Float]) = fill(Seq(1), value)
+    def scalar(value: Rep[Float]) = fill(Seq(), value)
 
     def zeros(dims: Int*): Tensor = // fill(dims, 0.0f)
       new Tensor(backend.mallocArray[Float](dims.product), dims)
@@ -2673,7 +2692,7 @@ trait TensorDsl extends DslOps with Diff {
     // val result = Tensor.zeros(1)                  // this should be the loss
     generateRawComment("allocate memory to save the final loss in CPU Tensor")
     val res = BackendCPU().mallocArray[Float](1)
-    val result = Tensor(res, 1)
+    val result = Tensor(res)
     reset {
       val y = f(x1)
       assert(y.x.scalarCount == 1, s"Loss function must return a Tensor of size 1, got ${y.x.scalarCount}")
@@ -2830,8 +2849,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       // val res = mallocArray[Float](1)
       val res = BackendCPU().mallocArray[Float](1)
       sdot(x.scalarCount, x.data, y.data, res)
-      // Tensor(res, 1)
-      Tensor(res, 1).toGPU()  // TODO (Fei Wang): need optimization here!!
+      // Tensor(res)
+      Tensor(res).toGPU()  // TODO (Fei Wang): need optimization here!!
     }
 
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
