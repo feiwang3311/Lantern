@@ -455,6 +455,7 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  } \
       |}
       |
+      |void *gpuMallocBase;
       |void *gpuMallocAddr;
       |
       |// Alignment boundary size, in bytes.
