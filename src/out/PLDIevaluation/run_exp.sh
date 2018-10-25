@@ -2,12 +2,13 @@
 echo "Note: make sure you are using the most updated .cpp file!"
 echo "Note: we assume the system has python-pip python-dev python-virtualenv"
 
-# python3 -m venv python3-env
-# source python3-env/bin/activate
-# pip3 install --upgrade tensorflow
-# pip3 install torch torchvision
-# pip3 install dynet
-# pip3 install matplotlib
+python3 -m venv python3-env
+source python3-env/bin/activate
+pip3 install --upgrade tensorflow
+pip3 install torch torchvision
+pip3 install matplotlib
+
+exit 1
 
 export OPENBLAS_NUM_THREADS=1
 
