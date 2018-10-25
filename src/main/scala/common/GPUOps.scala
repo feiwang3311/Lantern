@@ -15,9 +15,11 @@ trait GPUOps extends ArrayOps {
   def gpu_array_new[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]]
   def gpu_array_fromseq[T: Manifest](xs: Seq[Rep[T]]): Rep[Array[T]]
   // Copy an array from device to host.
-  def gpu_array_copy_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
+  def gpu_array_copy_device_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
   // Copy an array from host to device.
-  def gpu_array_copy_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
+  def gpu_array_copy_host_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
+  // Copy an array from device to device.
+  def gpu_array_copy_device_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
 }
 
 trait GPUOpsExp extends ArrayOpsExp {
@@ -29,17 +31,21 @@ trait GPUOpsExp extends ArrayOpsExp {
     val mArray = manifest[Array[T]]
   }
   object CopyDirection extends Enumeration {
-    val DeviceToHost, HostToDevice = Value
+    val HostToDevice = Value("cudaMemcpyHostToDevice")
+    val DeviceToHost = Value("cudaMemcpyDeviceToHost")
+    val DeviceToDevice = Value("cudaMemcpyDeviceToDevice")
   }
   case class GPUArrayCopy[T: Manifest](src: Exp[Array[T]], dest: Exp[Array[T]], len: Exp[Int], direction: CopyDirection.Value) extends Def[Unit] {
     val m = manifest[T]
   }
   def gpu_array_new[T: Manifest](scalarCount: Exp[Int]) = reflectMutable(GPUArrayNew(scalarCount))
   def gpu_array_fromseq[T: Manifest](xs: Seq[Rep[T]]): Rep[Array[T]] = /*reflectMutable(*/ GPUArrayFromSeq(xs) /*)*/
-  def gpu_array_copy_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
-    reflectWrite(dest)(GPUArrayCopy(src, dest, len, CopyDirection.DeviceToHost))
-  def gpu_array_copy_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
-    reflectWrite(dest)(GPUArrayCopy(src, dest, len, CopyDirection.HostToDevice))
+  def gpu_array_copy_device_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
+    reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.DeviceToHost))
+  def gpu_array_copy_host_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
+    reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.HostToDevice))
+  def gpu_array_copy_device_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
+    reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.DeviceToDevice))
 }
 
 trait CudaGenGPUOps extends CGenBase {
@@ -54,13 +60,9 @@ trait CudaGenGPUOps extends CGenBase {
   def getCudaMallocArenaString(count: String, dataType: String): String =
     "(" + dataType + "*)myGpuMalloc(" + count + " * sizeof(" + dataType + "))"
 
-  // Copy an array from host to device.
-  def cudaMemcpyHostToDevice(dest: String, src: String, count: String, dataType: String): String =
-    s"CUDA_CALL(cudaMemcpy($dest, $src, $count * sizeof($dataType), cudaMemcpyHostToDevice))"
-
-  // Copy an array from device to host.
-  def cudaMemcpyDeviceToHost(dest: String, src: String, count: String, dataType: String): String =
-    s"CUDA_CALL(cudaMemcpy($dest, $src, $count * sizeof($dataType), cudaMemcpyDeviceToHost))"
+  // Copy an array in the specified direction.
+  def cudaMemcpy(dest: String, src: String, count: String, dataType: String, direction: CopyDirection.Value): String =
+    s"CUDA_CALL(cudaMemcpy($dest, $src, $count * sizeof($dataType), ${direction.toString}))"
 
   // Allocate unified memory, accessible by CPU and GPU.
   // FIXME: I encountered "bus error" when performing CPU ops on managed memory:
@@ -84,15 +86,10 @@ trait CudaGenGPUOps extends CGenBase {
       val src = fresh(a.mArray)
       emitNode(src, ArrayFromSeq(xs)(a.m))
       // Copy CPU array to GPU array.
-      stream.println(cudaMemcpyHostToDevice(quote(sym), quote(src), count, dataType))
+      stream.println(cudaMemcpy(quote(sym), quote(src), count, dataType, CopyDirection.HostToDevice))
     case a@GPUArrayCopy(src, dest, len, direction) =>
       val dataType = remap(a.m)
-      direction match {
-        case CopyDirection.DeviceToHost =>
-          stream.println(cudaMemcpyDeviceToHost(quote(src), quote(dest), len.toString, dataType))
-        case CopyDirection.HostToDevice =>
-          stream.println(cudaMemcpyHostToDevice(quote(src), quote(dest), len.toString, dataType))
-      }
+      stream.println(cudaMemcpy(quote(dest), quote(src), quote(len), dataType, direction))
     case _ => super.emitNode(sym,rhs)
   }
 }

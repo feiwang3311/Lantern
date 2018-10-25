@@ -2754,15 +2754,6 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     unchecked[Unit]("gpuMallocAddr = (void*)", addr)
   }
 
-  protected def cudaMemcpyHostToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyHostToDevice))")
-
-  protected def cudaMemcpyDeviceToHost(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToHost))")
-
-  protected def cudaMemcpyDeviceToDevice(dest: Rep[Array[Float]], src: Rep[Array[Float]], n: Int): Rep[Unit] =
-    unchecked[Unit]("CUDA_CALL(cudaMemcpy(", dest, ", ", src, ", ", n, " * sizeof(float), cudaMemcpyDeviceToDevice))")
-
   // NOTE: `cudaMemset` is not very useful because it only works with an integer array/value.
   protected def cudaMemset(array: Rep[Array[Int]], value: Rep[Int], n: Int): Rep[Unit] =
     unchecked[Unit]("CUDA_CALL(cudaMemset((void **)&", array, ", ", value, ", ", n, " * sizeof(int)))")
@@ -2774,19 +2765,31 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     unchecked[Unit]("cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_HOST)")
 
   class ArrayTransferOps[T: Manifest](array: Rep[Array[T]]) {
+    // Get a CPU-allocated copy of this array.
+    def toCPU(length: Rep[Int]): Rep[Array[T]] = {
+      val res = BackendCPU().mallocArray[T](length)
+      gpu_array_copy_device_to_host(array, res, length)
+      res
+    }
+
+    // Get a GPU-allocated copy of this array.
+    def toGPU(length: Rep[Int]): Rep[Array[T]] = {
+      val res = BackendGPU.mallocArray[T](length)
+      gpu_array_copy_host_to_device(array, res, length)
+      res
+    }
+
     // Move the underlying data of this array to the CPU.
     def moveToCPU(length: Rep[Int]): Unit = {
-      generateRawComment("Array 'moveToCPU' invocation.")
       val res = BackendCPU().mallocArray[T](length)
-      gpu_array_copy_to_host(array, res, length)
+      gpu_array_copy_device_to_host(array, res, length)
       unchecked[Unit](array, " = ", res)
     }
 
     // Move the underlying data of this array to the GPU.
     def moveToGPU(length: Rep[Int]): Unit = {
-      generateRawComment("Array 'moveToGPU' invocation.")
       val res = BackendGPU.mallocArray[T](length)
-      gpu_array_copy_to_device(array, res, length)
+      gpu_array_copy_host_to_device(array, res, length)
       unchecked[Unit](array, " = ", res)
     }
   }
@@ -2797,33 +2800,26 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // Get a CPU-allocated copy of this tensor.
     def toCPU(): Tensor = {
       generateRawComment("Tensor 'toCPU' invocation.")
-      val res = BackendCPU().mallocArray[Float](t.scalarCount)
-      cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
-      Tensor(res, t.shape: _*)
+      Tensor(t.data.toCPU(t.scalarCount), t.shape: _*)
     }
 
     // Get a GPU-allocated copy of this tensor.
     def toGPU(): Tensor = {
       generateRawComment("Tensor 'toGPU' invocation.")
       val res = BackendGPU.mallocArray[Float](t.scalarCount)
-      cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
-      Tensor(res, t.shape: _*)
+      Tensor(t.data.toGPU(t.scalarCount), t.shape: _*)
     }
 
     // Move the underlying data of this tensor to the CPU.
     def moveToCPU(): Unit = {
       generateRawComment("Tensor 'moveToCPU' invocation.")
-      val res = BackendCPU().mallocArray[Float](t.scalarCount)
-      cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
-      unchecked[Unit](t.data, " = ", res)
+      t.data.moveToCPU(t.scalarCount)
     }
 
     // Move the underlying data of this tensor to the GPU.
     def moveToGPU(): Unit = {
       generateRawComment("Tensor 'moveToGPU' invocation.")
-      val res = BackendGPU.mallocArray[Float](t.scalarCount)
-      cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
-      unchecked[Unit](t.data, " = ", res)
+      t.data.moveToGPU(t.scalarCount)
     }
   }
   implicit def tensorToTransferOps(t: Tensor) = new TensorTransferOps(t)
@@ -2860,7 +2856,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = NewGPUArray[T](length)
 
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
-      cudaMemcpyDeviceToDevice(dest, src, length)
+      gpu_array_copy_device_to_device(src, dest, length)
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor =
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()
@@ -3946,7 +3942,9 @@ trait TensorDslCudnn extends TensorDslCublas {
       Tensor(res.data, resShape: _*)
     }
 
-    override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
+    // TODO(dan-zheng): Uncomment when CUDA 9 is supported.
+    // Forward CPU implementation (defined on `BackendCublas`) in the meantime.
+    // override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
   }
 
   object BackendCudnn {
