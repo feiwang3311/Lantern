@@ -272,9 +272,16 @@ trait TensorDsl extends DslOps with Diff {
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
 
+    // Why do we have plusBias and what is the difference of plusBias with elementWise + with broadcasting
+    // Ans: plusBias is less general than elementwise + with broadcasting, since it is assume that
+    // the bias may be broadcasted, while the other tensor (call it main tensor) doesn't need to.
+    // That resulted in easier implementation in cuDNN API calls.
+    // It also carries the assumption that the main tensor is not used by other ops until it was added to the bias,
+    // so an optimization can be done, such that plusBias is in-place (directly changing the main tensor).
     def plusBias(main: Tensor, bias: Tensor): Tensor
     def plusBias_grad(main: TensorR, bias: TensorR): Unit
 
+    // output = x * alpha + y * beta (can be in-place if output is x or y)
     def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit
 
     /**
@@ -321,9 +328,8 @@ trait TensorDsl extends DslOps with Diff {
 
     // Reduction operations.
     def sum(x: Tensor): Tensor
-    def sum_grad(input: TensorR, res: TensorR): Unit = { +=(input.d, res.d) }
+    def sum_grad(input: TensorR, res: TensorR): Unit
 
-    def bias_grad(bias: TensorR, output: TensorR): Unit
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -356,6 +362,10 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(array, dims: _*)
     }
 
+    // TODO (Optimizations) (Fei Wang): bias has the feature that the values before bias is never used otherwise
+    // The consequence is that add bias can be done in-place with broadcasting
+    // and backprop to bias can be done by += with reduction
+    // In that sense, this function should be removed, and we should use plusBias/plusBias_grad instead
     override def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int): Tensor = {
       assert(dim >= 0 && dim < dims.size, s"Target dimension $dim is out of range $dims")
       assert(bias.rank == 1 && bias.scalarCount == dims(dim),
@@ -378,12 +388,17 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, dims: _*)
     }
 
+    // TODO (Optimization) (Fei Wang): It is advisable that all mapping like functions (fillInPlace, map, mapInplace)
+    // should take a function/closure that starts from index (i => compute_value_at_pos_i)
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       for (i <- DataLoop(x.scalarCount)) x.data(i) = value
     }
 
     override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
-      // TODO: Handle `seed`.
+      seed match {
+        case None => ()
+        case Some(seed) => Random.srand(Some(seed))
+      }
       val scalarCount = dims.product
       val res = mallocArray[Float](scalarCount)
       for (i <- DataLoop(scalarCount)) res(i) = (Random.rand() - 0.5f) * scale
@@ -398,7 +413,7 @@ trait TensorDsl extends DslOps with Diff {
       }
       val res = mallocArray[Float](1)
       res(0) = readVar(value)
-      Tensor(res)
+      Tensor(res, 1)
     }
 
     override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -449,6 +464,8 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // TODO (Optimize) (Fei Wang): adapt it so that it can be done with a kernel function (index => f(index))
+    // nested loop is smart, but not elegant
     def elementWiseOpWithBroadCast(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
@@ -485,6 +502,8 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // TODO (Optimize) (Fei Wang): adapt it so that it can be done with a kernel function (index => f(index))
+    // nested loop is smart, but not elegant
     def backpropElementWiseOpWithBroadCast(in1: TensorR, that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
       // assume y.x = elementWiseOpWithBroadCast(this.x, that.x, someOp)
       // assume that opThis returns the increment of this.d; opThat returns the increment of that.d
@@ -523,6 +542,8 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // TODO (Optimize) (Fei Wang): adapt it so that it can be done with a kernel function (index => f(index))
+    // nested loop is smart, but not elegant
     // x += y (with potentially broadcasting y, or reducing y (reverse of broadcasting x))
     def inplaceElementWiseOpWithBroadCastOrReduce(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
@@ -568,7 +589,7 @@ trait TensorDsl extends DslOps with Diff {
     override def -(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ - _)
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s - y)
-    override def -=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ + _))
+    override def -=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ - _))
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s * y)
     override def *(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ * _)
@@ -1066,8 +1087,8 @@ trait TensorDsl extends DslOps with Diff {
       generateRawComment("CPU sum function called here")
       Tensor.scalar(x.fold(0.0f)(_ + _))
     }
+    override def sum_grad(input: TensorR, res: TensorR): Unit = { +=(input.d, res.d) }
 
-    override def bias_grad(bias: TensorR, output: TensorR): Unit = { ??? }
   }
 
   object BackendCPU {
@@ -1083,6 +1104,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def shape = Dimensions(dimensions)
     val rank = dimensions.length
+    assert (rank > 0, "Tensors need to have nonEmpty dimensions")
     val scalarCount = shape.scalarCount
     val isScalar = scalarCount == 1
 
@@ -1849,7 +1871,10 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   object Tensor {
-    def apply(data: Rep[Array[Float]], dims: Int*) = new Tensor(data, dims)
+    def apply(data: Rep[Array[Float]], dims: Int*) = {
+      assert (dims.size > 0, "dims has to be nonEmpty")
+      new Tensor(data, dims)
+    }
 
     def dimCompatible(a: Tensor, b: Tensor) = {
       (a.shape == b.shape) || a.isScalar || b.isScalar
@@ -1923,7 +1948,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def fillWithBias(dims: Seq[Int], bias: Tensor, dim: Int) = backend.fillWithBias(dims, bias, dim)
 
-    def scalar(value: Rep[Float]) = fill(Seq(), value)
+    def scalar(value: Rep[Float]) = fill(Seq(1), value)
 
     def zeros(dims: Int*): Tensor = // fill(dims, 0.0f)
       new Tensor(backend.mallocArray[Float](dims.product), dims)
@@ -2694,7 +2719,7 @@ trait TensorDsl extends DslOps with Diff {
     // val result = Tensor.zeros(1)                  // this should be the loss
     generateRawComment("allocate memory to save the final loss in CPU Tensor")
     val res = BackendCPU().mallocArray[Float](1)
-    val result = Tensor(res)
+    val result = Tensor(res, 1)
     reset {
       val y = f(x1)
       assert(y.x.scalarCount == 1, s"Loss function must return a Tensor of size 1, got ${y.x.scalarCount}")
@@ -3143,7 +3168,6 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       cudaMemcpyHostToDevice(input.d.data, grad, nbatch * nchoice)
     }
 
-    override def bias_grad(bias: TensorR, output: TensorR): Unit = { ??? }
   }
 
   object BackendCublas {
@@ -3273,17 +3297,6 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = {
       // use cudnnConvolutionBackwardBias (or TensorReduce) for bias.d += main.d
       cudnnConvolutionBackwardBias(bias.d, main.d)
-    }
-
-    // override def plusBias_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit = {
-    //   // TODO (Fei Wang): use bias_grad for now but we need TensorReduce op for this
-    //   assert(in1.x.shape == out.x.shape, "This implementation is not complete")
-    //   this.+=(in1.d, out.d)
-    //   cudnnConvolutionBackwardBias(in2.d, out.d)
-    // }
-
-    override def bias_grad(bias: TensorR, output: TensorR): Unit = {
-      cudnnConvolutionBackwardBias(bias.d, output.d)
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias
