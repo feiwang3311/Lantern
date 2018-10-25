@@ -142,7 +142,7 @@ object MnistCNN {
 
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (batchIndex: TensorR) =>
         val res = net(input).logSoftmaxB().nllLossB(target)
-        res
+        res.sum()
       }
 
       // Training
@@ -152,6 +152,7 @@ object MnistCNN {
       val tot2 = NewArray[Long](2)
 
       val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, Seq(iChan1, iRow1, iCol1))
+      // Move target labels to GPU.
       train.target.moveToGPU(train.tlen)
       train.normalize()
 
