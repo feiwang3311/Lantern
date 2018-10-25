@@ -1103,9 +1103,9 @@ trait TensorDsl extends DslOps with Diff {
     override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
       generateRawComment("nllLoss_grad implementation in CPU")
       val offset = var_new(0)
-      for (batch <- DataLoop(input.x.shape(0))) {
+      for (batch <- DataLoop(input.d.shape(0))) {
         input.d.data(offset + target(batch)) += -1.0f * res.d.data(batch)
-        offset += input.x.shape.strides(0)
+        offset += input.d.shape.strides(0)
       }
     }
 
@@ -3132,25 +3132,23 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     // TODO: Implement using custom GPU kernel generation.
     // All that's really necessary is GPU array indexing.
-    // Currently, this function calls the CPU implementation to unblock progress.
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
       assert(x.rank == 2, "Input must be a 2-D tensor")
-      // BackendCPU().nllLoss(x.toCPU(), target).toGPU()
-      generateRawComment("nllLoss realized in CPU instead")
-      BackendCPU().sum(BackendCPU().nllLoss(x.toCPU(), target))
+
+      val batchSize = x.shape(0)
+      val res = Tensor(mallocArray[Float](batchSize), batchSize)
+      unchecked[Unit](
+        s"nllLoss<<<${batchSize}, 1>>>(", x.data, ",", x.shape.strides(0), ",",
+        res.data, ",", target, ")")
+      res
     }
 
     // TODO: Implement using custom GPU kernel generation.
-    // override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
-    //   input.moveToCPU()
-    //   res.moveToCPU()
-
-    //   // TODO: Use `withBackend` when implemented.
-    //   BackendCPU().nllLoss_grad(input, res, target)
-
-    //   input.moveToGPU()
-    //   res.moveToGPU()
-    // }
+    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
+      unchecked[Unit](
+        s"nllLoss_grad<<<${input.d.shape(0)}, 1>>>(", input.d.shape.strides(0), ",",
+        res.d.data, ",", target, ",", input.d.data, ")")
+    }
 
     override def sum(x: Tensor): Tensor = {
       BackendCPU().sum(x.toCPU()).toGPU()
@@ -3169,18 +3167,6 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       input.moveToGPU()
       res.moveToGPU()
     }
-
-    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
-      // transfrom target to one-hot encoding, and lift to GPU as input.d
-      val nbatch = input.x.shape(0)
-      val nchoice = input.x.shape(1)
-      val grad = BackendCPU().mallocArray[Float](nbatch * nchoice)
-      for (i <- DataLoop(nbatch)) {
-        grad(i * nchoice + target(i)) = -1.0f
-      }
-      cudaMemcpyHostToDevice(input.d.data, grad, nbatch * nchoice)
-    }
-
   }
 
   object BackendCublas {
