@@ -188,7 +188,7 @@ trait TensorDsl extends DslOps with Diff {
     def cleanup(): Unit
 
     // Allocate an array with the specified length.
-    def mallocArray[T: Manifest](length: Int): Rep[Array[T]]
+    def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]]
 
     // Copy data from one array to another.
     // NOTE: This function is intentionally not defined generically to simplify the codegen implementation.
@@ -353,7 +353,7 @@ trait TensorDsl extends DslOps with Diff {
   class BackendCPU protected() extends Backend {
     override def setup() {}
     override def cleanup() {}
-    override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewArray[T](length)
+    override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = NewArray[T](length)
 
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit = {
       for (i <- DataLoop(length)) dest(i) = src(i)
@@ -2773,13 +2773,30 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
   protected def cublasSetPointerModeHost(): Rep[Unit] =
     unchecked[Unit]("cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_HOST)")
 
-  /**
-    * Defines tensor backend transfer operations.
-    */
+  class ArrayTransferOps[T: Manifest](array: Rep[Array[T]]) {
+    // Move the underlying data of this array to the CPU.
+    def moveToCPU(length: Rep[Int]): Unit = {
+      generateRawComment("Array 'moveToCPU' invocation.")
+      val res = BackendCPU().mallocArray[T](length)
+      gpu_array_copy_to_host(array, res, length)
+      unchecked[Unit](array, " = ", res)
+    }
+
+    // Move the underlying data of this array to the GPU.
+    def moveToGPU(length: Rep[Int]): Unit = {
+      generateRawComment("Array 'moveToGPU' invocation.")
+      val res = BackendGPU.mallocArray[T](length)
+      gpu_array_copy_to_device(array, res, length)
+      unchecked[Unit](array, " = ", res)
+    }
+  }
+  implicit def arrayToTransferOps[T: Manifest](array: Rep[Array[T]]) = new ArrayTransferOps(array)
+
+  // Tensor backend transfer operations.
   class TensorTransferOps(t: Tensor) {
     // Get a CPU-allocated copy of this tensor.
     def toCPU(): Tensor = {
-      generateRawComment("'toCPU' invocation.")
+      generateRawComment("Tensor 'toCPU' invocation.")
       val res = BackendCPU().mallocArray[Float](t.scalarCount)
       cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
       Tensor(res, t.shape: _*)
@@ -2787,7 +2804,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     // Get a GPU-allocated copy of this tensor.
     def toGPU(): Tensor = {
-      generateRawComment("'toGPU' invocation.")
+      generateRawComment("Tensor 'toGPU' invocation.")
       val res = BackendGPU.mallocArray[Float](t.scalarCount)
       cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
       Tensor(res, t.shape: _*)
@@ -2795,7 +2812,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     // Move the underlying data of this tensor to the CPU.
     def moveToCPU(): Unit = {
-      generateRawComment("'moveToCPU' invocation.")
+      generateRawComment("Tensor 'moveToCPU' invocation.")
       val res = BackendCPU().mallocArray[Float](t.scalarCount)
       cudaMemcpyDeviceToHost(res, t.data, t.scalarCount)
       unchecked[Unit](t.data, " = ", res)
@@ -2803,7 +2820,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     // Move the underlying data of this tensor to the GPU.
     def moveToGPU(): Unit = {
-      generateRawComment("'moveToGPU' invocation.")
+      generateRawComment("Tensor 'moveToGPU' invocation.")
       val res = BackendGPU.mallocArray[Float](t.scalarCount)
       cudaMemcpyHostToDevice(res, t.data, t.scalarCount)
       unchecked[Unit](t.data, " = ", res)
@@ -2840,7 +2857,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         |CUDA_CALL(cudaFree(gpuMallocBase));
       """.stripMargin)
 
-    override def mallocArray[T: Manifest](length: Int): Rep[Array[T]] = NewGPUArray[T](length)
+    override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = NewGPUArray[T](length)
 
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
       cudaMemcpyDeviceToDevice(dest, src, length)

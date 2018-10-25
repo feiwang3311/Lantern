@@ -9,10 +9,15 @@ trait GPUOps extends ArrayOps {
     def apply[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]] = gpu_array_new(scalarCount)
   }
   object GPUArray {
+    // Initialize an array with the specified elements on the GPU.
     def apply[T: Manifest](xs: Rep[T]*) = gpu_array_fromseq(xs)
   }
   def gpu_array_new[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]]
   def gpu_array_fromseq[T: Manifest](xs: Seq[Rep[T]]): Rep[Array[T]]
+  // Copy an array from device to host.
+  def gpu_array_copy_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
+  // Copy an array from host to device.
+  def gpu_array_copy_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
 }
 
 trait GPUOpsExp extends ArrayOpsExp {
@@ -23,8 +28,18 @@ trait GPUOpsExp extends ArrayOpsExp {
     val m = manifest[T]
     val mArray = manifest[Array[T]]
   }
+  object CopyDirection extends Enumeration {
+    val DeviceToHost, HostToDevice = Value
+  }
+  case class GPUArrayCopy[T: Manifest](src: Exp[Array[T]], dest: Exp[Array[T]], len: Exp[Int], direction: CopyDirection.Value) extends Def[Unit] {
+    val m = manifest[T]
+  }
   def gpu_array_new[T: Manifest](scalarCount: Exp[Int]) = reflectMutable(GPUArrayNew(scalarCount))
   def gpu_array_fromseq[T: Manifest](xs: Seq[Rep[T]]): Rep[Array[T]] = /*reflectMutable(*/ GPUArrayFromSeq(xs) /*)*/
+  def gpu_array_copy_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
+    reflectWrite(dest)(GPUArrayCopy(src, dest, len, CopyDirection.DeviceToHost))
+  def gpu_array_copy_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
+    reflectWrite(dest)(GPUArrayCopy(src, dest, len, CopyDirection.HostToDevice))
 }
 
 trait CudaGenGPUOps extends CGenBase {
@@ -70,6 +85,14 @@ trait CudaGenGPUOps extends CGenBase {
       emitNode(src, ArrayFromSeq(xs)(a.m))
       // Copy CPU array to GPU array.
       stream.println(cudaMemcpyHostToDevice(quote(sym), quote(src), count, dataType))
+    case a@GPUArrayCopy(src, dest, len, direction) =>
+      val dataType = remap(a.m)
+      direction match {
+        case CopyDirection.DeviceToHost =>
+          stream.println(cudaMemcpyDeviceToHost(quote(src), quote(dest), len.toString, dataType))
+        case CopyDirection.HostToDevice =>
+          stream.println(cudaMemcpyHostToDevice(quote(src), quote(dest), len.toString, dataType))
+      }
     case _ => super.emitNode(sym,rhs)
   }
 }

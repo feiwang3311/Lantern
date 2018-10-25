@@ -30,7 +30,7 @@ object MnistCNN {
       val dataTimer = Timer2()
       dataTimer.startTimer
 
-      val (batch, iChan1, iRow1, iCol1) = (100, 1, 28, 28)
+      val (batchSize, iChan1, iRow1, iCol1) = (100, 1, 28, 28)
 
       case class MNIST(val name: String = "mnist") extends Module {
         val conv1 = Conv2D(inChannel = 1, outChannel = 10, kernelSize = Seq(5, 5))
@@ -78,8 +78,8 @@ object MnistCNN {
         printf("Start training epoch %d\\n", epoch + 1)
         trainTimer.startTimer
 
-        train.foreachBatch(batch) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-          imgIdx += batch
+        train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+          imgIdx += batchSize
           val inputR = TensorR(input, isInput=true)
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(4))
           trainLoss += loss.data(0)
@@ -121,7 +121,7 @@ object MnistCNN {
       val dataTimer = Timer2()
       dataTimer.startTimer
 
-      val (batch, iChan1, iRow1, iCol1) = (100, 1, 28, 28)
+      val (batchSize, iChan1, iRow1, iCol1) = (100, 1, 28, 28)
 
       case class MNIST(val name: String = "mnist") extends Module {
         val conv1 = Conv2D(inChannel = 1, outChannel = 10, kernelSize = Seq(5, 5))
@@ -152,6 +152,7 @@ object MnistCNN {
       val tot2 = NewArray[Long](2)
 
       val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, Seq(iChan1, iRow1, iCol1))
+      train.target.moveToGPU(train.tlen)
       train.normalize()
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f
@@ -170,8 +171,8 @@ object MnistCNN {
         printf("Start training epoch %d\\n", epoch + 1)
         trainTimer.startTimer
 
-        train.foreachBatch(batch) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-          imgIdx += batch
+        train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+          imgIdx += batchSize
           val inputR = TensorR(input.toGPU(), isInput=true)
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(4))
           trainLoss += loss.data(0)
