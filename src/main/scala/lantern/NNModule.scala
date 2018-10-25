@@ -56,13 +56,6 @@ trait NNModule extends TensorDsl {
     def apply(in: TensorR): TensorR @diff = in.dot(weight) plusBias bias
   }
 
-  case class Linear1DTrans(val inSize: Int, val outSize: Int, val name: String = "linear1dtrans") extends Module {
-    val scale: Float = 1.0f / sqrt(inSize).toFloat
-    val weight = TensorR(Tensor.rand(Seq(outSize, inSize), scale))
-    val bias = TensorR(Tensor.zeros(outSize))
-    def apply(in: TensorR): TensorR @diff = in.dot_trans(weight) + bias
-  }
-
   case class Linear1D2(val inSize1: Int, val inSize2: Int, val outSize: Int, val name: String = "Linear1d2") extends Module {
     val scale1: Float = 1.0f / sqrt(inSize1).toFloat
     val scale2: Float = 1.0f / sqrt(inSize2).toFloat
@@ -70,15 +63,6 @@ trait NNModule extends TensorDsl {
     val weight2 = TensorR(Tensor.rand(Seq(inSize2, outSize), scale2))
     val bias    = TensorR(Tensor.zeros(outSize))
     def apply(in1: TensorR, in2: TensorR): TensorR @diff = in1.dot(weight1) + in2.dot(weight2) + bias
-  }
-
-  case class Linear1D2Trans(val inSize1: Int, val inSize2: Int, val outSize: Int, val name: String = "Linear1d2trans") extends Module {
-    val scale1: Float = 1.0f / sqrt(inSize1).toFloat
-    val scale2: Float = 1.0f / sqrt(inSize2).toFloat
-    val weight1 = TensorR(Tensor.rand(Seq(outSize, inSize1), scale1))
-    val weight2 = TensorR(Tensor.rand(Seq(outSize, inSize2), scale2))
-    val bias    = TensorR(Tensor.zeros(outSize))
-    def apply(in1: TensorR, in2: TensorR): TensorR @diff = in1.dot_trans(weight1) + in2.dot_trans(weight2) + bias
   }
 
   case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val useBias: Boolean = true, val pad: Int = 0, val name: String = "conv2d") extends Module {
@@ -108,19 +92,6 @@ trait NNModule extends TensorDsl {
     def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)))
   }
 
-  case class VanillaRNNCellTrans(val inputSize: Int, val hiddenSize: Int, val outputSize: Int, val name: String = "vanilla_rnn_cell_trans") extends RnnCell {
-    val inLinear = Linear1D2Trans(inputSize, hiddenSize, hiddenSize)
-    val outLinear = Linear1DTrans(hiddenSize, outputSize)
-    def apply(ins: ArrayBuffer[TensorR]): ArrayBuffer[TensorR] @diff = {
-      assert(ins.size == 2, "vanilla rnn cell trans should take a input of two tensors, the next element, and the last hidden layer")
-      val in = ins(0)
-      val lastHidden = ins(1)
-      val hidden = inLinear(in, lastHidden).tanh()
-      ArrayBuffer(outLinear(hidden), hidden)
-    }
-    def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)))
-  }
-
   case class LSTMCell(val inputSize: Int, val hiddenSize: Int, val outputSize: Int, val name: String = "lstm_cell") extends RnnCell {
     val scale1: Float = 1.0f / sqrt(inputSize).toFloat
     val scale2: Float = 1.0f / sqrt(hiddenSize).toFloat
@@ -131,32 +102,6 @@ trait NNModule extends TensorDsl {
     val cGate = Linear1D2(inputSize, hiddenSize, hiddenSize)
     val oGate = Linear1D2(inputSize, hiddenSize, hiddenSize)
     val outLinear = Linear1D(hiddenSize, outputSize)
-    def apply(ins: ArrayBuffer[TensorR]): ArrayBuffer[TensorR] @diff = {
-      assert(ins.size == 3, "LSTM cell should take a input of three tensors, the next element, the last hidden layer, and the last cell layer")
-      val in = ins(0)
-      val lastHidden = ins(1)
-      val lastCell = ins(2)
-      val f = fGate(in, lastHidden).sigmoid()
-      val i = iGate(in, lastHidden).sigmoid()
-      val o = oGate(in, lastHidden).sigmoid()
-      val C = cGate(in, lastHidden).tanh()
-      val c = f * lastCell + i * C
-      val h = o * c.tanh()
-      ArrayBuffer(outLinear(h), h, c)
-    }
-    def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)), TensorR(Tensor.zeros(batchSize, hiddenSize)))
-  }
-
-  case class LSTMCellTrans(val inputSize: Int, val hiddenSize: Int, val outputSize: Int, val name: String = "lstm_cell_trans") extends RnnCell {
-    val scale1: Float = 1.0f / sqrt(inputSize).toFloat
-    val scale2: Float = 1.0f / sqrt(hiddenSize).toFloat
-
-    // initialize all parameters
-    val fGate = Linear1D2Trans(inputSize, hiddenSize, hiddenSize)
-    val iGate = Linear1D2Trans(inputSize, hiddenSize, hiddenSize)
-    val cGate = Linear1D2Trans(inputSize, hiddenSize, hiddenSize)
-    val oGate = Linear1D2Trans(inputSize, hiddenSize, hiddenSize)
-    val outLinear = Linear1DTrans(hiddenSize, outputSize)
     def apply(ins: ArrayBuffer[TensorR]): ArrayBuffer[TensorR] @diff = {
       assert(ins.size == 3, "LSTM cell should take a input of three tensors, the next element, the last hidden layer, and the last cell layer")
       val in = ins(0)

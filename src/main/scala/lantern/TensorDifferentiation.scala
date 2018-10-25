@@ -310,10 +310,18 @@ trait TensorDsl extends DslOps with Diff {
     def relu(x: Tensor): Tensor
     def tanh(x: Tensor): Tensor
     def sigmoid(x: Tensor): Tensor
+    def exp(x: Tensor): Tensor
+    def log(x: Tensor): Tensor
+    def sqrt(x: Tensor): Tensor
+    def square(x: Tensor): Tensor
 
     def relu_grad(input: TensorR, res: TensorR): Unit
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
+    def exp_grad(input: TensorR, res: TensorR): Unit
+    def log_grad(input: TensorR, res: TensorR): Unit
+    def sqrt_grad(input: TensorR, res: TensorR): Unit
+    def square_grad(input: TensorR, res: TensorR): Unit
 
     // Softmax functions.
     def softmax(x: Tensor): Tensor
@@ -860,6 +868,24 @@ trait TensorDsl extends DslOps with Diff {
       input.d.add_oneMinusThenMult_mult(res.x, res.d)
     }
 
+    def buildTensor(dims: Seq[Int], byIndex: Rep[Int] => Rep[Float]): Tensor = {
+      val res = this.mallocArray[Float](dims.product)
+      for (i <- DataLoop(dims.product)) res(i) = byIndex(i)
+      Tensor(res, dims: _*)
+    }
+
+    override def exp(x: Tensor) = buildTensor(x.shape, i => Math.exp(x.data(i)).toFloat)
+    override def exp_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def log(x: Tensor) = buildTensor(x.shape, i => Math.log(x.data(i)).toFloat)
+    override def log_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def sqrt(x: Tensor) = buildTensor(x.shape, i => Math.sqrt(x.data(i)).toFloat)
+    override def sqrt_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def square(x: Tensor) = buildTensor(x.shape, {i => val t = x.data(i); t * t})
+    override def square_grad(x: TensorR, y: TensorR): Unit = ???
+
     @virtualize
     override def softmax(x: Tensor): Tensor = {
       assert(x.rank == 2, "Softmax input must be 2-D: [batchSize, logits]")
@@ -1113,6 +1139,8 @@ trait TensorDsl extends DslOps with Diff {
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
     // def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i + 1) +: shape.tail)
 
+    // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
+    // OR, should we depend this function on other function such as map?
     @virtualize
     def clipAt(bound: Float) = {
       for (i <- DataLoop(scalarCount)) {
@@ -1122,24 +1150,32 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // OR, do we really need this function here?
+    // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
     def mutate(delta: Rep[Int] => Rep[Float]) = {
       for (i <- DataLoop(scalarCount)) this.data(i) += delta(i)
     }
 
+    // OR, do we really need this function here?
+    // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
     def mapInPlace(op: Rep[Float] => Rep[Float]) = {
       for (i <- DataLoop(scalarCount)) this.data(i) = op(this.data(i))
     }
 
+    // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
     def changeTo(gen: Rep[Int] => Rep[Float]) = {
       for (i <- DataLoop(scalarCount)) this.data(i) = gen(i)
     }
 
+    // OR, do we really need this function here?
     def map(op: Rep[Float] => Rep[Float]) = {
       val res = backend.mallocArray[Float](scalarCount)
+      // TODO (Fei Wang): This assignment needs to be backend dependent (GPU version needs to use user defined kernel)
       for (i <- DataLoop(scalarCount)) res(i) = op(this.data(i))
       new Tensor(res, shape)
     }
 
+    // TODO (Fei Wang): either remove it or make it backend dependent
     def fold(init: Rep[Float])(op: (Rep[Float], Rep[Float]) => Rep[Float]) = {
       val res = var_new[Float](init)
       for (i <- DataLoop(scalarCount)) var_assign(res, op(res, this.data(i)))
@@ -1205,31 +1241,9 @@ trait TensorDsl extends DslOps with Diff {
       backend.dot(this, that)
     }
 
-    def dot_trans(that: Tensor) = {
-      (this.rank, that.rank) match {
-        case (1, 1) | (2, 1) => this.dot(that)
-        case (2, 2) =>
-          assert (this.shape(1) == that.shape(1), s"Incompatible shapes for dot_trans ${this.shape}. ${that.shape}")
-          val dim1 = this.shape(0)
-          val dim2 = that.shape(0)
-          val dim3 = this.shape(1)
-          val res = backend.mallocArray[Float](dim1 * dim2)
-          for (i <- DataLoop(dim1)) {
-            for (j <- DataLoop(dim2)) {
-              val value = var_new(0.0f)
-              for (k <- DataLoop(dim3)) {
-                value += this.data(i * dim3 + k) * that.data(j * dim3 + k)
-              }
-              res(i * dim2 + j) = readVar(value)
-            }
-          }
-          Tensor(res, dim1, dim2)
-        case _ => throw new IllegalArgumentException(
-          s"Only vector-vector, matrix-vector, and matrix-matrix multiplication are allowed (actual shapes: ${this.shape}, ${that.shape})")
-      }
-    }
-
     // NOTE: only handles (Vector Cartesian Vector)
+    // limited support for GPU backend. Do not recommend using this function
+    @deprecated
     def cart(that: Tensor) = {
       assert(this.rank == 1 && that.rank == 1, "cartesian product is only for 1d vectors")
       val res = backend.mallocArray[Float](this.shape(0) * that.shape(0))
@@ -1243,6 +1257,7 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, this.shape(0), that.shape(0))
     }
 
+    @deprecated // limited support for GPU backend, Do not recommend using this function
     def trans() = {
       assert(this.rank == 2, "transpose is only for matrix. Tensor transpose is not supported here")
       val res = backend.mallocArray[Float](this.scalarCount)
@@ -1258,19 +1273,21 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, this.shape.reverse)
     }
 
-    def exp() = this.map(x => Math.exp(x).toFloat)
-    def log() = this.map(x => Math.log(x).toFloat)
-    def sqrt() = this.map(x => Math.sqrt(x).toFloat)
-    def square() = this.map(x => x * x)
+    def exp() = backend.exp(this)
+    def log() = backend.log(this)
+    def sqrt() = backend.sqrt(this)
+    def square() = backend.square(this)
 
     def relu() = backend.relu(this)
     def tanh() = backend.tanh(this)
     def sigmoid() = backend.sigmoid(this)
 
     // NOTE: sum all elements
+    // TODO (Fei Wang): prefer to have a general reduce function, and depend sum() to that function
     def sum() = backend.sum(this)
 
-    @virtualize
+    // sum over one dimension
+    // TODO (Fei Wang): prefer to have a general reduce over given dimension function, and depend sum(dim) to that function
     def sum(dim: Int) = {
       assert(dim >= 0 && dim < this.rank, "dim should be within range of this.nbDims")
       val higherDims = this.shape.take(dim)
@@ -1312,6 +1329,8 @@ trait TensorDsl extends DslOps with Diff {
       res / base
     }
 
+    // mark: (Fei Wang) HERE: more gardening below
+    // only for debugging, maybe remove?
     @virtualize
     def check(limit: Float) = {
       val idx = var_new(0)
@@ -2078,7 +2097,6 @@ trait TensorDsl extends DslOps with Diff {
     // that is bias
     def plusBias(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       backend.plusBias(this.x, that.x); k(this)  // note: plusBias is in-place
-      // generateRawComment("back prop for plusBias op")
       backend.plusBias_grad(this, that)
     }
 
@@ -2089,11 +2107,8 @@ trait TensorDsl extends DslOps with Diff {
     def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x + that.x); k(y)
       generateRawComment("back prop for + op")
-      // TODO: this need to be fixed later !!!!! should support broadcasting in GPU
-      // backend.plusBias_grad(this, that, y)
       backend.+=(this.d, y.d); backend.+=(that.d, y.d)
-      // this.d += y.d; // that.d += y.d
-      // backend.bias_grad(that, y)
+      // TODO: (Fei Wang): potential optimization (define specific +_grad to fuse to updates)
       // val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
       // val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
       // backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
@@ -2105,12 +2120,15 @@ trait TensorDsl extends DslOps with Diff {
     }
     def - (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x - that.x); k(y)
-      // this.d += y.d; that.d -= y.d
-      val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
-      val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => -1.0f * c
-      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
+      generateRawComment("back prop for - op")
+      backend.+=(this.d, y.d); backend.-=(that.d, y.d)
+      // TODO: (Fei Wang): potential optimization (define specific +_grad to fuse to updates)
+      // val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
+      // val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => -1.0f * c
+      // backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
+    // mark: HERE: following code need to be backend depend!
     // this is element wise multiplication
     def * (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that); k(y)
@@ -2152,24 +2170,6 @@ trait TensorDsl extends DslOps with Diff {
 
       // back-propagate
       backend.dot_grad(this, that, y)
-    }
-
-    def dot_trans(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      assert(this.x.rank == 2 && that.x.rank == 2 && this.x.shape(1) == that.x.shape(1), s"shape must match for dot_trans, got ${this.x.shape}, ${that.x.shape}")
-      val y = TensorR(x dot_trans that.x); k(y)
-      // back-propagate
-      val dim1 = this.x.shape(0)
-      val dim2 = that.x.shape(0)
-      val dim3 = this.x.shape(1)
-      for (i <- DataLoop(dim1)) {
-        for (j <- DataLoop(dim2)) {
-          val curr = y.d.data(i * dim2 + j)
-          for (k <- DataLoop(dim3)) {
-            this.d.data(i * dim3 + k) += that.x.data(j * dim3 + k) * curr
-            that.d.data(j * dim3 + k) += this.x.data(i * dim3 + k) * curr
-          }
-        }
-      }
     }
 
     def trans(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -3117,6 +3117,19 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
     override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = ???
 
+    override def exp(x: Tensor) = ???
+    override def exp_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def log(x: Tensor) = ???
+    override def log_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def sqrt(x: Tensor) = ???
+    override def sqrt_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def square(x: Tensor) = ???
+    override def square_grad(x: TensorR, y: TensorR): Unit = ???
+
+
     // TODO: Implement using custom GPU kernel generation.
     // All that's really necessary is GPU array indexing.
     // Currently, this function calls the CPU implementation to unblock progress.
@@ -3760,6 +3773,19 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = {
       cudnnActivationBackward(input, res, Activation.Sigmoid)
     }
+
+    override def exp(x: Tensor) = ???
+    override def exp_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def log(x: Tensor) = ???
+    override def log_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def sqrt(x: Tensor) = ???
+    override def sqrt_grad(x: TensorR, y: TensorR): Unit = ???
+
+    override def square(x: Tensor) = ???
+    override def square_grad(x: TensorR, y: TensorR): Unit = ???
+
 
     object SoftmaxMode extends Enumeration {
       val Fast = Value("CUDNN_SOFTMAX_FAST")
