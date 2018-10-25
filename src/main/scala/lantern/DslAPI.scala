@@ -168,7 +168,8 @@ trait DslGenScala extends ScalaGenNumericOps
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-    case afs@ArrayFromSeq(xs) => stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs mkString ",") + "}; // ;)")
+    case afs@ArrayFromSeq(xs) =>
+      stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs mkString ",") + "}")
     case Assign(Variable(a), b) =>
       emitAssignment(a.asInstanceOf[Sym[Variable[Any]]], quote(b))
     case IfThenElse(c,Block(Const(true)),Block(Const(false))) =>
@@ -311,7 +312,7 @@ trait DslGenBase extends CGenNumericOpsExtra
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case Error(s) => stream.println("assert(false && " + quote(s) + ");")
     case afs@ArrayFromSeq(xs) =>
-      stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "}; // ;)")
+      stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "};")
     case a@ArrayNew(n) =>
       val arrType = remap(a.m)
       // emitValDef(sym, getMallocString(quote(n), arrType))
@@ -475,6 +476,18 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |__global__ void arrayFill(float *data, float value) {
       |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
       |  data[tid] = value;
+      |}
+      |
+      |__global__ void nllLoss(float *x, int x_stride, float *y, int* target) {
+      |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+      |  int offset = tid * x_stride + target[tid];
+      |  y[tid] = -1 * x[offset];
+      |}
+      |
+      |__global__ void nllLoss_grad(int x_stride, float *yGrad, int* target, float* xGrad) {
+      |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+      |  int offset = tid * x_stride + target[tid];
+      |  xGrad[offset] += -1 * yGrad[tid];
       |}
       |
       |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/THC/THCIntegerDivider.cuh
