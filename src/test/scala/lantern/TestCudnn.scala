@@ -355,4 +355,30 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(sum)
   }
+
+  testGPU("batch-norm") {
+    val batchNorm = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-batch-norm"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.ones(1, 2, 1, 1)
+        val scale = TensorR(Tensor.ones(1, 2, 1, 1))
+        val bias = TensorR(Tensor.zeros(1, 2, 1, 1))
+        val runningMean = Tensor.zeros(1, 2, 1, 1)
+        val runningVar = Tensor.zeros(1, 2, 1, 1)
+        val result = input.batchNorm(scale.x, bias.x, runningMean, runningVar)
+        val grad = gradR(x => x.batchNorm(scale, bias, runningMean, runningVar))(input)
+
+        backend = BackendCPU()
+        result.toCPU().print()
+        grad.toCPU().print()
+        val expectedResult = Tensor.fromData(Seq(1, 2, 1, 1), 316.22775f, 316.22775f)
+        val expectedGrad = Tensor.fromData(Seq(1, 2, 1, 1), 316.22775f, 316.22775f)
+        Tensor.assertEqual(expectedResult, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(batchNorm)
+  }
 }
