@@ -490,6 +490,40 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  xGrad[offset] += -1 * yGrad[tid];
       |}
       |
+      |__global__ void concat(float* in1, float* in2, float* out, int bound) {
+      |  int tid = blockIdx.x * blockDim.x * blockDim.y * blockDim.z +
+      |            threadIdx.z * blockDim.y * blockDim.x +
+      |            threadIdx.y * blockDim.x + threadIdx.x;
+      |  if (threadIdx.z < bound) {
+      |    int subid = blockIdx.x * blockDim.x * blockDim.y * bound +
+      |                threadIdx.z * blockDim.y * blockDim.x +
+      |                threadIdx.y * blockDim.x + threadIdx.x;
+      |    out[tid] = in1[subid];
+      |  } else {
+      |    int subid = blockIdx.x * blockDim.x * blockDim.y * (blockDim.z - bound) +
+      |                (threadIdx.z - bound) * blockDim.y * blockDim.x +
+      |                threadIdx.y * blockDim.x + threadIdx.x;
+      |    out[tid] = in2[subid];
+      |  }
+      |}
+      |
+      |__global__ void concat_grad(float* in1, float* in2, float* out, int bound) {
+      |  int tid = blockIdx.x * blockDim.x * blockDim.y * blockDim.z +
+      |            threadIdx.z * blockDim.y * blockDim.x +
+      |            threadIdx.y * blockDim.x + threadIdx.x;
+      |  if (threadIdx.z < bound) {
+      |    int subid = blockIdx.x * blockDim.x * blockDim.y * bound +
+      |                threadIdx.z * blockDim.y * blockDim.x +
+      |                threadIdx.y * blockDim.x + threadIdx.x;
+      |     in1[subid] += out[tid];
+      |  } else {
+      |    int subid = blockIdx.x * blockDim.x * blockDim.y * (blockDim.z - bound) +
+      |                (threadIdx.z - bound) * blockDim.y * blockDim.x +
+      |                threadIdx.y * blockDim.x + threadIdx.x;
+      |    in2[subid] += out[tid];
+      |  }
+      |}
+      |
       |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/THC/THCIntegerDivider.cuh
       |// Result of div/mod operation stored together.
       |template <typename Value>

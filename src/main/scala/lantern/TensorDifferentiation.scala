@@ -3193,8 +3193,44 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       res.moveToGPU()
     }
 
-    override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = ???
-    override def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit = ???
+    override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
+      assert(dim == 1, "TODO (Fei Wang): only support dim = 1 so far")
+      assert(tensors.size == 2, "TODO: (Fei Wang): only support two tensor concatenation so far")
+      assert(tensors(0).rank == 4 && tensors(1).rank == 4, "TODO: (Fei Wang): only support 4D concat so far")
+
+      val dim0 = tensors(0).shape(0)
+      val dim1 = tensors(0).shape(1) + tensors(1).shape(1)
+      val dim2 = tensors(0).shape(2)
+      val dim3 = tensors(0).shape(3)
+      val resShape = Seq(dim0, dim1, dim2, dim3)
+      val res = this.mallocArray[Float](resShape.product)
+
+      // concatenate with user-define kernel function (1D grid 3D block)
+      unchecked[Unit](
+        "{\n",
+        "dim3 block(", dim3, ", ", dim2, ", ", dim1, ");\n",
+        "concat<<<", dim0, ", block>>>(", tensors(0).data, ",", tensors(1).data, ",", res, ", ", tensors(0).shape(1), ");\n",
+        "}\n")
+      Tensor(res, dim0, dim1, dim2, dim3)
+    }
+
+    override def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit = {
+      assert(dim == 1, "TODO (Fei Wang): only support dim = 1 so far")
+      assert(tensorRs.size == 2, "TODO: (Fei Wang): only support two tensor concatenation so far")
+      assert(tensorRs(0).x.rank == 4 && tensorRs(1).x.rank == 4, "TODO: (Fei Wang): only support 4D concat so far")
+
+      val dim0 = tensorRs(0).x.shape(0)
+      val dim1 = tensorRs(0).x.shape(1) + tensorRs(1).x.shape(1)
+      val dim2 = tensorRs(0).x.shape(2)
+      val dim3 = tensorRs(0).x.shape(3)
+
+      // concatenate with user-define kernel function (1D grid 3D block)
+      unchecked[Unit](
+        "{\n",
+        "dim3 block(", dim3, ", ", dim2, ", ", dim1, ");\n",
+        "concat_grad<<<", dim0, ", block>>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ", tensorRs(0).x.shape(1), ");\n",
+        "}\n")
+    }
   }
 
   object BackendCublas {
