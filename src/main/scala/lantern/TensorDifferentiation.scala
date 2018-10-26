@@ -338,6 +338,10 @@ trait TensorDsl extends DslOps with Diff {
     def sum(x: Tensor): Tensor
     def sum_grad(input: TensorR, res: TensorR): Unit
 
+    // concatenate and split
+    def concat(dim: Int, tensors: Seq[Tensor]): Tensor
+    def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit
+
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -1115,6 +1119,54 @@ trait TensorDsl extends DslOps with Diff {
     }
     override def sum_grad(input: TensorR, res: TensorR): Unit = { +=(input.d, res.d) }
 
+    override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
+      // prepare result tensor
+      val higherDims = tensors(0).shape.take(dim)
+      val higherDimsSquashed = higherDims.product
+      val resDims    = (0 until tensors(0).rank: Range).map { i =>
+        if (i != dim) tensors(0).shape(i)
+        else tensors.map(x => x.shape(dim)).sum
+      }
+      val totalnbElem = resDims.product
+
+      val res = this.mallocArray[Float](totalnbElem)
+      val targetId = var_new(0)             // this is the index of res to write to
+      // looping over dims higher than dim, squashed
+      for (high <- DataLoop(higherDimsSquashed)) {
+        // looping over the concatenation dim
+        for (whichTensor <- tensors) {
+          // looping over the dimensions lower than or equal to dim, in the current tensor
+          val stride = if (dim == 0) whichTensor.shape.scalarCount else whichTensor.shape.strides(dim-1)
+          val ptrIntput = slice(whichTensor.data, high * stride)
+          for (lowOrEqual <- DataLoop(stride)) {
+            res(targetId) = ptrIntput(lowOrEqual)
+            targetId += 1
+          }
+        }
+      }
+      Tensor(res, resDims: _*)
+    }
+
+    override def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit = {
+      val higherDims = tensorRs(0).x.shape.take(dim)
+      val higherDimsSquashed = higherDims.product
+
+      val targetId = var_new(0)        // this is the index of res to read gradient from
+      // looping over dims higher than dim, squashed
+      for (high <- DataLoop(higherDimsSquashed)) {
+        // looping over the concatenation dim
+        for (whichTensorR <- tensorRs) {
+          // looping over the dimensions lower than or equal to dim (but within an input tensor)
+          val stride = if (dim == 0) whichTensorR.x.shape.scalarCount else whichTensorR.x.shape.strides(dim-1)
+          val ptrInput = slice(whichTensorR.d.data, high * stride)
+          for (lowOrEqual <- DataLoop(stride)) {
+            ptrInput(lowOrEqual) += output.d.data(targetId)
+            targetId += 1
+          }
+        }
+      }
+    }
+
   }
 
   object BackendCPU {
@@ -1747,6 +1799,7 @@ trait TensorDsl extends DslOps with Diff {
     def dropout(prob: Float = 0.5f) =
       backend.dropout(this, prob)
 
+    // TODO make concat backend-dependent, and implement backendGPU concat and concat_grad (split)
     @virtualize
     def concat(dim: Int, others: Tensor*) = {
       assert(others.size >= 1, "there should be at least one tensor in others")
@@ -1755,32 +1808,8 @@ trait TensorDsl extends DslOps with Diff {
       assert(others.forall(x => (0 until this.rank: Range).forall(i =>  i == dim || x.shape(i) == this.shape(i))),
         "all dimensions except the concatenation dimension should be the same")
 
-      // prepare result tensor
-      val higherDims = this.shape.take(dim)
-      val higherDimsSquashed = higherDims.product
-      val resDims    = (0 until this.rank: Range).map{ i =>
-        if (i != dim) this.shape(i)
-        else others.map(x => x.shape(dim)).sum + this.shape(dim)}
-      val totalnbElem = resDims.product
-      val res = backend.mallocArray[Float](totalnbElem)
-
-      // prepare for looping/copying
-      val totalFrom = this +: others        // put all tensors in one Seq for easy of handling
-      val targetId = var_new(0)             // this is the index of res to write to
-      // looping over dims higher than dim, squashed
-      for (high <- DataLoop(higherDimsSquashed)) {
-        // looping over the concatenation dim
-        for (whichTensor <- totalFrom) {
-          // looping over the dimensions lower than or equal to dim, in the current tensor
-          val stride = if (dim == 0) whichTensor.shape.scalarCount else whichTensor.shape.strides(dim-1)
-          val ptrIntput = slice(whichTensor.data, high * stride)
-          for (lowOrEqual <- DataLoop(stride)) {
-            res(targetId) = ptrIntput(lowOrEqual)
-            targetId += 1
-          }
-        }
-      }
-      Tensor(res, resDims: _*)
+      // call backend-specific function for this.
+      backend.concat(dim: Int, this +: others)
     }
 
     @virtualize
@@ -2392,24 +2421,7 @@ trait TensorDsl extends DslOps with Diff {
       k(ty)
 
       // back propagate
-      val higherDims = this.x.shape.take(dim)
-      val higherDimsSquashed = higherDims.product
-
-      val totalFrom = this +: others   // put all tensorRs in one Seq for easy handling
-      val targetId = var_new(0)        // this is the index of res to read gradient from
-      // looping over dims higher than dim, squashed
-      for (high <- DataLoop(higherDimsSquashed)) {
-        // looping over the concatenation dim
-        for (whichTensorR <- totalFrom) {
-          // looping over the dimensions lower than or equal to dim (but within an input tensor)
-          val stride = if (dim == 0) whichTensorR.x.shape.scalarCount else whichTensorR.x.shape.strides(dim-1)
-          val ptrInput = slice(whichTensorR.d.data, high * stride)
-          for (lowOrEqual <- DataLoop(stride)) {
-            ptrInput(lowOrEqual) += ty.d.data(targetId)
-            targetId += 1
-          }
-        }
-      }
+      backend.concat_grad(dim, this +: others, ty)
     }
 
     @virtualize
@@ -3180,6 +3192,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       input.moveToGPU()
       res.moveToGPU()
     }
+
+    override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = ???
+    override def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit = ???
   }
 
   object BackendCublas {
