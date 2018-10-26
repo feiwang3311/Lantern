@@ -26,6 +26,7 @@ import argparse
 import os
 import sys
 
+import urllib.request
 import tarfile
 from six.moves import cPickle as pickle
 from six.moves import xrange  # pylint: disable=redefined-builtin
@@ -35,7 +36,7 @@ CIFAR_FILENAME = 'cifar-10-python.tar.gz'
 CIFAR_FILENAME_BINARY = 'cifar-10-binary.tar.gz'
 CIFAR_DOWNLOAD_URL = 'https://www.cs.toronto.edu/~kriz/' + CIFAR_FILENAME
 CIFAR_DOWNLOAD_URL_BINARY = 'https://www.cs.toronto.edu/~kriz/' + CIFAR_FILENAME_BINARY
-CIFAR_LOCAL_FOLDER = 'cifar10'
+CIFAR_LOCAL_FOLDER = 'cifar-10-batches-py'
 
 def maybe_download(filename, work_directory, download_url):
   """Download the data unless it's already here."""
@@ -43,7 +44,7 @@ def maybe_download(filename, work_directory, download_url):
     os.mkdir(work_directory)
   filepath = os.path.join(work_directory, filename)
   if not os.path.exists(filepath):
-    filepath, _ = urllib.urlretrieve(download_url, filepath)
+    filepath, _ = urllib.request.urlretrieve(download_url, filepath)
     statinfo = os.stat(filepath)
     print('Succesfully downloaded', filename, statinfo.st_size, 'bytes.')
   return filepath
@@ -127,4 +128,4 @@ if __name__ == '__main__':
       help='Directory to download and extract CIFAR-10 to.')
 
   args = parser.parse_args()
-main(CIFAR_LOCAL_FOLDER)
+main(args.data_dir)
