@@ -2,16 +2,18 @@
 echo "Note: make sure you are using the most updated .cpp file!"
 echo "Note: we assume the system has python-pip python-dev python-virtualenv"
 
-# # git clone https://github.com/tensorflow/models.git
-# # export PYTHONPATH=$(pwd)/models/research:$PYTHONPATH
-# # cd squeezenet/
-# # export PYTHONPATH=$(pwd):$PYTHONPATH
+# git clone https://github.com/tensorflow/models.git
+# export PYTHONPATH=$(pwd)/models/research:$PYTHONPATH
+# cd squeezenet/
+# export PYTHONPATH=$(pwd):$PYTHONPATH
 
-# python3 -m venv python3-env
-# source python3-env/bin/activate
-# pip3 install --upgrade tensorflow-gpu==1.4
-# pip3 install torch torchvision
-# pip3 install matplotlib
+export CUDA_VISIBLE_DEVICES=0
+
+python3 -m venv python3-env
+source python3-env/bin/activate
+pip3 install --upgrade tensorflow-gpu
+pip3 install torch torchvision
+pip3 install matplotlib
 
 export CUDA_​VISIBLE_​DEVICES=0
 

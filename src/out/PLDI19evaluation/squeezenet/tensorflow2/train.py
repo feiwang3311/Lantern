@@ -73,7 +73,7 @@ if __name__ == '__main__':
            help='Directory for storing input data')
   parser.add_argument('--write_to', type=str,
            default='result_TensorFlow',
-           help='Directory for saving performance data')
+           help='Directory for saving runtime performance')
   parser.add_argument('--batch_norm_decay', type=float, default=0.9)
   parser.add_argument('--weight_decay', type=float, default=0.0,
             help='''L2 regularization factor for convolution layer weights.
