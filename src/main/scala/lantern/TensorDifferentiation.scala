@@ -3570,14 +3570,19 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
-    override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
-      assert(input.rank == 4, "Currently, maxpool2D only supports inputs of rank 4")
-      val mode = "CUDNN_POOLING_MAX"
-      // val mode = "CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING"
-      // val mode = "CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING"
-      // val mode = "CUDNN_POOLING_MAX_DETERMINISTIC"
-      val nanOpt = "CUDNN_NOT_PROPAGATE_NAN"
-      // val nanOpt = "CUDNN_PROPAGATE_NAN"
+    object PoolModes extends Enumeration {
+      val Max = Value("CUDNN_POOLING_MAX")
+      val AverageIP = Value("CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING")
+      val AverageEP = Value("CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING")
+      val MaxD = Value("CUDNN_POOLING_MAX_DETERMINISTIC")
+    }
+
+    object NanOpt extends Enumeration {
+      val NotProp = Value("CUDNN_NOT_PROPAGATE_NAN")
+      val Prop = Value("CUDNN_PROPAGATE_NAN")
+    }
+
+    def Pool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]], mode: PoolModes.Value, nanOpt: NanOpt.Value): Tensor = {
       val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
       val (verticalPadding, horizontalPadding) = pads match {
         case None => (0, 0)
@@ -3609,7 +3614,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |cudnnPoolingDescriptor_t poolingDesc;
           |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
           |CUDNN_CALL(cudnnSetPooling2dDescriptor(
-          |    poolingDesc, ${mode}, ${nanOpt},
+          |    poolingDesc, ${mode.toString}, ${nanOpt.toString},
           |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
           |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
           |));
@@ -3620,12 +3625,15 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    poolingDesc, \n" +
           "    ", one, ", in_desc, ", input.data, ", ", zero, ", out_desc, ", output.data, "));\n" +
           "}"): _*)
-      (output, None)
+      output
     }
 
-    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
-      val mode = "CUDNN_POOLING_MAX"
-      val nanOpt = "CUDNN_NOT_PROPAGATE_NAN"
+    override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
+      assert(input.rank == 4, "Currently, maxpool2D only supports inputs of rank 4")
+      (Pool2D_batch(input, kernel, strides, pads, PoolModes.Max, NanOpt.NotProp), None)
+    }
+
+    def Pool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int], mode: PoolModes.Value, nanOpt: NanOpt.Value): Unit = {
       val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
       val (verticalPadding, horizontalPadding) = (pads(0), pads(2))
       val (verticalStride :: horizontalStride :: Nil) = strides.take(2).toList
@@ -3649,7 +3657,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |cudnnPoolingDescriptor_t poolingDesc;
           |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
           |CUDNN_CALL(cudnnSetPooling2dDescriptor(
-          |    poolingDesc, ${mode}, ${nanOpt},
+          |    poolingDesc, ${mode.toString}, ${nanOpt.toString},
           |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
           |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
           |));
@@ -3663,8 +3671,18 @@ trait TensorDslCudnn extends TensorDslCublas {
           "}"): _*)
     }
 
-    override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = ???
-    override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
+    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+      Pool2D_batch_grad(input, output, kernel, strides, pads, PoolModes.Max, NanOpt.NotProp)
+    }
+
+    override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = {
+      assert(input.rank == 4, "Current, averagePool2D_batch only supports inputs of rank 4")
+      Pool2D_batch(input, kernel, strides, Some(pads), PoolModes.AverageEP, NanOpt.NotProp)
+    }
+
+    override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+      Pool2D_batch_grad(input, output, kernel, strides, pads, PoolModes.AverageEP, NanOpt.NotProp)
+    }
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       val output = Tensor.zeros_like(input)
