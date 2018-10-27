@@ -3322,7 +3322,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
@@ -3424,7 +3424,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
@@ -3480,7 +3480,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
@@ -3973,7 +3973,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    reduce_desc, ${op.toString}, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN,
           |    CUDNN_REDUCE_TENSOR_NO_INDICES, CUDNN_32BIT_INDICES));
           |
-          |void *indices;
+          |void *indices = nullptr; // Don't store indices.
           |
           |// Workspace.
           |size_t ws_size;
@@ -3990,12 +3990,14 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resShape = x.shape.zipWithIndex.flatMap { case (dim, i) =>
         if (indices.contains(i)) if (flatten) None else Some(1) else Some(dim)
       }
+      // TODO: Temporary scalar tensor hack.
+      // Remove if expression when rank-0 tensor support is fixed.
+      if (resShape.isEmpty)
+        return Tensor(res.data, 1)
       Tensor(res.data, resShape: _*)
     }
 
-    // TODO(dan-zheng): Uncomment when CUDA 9 is supported.
-    // Forward CPU implementation (defined on `BackendCublas`) in the meantime.
-    // override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
+    override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
   }
 
   object BackendCudnn {
