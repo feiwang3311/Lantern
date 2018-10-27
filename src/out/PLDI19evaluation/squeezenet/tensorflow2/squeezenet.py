@@ -90,7 +90,7 @@ class Squeezenet_CIFAR(object):
 
     @staticmethod
     def _squeezenet(images, num_classes=10):
-        net = conv2d(images, 96, [2, 2], scope='conv1')
+        net = conv2d(images, 96, [3, 3], scope='conv1')
         net = max_pool2d(net, [2, 2], scope='maxpool1')
         net = fire_module(net, 16, 64, scope='fire2')
         net = fire_module(net, 16, 64, scope='fire3')

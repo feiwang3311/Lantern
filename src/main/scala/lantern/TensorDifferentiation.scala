@@ -106,6 +106,39 @@ trait TensorDsl extends DslOps with Diff {
         }
       }
     }
+
+    class Cifar10DataLoader(name: String, train: Boolean, dims: Seq[Int]) {
+
+    val fd = open(name)
+    val len = filelen(fd)
+    val data = mmap[Char](fd, len)
+    // each entry is target + image
+    val entrySize = (dims.product + 1)
+    val dLength = (len/entrySize.toLong).toInt
+    val length = dLength
+
+    val x = NewArray[Float](dLength * dims.product)
+    val y = NewArray[Int](dLength)
+
+    for (i <- (0 until dLength): Rep[Range]) {
+      y(i) = data(i * entrySize).toInt
+      for (j <- (0 until dims.product): Rep[Range]) {
+        x(i * dims.product + j) = data(i * entrySize + 1 + j).toInt.toFloat / 255
+      }
+    }
+
+    @virtualize
+    def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
+      val off = var_new(0)
+      for (batchIndex <- 0 until (dLength / batchSize): Rep[Range]) {
+        val dataPtr = slice(x, off)
+        val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
+        val targets = slice(y, batchIndex * batchSize)
+        f(batchIndex, t, targets)
+        off += t.scalarCount
+      }
+    }
+  }
   }
 
   def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
@@ -302,6 +335,9 @@ trait TensorDsl extends DslOps with Diff {
 
     def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]])
     def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
+
+    def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor
+    def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
 
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
@@ -1067,6 +1103,85 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = {
+      val (strideRow :: strideCol :: Nil) = strides.toList
+      val (kernelRow :: kernelCol :: Nil) = kernel.toList
+      val (padUp :: padDown :: padLeft :: padRight :: Nil) = pads.toList
+
+      val resWidth = convSize(input.shape(2) + padUp + padDown, kernelRow, strideRow)
+      val resHeight = convSize(input.shape(3) + padLeft + padRight, kernelCol, strideCol)
+      val res = Tensor.zeros(input.shape(0), input.shape(1), resWidth, resHeight)
+
+      for (i <- DataLoop(input.shape(0))) {
+        val ptrInput = slice(input.data, i * input.shape.strides(0))
+        val ptrOutput = slice(res.data, i * res.shape.strides(0))
+        this.averagePool_inplace(Tensor(ptrInput, input.shape.drop(1): _*),
+          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*))
+      }
+      res
+    }
+
+    @virtualize
+    def averagePool_inplace(input: Tensor, kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor): Unit = {
+      val resWidth = res.shape(1)
+      val resHeight = res.shape(2)
+      val kernelSize = kernelRow * kernelCol * 1.0f
+
+      if (padUp == 0) {
+        // looping for the output
+        for (resPane <- DataLoop(res.shape(0))) {
+          for (resRow <- DataLoop(res.shape(1))) {
+            for (resCol <- DataLoop(res.shape(2))) {
+              val resOff = resPane * res.shape.strides(0) + resRow * res.shape.strides(1) + resCol
+              val inOff = resPane * input.shape.strides(0) + resRow * strideRow * input.shape.strides(1) + resCol * strideCol
+              // looping for the kernel
+              val sum = var_new[Float](0.0f)
+              for (kRow <- DataLoop(kernelRow)) {
+                for (kCol <- DataLoop(kernelCol)) {
+                  sum += input.data(inOff + kRow * input.shape.strides(1) + kCol)
+                }
+              }
+              res.data(resOff) = sum / kernelSize
+            }
+          }
+        }
+      } else {
+        ???
+      }
+    }
+
+    override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+      val strideRow = strides.head
+      val strideCol = strides.last
+      val kernelRow = kernel.head
+      val kernelCol = kernel.last
+      val kernelSize = kernelRow * kernelCol
+      val pad = pads(0)
+
+      if (pad == 0) {
+        for (batch <- DataLoop(input.x.shape(0))) {
+          // looping for the output
+          for (yPane <- DataLoop(output.x.shape(1))) {
+            for (yRow <- DataLoop(output.x.shape(2))) {
+              for (yCol <- DataLoop(output.x.shape(3))) {
+                val indexCurr = batch * output.x.shape.strides(0) + yPane * output.x.shape.strides(1) + yRow * output.x.shape.strides(2) + yCol
+                val dCurr = output.d.data(indexCurr) / kernelSize
+                val indexThis = batch * input.x.shape.strides(0) + yPane * input.x.shape.strides(1) + yRow * strideRow * input.x.shape.strides(2) + yCol * strideCol
+                // looping for the kernel
+                for (kRow <- DataLoop(kernelRow)) {
+                  for (kCol <- DataLoop(kernelCol)) {
+                    input.d.data(indexThis + kRow * input.x.shape.strides(2) + kCol) += dCurr
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        ???
+      }
+    }
+
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
@@ -1114,7 +1229,6 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def sum(x: Tensor): Tensor = {
-      generateRawComment("CPU sum function called here")
       Tensor.scalar(x.fold(0.0f)(_ + _))
     }
     override def sum_grad(input: TensorR, res: TensorR): Unit = { +=(input.d, res.d) }
@@ -1697,63 +1811,20 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def averagePool_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]): Tensor = {
-      assert(this.rank == 4, "the input for averagePool_batch should have 4 dimensions")
-      assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")
-      paddings match {
-        case None => ()
-        case Some(paddings) => assert(paddings.size == 4, "paddings should be size 4 for averagePool_batch")
-      }
-      val (strideRow :: strideCol :: Nil) = strides.toList
-      val (kernelRow :: kernelCol :: Nil) = kernels.toList
+      val (strideRow :: strideCol :: Nil) = strides.take(2).toList
+      val (kernelRow :: kernelCol :: Nil) = kernels.take(2).toList
       val (padUp :: padDown :: padLeft :: padRight :: Nil) = paddings match {
         case None => List(0, 0, 0, 0)
-        case Some(paddings) => paddings.toList
+        case Some(pads) => pads.take(4).toList
       }
+      assert(this.rank == 4, "the input for averagePool_batch should have 4 dimensions")
+      assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")
       assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
       assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
       assert(this.shape(2) >= kernelRow && this.shape(3) >= kernelCol, "Image too small for averagePool_batch: " + this.shape + "|" + (kernelRow, kernelCol))
       assert(padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
 
-      val resWidth = convSize(this.shape(2) + padUp + padDown, kernelRow, strideRow)
-      val resHeight = convSize(this.shape(3) + padLeft + padRight, kernelCol, strideCol)
-      val res = Tensor.zeros(this.shape(0), this.shape(1), resWidth, resHeight)
-
-      for (i <- DataLoop(this.shape(0))) {
-        val ptrInput = slice(this.data, i * this.shape.strides(0))
-        val ptrOutput = slice(res.data, i * res.shape.strides(0))
-        Tensor(ptrInput, this.shape.drop(1): _*).averagePool_inplace(
-          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*))
-      }
-      res
-    }
-
-    @virtualize
-    def averagePool_inplace(kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor): Unit = {
-      val resWidth = res.shape(1)
-      val resHeight = res.shape(2)
-      val kernelSize = kernelRow * kernelCol * 1.0f
-
-      if (padUp == 0) {
-        // looping for the output
-        for (resPane <- DataLoop(res.shape(0))) {
-          for (resRow <- DataLoop(res.shape(1))) {
-            for (resCol <- DataLoop(res.shape(2))) {
-              val resOff = resPane * res.shape.strides(0) + resRow * res.shape.strides(1) + resCol
-              val inOff = resPane * this.shape.strides(0) + resRow * strideRow * this.shape.strides(1) + resCol * strideCol
-              // looping for the kernel
-              val sum = var_new[Float](0.0f)
-              for (kRow <- DataLoop(kernelRow)) {
-                for (kCol <- DataLoop(kernelCol)) {
-                  sum += this.data(inOff + kRow * this.shape.strides(1) + kCol)
-                }
-              }
-              res.data(resOff) = sum / kernelSize
-            }
-          }
-        }
-      } else {
-        ???
-      }
+      backend.averagePool2D_batch(this, kernels, strides, paddings match {case None => Seq(0, 0, 0, 0); case Some(paddings) => paddings})
     }
 
     @virtualize
@@ -2332,43 +2403,12 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def averagePoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+    def averagePoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(this.x.averagePool_batch(kernels, strides, pads))
       k(y)
 
       // back prop
-      val strideRow = strides.head
-      val strideCol = strides.last
-      val kernelRow = kernels.head
-      val kernelCol = kernels.last
-      val kernelSize = kernelRow * kernelCol
-      val pad = pads match {
-        case None => 0
-        case Some(Seq(padUp, padDown, padLeft, padRight)) => padUp
-      }
-
-      if (pad == 0) {
-        for (batch <- DataLoop(this.x.shape(0))) {
-          // looping for the output
-          for (yPane <- DataLoop(y.x.shape(1))) {
-            for (yRow <- DataLoop(y.x.shape(2))) {
-              for (yCol <- DataLoop(y.x.shape(3))) {
-                val indexCurr = batch * y.x.shape.strides(0) + yPane * y.x.shape.strides(1) + yRow * y.x.shape.strides(2) + yCol
-                val dCurr = y.d.data(indexCurr) / kernelSize
-                val indexThis = batch * this.x.shape.strides(0) + yPane * this.x.shape.strides(1) + yRow * strideRow * this.x.shape.strides(2) + yCol * strideCol
-                // looping for the kernel
-                for (kRow <- DataLoop(kernelRow)) {
-                  for (kCol <- DataLoop(kernelCol)) {
-                    this.d.data(indexThis + kRow * this.x.shape.strides(2) + kCol) += dCurr
-                  }
-                }
-              }
-            }
-          }
-        }
-      } else {
-        ???
-      }
+      backend.averagePool2D_batch_grad(this, y, kernels, strides, pads match {case None => Seq(0,0,0,0); case Some(pads) => pads})
     }
 
     @virtualize  // conv with batch, bias, and pads
@@ -2390,7 +2430,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // maxpool with kernel size potentially different from strides, and works with batch dimension! can have optional paddings
-    def maxPoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+    def maxPoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (y, sidx) = backend.maxPool2D_batch(x, kernels, strides, pads)
       val ty = TensorR(y)
       k(ty)
@@ -3127,6 +3167,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
     override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = ???
     override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
+
+    override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = ???
+    override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
+
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
@@ -3175,23 +3219,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         res.d.data, ",", target, ",", input.d.data, ")")
     }
 
-    override def sum(x: Tensor): Tensor = {
-      BackendCPU().sum(x.toCPU()).toGPU()
-    }
+    override def sum(x: Tensor): Tensor = ???
 
-    override def sum_grad(input: TensorR, res: TensorR): Unit = {
-      input.moveToCPU()
-      res.moveToCPU()
-
-      // TODO: Use `withBackend` when implemented.
-      val tmp = backend
-      backend = BackendCPU()
-      BackendCPU().sum_grad(input, res)
-      backend = tmp
-
-      input.moveToGPU()
-      res.moveToGPU()
-    }
+    override def sum_grad(input: TensorR, res: TensorR): Unit = ???
 
     override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
       assert(dim == 1, "TODO (Fei Wang): only support dim = 1 so far")
@@ -3265,7 +3295,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         (bias.shape.padTo(4, 1), res.shape.padTo(4, 1))
       } else {
         assert(bias.rank == 1, "if not equal shape, bias must be rank 1")
-        assert(res.rank >= 2, "if not equal shape, res must be rank 2 or more")
+        // assert(res.rank >= 2, "if not equal shape, res must be rank 2 or more")
         (Seq(1, bias.shape(0), 1, 1), res.shape.padTo(4, 1))
       }
       val one = NewArray[Float](1); one(0) = 1
@@ -3518,7 +3548,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           assert(bias.shape(0) == kernel.shape(0), "Bias length must equal number of out-channels")
         case None => ()
       }
-      assert(kernel.shape(1) == input.shape(1), "In-channel count mismatch: input.shape[1] should match kernel.shape[1]")
+      assert(kernel.shape(1) == input.shape(1), s"In-channel count mismatch: input.shape[1] ${input.shape(1)} should match kernel.shape[1] ${kernel.shape(1)}")
       assert(input.shape(2) >= kernel.shape(2) && input.shape(3) >= kernel.shape(3), "Image too small for conv")
 
       assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
@@ -3558,14 +3588,19 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
-    override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
-      assert(input.rank == 4, "Currently, maxpool2D only supports inputs of rank 4")
-      val mode = "CUDNN_POOLING_MAX"
-      // val mode = "CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING"
-      // val mode = "CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING"
-      // val mode = "CUDNN_POOLING_MAX_DETERMINISTIC"
-      val nanOpt = "CUDNN_NOT_PROPAGATE_NAN"
-      // val nanOpt = "CUDNN_PROPAGATE_NAN"
+    object PoolModes extends Enumeration {
+      val Max = Value("CUDNN_POOLING_MAX")
+      val AverageIP = Value("CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING")
+      val AverageEP = Value("CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING")
+      val MaxD = Value("CUDNN_POOLING_MAX_DETERMINISTIC")
+    }
+
+    object NanOpt extends Enumeration {
+      val NotProp = Value("CUDNN_NOT_PROPAGATE_NAN")
+      val Prop = Value("CUDNN_PROPAGATE_NAN")
+    }
+
+    def Pool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]], mode: PoolModes.Value, nanOpt: NanOpt.Value): Tensor = {
       val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
       val (verticalPadding, horizontalPadding) = pads match {
         case None => (0, 0)
@@ -3597,7 +3632,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |cudnnPoolingDescriptor_t poolingDesc;
           |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
           |CUDNN_CALL(cudnnSetPooling2dDescriptor(
-          |    poolingDesc, ${mode}, ${nanOpt},
+          |    poolingDesc, ${mode.toString}, ${nanOpt.toString},
           |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
           |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
           |));
@@ -3608,12 +3643,15 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    poolingDesc, \n" +
           "    ", one, ", in_desc, ", input.data, ", ", zero, ", out_desc, ", output.data, "));\n" +
           "}"): _*)
-      (output, None)
+      output
     }
 
-    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
-      val mode = "CUDNN_POOLING_MAX"
-      val nanOpt = "CUDNN_NOT_PROPAGATE_NAN"
+    override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = {
+      assert(input.rank == 4, "Currently, maxpool2D only supports inputs of rank 4")
+      (Pool2D_batch(input, kernel, strides, pads, PoolModes.Max, NanOpt.NotProp), None)
+    }
+
+    def Pool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int], mode: PoolModes.Value, nanOpt: NanOpt.Value): Unit = {
       val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
       val (verticalPadding, horizontalPadding) = (pads(0), pads(2))
       val (verticalStride :: horizontalStride :: Nil) = strides.take(2).toList
@@ -3637,7 +3675,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |cudnnPoolingDescriptor_t poolingDesc;
           |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
           |CUDNN_CALL(cudnnSetPooling2dDescriptor(
-          |    poolingDesc, ${mode}, ${nanOpt},
+          |    poolingDesc, ${mode.toString}, ${nanOpt.toString},
           |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
           |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
           |));
@@ -3649,6 +3687,19 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    ", one, ", out_desc, ", output.x.data, ", out_desc, ", output.d.data, ", in_desc, ", input.x.data,
           "  , ", zero, ", in_desc, ", input.d.data, "));\n" +
           "}"): _*)
+    }
+
+    override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+      Pool2D_batch_grad(input, output, kernel, strides, pads, PoolModes.Max, NanOpt.NotProp)
+    }
+
+    override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = {
+      assert(input.rank == 4, "Current, averagePool2D_batch only supports inputs of rank 4")
+      Pool2D_batch(input, kernel, strides, Some(pads), PoolModes.AverageEP, NanOpt.NotProp)
+    }
+
+    override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+      Pool2D_batch_grad(input, output, kernel, strides, pads, PoolModes.AverageEP, NanOpt.NotProp)
     }
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
@@ -3990,14 +4041,23 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resShape = x.shape.zipWithIndex.flatMap { case (dim, i) =>
         if (indices.contains(i)) if (flatten) None else Some(1) else Some(dim)
       }
-      // TODO: Temporary scalar tensor hack.
-      // Remove if expression when rank-0 tensor support is fixed.
-      if (resShape.isEmpty)
-        return Tensor(res.data, 1)
-      Tensor(res.data, resShape: _*)
+
+      // TODO: Remove if expression when rank-0 tensor support is fixed.
+      if (resShape.isEmpty) Tensor(res.data, 1)
+      else Tensor(res.data, resShape: _*)
     }
 
-    override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
+    // TODO(dan-zheng): Uncomment when CUDA 9 is supported.
+    // Forward CPU implementation (defined on `BackendCublas`) in the meantime.
+    override def sum(x: Tensor): Tensor = {
+      val xx = x.resize(x.shape.padTo(4, 1): _*)
+      val res = cudnnReduceTensor(xx, ReductionOp.Add, xx.shape.indices)
+      res.resize(1)
+    }
+
+    override def sum_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnAddBiasTensor(res.d, input.d)
+    }
   }
 
   object BackendCudnn {

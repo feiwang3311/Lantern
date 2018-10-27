@@ -275,6 +275,47 @@ class TestCudnn extends LanternFunSuite {
     runTest(maxPool2D)
   }
 
+  testGPU("averagePool2D_batch") {
+    val averagePool2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-averagePool"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9)
+        val kernel = Seq(2,2)
+        val strides = Seq(1,1)
+        val output = input.averagePool_batch(kernel, strides, None)
+
+        backend = BackendCPU()
+        val expect_output = Tensor.fromData(Seq(1,1,2,2), 3, 4, 6, 7)
+        Tensor.assertEqual(expect_output, output.toCPU(), "expect and output are")
+      }
+    }
+    runTest(averagePool2D)
+  }
+
+  testGPU("averagePool2D_batch_grad") {
+    val averagePool2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-averagePool-grad"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = TensorR(Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9))
+        val kernel = Seq(2,2)
+        val strides = Seq(1,1)
+        def lossFun(dummy: TensorR) = {
+          input.averagePoolBK(kernel, strides, None)
+        }
+        gradR(lossFun)(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expect_input_grad = Tensor.fromData(Seq(1,1,3,3), 0.25f,0.5f,0.25f,0.5f,1,0.5f,0.25f,0.5f,0.25f)
+        Tensor.assertEqual(expect_input_grad, input.d.toCPU(), "expect and output are")
+      }
+    }
+    runTest(averagePool2D)
+  }
+
   testGPU("dropout_batch") {
     val dropout = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-dropout"
