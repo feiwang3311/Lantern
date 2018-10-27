@@ -1196,7 +1196,6 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def sum(x: Tensor): Tensor = {
-      generateRawComment("CPU sum function called here")
       Tensor.scalar(x.fold(0.0f)(_ + _))
     }
     override def sum_grad(input: TensorR, res: TensorR): Unit = { +=(input.d, res.d) }
@@ -2371,7 +2370,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def averagePoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+    def averagePoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(this.x.averagePool_batch(kernels, strides, pads))
       k(y)
 
@@ -2398,7 +2397,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // maxpool with kernel size potentially different from strides, and works with batch dimension! can have optional paddings
-    def maxPoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+    def maxPoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (y, sidx) = backend.maxPool2D_batch(x, kernels, strides, pads)
       val ty = TensorR(y)
       k(ty)
@@ -3187,23 +3186,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         res.d.data, ",", target, ",", input.d.data, ")")
     }
 
-    override def sum(x: Tensor): Tensor = {
-      BackendCPU().sum(x.toCPU()).toGPU()
-    }
+    override def sum(x: Tensor): Tensor = ???
 
-    override def sum_grad(input: TensorR, res: TensorR): Unit = {
-      input.moveToCPU()
-      res.moveToCPU()
-
-      // TODO: Use `withBackend` when implemented.
-      val tmp = backend
-      backend = BackendCPU()
-      BackendCPU().sum_grad(input, res)
-      backend = tmp
-
-      input.moveToGPU()
-      res.moveToGPU()
-    }
+    override def sum_grad(input: TensorR, res: TensorR): Unit = ???
 
     override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
       assert(dim == 1, "TODO (Fei Wang): only support dim = 1 so far")
@@ -4028,7 +4013,12 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     // TODO(dan-zheng): Uncomment when CUDA 9 is supported.
     // Forward CPU implementation (defined on `BackendCublas`) in the meantime.
-    // override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
+    override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
+
+    override def sum_grad(input: TensorR, res: TensorR): Unit = {
+      cudnnAddBiasTensor(res.d, input.d)
+    }
+
   }
 
   object BackendCudnn {
