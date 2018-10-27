@@ -437,7 +437,7 @@ class TestCudnn extends LanternFunSuite {
         val grad = gradR(x => x.sum())(input)
 
         backend = BackendCPU()
-        val expectedResult = Tensor.scalar(10)
+        val expectedResult = Tensor.scalar(21)
         val expectedGrad = Tensor.fromData(Seq(1, 1, 2, 3), 1, 1, 1, 1, 1, 1)
         Tensor.assertEqual(expectedResult, result.toCPU())
         Tensor.assertEqual(expectedGrad, grad.toCPU())

@@ -4036,7 +4036,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    reduce_desc, ${op.toString}, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN,
           |    CUDNN_REDUCE_TENSOR_NO_INDICES, CUDNN_32BIT_INDICES));
           |
-          |void *indices;
+          |void *indices = nullptr; // Don't store indices.
           |
           |// Workspace.
           |size_t ws_size;
@@ -4053,6 +4053,8 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resShape = x.shape.zipWithIndex.flatMap { case (dim, i) =>
         if (indices.contains(i)) if (flatten) None else Some(1) else Some(dim)
       }
+
+      // TODO: Remove if expression when rank-0 tensor support is fixed.
       if (resShape.isEmpty) Tensor(res.data, 1)
       else Tensor(res.data, resShape: _*)
     }
@@ -4069,7 +4071,6 @@ trait TensorDslCudnn extends TensorDslCublas {
       generateRawComment("backprop for sum op")
       cudnnAddBiasTensor(res.d, input.d)
     }
-
   }
 
   object BackendCudnn {
