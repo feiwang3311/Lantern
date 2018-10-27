@@ -1595,9 +1595,13 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(this.data, new_dims : _*)
     }
 
+    @virtualize
+    def amax() = this.fold(0.0f)((agg, x) => if (Math.abs(x) > Math.abs(agg)) x else agg)
+
     def printHead(count: Int = 10, msg: String = ""): Unit = {
       if (msg != "")
         printf(s"$msg (size ${this.shape.seq mkString " x "})\\n")
+      printf(s"Max Abs: ${format}|| ", this.amax())
       for (i <- 0 until count: Rep[Range]) {
         printf(format, this.data(i))
       }
@@ -2777,9 +2781,9 @@ trait TensorDsl extends DslOps with Diff {
       assert(y.x.scalarCount == 1, s"Loss function must return a Tensor of size 1, got ${y.x.scalarCount}")
       y.d.setAsOne()
       generateRawComment(s"backend is $backend")
+      // result.copy_data(y.x)
       if (backend.isInstanceOf[BackendCPU]) BackendCPU().copyFloatArray(res, y.x.data, 1)
       else unchecked[Unit]("CUDA_CALL(cudaMemcpy(", res, ", ", y.x.data, ", ", 1, " * sizeof(float), cudaMemcpyDeviceToHost))")
-      // result.copy_data(y.x)
       ()
     }
     result
@@ -3238,9 +3242,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       // concatenate with user-define kernel function (1D grid 3D block)
       unchecked[Unit](
         "{\n",
-        "dim3 block(", dim3, ", ", dim2, ", ", dim1, ");\n",
-        "concat<<<", dim0, ", block>>>(", tensors(0).data, ",", tensors(1).data, ",", res, ", ", tensors(0).shape(1), ");\n",
-        "}\n")
+        "dim3 grid(", dim1 * dim2, ", ", dim0, "); \n",
+        "concat2D_1D<<<grid", ", ", dim3, ">>>(", tensors(0).data, ",", tensors(1).data, ",", res, ", ", dim2, ", ", tensors(0).shape(1), ");\n",
+        "}")
       Tensor(res, dim0, dim1, dim2, dim3)
     }
 
@@ -3257,9 +3261,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       // concatenate with user-define kernel function (1D grid 3D block)
       unchecked[Unit](
         "{\n",
-        "dim3 block(", dim3, ", ", dim2, ", ", dim1, ");\n",
-        "concat_grad<<<", dim0, ", block>>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ", tensorRs(0).x.shape(1), ");\n",
-        "}\n")
+        "dim3 grid(", dim1 * dim2, ", ", dim0, ");\n",
+        "concat2D_1D_grad<<<grid", ", ", dim3, ">>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ", dim2, ", ", tensorRs(0).x.shape(1), ");\n",
+        "}")
     }
   }
 
@@ -3352,7 +3356,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
@@ -3454,7 +3458,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
@@ -3510,7 +3514,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-          |CUDNN_CALL(cudnnSetConvolution2dDescriptor_v5(
+          |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
@@ -3586,6 +3590,13 @@ trait TensorDslCudnn extends TensorDslCublas {
         case Some(bias) =>
           cudnnConvolutionBackwardBias(bias.d, res.d)
       }
+      // input.x.toCPU().printHead(10, "forward, input of conv")
+      // input.d.toCPU().printHead(10, "backprop, input of conv")
+      // filter.x.toCPU().printHead(10, "forward, filter of conv")
+      // filter.d.toCPU().printHead(10, "backprop, filter of conv")
+      // res.x.toCPU().printHead(10, "forward, res of conv")
+      // res.d.toCPU().printHead(10, "backprop, res of conv")
+      // error("")
     }
 
     object PoolModes extends Enumeration {
@@ -3971,8 +3982,9 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def softmax_grad(input: TensorR, res: TensorR): Unit =
       softmaxBackwardHelper(input, res, SoftmaxMode.Accurate)
-    override def logSoftmax_grad(input: TensorR, res: TensorR): Unit =
+    override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = {
       softmaxBackwardHelper(input, res, SoftmaxMode.Log)
+    }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnReduceTensorOp_t
     object ReductionOp extends Enumeration {
@@ -4054,6 +4066,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
+      generateRawComment("backprop for sum op")
       cudnnAddBiasTensor(res.d, input.d)
     }
 

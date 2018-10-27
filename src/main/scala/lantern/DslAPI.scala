@@ -310,7 +310,7 @@ trait DslGenBase extends CGenNumericOpsExtra
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-    case CharToInt(s) => stream.println("(int)" + quote(s) + ";")
+    case CharToInt(s) => stream.println(s"int32_t ${quote{sym}} = (int32_t) ${quote(s)};")
     case Error(s) => stream.println("assert(false && " + quote(s) + ");")
     case afs@ArrayFromSeq(xs) =>
       stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "};")
@@ -505,6 +505,28 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |                (threadIdx.z - bound) * blockDim.y * blockDim.x +
       |                threadIdx.y * blockDim.x + threadIdx.x;
       |    out[tid] = in2[subid];
+      |  }
+      |}
+      |
+      |__global__ void concat2D_1D(float* in1, float* in2, float* out, int dim2, int bound) {
+      |  int tid = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (blockIdx.x < bound * dim2) {
+      |    int subid = blockIdx.y * bound * dim2 * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
+      |    out[tid] = in1[subid];
+      |  } else {
+      |    int subid = blockIdx.y * (gridDim.x - bound * dim2) * blockDim.x + (blockIdx.x - bound * dim2) * blockDim.x + threadIdx.x;
+      |    out[tid] = in2[subid];
+      |  }
+      |}
+      |
+      |__global__ void concat2D_1D_grad(float* in1, float* in2, float* out, int dim2, int bound) {
+      |  int tid = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (blockIdx.x < bound * dim2) {
+      |    int subid = blockIdx.y * bound * dim2 * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
+      |    in1[subid] += out[tid];
+      |  } else {
+      |    int subid = blockIdx.y * (gridDim.x - bound * dim2) * blockDim.x + (blockIdx.x - bound * dim2) * blockDim.x + threadIdx.x;
+      |    in2[subid] += out[tid];
       |  }
       |}
       |

@@ -152,8 +152,6 @@ object MnistCNN {
       val tot2 = NewArray[Long](2)
 
       val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, Seq(iChan1, iRow1, iCol1))
-      // Move target labels to GPU.
-      train.target.moveToGPU(train.tlen)
       train.normalize()
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f
@@ -175,7 +173,8 @@ object MnistCNN {
         train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
           imgIdx += batchSize
           val inputR = TensorR(input.toGPU(), isInput=true)
-          val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(4))
+          val targetR = target.toGPU(batchSize)
+          val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(4))
           trainLoss += loss.data(0)
           opt.step()
 

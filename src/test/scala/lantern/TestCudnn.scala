@@ -402,6 +402,30 @@ class TestCudnn extends LanternFunSuite {
     runTest(concat)
   }
 
+  testGPU("concat_big") {
+    val concat = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-concat-grad"
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input1 = Tensor.fill(Seq(100,3,32,32), 1.0f)
+        val input2 = Tensor.fill(Seq(100,3,32,32), 1.0f)
+        val result = input1.concat(1, input2)
+        val input1R = TensorR(input1)
+        val input2R = TensorR(input2)
+        val grad = gradR(x => input1R.concat(1, input2R))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedResult = Tensor.fill(Seq(100,6,32,32), 1.0f)
+        val expectedGrad1 = Tensor.fill(Seq(100, 3, 32, 32), 1.0f)
+        val expectedGrad2 = Tensor.fill(Seq(100, 3, 32, 32), 1.0f)
+        Tensor.assertEqual(expectedResult, result.toCPU())
+        Tensor.assertEqual(expectedGrad1, input1R.d.toCPU())
+        Tensor.assertEqual(expectedGrad2, input2R.d.toCPU())
+      }
+    }
+    runTest(concat)
+  }
+
   testGPU("sum") {
     val sum = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-sum"

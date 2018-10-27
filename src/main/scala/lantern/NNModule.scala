@@ -41,10 +41,12 @@ trait NNModule extends TensorDsl {
         res
       }
       val allParams = this.getClass.getDeclaredFields
-      val subParameters = allParams.filter { _.getType.isAssignableFrom(classOf[TensorR]) }
-      val subModules = allParams.filter { t => classOf[Module].isAssignableFrom(t.getType) && oops[Boolean](t) { _.get(this) != this }}
+      val subParameters = allParams.filter { t => classOf[Some[TensorR]].isAssignableFrom(t.getType) || classOf[TensorR].isAssignableFrom(t.getType) }
+      val subModules = allParams.filter { t => (classOf[Some[Module]].isAssignableFrom(t.getType) || classOf[Module].isAssignableFrom(t.getType)) && oops[Boolean](t) { _.get(this) != this }}
 
-      subParameters.map{ field => oops[Unit](field) {x => parameters.update(s"$nameScope${x.getName()}", (x.get(this).asInstanceOf[TensorR], None))} }
+      subParameters.map{ field => oops[Unit](field) {x => parameters.update(s"$nameScope${x.getName()}", (
+        if (x.get(this).isInstanceOf[Some[TensorR]]) x.get(this).asInstanceOf[Some[TensorR]].get else x.get(this).asInstanceOf[TensorR], None
+      ))} }
       subModules.map{ field => oops[Unit](field) {x => {val a = x.get(this).asInstanceOf[Module]; modules.update(s"$nameScope${x.getName()}", a); a.registerParamters(s"$nameScope${x.getName()}/")}}}
     }
   }
