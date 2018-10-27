@@ -303,6 +303,9 @@ trait TensorDsl extends DslOps with Diff {
     def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]])
     def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
 
+    def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor
+    def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
+
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
@@ -1067,6 +1070,85 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = {
+      val (strideRow :: strideCol :: Nil) = strides.toList
+      val (kernelRow :: kernelCol :: Nil) = kernel.toList
+      val (padUp :: padDown :: padLeft :: padRight :: Nil) = pads.toList
+
+      val resWidth = convSize(input.shape(2) + padUp + padDown, kernelRow, strideRow)
+      val resHeight = convSize(input.shape(3) + padLeft + padRight, kernelCol, strideCol)
+      val res = Tensor.zeros(input.shape(0), input.shape(1), resWidth, resHeight)
+
+      for (i <- DataLoop(input.shape(0))) {
+        val ptrInput = slice(input.data, i * input.shape.strides(0))
+        val ptrOutput = slice(res.data, i * res.shape.strides(0))
+        this.averagePool_inplace(Tensor(ptrInput, input.shape.drop(1): _*),
+          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*))
+      }
+      res
+    }
+
+    @virtualize
+    def averagePool_inplace(input: Tensor, kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor): Unit = {
+      val resWidth = res.shape(1)
+      val resHeight = res.shape(2)
+      val kernelSize = kernelRow * kernelCol * 1.0f
+
+      if (padUp == 0) {
+        // looping for the output
+        for (resPane <- DataLoop(res.shape(0))) {
+          for (resRow <- DataLoop(res.shape(1))) {
+            for (resCol <- DataLoop(res.shape(2))) {
+              val resOff = resPane * res.shape.strides(0) + resRow * res.shape.strides(1) + resCol
+              val inOff = resPane * input.shape.strides(0) + resRow * strideRow * input.shape.strides(1) + resCol * strideCol
+              // looping for the kernel
+              val sum = var_new[Float](0.0f)
+              for (kRow <- DataLoop(kernelRow)) {
+                for (kCol <- DataLoop(kernelCol)) {
+                  sum += input.data(inOff + kRow * input.shape.strides(1) + kCol)
+                }
+              }
+              res.data(resOff) = sum / kernelSize
+            }
+          }
+        }
+      } else {
+        ???
+      }
+    }
+
+    override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
+      val strideRow = strides.head
+      val strideCol = strides.last
+      val kernelRow = kernel.head
+      val kernelCol = kernel.last
+      val kernelSize = kernelRow * kernelCol
+      val pad = pads(0)
+
+      if (pad == 0) {
+        for (batch <- DataLoop(input.x.shape(0))) {
+          // looping for the output
+          for (yPane <- DataLoop(output.x.shape(1))) {
+            for (yRow <- DataLoop(output.x.shape(2))) {
+              for (yCol <- DataLoop(output.x.shape(3))) {
+                val indexCurr = batch * output.x.shape.strides(0) + yPane * output.x.shape.strides(1) + yRow * output.x.shape.strides(2) + yCol
+                val dCurr = output.d.data(indexCurr) / kernelSize
+                val indexThis = batch * input.x.shape.strides(0) + yPane * input.x.shape.strides(1) + yRow * strideRow * input.x.shape.strides(2) + yCol * strideCol
+                // looping for the kernel
+                for (kRow <- DataLoop(kernelRow)) {
+                  for (kCol <- DataLoop(kernelCol)) {
+                    input.d.data(indexThis + kRow * input.x.shape.strides(2) + kCol) += dCurr
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        ???
+      }
+    }
+
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
@@ -1697,63 +1779,20 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def averagePool_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]): Tensor = {
-      assert(this.rank == 4, "the input for averagePool_batch should have 4 dimensions")
-      assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")
-      paddings match {
-        case None => ()
-        case Some(paddings) => assert(paddings.size == 4, "paddings should be size 4 for averagePool_batch")
-      }
-      val (strideRow :: strideCol :: Nil) = strides.toList
-      val (kernelRow :: kernelCol :: Nil) = kernels.toList
+      val (strideRow :: strideCol :: Nil) = strides.take(2).toList
+      val (kernelRow :: kernelCol :: Nil) = kernels.take(2).toList
       val (padUp :: padDown :: padLeft :: padRight :: Nil) = paddings match {
         case None => List(0, 0, 0, 0)
-        case Some(paddings) => paddings.toList
+        case Some(pads) => pads.take(4).toList
       }
+      assert(this.rank == 4, "the input for averagePool_batch should have 4 dimensions")
+      assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")
       assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
       assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
       assert(this.shape(2) >= kernelRow && this.shape(3) >= kernelCol, "Image too small for averagePool_batch: " + this.shape + "|" + (kernelRow, kernelCol))
       assert(padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
 
-      val resWidth = convSize(this.shape(2) + padUp + padDown, kernelRow, strideRow)
-      val resHeight = convSize(this.shape(3) + padLeft + padRight, kernelCol, strideCol)
-      val res = Tensor.zeros(this.shape(0), this.shape(1), resWidth, resHeight)
-
-      for (i <- DataLoop(this.shape(0))) {
-        val ptrInput = slice(this.data, i * this.shape.strides(0))
-        val ptrOutput = slice(res.data, i * res.shape.strides(0))
-        Tensor(ptrInput, this.shape.drop(1): _*).averagePool_inplace(
-          kernelRow, kernelCol, strideRow, strideCol, padUp, padDown, padLeft, padRight, Tensor(ptrOutput, res.shape.drop(1): _*))
-      }
-      res
-    }
-
-    @virtualize
-    def averagePool_inplace(kernelRow: Int, kernelCol: Int, strideRow: Int, strideCol: Int, padUp: Int, padDown: Int, padLeft: Int, padRight: Int, res: Tensor): Unit = {
-      val resWidth = res.shape(1)
-      val resHeight = res.shape(2)
-      val kernelSize = kernelRow * kernelCol * 1.0f
-
-      if (padUp == 0) {
-        // looping for the output
-        for (resPane <- DataLoop(res.shape(0))) {
-          for (resRow <- DataLoop(res.shape(1))) {
-            for (resCol <- DataLoop(res.shape(2))) {
-              val resOff = resPane * res.shape.strides(0) + resRow * res.shape.strides(1) + resCol
-              val inOff = resPane * this.shape.strides(0) + resRow * strideRow * this.shape.strides(1) + resCol * strideCol
-              // looping for the kernel
-              val sum = var_new[Float](0.0f)
-              for (kRow <- DataLoop(kernelRow)) {
-                for (kCol <- DataLoop(kernelCol)) {
-                  sum += this.data(inOff + kRow * this.shape.strides(1) + kCol)
-                }
-              }
-              res.data(resOff) = sum / kernelSize
-            }
-          }
-        }
-      } else {
-        ???
-      }
+      backend.averagePool2D_batch(this, kernels, strides, paddings match {case None => Seq(0, 0, 0, 0); case Some(paddings) => paddings})
     }
 
     @virtualize
@@ -2337,38 +2376,7 @@ trait TensorDsl extends DslOps with Diff {
       k(y)
 
       // back prop
-      val strideRow = strides.head
-      val strideCol = strides.last
-      val kernelRow = kernels.head
-      val kernelCol = kernels.last
-      val kernelSize = kernelRow * kernelCol
-      val pad = pads match {
-        case None => 0
-        case Some(Seq(padUp, padDown, padLeft, padRight)) => padUp
-      }
-
-      if (pad == 0) {
-        for (batch <- DataLoop(this.x.shape(0))) {
-          // looping for the output
-          for (yPane <- DataLoop(y.x.shape(1))) {
-            for (yRow <- DataLoop(y.x.shape(2))) {
-              for (yCol <- DataLoop(y.x.shape(3))) {
-                val indexCurr = batch * y.x.shape.strides(0) + yPane * y.x.shape.strides(1) + yRow * y.x.shape.strides(2) + yCol
-                val dCurr = y.d.data(indexCurr) / kernelSize
-                val indexThis = batch * this.x.shape.strides(0) + yPane * this.x.shape.strides(1) + yRow * strideRow * this.x.shape.strides(2) + yCol * strideCol
-                // looping for the kernel
-                for (kRow <- DataLoop(kernelRow)) {
-                  for (kCol <- DataLoop(kernelCol)) {
-                    this.d.data(indexThis + kRow * this.x.shape.strides(2) + kCol) += dCurr
-                  }
-                }
-              }
-            }
-          }
-        }
-      } else {
-        ???
-      }
+      backend.averagePool2D_batch_grad(this, y, kernels, strides, pads match {case None => Seq(0,0,0,0); case Some(pads) => pads})
     }
 
     @virtualize  // conv with batch, bias, and pads
@@ -3127,6 +3135,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???
     override def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]]) = ???
     override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
+
+    override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = ???
+    override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
+
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
@@ -3650,6 +3662,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           "  , ", zero, ", in_desc, ", input.d.data, "));\n" +
           "}"): _*)
     }
+
+    override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = ???
+    override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       val output = Tensor.zeros_like(input)
