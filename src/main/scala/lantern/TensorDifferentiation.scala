@@ -106,6 +106,39 @@ trait TensorDsl extends DslOps with Diff {
         }
       }
     }
+
+    class Cifar10DataLoader(name: String, train: Boolean, dims: Seq[Int]) {
+
+    val fd = open(name)
+    val len = filelen(fd)
+    val data = mmap[Char](fd, len)
+    // each entry is target + image
+    val entrySize = (dims.product + 1)
+    val dLength = (len/entrySize.toLong).toInt
+    val length = dLength
+
+    val x = NewArray[Float](dLength * dims.product)
+    val y = NewArray[Int](dLength)
+
+    for (i <- (0 until dLength): Rep[Range]) {
+      y(i) = data(i * entrySize).toInt
+      for (j <- (0 until dims.product): Rep[Range]) {
+        x(i * dims.product + j) = data(i * entrySize + 1 + j).toInt.toFloat / 255
+      }
+    }
+
+    @virtualize
+    def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
+      val off = var_new(0)
+      for (batchIndex <- 0 until (dLength / batchSize): Rep[Range]) {
+        val dataPtr = slice(x, off)
+        val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
+        val targets = slice(y, batchIndex * batchSize)
+        f(batchIndex, t, targets)
+        off += t.scalarCount
+      }
+    }
+  }
   }
 
   def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
@@ -3262,7 +3295,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         (bias.shape.padTo(4, 1), res.shape.padTo(4, 1))
       } else {
         assert(bias.rank == 1, "if not equal shape, bias must be rank 1")
-        assert(res.rank >= 2, "if not equal shape, res must be rank 2 or more")
+        // assert(res.rank >= 2, "if not equal shape, res must be rank 2 or more")
         (Seq(1, bias.shape(0), 1, 1), res.shape.padTo(4, 1))
       }
       val one = NewArray[Float](1); one(0) = 1
@@ -3515,7 +3548,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           assert(bias.shape(0) == kernel.shape(0), "Bias length must equal number of out-channels")
         case None => ()
       }
-      assert(kernel.shape(1) == input.shape(1), "In-channel count mismatch: input.shape[1] should match kernel.shape[1]")
+      assert(kernel.shape(1) == input.shape(1), s"In-channel count mismatch: input.shape[1] ${input.shape(1)} should match kernel.shape[1] ${kernel.shape(1)}")
       assert(input.shape(2) >= kernel.shape(2) && input.shape(3) >= kernel.shape(3), "Image too small for conv")
 
       assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
@@ -4008,12 +4041,17 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resShape = x.shape.zipWithIndex.flatMap { case (dim, i) =>
         if (indices.contains(i)) if (flatten) None else Some(1) else Some(dim)
       }
-      Tensor(res.data, resShape: _*)
+      if (resShape.isEmpty) Tensor(res.data, 1)
+      else Tensor(res.data, resShape: _*)
     }
 
     // TODO(dan-zheng): Uncomment when CUDA 9 is supported.
     // Forward CPU implementation (defined on `BackendCublas`) in the meantime.
-    override def sum(x: Tensor): Tensor = cudnnReduceTensor(x, ReductionOp.Add, x.shape.indices)
+    override def sum(x: Tensor): Tensor = {
+      val xx = x.resize(x.shape.padTo(4, 1): _*)
+      val res = cudnnReduceTensor(xx, ReductionOp.Add, xx.shape.indices)
+      res.resize(1)
+    }
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       cudnnAddBiasTensor(res.d, input.d)

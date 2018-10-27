@@ -310,6 +310,7 @@ trait DslGenBase extends CGenNumericOpsExtra
   }
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case CharToInt(s) => stream.println("(int)" + quote(s) + ";")
     case Error(s) => stream.println("assert(false && " + quote(s) + ");")
     case afs@ArrayFromSeq(xs) =>
       stream.println(remap(afs.m) + " " + quote(sym) + "[" + xs.length + "] = {" + (xs map quote mkString ",") + "};")
