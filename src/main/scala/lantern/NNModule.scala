@@ -196,13 +196,10 @@ trait NNModule extends TensorDsl {
           tr.x.data(i) += learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
         0.0f
       }
-      // tr.clip_grad(gradClip)
-      // t += tr.d * tr.d
-      // if (descent)
-      //   tr.x -= tr.d * learning_rate / (t + 1e-8f).sqrt()
-      // else
-      //   tr.x += tr.d * learning_rate / (t + 1e-8f).sqrt()
-      // tr.clear_grad()
+      // par.clip_grad(5.0f)
+      // mem += par.d * par.d
+      // par.x -= par.d * lr / (mem + hp).sqrt()
+      // par.clear_grad()
     }
   }
 }

@@ -194,6 +194,29 @@ class AdLMSTest extends FunSuite {
     }
   }
 
+  test("whileC") {
+    val gr3 = new DslDriverC[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        val half = (new NumR(0.5,var_new(0.0)))
+        val res = gradR(x => LOOP(x)(x1 => x1.x > 1.0)(x1 => half * x1))(x)
+        res
+      }
+    }
+    // System.out.println(gr3.code)
+
+    // double Snippet(double  x0) {
+    //   auto k = [&](double x) {return 1.0;};
+    //   function<double(double)> rec = [&](double x4) {
+    //     if (x4 > 1.0) {
+    //       return 0.5 * rec(0.5 * x4);
+    //     } else {
+    //       return k(x4);
+    //     }
+    //   };
+    //   return rec(x0);
+    // }
+  }
+
   test("while") {
     val gr3 = new DslDriverScala[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
