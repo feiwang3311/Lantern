@@ -1,0 +1,81 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import argparse
+import inputs
+import pytorch_squeeze_cifar10
+import time
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.autograd import Variable
+import numpy as np
+
+def train(args):
+  startTime = time.time()
+  torch.set_num_threads(1)
+  torch.manual_seed(args.seed)
+
+  model = pytorch_squeeze_cifar10.SqueezeNet()
+  optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+  batch = inputs.Batch(args.input_file, args.batch_size)
+
+  def train(epoch):
+    tloss = 0.0
+    for i in range(batch.total_size // batch.batch_size):
+      (input_x, input_y) = batch.batch()
+      optimizer.zero_grad()
+      loss = F.nll_loss(F.log_softmax(model(Variable(torch.from_numpy(input_x))), dim=1), Variable(torch.from_numpy(input_y)))
+      tloss += loss.data[0]
+      loss.backward()
+      optimizer.step()
+      if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:
+        print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, tloss / (i)))
+    return tloss / (batch.batch_size)
+
+  loopStart = time.time()
+  loss_save = []
+  for epoch in range(args.epochs):
+    start = time.time()
+    loss_save.append(train(epoch))
+    stop = time.time()
+    print('Training completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
+  loopEnd = time.time()
+
+  prepareTime = loopStart - startTime
+  loopTime = loopEnd - loopStart
+  timePerEpoch = loopTime / args.epochs
+
+  with open(args.write_to, "w") as f:
+    f.write("unit: " + "1 epoch\n")
+    for loss in loss_save:
+      f.write("{}\n".format(loss))
+    f.write("run time: " + str(prepareTime) + " " + str(timePerEpoch) + "\n")
+
+
+if __name__ == '__main__':
+  # Training settings
+  parser = argparse.ArgumentParser(description='PyTorch cifar10 Example')
+  parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+            help='input batch size for training (default: 64)')
+  parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
+            help='input batch size for testing (default: 1000)')
+  parser.add_argument('--epochs', type=int, default=4, metavar='N',
+            help='number of epochs to train (default: 4)')
+  parser.add_argument('--lr', type=float, default=0.005, metavar='LR',
+            help='learning rate (default: 0.05)')
+  parser.add_argument('--momentum', type=float, default=0.0, metavar='M',
+            help='SGD momentum (default: 0.5)')
+  parser.add_argument('--seed', type=int, default=42, metavar='S',
+            help='random seed (default: 1)')
+  parser.add_argument('--input_file', type=str,
+           default='../cifar10_data/cifar-10-batches-py/data_batch_1',
+           help='Directory for storing input data')
+  parser.add_argument('--write_to', type=str,
+           default='result_PyTorch',
+           help='Directory for saving performance data')
+  args = parser.parse_args()
+
+  train(args)

@@ -109,36 +109,37 @@ trait TensorDsl extends DslOps with Diff {
 
     class Cifar10DataLoader(name: String, train: Boolean, dims: Seq[Int]) {
 
-    val fd = open(name)
-    val len = filelen(fd)
-    val data = mmap[Char](fd, len)
-    // each entry is target + image
-    val entrySize = (dims.product + 1)
-    val dLength = (len/entrySize.toLong).toInt
-    val length = dLength
+      val fd = open(name)
+      val len = filelen(fd)
+      val data = mmap[Char](fd, len)
+      // each entry is target + image
+      val entrySize = (dims.product + 1)
+      val dLength = (len/entrySize.toLong).toInt
+      val length = dLength
 
-    val x = NewArray[Float](dLength * dims.product)
-    val y = NewArray[Int](dLength)
+      val x = NewArray[Float](dLength * dims.product)
+      val y = NewArray[Int](dLength)
 
-    for (i <- (0 until dLength): Rep[Range]) {
-      y(i) = data(i * entrySize).toInt
-      for (j <- (0 until dims.product): Rep[Range]) {
-        x(i * dims.product + j) = data(i * entrySize + 1 + j).toInt.toFloat / 255
+      for (i <- (0 until dLength): Rep[Range]) {
+        y(i) = unchecked[Int]("(int32_t)(unsigned char)", data(i * entrySize))
+        // y(i) = data(i * entrySize).toInt
+        for (j <- (0 until dims.product): Rep[Range]) {
+          x(i * dims.product + j) = uncheckedPure[Float]("(float)(unsigned char)", data(i * entrySize + 1 + j)) / 255.0f
+        }
+      }
+
+      @virtualize
+      def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
+        val off = var_new(0)
+        for (batchIndex <- 0 until (dLength / batchSize): Rep[Range]) {
+          val dataPtr = slice(x, off)
+          val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
+          val targets = slice(y, batchIndex * batchSize)
+          f(batchIndex, t, targets)
+          off += t.scalarCount
+        }
       }
     }
-
-    @virtualize
-    def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
-      val off = var_new(0)
-      for (batchIndex <- 0 until (dLength / batchSize): Rep[Range]) {
-        val dataPtr = slice(x, off)
-        val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
-        val targets = slice(y, batchIndex * batchSize)
-        f(batchIndex, t, targets)
-        off += t.scalarCount
-      }
-    }
-  }
   }
 
   def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
@@ -690,6 +691,7 @@ trait TensorDsl extends DslOps with Diff {
                   memsetFloatZero(slice(dst, y*outputWidth), outputWidth)
                 }, {
                   __ifThenElse ((lpad > 0), memsetFloatZero(slice(dst, y*outputWidth), lpad), ())
+                  generateRawComment("may have segfault here")
                   memcpyFloat(slice(dst, y*outputWidth+lpad), slice(src, iy*inputWidth+ix+lpad), outputWidth-rpad-lpad)
                   __ifThenElse ((rpad > 0), memsetFloatZero(slice(dst, y*outputWidth+outputWidth-rpad), rpad), ())
                 })

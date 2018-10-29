@@ -47,7 +47,7 @@ def train(args):
   loopTime = loopEnd - loopStart
   timePerEpoch = loopTime / args.epochs
 
-  with open(write_to, "w") as f:
+  with open(args.write_to, "w") as f:
     f.write("unit: " + "1 epoch\n")
     for loss in loss_save:
       f.write(str(loss) + "\n")
@@ -63,7 +63,7 @@ if __name__ == '__main__':
   parser.add_argument('--epochs', type=int, default=4, metavar='N',
             help='number of epochs to train (default: 4)')
   parser.add_argument('--lr', type=float, default=0.05, metavar='LR',
-            help='learning rate (default: 0.01)')
+            help='learning rate (default: 0.05)')
   parser.add_argument('--momentum', type=float, default=0.0, metavar='M',
             help='SGD momentum (default: 0.5)')
   parser.add_argument('--seed', type=int, default=42, metavar='S',
@@ -71,6 +71,9 @@ if __name__ == '__main__':
   parser.add_argument('--input_file', type=str,
            default='../cifar10_data/cifar-10-batches-py/data_batch_1',
            help='Directory for storing input data')
+  parser.add_argument('--write_to', type=str,
+           default='result_TensorFlow',
+           help='Directory for saving performance data')
   parser.add_argument('--batch_norm_decay', type=float, default=0.9)
   parser.add_argument('--weight_decay', type=float, default=0.0,
             help='''L2 regularization factor for convolution layer weights.

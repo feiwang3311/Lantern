@@ -41,13 +41,24 @@ trait NNModule extends TensorDsl {
         res
       }
       val allParams = this.getClass.getDeclaredFields
-      val subParameters = allParams.filter { t => classOf[Some[TensorR]].isAssignableFrom(t.getType) || classOf[TensorR].isAssignableFrom(t.getType) }
-      val subModules = allParams.filter { t => (classOf[Some[Module]].isAssignableFrom(t.getType) || classOf[Module].isAssignableFrom(t.getType)) && oops[Boolean](t) { _.get(this) != this }}
+      val subParameters = allParams.filter { t => classOf[Option[TensorR]].isAssignableFrom(t.getType) || classOf[TensorR].isAssignableFrom(t.getType) }
+      val subModules = allParams.filter { t => classOf[Module].isAssignableFrom(t.getType) && oops[Boolean](t) { _.get(this) != this }}
 
-      subParameters.map{ field => oops[Unit](field) {x => parameters.update(s"$nameScope${x.getName()}", (
-        if (x.get(this).isInstanceOf[Some[TensorR]]) x.get(this).asInstanceOf[Some[TensorR]].get else x.get(this).asInstanceOf[TensorR], None
-      ))} }
-      subModules.map{ field => oops[Unit](field) {x => {val a = x.get(this).asInstanceOf[Module]; modules.update(s"$nameScope${x.getName()}", a); a.registerParamters(s"$nameScope${x.getName()}/")}}}
+      subParameters.map{ field => oops[Unit](field) { x =>
+        val field = x.get(this)
+        val name = x.getName()
+        val fullName = s"$nameScope${name}"
+        if (field.isInstanceOf[TensorR]) parameters.update(fullName, (field.asInstanceOf[TensorR], None))
+        else field match {
+          case Some(field) => parameters.update(fullName, (field.asInstanceOf[TensorR], None))
+          case None => ()
+        }
+      }}
+      subModules.map{ field => oops[Unit](field) { x =>
+        val a = x.get(this).asInstanceOf[Module]
+        modules.update(s"$nameScope${x.getName()}", a)
+        a.registerParamters(s"$nameScope${x.getName()}/")
+      }}
     }
   }
 
@@ -67,11 +78,22 @@ trait NNModule extends TensorDsl {
     def apply(in1: TensorR, in2: TensorR): TensorR @diff = in1.dot(weight1) + in2.dot(weight2) + bias
   }
 
+  // fan_in = kernel.shape(1) * kernel.shape(2) * kernel.shape(3)
+  // fan_out = kernel.shape(0) * kernel.shape(2) * kernel.shape(3)
+  // kaiming_uniform [-bound, bound] where bound = sqrt(6/fan_in)
+  // xaiver_uniform [-bound, bound] where bound = sqrt(6/(fan_in + fan_out))
+
   case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val useBias: Boolean = true, val pad: Int = 0, val name: String = "conv2d") extends Module {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
-    val scale: Float = 1.0f / sqrt(inChannel * kernelSize.head * kernelSize.last).toFloat
+    // xaiver_uniform initialization
+    // val fan_in = inChannel * kernelSize.head * kernelSize.last
+    // val fan_out = outChannel * kernelSize.head * kernelSize.last
+    // val scale: Float = 2.0f * sqrt(6.0f / (fan_in + fan_out)).toFloat
+    // kaiming_uniform initialization
+    val scale: Float = 2.0f * sqrt(6.0f / (inChannel * kernelSize.head * kernelSize.last)).toFloat
     val kernel = TensorR(Tensor.rand(Seq(outChannel, inChannel, kernelSize.head, kernelSize.last), scale))
+    // val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
     val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
     def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, Seq(pad, pad, pad, pad))
   }
