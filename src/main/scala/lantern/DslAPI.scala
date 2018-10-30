@@ -823,13 +823,15 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
 }
 
 abstract class DslDriverCuda[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslGPUExp {
-  val nvccArguments: Seq[String] = Seq("--expt-extended-lambda", "-Wno-deprecated-gpu-targets")
+  def nvccArguments: Seq[String] = Seq("-ccbin gcc-5", "-std=c++11", "-O1", "--expt-extended-lambda", "-Wno-deprecated-gpu-targets", "-lstdc++")
 }
 
 abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverCuda[A, B] { self =>
   override val codegen = new DslGenCublas {
     val IR: self.type = self
   }
+
+  override def nvccArguments: Seq[String] = super.nvccArguments ++ Seq("-lcublas")
 
   override def eval(a: A) {
     val cudaFileName = s"$dir/$fileName.cu"
@@ -841,7 +843,7 @@ abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverCuda[A
     new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ (cuBLAS) code")
-    (s"nvcc -std=c++11 -O1 ${nvccArguments.mkString(" ")} $cudaFileName -o $binaryFileName -lcublas": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    (s"nvcc $cudaFileName -o $binaryFileName ${nvccArguments.mkString(" ")}": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ (cuBLAS) code")
     (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
@@ -851,6 +853,8 @@ abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCuda[A,
   override val codegen = new DslGenCudnn {
     val IR: self.type = self
   }
+
+  override def nvccArguments: Seq[String] = super.nvccArguments ++ Seq("-lcublas", "-lcudnn")
 
   override def eval(a: A) {
     val cudaFileName = s"$dir/$fileName.cu"
@@ -862,7 +866,7 @@ abstract class DslDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCuda[A,
     new java.io.File(binaryFileName).delete
     import scala.sys.process._
     System.out.println("Compile C++ (cuBLAS & cuDNN) code")
-    (s"nvcc -std=c++11 -O1 ${nvccArguments.mkString(" ")} $cudaFileName -o $binaryFileName -lcublas -lcudnn --expt-extended-lambda": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+    (s"nvcc $cudaFileName -o $binaryFileName ${nvccArguments.mkString(" ")}": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
     System.out.println("Run C++ (cuBLAS & cuDNN) code")
     (s"$binaryFileName $a": ProcessBuilder).lines.foreach(System.out.println)
   }
