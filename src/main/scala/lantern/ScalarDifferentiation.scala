@@ -69,13 +69,22 @@ trait DiffApi extends DslOps with Diff {
   // have NumR objects in the generated code and that we can't (easily) pass
   // a mutable var to a function with reference semantics (we could with
   // explicit boxing, and in C/C++ we could just pass the address)
-  def FUN(f: NumR => Unit): (NumR => Unit) = { (x: NumR) =>
+  def FUNx(f: NumR => Unit): (NumR => Unit) = { (x: NumR) =>
     val f1 = fun { (x:Rep[Double]) =>
       val deltaVar = var_new(0.0)
       f(new NumR(x, deltaVar))
       readVar(deltaVar)
     }
     x.d += f1(x.x)
+  }
+
+  def FUN(f: NumR => Unit): (NumR => Unit) = { (x: NumR) =>
+    val deltaVar = var_new(0.0)
+    val f1 = fun { (x: Rep[Double]) =>
+      f(new NumR(x, deltaVar))
+    }
+    f1(x.x)
+    x.d += deltaVar
   }
 
   @virtualize

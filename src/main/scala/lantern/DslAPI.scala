@@ -776,6 +776,12 @@ abstract class DslDriverScala[A: Manifest, B: Manifest] extends DslOps with DslE
   // def precompileSilently: Unit = utils.devnull(f)
 
   def eval(x: A): B = f(x)
+
+  lazy val code: String = {
+    val source = new java.io.StringWriter()
+    codegen.emitSource[A,B](snippet, "Snippet", new java.io.PrintWriter(source))
+    source.toString
+  }
 }
 
 abstract class DslDriverBase[A: Manifest, B: Manifest] extends DslExp { self =>

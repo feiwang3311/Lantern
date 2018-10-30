@@ -37,6 +37,10 @@ class AdLMSTest extends FunSuite {
       }
     }
     // System.out.println(g1.code)
+    def grad(x: Double) = 2 * x
+    for (x <- (-5 until 5)) {
+      assert (g1.eval(x) == grad(x))
+    }
   }
 
   test("reccc") {
@@ -182,17 +186,47 @@ class AdLMSTest extends FunSuite {
 
 
   test("condition") {
-    val gr2 = new DslDriverScala[Double,Double] with DiffApi {
+    val gr2 = new DslDriverC[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val minus_1 = (new NumR(-1.0, var_new(0.0)))
-        gradR(x => IF (x.x > 0.0) { minus_1*x*x } { x*x })(x)
+        gradR(x => IF (x.x > 0.0) { minus_1*x } { x })(x)
       }
     }
-    def grad(x: Double) = if (x > 0) -2 * x else 2 * x
-    for (x <- (-5 until 5)) {
-      assert(gr2.eval(x) == grad(x))
-    }
+    System.out.println(gr2.code)
+    // def grad(x: Double) = if (x > 0) -1 else 1
+    // for (x <- (-5 until 5)) {
+    //   assert(gr2.eval(x) == grad(x))
+    // }
   }
+
+// destination-passing Scala
+// class Snippet extends ((Double)=>(Double)) {
+//   def apply(x0:Double): Double = {
+//     var x2: Double = 0.0
+//     val x29 = if (x0 > 0.0) {
+//       var x6: Double = 0.0
+//       val x7 = {x8: (Double) =>
+//         x6 = 1.0
+//         (): Unit
+//       }
+//       x7(-1.0 * x0)
+//       x2 += -1.0 * x6
+//       ()
+//     } else {
+//       var x20: Double = 0.0
+//       val x21 = {x22: (Double) =>
+//         x20 = 1.0
+//         (): Unit
+//       }
+//       x21(x0)
+//       x2 += x20
+//       ()
+//     }
+//     x2
+//   }
+// }
+
+
 // double Snippet(double  in) {
 //   function<double(double)> k = [&](double x) { return 1.0; }
 //   if (in > 0.0) {
