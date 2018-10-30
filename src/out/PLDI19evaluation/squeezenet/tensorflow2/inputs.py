@@ -26,4 +26,5 @@ class Batch(object):
 		x = [i.astype(np.float32).reshape(3, 32, 32) for i in x]
 		y = self.labels[self.current_idx: self.current_idx + self.batch_size]
 		y = np.asarray(y, dtype=np.int32)
+		self.current_idx += self.batch_size
 		return x, y

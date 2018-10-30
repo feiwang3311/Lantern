@@ -31,7 +31,7 @@ object SqueezeNet {
       val dataTimer = Timer2()
       dataTimer.startTimer
 
-      val (batchSize, iChan1, iRow1, iCol1) = (50, 3, 32, 32)
+      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
 
       case class FireModule(val name: String = "squeezenet_fire", val inChannel: Int, val squeezeDepth: Int, val expandDepth: Int) extends Module {
         val convs1 = Conv2D(inChannel = inChannel, outChannel = squeezeDepth, kernelSize = Seq(1, 1))
@@ -59,7 +59,7 @@ object SqueezeNet {
         val fire6 = FireModule(inChannel = 384, squeezeDepth = 48, expandDepth = 192)
         val fire7 = FireModule(inChannel = 384, squeezeDepth = 64, expandDepth = 256)
         val fire8 = FireModule(inChannel = 512, squeezeDepth = 64, expandDepth = 256)
-        val conv2 = Conv2D(inChannel = 512, outChannel = num_classes, kernelSize = Seq(1, 1))
+        val conv2 = Conv2Dn(inChannel = 512, outChannel = num_classes, kernelSize = Seq(4, 4))
 
         def apply(in: TensorR): TensorR @diff = {
           // in.x.printHead(10, "forward, input")
@@ -84,7 +84,7 @@ object SqueezeNet {
           // step5.x.printHead(10, "forward, after fire5")
           val step6 = fire6(step5)
           val step7 = fire7(step6).maxPoolBK(kernels = Seq(2, 2), strides = Seq(2, 2), None)
-          val step8 = fire8(step7).averagePoolBK(kernels = Seq(4, 4), strides = Seq(1, 1), None)
+          val step8 = fire8(step7) //.averagePoolBK(kernels = Seq(4, 4), strides = Seq(1, 1), None)
           val logits = conv2(step8).resize(-1, num_classes)
           logits
         }
@@ -101,9 +101,6 @@ object SqueezeNet {
 
       // Training
       val nbEpoch = 4
-
-      val tot1 = NewArray[Long](2)
-      val tot2 = NewArray[Long](2)
 
       val train = new Dataset.Cifar10DataLoader(data_dir, true, Seq(iChan1, iRow1, iCol1))
 
@@ -132,14 +129,14 @@ object SqueezeNet {
           opt.step()
 
           // selective printing
-          if (imgIdx % (train.length / 10) == 0) {
+          if ((imgIdx / batchSize) % (train.length / batchSize / 10) == 0) {
             printf(s"Train epoch %d: [%d/%d (%.0f%%)]\\tAverage Loss: %.6f\\n", epoch, imgIdx, train.length, 100.0 * imgIdx /train.length, trainLoss/imgIdx)
             unchecked[Unit]("fflush(stdout)")
           }
           resetMallocAddr(addr)
         }
         val delta = trainTimer.getElapsedTime
-        // printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
+        printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
 
         loss_save(epoch) = trainLoss / train.length
       }
@@ -221,9 +218,6 @@ object SqueezeNet {
 
       // Training
       val nbEpoch = 4
-
-      val tot1 = NewArray[Long](2)
-      val tot2 = NewArray[Long](2)
 
       val train = new Dataset.Cifar10DataLoader(data_dir, true, Seq(iChan1, iRow1, iCol1))
 

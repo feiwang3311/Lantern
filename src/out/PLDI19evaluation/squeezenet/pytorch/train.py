@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 import numpy as np
+import torch.onnx
 
 def train(args):
   startTime = time.time()
@@ -22,7 +23,7 @@ def train(args):
   optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
   batch = inputs.Batch(args.input_file, args.batch_size)
 
-  def train(epoch):
+  def train_epoch(epoch):
     tloss = 0.0
     for i in range(batch.total_size // batch.batch_size):
       (input_x, input_y) = batch.batch()
@@ -39,7 +40,7 @@ def train(args):
   loss_save = []
   for epoch in range(args.epochs):
     start = time.time()
-    loss_save.append(train(epoch))
+    loss_save.append(train_epoch(epoch))
     stop = time.time()
     print('Training completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
   loopEnd = time.time()
@@ -65,9 +66,9 @@ if __name__ == '__main__':
   parser.add_argument('--epochs', type=int, default=4, metavar='N',
             help='number of epochs to train (default: 4)')
   parser.add_argument('--lr', type=float, default=0.005, metavar='LR',
-            help='learning rate (default: 0.05)')
+            help='learning rate (default: 0.005)')
   parser.add_argument('--momentum', type=float, default=0.0, metavar='M',
-            help='SGD momentum (default: 0.5)')
+            help='SGD momentum (default: 0.0)')
   parser.add_argument('--seed', type=int, default=42, metavar='S',
             help='random seed (default: 1)')
   parser.add_argument('--input_file', type=str,
@@ -79,3 +80,12 @@ if __name__ == '__main__':
   args = parser.parse_args()
 
   train(args)
+  # torch.manual_seed(args.seed)
+  # model = pytorch_squeeze_cifar10.SqueezeNet()
+  # batch = inputs.Batch('../cifar10_data/cifar-10-batches-py/data_batch_1', 64)
+  # (input_x, input_y) = batch.batch()
+  # pytorch_squeeze_cifar10.printHead(10, model.features[0].weight, "conv1 kernel")
+  # torch.onnx.export(model, Variable(torch.from_numpy(input_x)), "squeezenetCifar10.onnx", verbose=True)
+
+# conv1 kernel torch.Size([96, 3, 3, 3])
+# 0.47137 || 0.03537 -0.33162 0.43771 0.24117 0.38503 0.04417 0.00890 0.04059 0.10085 0.40934 

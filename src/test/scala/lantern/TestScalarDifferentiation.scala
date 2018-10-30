@@ -184,7 +184,7 @@ class AdLMSTest extends FunSuite {
   test("condition") {
     val gr2 = new DslDriverScala[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
-        val minus_1 = (new NumR(-1.0,var_new(0.0)))
+        val minus_1 = (new NumR(-1.0, var_new(0.0)))
         gradR(x => IF (x.x > 0.0) { minus_1*x*x } { x*x })(x)
       }
     }
@@ -193,6 +193,17 @@ class AdLMSTest extends FunSuite {
       assert(gr2.eval(x) == grad(x))
     }
   }
+// double Snippet(double  in) {
+//   function<double(double)> k = [&](double x) { return 1.0; }
+//   if (in > 0.0) {
+//     double x = k(-in * in);
+//     return -2 * in * x;
+//   } else {
+//     double x = k(in * in);
+//     return 2 * in * x;
+//   }
+// }
+
 
   test("whileC") {
     val gr3 = new DslDriverC[Double, Double] with DiffApi {

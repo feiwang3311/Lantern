@@ -93,7 +93,15 @@ trait NNModule extends TensorDsl {
     // kaiming_uniform initialization
     val scale: Float = 2.0f * sqrt(6.0f / (inChannel * kernelSize.head * kernelSize.last)).toFloat
     val kernel = TensorR(Tensor.rand(Seq(outChannel, inChannel, kernelSize.head, kernelSize.last), scale))
-    // val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
+    val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
+    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, Seq(pad, pad, pad, pad))
+  }
+
+  case class Conv2Dn(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val useBias: Boolean = true, val pad: Int = 0, val name: String = "conv2d") extends Module {
+    assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
+    assert(stride.size == 2, "stride should be Seq[Int] of size 2")
+    // normal initialization with mean 0.0 and std 0.01
+    val kernel = TensorR(Tensor.randnorm(outChannel, inChannel, kernelSize.head, kernelSize.last))
     val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
     def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, Seq(pad, pad, pad, pad))
   }

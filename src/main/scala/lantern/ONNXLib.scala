@@ -232,20 +232,18 @@ trait ONNXLib extends TensorDsl {
     case class softmaxNode(input: String, output: String) extends Node
     case class reshapeNode(inputs: Seq[String], output: String) extends Node
     case class gemmNode(inputs: Seq[String], output: String, attInts: Map[String, Int], attFloats: Map[String, Float]) extends Node
+    case class flattenNode(input: String, output: String, axis: Int) extends Node
 
     def getConvMaxPAvPAttr(attributes: Seq[onnx_ml.AttributeProto]): Map[String, Seq[Int]] = {
-      assert (attributes.size == 2 || attributes.size == 3, s"number of attributes of a conv node should be 2 or 3, got ${attributes}")
-      val atts: Map[String, Seq[Int]] = attributes.map(att => att.getName -> att.ints.map(x => x.toInt)).toMap
+      val atts: Map[String, Seq[Int]] = attributes.map{att =>
+        if (att.getName == "group") att.getName -> Seq(att.getI.toInt)
+        else att.getName -> att.ints.map(x => x.toInt)
+      }.toMap
       assert (atts.contains("strides"), "attributes of a conv/maxP/avP node should have strides")
       assert (atts.contains("kernel_shape"), "attributes of a conv/maxP/avP node should have kernel_shape")
       assert(atts("strides").size == 2, "strides should be length 2")
       assert(atts("kernel_shape").size == 2, "kernel_shape should be length 2")
-      if (attributes.size == 3) {
-        assert (atts.contains("pads"), "attributes of a conv/maxP/avP node should have pads")
-        atts
-      } else {
-        atts + (("pads", Seq(0, 0, 0, 0)))
-      }
+      if (atts.contains("pads")) atts else atts + (("pads", Seq(0,0,0,0)))
     }
 
     val allNodes: Seq[Node] = nodes.map { node =>
@@ -399,7 +397,23 @@ trait ONNXLib extends TensorDsl {
           gemmNode(inputs, outputs.head, attsInts, attsFloats)
         }
 
-        case _ => throw new RuntimeException("Node not yet implemented")
+        case "Flatten" => {
+          val inputs: Seq[String] = node.input
+          assert (inputs.size == 1, s"number of inputs for Flatten layer should be 1, got ${inputs.size}")
+
+          val outputs: Seq[String] = node.output
+          assert (outputs.size == 1, s"number of outputs for Flatten layer should be 1, got ${outputs.size}")
+
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+          assert (attributes.size == 1, "number of attributes of a Flatten node should be 1")
+          val axis: Int = attributes.head.getI.toInt
+
+          flattenNode(inputs.head, outputs.head, axis)
+        }
+
+        case _ =>
+          System.out.println(node.toProtoString)
+          throw new RuntimeException(s"Node not yet implemented")
       }
     }
 
@@ -443,12 +457,15 @@ trait ONNXLib extends TensorDsl {
         node match {
 
           case convNode(inputs, output, atts) => {
+            // TODO: not yet handling dilations and groups
 
             val input1 = get_from_two_maps(inputs.head)
             val input2 = get_from_two_maps(inputs.tail.head)
             // bias tensor may not exist
             val input3 = if (inputs.size == 2) None else Some(get_from_two_maps(inputs.last))
-
+            // input1.printHead(10, "in for conv")
+            // input2.printHead(10, "filter for conv")
+            // if (inputs.size == 3) get_from_two_maps(inputs.last).printHead(10, "bias for conv")
             val strides = atts("strides")
             val pads = atts("pads")                  // pads may be zero
             val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
@@ -563,7 +580,14 @@ trait ONNXLib extends TensorDsl {
             intermediate_map_tensor += (output -> out)
           }
 
-          case x => throw new RuntimeException(s"not yet implemented, $x")
+          case flattenNode(input, output, axis) => {
+            val input1 = get_from_two_maps(input)
+            val shape = (input1.shape.take(axis) :+ -1)
+            intermediate_map_tensor += (output -> input1.resize(shape: _*))
+          }
+
+          case x =>
+            throw new RuntimeException(s"not yet implemented, $x")
         }
       }
 
@@ -713,7 +737,15 @@ trait ONNXLib extends TensorDsl {
           }
           intermediate_map_tensorR.update(output, out)
 
+        } else if (node.isInstanceOf[flattenNode]) {
+          val flattenNode(input, output, axis) = node
+          val input1 = get_from_two_maps(input)
+          val shape = input1.x.shape.take(axis) :+ -1
+          val out = input1.resize(shape: _*)
+          intermediate_map_tensorR.update(output, out)
+
         } else {
+          System.out.println(s"node $node is not implemented")
           shift{ (k: Tensor => Unit) => ???}
         }
       }

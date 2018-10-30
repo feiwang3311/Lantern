@@ -386,7 +386,7 @@ trait DslGenBase extends CGenNumericOpsExtra
         |  return hash;
         |}
         |
-        |int HEAP_SIZE = 1073741826; // 1048576; // 2147483652; // 536870912; // 268435456; // 2097152;
+        |int HEAP_SIZE = 1610612739; // 2147483652; // 1073741826; // 1048576; // 536870912; // 268435456; // 2097152;
         |void *mallocBase = calloc(HEAP_SIZE, 1);
         |void *mallocAddr = mallocBase;
         |void *waterMark = mallocBase;
@@ -409,7 +409,7 @@ trait DslGenBase extends CGenNumericOpsExtra
         |
         |std::random_device rd{};
         |std::mt19937 gen{rd()};
-        |std::normal_distribution<> d{0, 1};
+        |std::normal_distribution<> d{0, 0.01};
         |
         |int main(int argc, char *argv[]) {
         |  if (argc != 2) {

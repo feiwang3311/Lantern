@@ -122,7 +122,6 @@ trait TensorDsl extends DslOps with Diff {
 
       for (i <- (0 until dLength): Rep[Range]) {
         y(i) = unchecked[Int]("(int32_t)(unsigned char)", data(i * entrySize))
-        // y(i) = data(i * entrySize).toInt
         for (j <- (0 until dims.product): Rep[Range]) {
           x(i * dims.product + j) = uncheckedPure[Float]("(float)(unsigned char)", data(i * entrySize + 1 + j)) / 255.0f
         }
@@ -130,11 +129,34 @@ trait TensorDsl extends DslOps with Diff {
 
       @virtualize
       def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
-        val off = var_new(0)
         for (batchIndex <- 0 until (dLength / batchSize): Rep[Range]) {
-          val dataPtr = slice(x, off)
-          val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
+          val dataPtr = slice(x, batchIndex * batchSize * dims.product)
           val targets = slice(y, batchIndex * batchSize)
+          val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
+          f(batchIndex, t, targets)
+        }
+      }
+    }
+
+    class DataLoaderTest(name_x: String, name_y: String, dims: Seq[Int]) {
+
+      val fd = open(name_x)
+      val len = filelen(fd)
+      val data = mmap[Float](fd, len)
+      val dLength = (len/4L).toInt
+
+      val tfd = open(name_y)
+      val tlen = filelen(tfd)
+      val target = mmap[Int](tfd, tlen)
+      val length = tlen/4
+
+      @virtualize
+      def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
+        var off = var_new(0)
+        for (batchIndex <- 0 until (length / batchSize): Rep[Range]) {
+          val dataPtr = slice(data, off)
+          val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
+          val targets = slice(target, batchIndex * batchSize)
           f(batchIndex, t, targets)
           off += t.scalarCount
         }
@@ -2038,6 +2060,12 @@ trait TensorDsl extends DslOps with Diff {
       val res = backend.mallocArray[Float](dim0 * dim1)
       for (i <- (0 until dim0 * dim1): Rep[Range]) res(i) = unchecked[Float]("d(gen)") * scale
       Tensor(res, dim0, dim1)
+    }
+
+    def randnorm(dims: Int*) = {
+      val res = backend.mallocArray[Float](dims.product)
+      for (i <- (0 until dims.product): Rep[Range]) res(i) = unchecked[Float]("d(gen)")
+      Tensor(res, dims: _*)
     }
 
     def randPositive(dims: Int*) = {
