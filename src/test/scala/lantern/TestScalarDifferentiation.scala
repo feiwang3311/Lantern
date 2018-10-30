@@ -192,7 +192,7 @@ class AdLMSTest extends FunSuite {
         gradR(x => IF (x.x > 0.0) { minus_1*x } { x })(x)
       }
     }
-    System.out.println(gr2.code)
+    // System.out.println(gr2.code)
     // def grad(x: Double) = if (x > 0) -1 else 1
     // for (x <- (-5 until 5)) {
     //   assert(gr2.eval(x) == grad(x))
@@ -266,7 +266,7 @@ class AdLMSTest extends FunSuite {
     val gr3 = new DslDriverScala[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val half = (new NumR(0.5,var_new(0.0)))
-        val res = gradR(x => LOOP(x)(x1 => x1.x > 1.0)(x1 => half * x1))(x)
+        val res = gradR(x => LOOP(x)(_.x > 1.0)(_ * half))(x)
         // println(readVar(half.d))
         res
       }
