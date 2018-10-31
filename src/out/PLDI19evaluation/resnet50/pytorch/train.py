@@ -76,7 +76,7 @@ if __name__ == '__main__':
            default='../../cifar10_data/cifar-10-batches-py/data_batch_1',
            help='Directory for storing input data')
   parser.add_argument('--write_to', type=str,
-           default='result_PyTorch',
+           default='result_PyTorch.txt',
            help='Directory for saving performance data')
   args = parser.parse_args()
 

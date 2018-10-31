@@ -16,11 +16,10 @@ export CUDA_VISIBLE_DEVICES=0
 python3 -m venv python3-env
 source python3-env/bin/activate
 pip3 install --upgrade pip wheel
-pip3 install --upgrade tensorflow-gpu
+pip3 install --upgrade tensorflow-gpu=1.4.1  # this version of tensorflow works with cuda 8. the later versions work with cuda 9.0, which is not installed in ml machines
 pip3 install torch torchvision
 pip3 install matplotlib
 
-export CUDA_VISIBLE_DEVICES=0
 
 cd squeezenet
 cd tensorflow2
