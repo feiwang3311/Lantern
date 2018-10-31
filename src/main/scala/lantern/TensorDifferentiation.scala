@@ -362,6 +362,10 @@ trait TensorDsl extends DslOps with Diff {
     def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor
     def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
 
+    def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor
+    def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor])
+    def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit
+
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
@@ -1206,6 +1210,10 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    override def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = ???
+    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = ???
+    override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = ???
+
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
@@ -1501,6 +1509,14 @@ trait TensorDsl extends DslOps with Diff {
       res
     }
 
+    def batchNormInference(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor =
+      backend.batchNormInference(this, scale, bias, runningMean, runningVar)  
+
+    @virtualize
+    def batchNormTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) =
+      backend.batchNormTraining(this, scale, bias, runningMean, runningVar)
+
+    // NOTE: this function has nothing to do with Batch Normalization. Sorry for the confusing name
     @virtualize
     def batchNormAv() = {
       assert(this.rank == 4, "tensor for batch normal averaging should have 4 dimensions")
@@ -2019,7 +2035,7 @@ trait TensorDsl extends DslOps with Diff {
 
   object Tensor {
     def apply(data: Rep[Array[Float]], dims: Int*) = {
-      assert (dims.size > 0, "dims has to be nonEmpty")
+      assert(dims.size > 0, "dims has to be nonEmpty")
       new Tensor(data, dims)
     }
 
@@ -2148,7 +2164,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
   }
-
 
   // Tensor type is the similar to NumR, just replace RFloat with Tensor
   // also Tensor internally use array, which is mutable by default
@@ -2384,6 +2399,14 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    def batchNorm(scale: TensorR, bias: TensorR, runningMean: Tensor, runningVar: Tensor): TensorR @diff =
+      shift { (k: TensorR => Unit) =>
+        val (y, saveMean, saveInvVariance) = x.batchNormTraining(scale.x, bias.x, runningMean, runningVar)
+        val ty = TensorR(y); k(ty);
+        backend.batchNorm_grad(this, ty, scale, bias, saveMean, saveInvVariance)
+      }
+
+    // NOTE: this function has nothing to do with Batch Normalization. Sorry for the confusion of the name
     def batchNormAv(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.batchNormAv()); k(y)
 
@@ -3205,6 +3228,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def averagePool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Tensor = ???
     override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = ???
 
+    override def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = ???
+    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = ???
+    override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = ???
+
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
@@ -3741,6 +3768,141 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
       Pool2D_batch_grad(input, output, kernel, strides, pads, PoolModes.AverageEP, NanOpt.NotProp)
+    }
+
+    def cudnnBatchNormalizationForwardInference(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
+                                                runningMean: Tensor, runningVar: Tensor,
+                                                momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
+      // TODO: Look into `resultSaveMean` and `resultSaveInvVariance`.
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t sbmv_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${bias.shape(0)}, ${bias.shape(1)}, ${bias.shape(2)}, ${bias.shape(3)}));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnBatchNormalizationForwardInference(\n" +
+          // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+          "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+          "    ", one, ", ", one, ", in_desc, ", x.data, ", out_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
+          "    ", bias.data, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, "));\n" +
+          "}"): _*)
+    }
+
+    // TODO (Fei Wang): What is proper value for momentum (or should be called exponentialAverageFactor) here?
+    def cudnnBatchNormalizationForwardTraining(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
+                                               runningMean: Tensor, runningVar: Tensor, saveMean: Tensor, saveInvVariance: Tensor,
+                                               momentum: Double = 0.1, epsilon: Double = 1e-5): Unit = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t sbmv_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${bias.shape(0)}, ${bias.shape(1)}, ${bias.shape(2)}, ${bias.shape(3)}));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnBatchNormalizationForwardTraining(\n" +
+          // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+          "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+          "    ", one, ", ", zero, ", in_desc, ", x.data, ", out_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
+          "    ", bias.data, ", ", momentum, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, ",\n" +
+          "    ", saveMean.data, ", ", saveInvVariance.data, "));\n" +
+          "}"): _*)
+    }
+
+    def cudnnBatchNormalizationBackward(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
+                                        saveMean: Tensor, saveInvVariance: Tensor,
+                                        momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
+      // TODO: Look into `resultSaveMean` and `resultSaveInvVariance`.
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${res.x.shape(0)}, ${res.x.shape(1)}, ${res.x.shape(2)}, ${res.x.shape(3)}));
+          |
+          |cudnnTensorDescriptor_t sbmv_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${bias.x.shape(0)}, ${bias.x.shape(1)}, ${bias.x.shape(2)}, ${bias.x.shape(3)}));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
+          // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+          "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+          "    ", one, ", ", one, ", ", one, ", ", one, ", in_desc, ", input.x.data, ",\n" +
+          "    out_desc, ", res.d.data, ", in_desc, ", input.d.data, ", sbmv_desc, ", scale.x.data, ",\n" +
+          "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n" +
+          "}"): _*)
+    }
+
+    override def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = {
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      cudnnBatchNormalizationForwardInference(x, res, scale, bias, runningMean, runningVar)
+      res
+    }
+
+    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = {
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      val saveMean = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
+      val saveInvVariance = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
+      cudnnBatchNormalizationForwardTraining(x, res, scale, bias, runningMean, runningVar, saveMean, saveInvVariance)
+      (res, Some(saveMean), Some(saveInvVariance))
+    }
+
+    override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
+                                saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = {
+      (saveMean, saveInvVariance) match {
+        case (Some(saveMean), Some(saveInvVariance)) => cudnnBatchNormalizationBackward(input, res, scale, bias, saveMean, saveInvVariance)
+        case _ => ???
+      }
     }
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {

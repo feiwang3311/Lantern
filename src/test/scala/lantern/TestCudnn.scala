@@ -445,4 +445,92 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(sum)
   }
+
+  testGPU("batch-norm-inference") {
+    val batchNorm = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-batch-norm"
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.ones(3,2,3,3)
+        val scale = Tensor.fromData(Seq(1, 2, 1, 1), 3.0f, 3.0f)
+        val bias = Tensor.fromData(Seq(1, 2, 1, 1), 2.0f, 2.0f)
+        val runningMean = Tensor.fromData(Seq(1, 2, 1, 1), 3.0f, 3.0f)
+        val runningVar = Tensor.fromData(Seq(1, 2, 1, 1), 4.0f, 4.0f)
+        val result = input.batchNormInference(scale, bias, runningMean, runningVar)
+        backend = BackendCPU()
+        val expectedResult = Tensor.fill(Seq(3,2,3,3), -1.0f)
+        Tensor.assertEqual(expectedResult, result.toCPU(), tal = 0.0001f)
+      }
+    }
+    runTest(batchNorm)
+  }
+
+  testGPU("batch-norm-training") {
+    val batchNorm = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-batch-norm-training"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        Tensor.randseed(42)
+        val input = Tensor.rand(3, 2, 3, 3)
+        val scale = TensorR(Tensor.fromData(Seq(1, 2, 1, 1), 2, 2))
+        val bias = TensorR(Tensor.fromData(Seq(1, 2, 1, 1), -1, -1))
+        val runningMean = Tensor.ones(1,2,1,1)
+        val runningVar = Tensor.ones(1, 2, 1, 1)
+        val result = Tensor.zeros(3, 2, 3, 3)
+        def lossFun(x: TensorR) = {
+          val y = x.batchNorm(scale, bias, runningMean, runningVar)
+          result.copy_data(y.x)
+          y.relu()
+        }
+        val grad = gradR(lossFun)(input)
+
+        backend = BackendCPU()
+        // result.toCPU().print("result")
+        // grad.toCPU().print("grad")
+        // TODO (Fei Wang) need to be confirmed by PyTorch
+        val expectedResult = Tensor.fromData(Seq(3, 2, 3, 3),
+          -4.70055f, -2.42800f, 0.33646f, 
+          -1.71884f, -3.37612f, -3.03992f, 
+          -0.07803f, 1.66236f, -2.64498f, 
+          -4.40594f, -2.17456f, 0.45260f, 
+          -2.48382f, -3.67889f, -3.86906f, 
+          0.42170f, -4.03358f, -0.95436f, 
+          -0.62918f, 0.73989f, 2.56785f, 
+          -3.27966f, -1.47426f, -0.98174f, 
+          -0.55874f, -0.70138f, 0.62703f, 
+          -0.44310f, 0.65435f, -0.73941f, 
+          -2.76659f, 0.87396f, 1.42567f, 
+          1.76504f, -2.91541f, -3.78245f, 
+          -3.30510f, 1.85414f, 2.58171f, 
+          -0.99299f, 2.04517f, -2.28546f, 
+          -2.79128f, -3.18326f, -1.24514f, 
+          -2.01499f, 1.94021f, -0.85590f, 
+          1.60013f, -0.91634f, -2.54044f, 
+          1.48045f, 0.51965f, 0.44109f)
+        val expectedGrad = Tensor.fromData(Seq(3, 2, 3, 3),
+          3.09040f, -0.20212f, 3.45742f,
+          -1.22957f, 1.17154f, 0.68444f, 
+          -3.60681f, 1.53643f, 0.11224f, 
+          1.99813f, -1.06226f, 1.89603f, 
+          -0.63810f, 1.00096f, 1.26179f, 
+          1.93841f, 1.48743f, -2.73582f, 
+          -2.80830f, 2.87292f, 0.22452f, 
+          1.03179f, -1.58392f, -2.29750f, 
+          -2.91035f, -2.70368f, 3.03643f, 
+          -3.43702f, 1.61933f, -3.03063f, 
+          -0.25029f, 1.31812f, 0.56144f, 
+          0.09597f, -0.04617f, 1.14300f, 
+          1.06865f, 1.25857f, 0.20445f, 
+          -2.28120f, 0.98180f, -0.40863f, 
+          0.32422f, 0.89211f, -1.91587f, 
+          -1.28113f, -0.14428f, -2.87085f, 
+          0.32216f, -2.78796f, -0.56045f, 
+          0.48630f, 1.80406f, 1.91181f)
+        Tensor.assertEqual(expectedResult, result.toCPU(), tal = 0.0001f)
+        Tensor.assertEqual(expectedGrad, grad.toCPU(), tal = 0.0001f)
+      }
+    }
+    runTest(batchNorm)
+  }
 }
