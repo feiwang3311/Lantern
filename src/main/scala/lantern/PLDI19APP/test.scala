@@ -21,8 +21,8 @@ object TestNet {
   val root_dir = "src/out/PLDI19evaluation/"
   val cpu_file_dir = "squeezenet/lantern/test.cpp"
   val gpu_file_dir = "squeezenet/lantern/test.cu"
-  val data_dir_x = "../cifar10_data/cifar-10-batches-bin/small_batch_x.bin"
-  val data_dir_y = "../cifar10_data/cifar-10-batches-bin/small_batch_y.bin"
+  val data_dir_x = "../../cifar10_data/cifar-10-batches-bin/small_batch_x.bin"
+  val data_dir_y = "../../cifar10_data/cifar-10-batches-bin/small_batch_y.bin"
 
   val squeezenetCPU = new LanternDriverC[String, Unit] {
 

@@ -21,7 +21,7 @@ object SqueezeNet {
   val root_dir = "src/out/PLDI19evaluation/"
   val cpu_file_dir = "squeezenet/lantern/Lantern.cpp"
   val gpu_file_dir = "squeezenet/lantern/Lantern.cu"
-  val data_dir = "../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
+  val data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
 
   val squeezenetCPU = new LanternDriverC[String, Unit] {
 

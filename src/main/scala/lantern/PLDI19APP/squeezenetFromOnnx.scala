@@ -20,7 +20,7 @@ object SqueezeNetOnnx {
 
   val root_dir = "src/out/PLDI19evaluation/"
   val cpu_file_dir = "squeezenet/lantern/LanternOnnx.cpp"
-  val data_dir = "../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
+  val data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
   val model_file = "src/out/PLDI19evaluation/squeezenet/pytorch/squeezenetCifar10.onnx"
 
   val squeezenetInferenceCPU = new LanternDriverC[String, Unit] with ONNXLib {

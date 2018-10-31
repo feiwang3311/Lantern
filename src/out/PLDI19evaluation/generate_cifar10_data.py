@@ -115,7 +115,7 @@ def main(data_dir):
     except OSError:
       pass
     # Convert to tf.train.Example and write the to TFRecords.
-    convert_to_tfrecord(input_files, output_file)
+    # convert_to_tfrecord(input_files, output_file)
   print('Done!')
 
 
@@ -128,4 +128,4 @@ if __name__ == '__main__':
       help='Directory to download and extract CIFAR-10 to.')
 
   args = parser.parse_args()
-main(args.data_dir)
+  main(args.data_dir)

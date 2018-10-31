@@ -69,7 +69,7 @@ if __name__ == '__main__':
   parser.add_argument('--seed', type=int, default=42, metavar='S',
             help='random seed (default: 1)')
   parser.add_argument('--input_file', type=str,
-           default='../cifar10_data/cifar-10-batches-py/data_batch_1',
+           default='../../cifar10_data/cifar-10-batches-py/data_batch_1',
            help='Directory for storing input data')
   parser.add_argument('--write_to', type=str,
            default='result_TensorFlow',

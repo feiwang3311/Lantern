@@ -41,4 +41,4 @@ class Batch(object):
 
 if __name__ == '__main__':
 	batch = Batch('../../cifar10_data/cifar-10-batches-py/data_batch_1', 64)
-	batch.write_to_bin('../cifar10_data/cifar-10-batches-bin/small_batch_x.bin', '../cifar10_data/cifar-10-batches-bin/small_batch_y.bin')
+	batch.write_to_bin('../../cifar10_data/cifar-10-batches-bin/small_batch_x.bin', '../cifar10_data/cifar-10-batches-bin/small_batch_y.bin')

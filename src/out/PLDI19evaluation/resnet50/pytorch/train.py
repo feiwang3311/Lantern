@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import argparse
 import inputs
-import pytorch_squeeze_cifar10
+import resnet50
 import time
 import torch
 import torch.nn as nn
@@ -19,7 +19,7 @@ def train(args):
   torch.set_num_threads(1)
   torch.manual_seed(args.seed)
 
-  model = pytorch_squeeze_cifar10.SqueezeNet()
+  model = resnet50.resnet50Cifar10()
   optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
   batch = inputs.Batch(args.input_file, args.batch_size)
 
@@ -29,7 +29,7 @@ def train(args):
       (input_x, input_y) = batch.batch()
       optimizer.zero_grad()
       loss = F.nll_loss(F.log_softmax(model(Variable(torch.from_numpy(input_x))), dim=1), Variable(torch.from_numpy(input_y)))
-      tloss += loss.data[0]
+      tloss += loss.data.item()
       loss.backward()
       optimizer.step()
       if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:
@@ -77,18 +77,15 @@ if __name__ == '__main__':
   parser.add_argument('--write_to', type=str,
            default='result_PyTorch',
            help='Directory for saving performance data')
-  parser.add_argument('--generate_onnx', type=str, default='',
-           help='Directory for outputing onnx model')
   args = parser.parse_args()
 
-  if len(args.generate_onnx) > 0:
-    torch.manual_seed(args.seed)
-    model = pytorch_squeeze_cifar10.SqueezeNet()
-    batch = inputs.Batch(args.input_file, 64)
-    (input_x, input_y) = batch.batch()
-    torch.onnx.export(model, Variable(torch.from_numpy(input_x)), args.generate_onnx, verbose = True)
-  else:
-    train(args)
+  train(args)
+  # torch.manual_seed(args.seed)
+  # model = pytorch_squeeze_cifar10.SqueezeNet()
+  # batch = inputs.Batch('../cifar10_data/cifar-10-batches-py/data_batch_1', 64)
+  # (input_x, input_y) = batch.batch()
+  # pytorch_squeeze_cifar10.printHead(10, model.features[0].weight, "conv1 kernel")
+  # torch.onnx.export(model, Variable(torch.from_numpy(input_x)), "squeezenetCifar10.onnx", verbose=True)
 
 # conv1 kernel torch.Size([96, 3, 3, 3])
 # 0.47137 || 0.03537 -0.33162 0.43771 0.24117 0.38503 0.04417 0.00890 0.04059 0.10085 0.40934 

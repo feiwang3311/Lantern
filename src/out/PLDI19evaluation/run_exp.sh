@@ -2,6 +2,10 @@
 echo "Note: make sure you are using the most updated .cpp file!"
 echo "Note: we assume the system has python-pip python-dev python-virtualenv"
 
+echo "Note: the script must be run in PLDIevaluation directory"
+echo "Note: Maybe downloading cifar10_data"
+python3 generate_cifar10_data.py --data-dir cifar10_data
+
 # git clone https://github.com/tensorflow/models.git
 # export PYTHONPATH=$(pwd)/models/research:$PYTHONPATH
 # cd squeezenet/
@@ -19,7 +23,6 @@ pip3 install matplotlib
 export CUDA_VISIBLE_DEVICES=0
 
 cd squeezenet
-python3 generate_cifar10_tfrecords.py --data-dir cifar10_data
 cd tensorflow2
 python3 train.py
 
