@@ -11,11 +11,12 @@ export CUDA_VISIBLE_DEVICES=0
 
 python3 -m venv python3-env
 source python3-env/bin/activate
+pip3 install --upgrade pip wheel
 pip3 install --upgrade tensorflow-gpu
 pip3 install torch torchvision
 pip3 install matplotlib
 
-export CUDA_​VISIBLE_​DEVICES=0
+export CUDA_VISIBLE_DEVICES=0
 
 cd squeezenet
 python3 generate_cifar10_tfrecords.py --data-dir cifar10_data
