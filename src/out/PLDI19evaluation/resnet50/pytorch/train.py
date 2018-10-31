@@ -20,6 +20,7 @@ def train(args):
   torch.manual_seed(args.seed)
 
   model = resnet50.resnet50Cifar10()
+  model.cuda()
   optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
   batch = inputs.Batch(args.input_file, args.batch_size)
 
@@ -28,7 +29,7 @@ def train(args):
     for i in range(batch.total_size // batch.batch_size):
       (input_x, input_y) = batch.batch()
       optimizer.zero_grad()
-      loss = F.nll_loss(F.log_softmax(model(Variable(torch.from_numpy(input_x))), dim=1), Variable(torch.from_numpy(input_y)))
+      loss = F.nll_loss(F.log_softmax(model(Variable(torch.from_numpy(input_x)).cuda()), dim=1), Variable(torch.from_numpy(input_y)).cuda())
       tloss += loss.data.item()
       loss.backward()
       optimizer.step()
