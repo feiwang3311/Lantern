@@ -78,15 +78,18 @@ if __name__ == '__main__':
   parser.add_argument('--write_to', type=str,
            default='result_PyTorch.txt',
            help='Directory for saving performance data')
+  parser.add_argument('--generate_onnx', type=str, default='',
+           help='Directory for saving ONNX model')
   args = parser.parse_args()
 
-  train(args)
-  # torch.manual_seed(args.seed)
-  # model = pytorch_squeeze_cifar10.SqueezeNet()
-  # batch = inputs.Batch('../cifar10_data/cifar-10-batches-py/data_batch_1', 64)
-  # (input_x, input_y) = batch.batch()
-  # pytorch_squeeze_cifar10.printHead(10, model.features[0].weight, "conv1 kernel")
-  # torch.onnx.export(model, Variable(torch.from_numpy(input_x)), "squeezenetCifar10.onnx", verbose=True)
+  if args.generate_onnx == '':
+    train(args)
+  else:
+    torch.manual_seed(args.seed)
+    model = resnet50.resnet50Cifar10()
+    batch = inputs.Batch('../../cifar10_data/cifar-10-batches-py/data_batch_1', 64)
+    (input_x, input_y) = batch.batch()
+    torch.onnx.export(model, Variable(torch.from_numpy(input_x)), args.generate_onnx, verbose=True)
 
 # conv1 kernel torch.Size([96, 3, 3, 3])
 # 0.47137 || 0.03537 -0.33162 0.43771 0.24117 0.38503 0.04417 0.00890 0.04059 0.10085 0.40934 

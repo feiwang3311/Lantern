@@ -67,4 +67,4 @@ libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.com
 // https://github.com/feiwang3311/Lantern/issues/19
 
 // parallelExecution in Test := false
-Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
+concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)
