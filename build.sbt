@@ -66,4 +66,5 @@ libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.com
 // Parallel execution is disabled because it causes non-deterministic failures:
 // https://github.com/feiwang3311/Lantern/issues/19
 
-parallelExecution in Test := false
+// parallelExecution in Test := false
+Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)

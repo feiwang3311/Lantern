@@ -16,7 +16,7 @@ import org.scalatest.FunSuite
 import java.io.PrintWriter;
 import java.io.File;
 
-class BroadCastingTest extends FunSuite {
+class BroadCastingTest extends LanternFunSuite {
   test("broadcasting") {
     val test1 = new LanternDriverC[String, Unit] {
       def snippet(a: Rep[String]) = {}
@@ -58,7 +58,7 @@ class BroadCastingTest extends FunSuite {
         Tensor.assertEqual(b.d, Tensor(Array[Float](1,1,1,1,1,1), 2, 3))
       }
     }
-    test1.eval("a")
+    runTest(test1)
   }
 
   test("add_broadcast2") {
