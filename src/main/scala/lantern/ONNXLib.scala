@@ -763,7 +763,7 @@ trait ONNXLib extends TensorDsl {
 
       // TODO (Fei Wang): ask Greg, is there a better way to do this?
       def twoMaps = initializer_map_tensorR orElse intermediate_map_tensorR
-      def inTwoMaps(key: String) = initializer_map_tensorR.contains(key) || initializer_map_tensorR.contains(key)
+      def inTwoMaps(key: String) = initializer_map_tensorR.contains(key) || intermediate_map_tensorR.contains(key)
 
       val iter = allNodes.iterator
 
@@ -812,6 +812,7 @@ trait ONNXLib extends TensorDsl {
             val con_datas = datas.foldLeft(scala.Array[Int]())((a, b) => a ++ b)
             intMap += (output -> (con_dims, con_datas))
           }
+
         } else if (node.isInstanceOf[dropoutNode]) {
 
           val dropoutNode(input, outputs, ratio) = node
