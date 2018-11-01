@@ -539,15 +539,17 @@ trait ONNXLib extends TensorDsl {
       intermediate_map_tensor += (x_name -> x)
 
       // TODO (Fei Wang): ask Greg, is there a better way to do this?
-      def get_from_two_maps(key: String) = {
-        initializer_map_tensor.get(key) match {
-          case Some(v) => v
-          case None => intermediate_map_tensor.get(key) match {
-            case Some(v) => v
-            case None => throw new RuntimeException(key + " is not found in either maps")
-          }
-        }
-      }
+      def twoMaps = initializer_map_tensor orElse intermediate_map_tensor
+      def inTwoMaps = (k: String) => initializer_map_tensor.contains(k) || intermediate_map_tensor.contains(k)
+      // def get_from_two_maps(key: String) = {
+      //   initializer_map_tensor.get(key) match {
+      //     case Some(v) => v
+      //     case None => intermediate_map_tensor.get(key) match {
+      //       case Some(v) => v
+      //       case None => throw new RuntimeException(key + " is not found in either maps")
+      //     }
+      //   }
+      // }
 
       allNodes.foreach { node =>
 
@@ -556,13 +558,10 @@ trait ONNXLib extends TensorDsl {
           case convNode(inputs, output, atts) => {
             // TODO: not yet handling dilations and groups
 
-            val input1 = get_from_two_maps(inputs.head)
-            val input2 = get_from_two_maps(inputs.tail.head)
+            val input1 = twoMaps(inputs.head)
+            val input2 = twoMaps(inputs.tail.head)
             // bias tensor may not exist
-            val input3 = if (inputs.size == 2) None else Some(get_from_two_maps(inputs.last))
-            // input1.printHead(10, "in for conv")
-            // input2.printHead(10, "filter for conv")
-            // if (inputs.size == 3) get_from_two_maps(inputs.last).printHead(10, "bias for conv")
+            val input3 = if (inputs.size == 2) None else Some(twoMaps(inputs.last))
             val strides = atts("strides")
             val pads = atts("pads")                  // pads may be zero
             val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
@@ -573,14 +572,14 @@ trait ONNXLib extends TensorDsl {
 
           case reluNode(input, output) => {
 
-            val in = get_from_two_maps(input)
+            val in = twoMaps(input)
             val out = in.relu()
             intermediate_map_tensor += (output -> out)
           }
 
           case maxpoolNode(input, output, atts) => {
 
-            val in = get_from_two_maps(input)
+            val in = twoMaps(input)
 
             val strides = atts("strides")
             val pads = atts("pads")                     // pads may be zero
@@ -592,7 +591,7 @@ trait ONNXLib extends TensorDsl {
 
           case averagePoolNode(input, output, atts) => {
 
-            val input1 = get_from_two_maps(input)
+            val input1 = twoMaps(input)
 
             val strides = atts("strides")
             val kernel = atts("kernel_shape")
@@ -603,45 +602,40 @@ trait ONNXLib extends TensorDsl {
           }
 
           case concatNode(inputs, output, axis) => {
-            try {
-              val input_s = inputs.map(x => get_from_two_maps(x))
+            if (inTwoMaps(inputs.head)) {
+              val input_s = inputs.map(x => twoMaps(x))
               val out = input_s.head.concat(axis, input_s.tail: _*)
               intermediate_map_tensor += (output -> out)
-            } catch {
-              case e: RuntimeException => {
-                // TODO (Fei Wang): need to be more robust For now this means that the inputs are in tntMaps
-                val input_s = inputs.map(x => intMap.get(x).get)
-                // TODO: (Fei Wang): not general code for now
-                assert(input_s.size == 2, "TODO: not general code")
-                assert(axis == 0, s"TODO: not general code, axis got ${axis}")
-                val (dim0, data0) = input_s(0)
-                val (dim1, data1) = input_s(1)
-                assert(dim0 == Seq(1), "TODO: not general code")
-                assert(dim1 == Seq(1), "TODO: not general code")
-                intMap += (output -> (Seq(1), data0 ++ data1))
-
-              }
-              case e => throw e
+            } else {
+              // For now this means that the inputs are in tntMaps
+              val input_s = inputs.map(x => intMap.get(x).get)
+              val dims = input_s map {case (d, a) => d}
+              val datas = input_s map {case (d, a) => a}
+              dims foreach { d => assert(d.size == 1, s"shape tensors should have rank 1, got ${d}")}
+              assert(axis == 0, s"concatenating shape tensors should only be on dim 0, got ${axis}")
+              val conDims = dims.foldLeft(Seq(0))((a, b) => Seq(a(0) + b(0)))
+              val conDatas = datas.foldLeft(scala.Array[Int]())((a, b) => a ++ b)
+              intMap += (output -> (conDims, conDatas))
             }
           }
 
           case dropoutNode(input, outputs, ratio) => {
 
             // dropoutNode in inference function should act as identity function
-            val in = get_from_two_maps(input)
+            val in = twoMaps(input)
             intermediate_map_tensor += (outputs.head -> in)
           }
 
           case globalAveragePoolNode(input, output) => {
 
-            val in = get_from_two_maps(input)
+            val in = twoMaps(input)
             val out = in.global_ave_batch()
             intermediate_map_tensor += (output -> out)
           }
 
           case softmaxNode(input, output) => {
 
-            val in = get_from_two_maps(input)
+            val in = twoMaps(input)
             val out = in.softmax_batch()
             intermediate_map_tensor += (output -> out)
           }
@@ -649,7 +643,7 @@ trait ONNXLib extends TensorDsl {
           case bnNode(inputs, output, attMap) => {
 
             assert(inputs.size == 5, "For inference mode, BatchNormalization should have 5 inputs")
-            val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(get_from_two_maps(_))
+            val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(twoMaps(_))
             val epsilon: Float = attMap.getOrElse("epsilon", 0.000001f)
             val out1 = (in - runningMean.resize(-1,1,1)) / (runningVariance + epsilon).sqrt().resize(-1, 1, 1)
             val out2 = out1 * scale.resize(-1,1,1) + bias.resize(-1,1,1)
@@ -658,15 +652,15 @@ trait ONNXLib extends TensorDsl {
 
           case sumNode(inputs, output) => {
 
-            val input1 = get_from_two_maps(inputs.head)
-            val input2 = get_from_two_maps(inputs.last)
+            val input1 = twoMaps(inputs.head)
+            val input2 = twoMaps(inputs.last)
             val out = input1 + input2
             intermediate_map_tensor += (output -> out)
           }
 
           case reshapeNode(inputs, output) => {
 
-            val input1 = get_from_two_maps(inputs.head)
+            val input1 = twoMaps(inputs.head)
             // input2 should be Int64 tensor (we can find it in intMap)
             val (dim2, input2: Array[Int]) = intMap(inputs.last)
             assert (dim2.size == 1, s"reshape parameter (if presented as a tensor) should be dim 1, got ${dim2.size}")
@@ -677,9 +671,9 @@ trait ONNXLib extends TensorDsl {
 
           case gemmNode(inputs, output, attInts, attFloats) => {
 
-            val input1 = get_from_two_maps(inputs.head)
-            val input2 = get_from_two_maps(inputs.tail.head)
-            val input3 = get_from_two_maps(inputs.last)
+            val input1 = twoMaps(inputs.head)
+            val input2 = twoMaps(inputs.tail.head)
+            val input3 = twoMaps(inputs.last)
 
             val alpha = attFloats.getOrElse("alpha", 1.0f)
             val beta  = attFloats.getOrElse("beta", 1.0f)
@@ -696,69 +690,67 @@ trait ONNXLib extends TensorDsl {
           }
 
           case flattenNode(input, output, axis) => {
-            val input1 = get_from_two_maps(input)
+            val input1 = twoMaps(input)
             val shape = (input1.shape.take(axis) :+ -1)
             intermediate_map_tensor += (output -> input1.resize(shape: _*))
           }
 
           case addNode(inputs, output) => {
             assert(inputs.size == 2, s"inputs for addNode should be size 2, got ${inputs.size}")
-            val (input1 :: input2 :: Nil)  = inputs.map(a => get_from_two_maps(a)).take(2).toList
+            val (input1 :: input2 :: Nil)  = inputs.map(a => twoMaps(a)).take(2).toList
             intermediate_map_tensor += (output -> (input1 + input2))
           }
 
           case shapeNode(input, output) => {
-            val input1 = get_from_two_maps(input)
+            val input1 = twoMaps(input)
             val out: Seq[Int] = input1.shape
-            // TODO (Fei Wang): for now, saving Int typed Tensor to intMap (mutable map of type String -> (Seq[Int], Array[Int]))
+            // For now, saving Int typed Tensor to intMap (mutable map of type String -> (Seq[Int], Array[Int]))
             intMap += (output -> (Seq(out.size), out.toArray))
           }
 
           case sliceNode(input, output, attMap: Map[String, List[Int]]) => {
-            // TODO (Fei Wang): make this robust by something like get_from_three_maps
-            val (_, input1: Array[Int]) = intMap.get(input) match {
-              case Some(v) => v
-              case _ => ???
+            if (inTwoMaps(input)) {
+              ??? // TODO (Fei Wang): implemented general slice node
+            } else {
+              val (dim1, input1: Array[Int]) = intMap.get(input).get
+              val axes: List[Int] = attMap.get("axes").get
+              val starts: List[Int] = attMap.get("starts").get
+              val ends: List[Int] = attMap.get("ends").get
+              assert(axes == List(0), s"slice on shape tensor must be on dim 0, got ${axes}")
+              assert(starts.size == 1, s"index on shape tensor must be of size 1, got ${starts}")
+              assert(ends.size == 1, s"index on shape tensor must be of size 1, got ${ends}")
+              val start = starts(0); val end = ends(0)
+              intMap += (output -> (Seq(end - start), input1.take(end).drop(start)))
             }
-            // TODO (Fei Wang): for now, we KNOW that slice is working on the result of a shapeNode (should fix with more robust way later)
-            val axes: List[Int] = attMap.get("axes").get
-            val starts: List[Int] = attMap.get("starts").get
-            val ends: List[Int] = attMap.get("ends").get
-            assert(axes == List(0), s"TODO: not generalized code at all, axes got ${axes}")
-            assert(starts == List(0), s"TODO: not generalize code at all, starts got ${starts}")
-            assert(ends == List(1), s"TODO: not generalized code at all, ends got ${ends}")
-            val out: Int = input1(0)
-            // TODO (Fei Wang): for now, save the int typed Tensor to intMap
-            intMap += (output -> (Seq(1), scala.Array(out)))
           }
 
           case squeezeNode(input, output, axes) => {
-            // TODO (Fei Wang): make this robust by something like get_from_three_maps
-            val (dims: Seq[Int], input1: Array[Int]) = intMap.get(input) match {
-              case Some(v) => v
-              case _ => ???
+            if (inTwoMaps(input)) {
+              ??? // TODO (Fei Wang): implement general squeeze node function
+            } else {
+              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              assert(axes == List(0),  s"squeeze on shape tensor must be on dim 0, axes got ${axes}")
+              assert(dim1 == Seq(1), s"the dimension to squeeze must be dim 1, got ${dim1}")
+              assert(input1.size == 1, s"to squeeze on the shape tensor, it must have 1 element, got ${input1}")
+              intMap += (output -> (Seq[Int](), input1))
             }
-            // TODO (Fei Wang): for now, we KNOW that slice is working on the result of a shapeNode (should fix with more robust way later)
-            assert(axes == List(0),  s"TODO: not generalized code at all, axes got ${axes}")
-            // TODO (Fei Wang): for now, save the int typed Tensor to intMap
-            intMap += (output -> (Seq[Int](), input1))
           }
 
           case constantNode(output, data) => {
-            // TODO (Fei Wang): for now we know constantNode are Int
+            // For now we assume that constantNode are Int (for tensor shape)
             intMap += (output -> (Seq[Int](), scala.Array(data.toInt)))
           }
 
           case unsqueezeNode(input, output, axes) => {
-            // TODO (Fei Wang): make this robust by something like get_from_three_maps
-            val (dims: Seq[Int], input1: Array[Int]) = intMap.get(input) match {
-              case Some(v) => v
-              case _ => ???
+            if (inTwoMaps(input)) {
+              ??? // TODO (Fei Wang): implement general unsqueeze function
+            } else {
+              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              assert(axes == List(0),  s"unsqueeze on shape tensor must be on dim 0, axes got ${axes}")
+              assert(dim1 == Seq[Int](),  s"unsqueeze on shape tensor must be empty seq, dims got ${dim1}")
+              assert(input1.size == 1, s"unsqueeze on shape tensor must have 1 element, got ${input1}")
+              intMap += (output -> (Seq(1), input1))
             }
-            // TODO (Fei Wang): for now, we KNOW that axes is List(0),(should fix with more robust way later)
-            assert(axes == List(0),  s"TODO: not generalized code at all, axes got ${axes}")
-            assert(dims == Seq[Int](),  s"TODO: not generalized code at all, dims got ${dims}")
-            intMap += (output -> (Seq(1), input1))
           }
 
           case x =>
@@ -779,6 +771,8 @@ trait ONNXLib extends TensorDsl {
       intermediate_map_tensorR.update(x_name, x)
 
       // TODO (Fei Wang): ask Greg, is there a better way to do this?
+      def two_maps = initializer_map_tensorR orElse intermediate_map_tensorR
+      def inTwoMaps(key: String) = initializer_map_tensorR.contains(key) || initializer_map_tensorR.contains(key)
       def get_from_two_maps(key: String): TensorR = {
         initializer_map_tensorR.get(key) match {
           case Some(v) => v
@@ -823,9 +817,22 @@ trait ONNXLib extends TensorDsl {
           intermediate_map_tensorR.update(output, out)
         } else if (node.isInstanceOf[concatNode]) {
           val concatNode(inputs, output, axis) = node
-          val input_s = inputs.map(x => get_from_two_maps(x))
-          val out = input_s.head.concat(axis, input_s.tail: _*)
-          intermediate_map_tensorR.update(output, out)
+          // try {
+            val input_s = inputs.map(x => get_from_two_maps(x))
+            val out = input_s.head.concat(axis, input_s.tail: _*)
+            intermediate_map_tensorR.update(output, out)
+          // } catch {
+          //   case e: RuntimeException => {
+          //     val input_s = inputs.map(x => intMap.get(x).get)
+          //     val dims = input_s.map{case (d, a) => d}
+          //     val datas = input_s.map{case (d, a) => a}
+          //     dims foreach (d => assert(d.size == 1, s"intMaps (for shapeTensors) should all be rank 1, got ${d}"))
+          //     val con_dims = dims.foldLeft(Seq(0))((a, b) => Seq(a(0) + b(0)))
+          //     val con_datas = datas.foldLeft(scala.Array[Int]())((a, b) => a ++ b)
+          //     intMap += (output -> (con_dims, con_datas))
+          //   }
+          //   case e: Throwable => throw e
+          // }
         } else if (node.isInstanceOf[dropoutNode]) {
 
           val dropoutNode(input, outputs, ratio) = node
@@ -927,6 +934,80 @@ trait ONNXLib extends TensorDsl {
           val out = input1 + input2
           intermediate_map_tensorR.update(output, out)
 
+        } else if (node.isInstanceOf[shapeNode]) {
+          val shapeNode(input, output) = node
+          val input1 = get_from_two_maps(input)
+          val shape: Seq[Int] = input1.x.shape
+          // Note: shape information, which is non Rep type, should be saved in intMap
+          intMap += (output -> (Seq[Int](shape.size), shape.toArray))
+
+        } else if (node.isInstanceOf[constantNode]) {
+          val constantNode(output, data) = node
+          // TODO (Fei Wang): for now we know constantNode are Int
+          intMap += (output -> (Seq[Int](), scala.Array(data.toInt)))
+
+        } else if (node.isInstanceOf[sliceNode]) {
+          // try {
+          //   val sliceNode(inputt, output, attMap) = node
+          //   throw new RuntimeException("aa")
+          //   // val input1 = get_from_two_maps(inputt)
+          //   // ???  // TODO (Fei Wang) handle general slice case
+          // } catch {
+          //   case e: RuntimeException => { // it means that we are slicing a shape tensor in intMap
+              val sliceNode(inputt, output, attMap) = node
+              val (dims: Seq[Int], input1: Array[Int]) = intMap.get(inputt) match {
+                case Some(v) => v
+                case None => throw new RuntimeException(s"Tensor $inputt is not found anywhere")
+              }
+              val axes: List[Int] = attMap.getOrElse("axes", List[Int]())
+              val starts: List[Int] = attMap.getOrElse("starts", List[Int]())
+              val ends: List[Int] = attMap.getOrElse("ends", List[Int]())
+              assert(axes == List(0), s"TODO: not generalized code at all, axes got ${axes}")
+              assert(starts == List(0), s"TODO: not generalize code at all, starts got ${starts}")
+              assert(ends == List(1), s"TODO: not generalized code at all, ends got ${ends}")
+              intMap += (output -> (Seq(1), scala.Array(input1(0))))
+          //   }
+          //   case e: Throwable => throw e
+          // }
+
+        // } else if (node.isInstanceOf[squeezeNode]) {
+        //   val squeezeNode(input, output, axes) = node
+        //   try {
+        //     val input1 = get_from_two_maps(input)
+        //     ??? // TODO (Fei Wang) handle the general squeeze case
+        //   } catch {
+        //     case e: RuntimeException => {
+        //       val (dims: Seq[Int], input1: Array[Int]) = intMap.get(input) match {
+        //         case Some(v) => v
+        //         case None => throw new RuntimeException(s"tensor $input is not found anywhere")
+        //       }
+        //       val posAxes = axes.map(x => if (x >= 0) x else dims.size + x)
+        //       for (i <- posAxes) assert(dims(i) == 1, s"squeeze on dimensions of size not 1 is not allowed dims: $dims axes: $axes")
+        //       val shape = dims.zipWithIndex.filterNot{case (_, i) => posAxes.contains(i)}.map{case(a, _) => a}
+        //       intMap += (output -> (shape, input1))
+        //     }
+        //     case e: Throwable => throw e
+        //   }
+
+
+        // } else if (node.isInstanceOf[unsqueezeNode]) {
+        //   val unsqueezeNode(input, output, axes) = node
+        //   try {
+        //     val input1 = get_from_two_maps(input)
+        //     ??? // TODO: (Fei Wang) handle the general unsqueeze case
+        //   } catch {
+        //     case e: RuntimeException => {
+        //       val (dims: Seq[Int], input1: Array[Int]) = intMap.get(input) match {
+        //         case Some(v) => v
+        //         case None => ???
+        //       }
+        //       assert(axes.size == 1, s"unsqueeze only handle axes of size 1, got ${axes}")
+        //       val posAxes = if (axes(0) >= 0) axes(0) else (dims.size + axes(0) + 1) // Note the difference with squeeze (Not very sure)
+        //       val shape = (dims.take(posAxes) :+ 1) ++ dims.drop(posAxes)
+        //       intMap += (output -> (shape, input1))
+        //     }
+        //     case e: Throwable => throw e
+        //   }
         } else {
           System.out.println(s"node $node is not implemented")
           shift{ (k: Tensor => Unit) => ???}
