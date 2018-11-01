@@ -90,6 +90,3 @@ if __name__ == '__main__':
     batch = inputs.Batch('../../cifar10_data/cifar-10-batches-py/data_batch_1', 64)
     (input_x, input_y) = batch.batch()
     torch.onnx.export(model, Variable(torch.from_numpy(input_x)), args.generate_onnx, verbose=True)
-
-# conv1 kernel torch.Size([96, 3, 3, 3])
-# 0.47137 || 0.03537 -0.33162 0.43771 0.24117 0.38503 0.04417 0.00890 0.04059 0.10085 0.40934 

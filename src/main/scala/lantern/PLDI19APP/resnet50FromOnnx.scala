@@ -16,30 +16,36 @@ import scala.math._
 import java.io.PrintWriter;
 import java.io.File;
 
-object SqueezeNetOnnx {
+object Resnet50Onnx {
 
   val root_dir = "src/out/PLDI19evaluation/"
-  val cpu_file_dir = "squeezenet/lantern/LanternOnnx.cpp"
-  val data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
-  val model_file = "src/out/PLDI19evaluation/squeezenet/pytorch/squeezenetCifar10.onnx"
+  val inference_cpu_file_dir = "resnet50/lantern/LanternOnnxInference.cpp"
+  val cpu_file_dir = "resnet50/lantern/LanternOnnx.cpp"
+  val gpu_file_dir = "resnet50/lantern/LanternOnnx.cu"
+  val model_file = "resnet50/resnet50.onnx"
+  val relative_data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
 
-  val squeezenetInferenceCPU = new LanternDriverC[String, Unit] with ONNXLib {
+  val resnet50InferenceCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       // reading ONNX model
-      val model = readONNX(model_file)
+      val model = readONNX(root_dir + model_file)
       val (func, x_dims, y_dims) = (model.inference_func, model.x_dims, model.y_dims)
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+        input.printHead(10, "input")
         val out = func(input)
+        out.printHead(10, "output")
+        error("stop")
       }
     }
   }
 
-  val squeezenetCPU = new LanternDriverC[String, Unit] with ONNXLib {
+  // to here
+  val resnetCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       Random.srand(Some(42))
@@ -54,7 +60,7 @@ object SqueezeNetOnnx {
       }
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
@@ -105,9 +111,11 @@ object SqueezeNetOnnx {
   }
 
   def main(args: Array[String]) {
-    val squeezenet_file = new PrintWriter(new File(root_dir + cpu_file_dir))
-    squeezenet_file.println(squeezenetCPU.code)
-    squeezenet_file.flush()
+    val resnet_cpu_inference_file = new PrintWriter(new File(root_dir + inference_cpu_file_dir))
+    resnet_cpu_inference_file.println(resnet50InferenceCPU.code)
+    // val squeezenet_file = new PrintWriter(new File(root_dir + cpu_file_dir))
+    // squeezenet_file.println(squeezenetCPU.code)
+    resnet_cpu_inference_file.flush()
   }
 
 }

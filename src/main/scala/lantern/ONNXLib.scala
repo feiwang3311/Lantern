@@ -188,7 +188,11 @@ trait ONNXLib extends TensorDsl {
       int_init.map(ParseHelper.extract_init(_)).map{case (name, (dims, dt, arr)) => (name -> (dims, arr.map(_.toInt))) }.toMap
 
     // set up reading from parameters
-    val reader = ParameterReader(parameterFileName)
+    // because the parameterFileName is also used in the generated file for reading in parameters, we must make sure (for robustness) that the path is absolute
+    val whereami = System.getProperty("user.dir")
+    val absoluteParameterFileName = if (parameterFileName startsWith "/") parameterFileName
+                                    else new File(System.getProperty("user.dir"), parameterFileName).getPath
+    val reader = ParameterReader(absoluteParameterFileName)
     val initializer_map_tensor: Map[String, Tensor] =
       byteMap.map{ case (name, (dims, dt, offset)) => (name -> Tensor(reader.getOffset(offset), dims: _*)) }
     val initializer_map_tensorR: Map[String, TensorR] =
@@ -221,7 +225,7 @@ trait ONNXLib extends TensorDsl {
 
     abstract class Node
     case class convNode(inputs: Seq[String], output: String, attributes: Map[String, Seq[Int]]) extends Node
-    case class bnNode(inputs: Seq[String], output: String, epsilon: Float) extends Node
+    case class bnNode(inputs: Seq[String], output: String, attributeMap: Map[String, Float]) extends Node
     case class sumNode(inputs: Seq[String], output: String) extends Node
     case class reluNode(input: String, output: String) extends Node
     case class maxpoolNode(input: String, output: String, attributes: Map[String, Seq[Int]]) extends Node
@@ -233,6 +237,14 @@ trait ONNXLib extends TensorDsl {
     case class reshapeNode(inputs: Seq[String], output: String) extends Node
     case class gemmNode(inputs: Seq[String], output: String, attInts: Map[String, Int], attFloats: Map[String, Float]) extends Node
     case class flattenNode(input: String, output: String, axis: Int) extends Node
+    case class addNode(inputs: Seq[String], output: String) extends Node
+    // not yet implemented for inference and training
+    case class padNode(input: String, output: String, mode: String, pads: List[Int], value: Float) extends Node
+    case class shapeNode(input: String, output: String) extends Node
+    case class sliceNode(input: String, output: String, attMap: Map[String, List[Int]]) extends Node
+    case class squeezeNode(input: String, output: String, axes: List[Int]) extends Node
+    case class unsqueezeNode(input: String, output: String, axes: List[Int]) extends Node
+    case class constantNode(output: String, data: Float) extends Node
 
     def getConvMaxPAvPAttr(attributes: Seq[onnx_ml.AttributeProto]): Map[String, Seq[Int]] = {
       val atts: Map[String, Seq[Int]] = attributes.map{att =>
@@ -268,10 +280,16 @@ trait ONNXLib extends TensorDsl {
           assert (outputs.size == 1, s"number of outputs of a batch normalization layer should be 1, got ${outputs.size}")
 
           val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
-          assert (attributes.size == 1, s"number of attributes of a batch normalization layer should be 1, got ${attributes.size}")
-          val epsilon: Float = attributes.head.getF.toFloat
 
-          bnNode(inputs, outputs.head, epsilon)
+          val attributeMap: Map[String, Float] = attributes.map { att =>
+            att.getName match {
+              case "epsilon" => ("epsilon" -> att.getF.toFloat)
+              case "is_test" => ("is_test" -> att.getI.toFloat)
+              case "momentum" => ("momentum" -> att.getF.toFloat)
+              case other => System.out.println(s"not yet handling BatchNormalization attributes $other"); ???
+            }
+          }.toMap
+          bnNode(inputs, outputs.head, attributeMap)
         }
 
         case "Sum" => {
@@ -411,6 +429,85 @@ trait ONNXLib extends TensorDsl {
           flattenNode(inputs.head, outputs.head, axis)
         }
 
+        case "Add" => {
+          val inputs : Seq[String] = node.input
+          assert(inputs.size == 2, s"number of inputs for Add node should be 2, got ${inputs.size}")
+          val outputs: Seq[String] = node.output
+          assert(outputs.size == 1, s"number of outputs for Add node should be 1, got ${outputs.size}")
+          addNode(inputs, outputs.head)
+        }
+
+        case "Pad" => {
+          val inputs: Seq[String] = node.input
+          assert(inputs.size == 1, s"number of inputs for Pad node should be 1, got ${inputs.size}")
+          val outputs: Seq[String] = node.output
+          assert(outputs.size == 1, s"number of outputs for Pad node should be 1, got ${outputs.size}")
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+          assert(attributes.size == 3, s"number of attributes of a Pad node should be 3, got ${attributes.size}")
+          val sortedAttr = attributes.sortBy { att => att.getName match {
+            case "mode" => 1
+            case "pads" => 2
+            case "value" => 3
+          }}
+          val mode: String = sortedAttr(0).getS.toString()
+          val pads: List[Int] = sortedAttr(1).ints.toList.map(l => l.toInt)
+          val value: Float = sortedAttr(2).getF.toFloat
+          padNode(inputs.head, outputs.head, mode, pads, value)
+        }
+
+        case "Shape" => {
+          val inputs: Seq[String] = node.input
+          val outputs: Seq[String] = node.output
+          assert(inputs.size == 1, s"inputs should be size 1 for shapeNode, got ${inputs.size}")
+          assert(outputs.size == 1, s"outputs should be size 1 for shapeNode, got ${outputs.size}")
+          shapeNode(inputs.head, outputs.head)
+        }
+
+        case "Slice" => {
+          val inputs: Seq[String] = node.input
+          val outputs: Seq[String] = node.output
+          assert(inputs.size == 1, s"inputs should be size 1 for sliceNode, got ${inputs.size}")
+          assert(outputs.size == 1, s"outputs should be size 1 for sliceNode, got ${outputs.size}")
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+          val attMap: Map[String, List[Int]] = attributes.map {att =>
+            att.getName -> att.ints.toList.map(_.toInt)
+          }.toMap
+          sliceNode(inputs.head, outputs.head, attMap)
+        }
+
+        case "Squeeze" => {
+          val inputs: Seq[String] = node.input
+          val outputs: Seq[String] = node.output
+          assert(inputs.size == 1, s"inputs should be size 1 for squeezeNode, got ${inputs.size}")
+          assert(outputs.size == 1, s"outputs should be size 1 for squeezeNode, got ${outputs.size}")
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+          assert(attributes.size ==1, s"size of attributes should be 1 for squeezeNode, got ${attributes.size}")
+          val axes: List[Int] = attributes.head.ints.toList.map(_.toInt)
+          squeezeNode(inputs.head, outputs.head, axes)
+        }
+
+        case "Unsqueeze" => {
+          val inputs: Seq[String] = node.input
+          val outputs: Seq[String] = node.output
+          assert(inputs.size == 1, s"inputs should be size 1 for unsqueezeNode, got ${inputs.size}")
+          assert(outputs.size == 1, s"outputs should be size 1 for unsqueezeNode, got ${outputs.size}")
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+          assert(attributes.size ==1, s"size of attributes should be 1 for unsqueezeNode, got ${attributes.size}")
+          val axes: List[Int] = attributes.head.ints.toList.map(_.toInt)
+          unsqueezeNode(inputs.head, outputs.head, axes)
+        }
+
+        case "Constant" => {
+          val outputs : Seq[String] = node.output
+          assert(outputs.size == 1, s"outputs should be size 1 for constantNode, got ${outputs.size}")
+          val attributes: Seq[onnx_ml.AttributeProto] = node.attribute
+          assert(attributes.size ==1, s"size of attributes should be 1 for constantNode, got ${attributes.size}")
+          val value: onnx.onnx_ml.TensorProto = attributes.head.getT
+          val (_, (dims, _, data)): (String, (Seq[Int], onnx_ml.TensorProto.DataType, Array[Float])) = ParseHelper.extract_init(value)
+          assert(dims.product == 1, s"constant node should have tensor with single value, got ${dims}")
+          constantNode(outputs.head, data(0))
+        }
+
         case _ =>
           System.out.println(node.toProtoString)
           throw new RuntimeException(s"Node not yet implemented")
@@ -533,9 +630,11 @@ trait ONNXLib extends TensorDsl {
             intermediate_map_tensor += (output -> out)
           }
 
-          case bnNode(inputs, output, epsilon) => {
+          case bnNode(inputs, output, attMap) => {
 
+            assert(inputs.size == 5, "For inference mode, BatchNormalization should have 5 inputs")
             val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(get_from_two_maps(_))
+            val epsilon: Float = attMap.getOrElse("epsilon", 0.000001f)
             val out1 = (in - runningMean.resize(-1,1,1)) / (runningVariance + epsilon).sqrt().resize(-1, 1, 1)
             val out2 = out1 * scale.resize(-1,1,1) + bias.resize(-1,1,1)
             intermediate_map_tensor += (output -> out2)
@@ -584,6 +683,12 @@ trait ONNXLib extends TensorDsl {
             val input1 = get_from_two_maps(input)
             val shape = (input1.shape.take(axis) :+ -1)
             intermediate_map_tensor += (output -> input1.resize(shape: _*))
+          }
+
+          case addNode(inputs, output) => {
+            assert(inputs.size == 2, s"inputs for addNode should be size 2, got ${inputs.size}")
+            val (input1 :: input2 :: Nil)  = inputs.map(a => get_from_two_maps(a)).take(2).toList
+            intermediate_map_tensor += (output -> (input1 + input2))
           }
 
           case x =>
@@ -685,11 +790,12 @@ trait ONNXLib extends TensorDsl {
 
         } else if (node.isInstanceOf[bnNode]) {
 
-          val bnNode(inputs, output, epsilon) = node
+          val bnNode(inputs, output, attMap) = node
 
           val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(get_from_two_maps(_))
           val diff = in - in.batchNormAv()
           val vari = diff.square().batchNormAv()
+          val epsilon = attMap.getOrElse("epsilon", 0.000001f)
           val xhat = diff / (vari + epsilon).sqrt()
           val outy = xhat * scale.resize(-1, 1, 1) + bias.resize(-1, 1, 1)
 
@@ -742,6 +848,13 @@ trait ONNXLib extends TensorDsl {
           val input1 = get_from_two_maps(input)
           val shape = input1.x.shape.take(axis) :+ -1
           val out = input1.resize(shape: _*)
+          intermediate_map_tensorR.update(output, out)
+
+        } else if (node.isInstanceOf[addNode]) {
+          val addNode(inputs, output) = node
+          assert(inputs.size == 2)
+          val (input1 :: input2::Nil) = inputs.map(get_from_two_maps).take(2).toList
+          val out = input1 + input2
           intermediate_map_tensorR.update(output, out)
 
         } else {
