@@ -13,17 +13,20 @@ python3 generate_cifar10_data.py --data-dir cifar10_data
 
 export CUDA_VISIBLE_DEVICES=0
 
-python3 -m venv python3-env
+# python3 -m venv python3-env
 source python3-env/bin/activate
 pip3 install --upgrade pip wheel
-pip3 install --upgrade tensorflow-gpu=1.4.1  # this version of tensorflow works with cuda 8. the later versions work with cuda 9.0, which is not installed in ml machines
-pip3 install torch torchvision
-pip3 install matplotlib
-
+# pip3 install --upgrade tensorflow-gpu=1.4.1  # this version of tensorflow works with cuda 8. the later versions work with cuda 9.0, which is not installed in ml machines
+# pip3 install torch torchvision
+# pip3 install matplotlib
 
 cd squeezenet
-cd tensorflow2
+cd pytorch
+# training pytorch version of squeezenet
 python3 train.py
+python3 train.py --generate_onnx ../squeezenetCifar10.onnx
+#cd tensorflow2
+#python3 train.py
 
 exit 1
 

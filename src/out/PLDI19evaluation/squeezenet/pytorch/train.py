@@ -20,6 +20,7 @@ def train(args):
   torch.manual_seed(args.seed)
 
   model = pytorch_squeeze_cifar10.SqueezeNet()
+  model.cuda()
   optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
   batch = inputs.Batch(args.input_file, args.batch_size)
 
@@ -28,7 +29,7 @@ def train(args):
     for i in range(batch.total_size // batch.batch_size):
       (input_x, input_y) = batch.batch()
       optimizer.zero_grad()
-      loss = F.nll_loss(F.log_softmax(model(Variable(torch.from_numpy(input_x))), dim=1), Variable(torch.from_numpy(input_y)))
+      loss = F.nll_loss(F.log_softmax(model(Variable(torch.from_numpy(input_x)).cuda()), dim=1), Variable(torch.from_numpy(input_y)).cuda())
       tloss += loss.data[0]
       loss.backward()
       optimizer.step()
@@ -81,14 +82,11 @@ if __name__ == '__main__':
            help='Directory for outputing onnx model')
   args = parser.parse_args()
 
-  if len(args.generate_onnx) > 0:
+  if args.generate_onnx == '':
+    train(args)
+  else:
     torch.manual_seed(args.seed)
     model = pytorch_squeeze_cifar10.SqueezeNet()
     batch = inputs.Batch(args.input_file, 64)
     (input_x, input_y) = batch.batch()
     torch.onnx.export(model, Variable(torch.from_numpy(input_x)), args.generate_onnx, verbose = True)
-  else:
-    train(args)
-
-# conv1 kernel torch.Size([96, 3, 3, 3])
-# 0.47137 || 0.03537 -0.33162 0.43771 0.24117 0.38503 0.04417 0.00890 0.04059 0.10085 0.40934 
