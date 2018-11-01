@@ -20,7 +20,8 @@ def train(args):
   torch.manual_seed(args.seed)
 
   model = pytorch_squeeze_cifar10.SqueezeNet()
-  model.cuda()
+  if args.use_gpu:
+    model.cuda()
   optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
   batch = inputs.Batch(args.input_file, args.batch_size)
 
@@ -29,7 +30,13 @@ def train(args):
     for i in range(batch.total_size // batch.batch_size):
       (input_x, input_y) = batch.batch()
       optimizer.zero_grad()
-      loss = F.nll_loss(F.log_softmax(model(Variable(torch.from_numpy(input_x)).cuda()), dim=1), Variable(torch.from_numpy(input_y)).cuda())
+      if args.use_gpu:
+        inputX = Variable(torch.from_numpy(input_x)).cuda()
+        inputY = Variable(torch.from_numpy(input_y)).cuda()
+      else:
+        inputX = Variable(torch.from_numpy(input_x))
+        inputY = Variable(torch.from_numpy(input_y))
+      loss = F.nll_loss(F.log_softmax(model(inputX), dim=1), inputY)
       tloss += loss.data[0]
       loss.backward()
       optimizer.step()
@@ -80,6 +87,8 @@ if __name__ == '__main__':
            help='Directory for saving performance data')
   parser.add_argument('--generate_onnx', type=str, default='',
            help='Directory for outputing onnx model')
+  parser.add_argument('--use_gpu', type=bool, default=False,
+           help='Set to true if you want to use GPU')
   args = parser.parse_args()
 
   if args.generate_onnx == '':
