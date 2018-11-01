@@ -20,7 +20,7 @@ object SqueezeNetOnnx {
 
   val root_dir = "src/out/PLDI19evaluation/"
   val cpu_inference_file_dir = "squeezenet/lantern/LanternOnnxInference.cpp"
-  val cpu_file_dir = "squeezenet/lantern/LanternOnnx.cpp"
+  val cpu_training_file_dir = "squeezenet/lantern/LanternOnnxTraining.cpp"
   val model_file = "squeezenet/squeezenetCifar10.onnx"
   // this dir is relative to the generated code
   val relative_data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
@@ -44,25 +44,28 @@ object SqueezeNetOnnx {
     }
   }
 
-  val squeezenetCPU = new LanternDriverC[String, Unit] with ONNXLib {
+  val squeezenetTrainingCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+
+      // init timer
       Random.srand(Some(42))
       val dataTimer = Timer2()
       dataTimer.startTimer
+      val learning_rate = 0.005f
+
+      // set up data
+      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val prepareTime = dataTimer.getElapsedTime / 1e6f
+      printf("Data reading in %lf sec\\n", prepareTime)
 
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val res = model.training_func(input).logSoftmaxB().nllLossB(target)
-        res.sum() / 64.0f
+        res.sum() / batchSize  // TODO (Fei Wang) should implement a mean() reduction op instead
       }
-
-      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
-
-      val prepareTime = dataTimer.getElapsedTime / 1e6f
-      printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
 
       // Training
       val nbEpoch = 4
@@ -79,11 +82,10 @@ object SqueezeNetOnnx {
         train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
           val inputR = TensorR(input, isInput=true)
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(1))
-          // loss.print("loss")
           trainLoss += loss.data(0)
           model.initializer_map_tensorR foreach { case (name, tr) =>
             tr.d.changeTo { i =>
-              tr.x.data(i) = tr.x.data(i) - 0.005f * tr.d.data(i)
+              tr.x.data(i) = tr.x.data(i) - learning_rate * tr.d.data(i)
               0.0f
             }
           }
@@ -102,10 +104,8 @@ object SqueezeNetOnnx {
         }
         val delta = trainTimer.getElapsedTime
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
-        error("stop")
         loss_save(epoch) = trainLoss / train.length
       }
-
     }
   }
 
@@ -113,5 +113,8 @@ object SqueezeNetOnnx {
     val squeezenet_cpu_inference_file = new PrintWriter(new File(root_dir + cpu_inference_file_dir))
     squeezenet_cpu_inference_file.println(squeezenetInferenceCPU.code)
     squeezenet_cpu_inference_file.flush()
+    val squeezenet_cpu_training_file = new PrintWriter(new File(root_dir + cpu_training_file_dir))
+    squeezenet_cpu_training_file.println(squeezenetTrainingCPU.code)
+    squeezenet_cpu_training_file.flush()
   }
 }
