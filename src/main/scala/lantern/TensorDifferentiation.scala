@@ -1626,6 +1626,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def resize(dims: Int*) = {
+      generateRawComment(s"resize to $dims")
       val new_dims = if (dims.forall(_ > 0)) dims else {
         assert(dims.filter(_ < 0) == Seq(-1), s"there should be at most one -1 in the resize dims, got $dims")
         dims.updated(dims.indexOf(-1, 0), this.scalarCount / dims.filter(_ > 0).product)

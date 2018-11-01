@@ -19,22 +19,27 @@ import java.io.File;
 object SqueezeNetOnnx {
 
   val root_dir = "src/out/PLDI19evaluation/"
+  val cpu_inference_file_dir = "squeezenet/lantern/LanternOnnxInference.cpp"
   val cpu_file_dir = "squeezenet/lantern/LanternOnnx.cpp"
-  val data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
-  val model_file = "src/out/PLDI19evaluation/squeezenet/pytorch/squeezenetCifar10.onnx"
+  val model_file = "squeezenet/squeezenetCifar10.onnx"
+  // this dir is relative to the generated code
+  val relative_data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
 
   val squeezenetInferenceCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       // reading ONNX model
-      val model = readONNX(model_file)
+      val model = readONNX(root_dir + model_file)
       val (func, x_dims, y_dims) = (model.inference_func, model.x_dims, model.y_dims)
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+        input.printHead(10, "input")
         val out = func(input)
+        out.printHead(10, "out")
+        error("stop")
       }
     }
   }
@@ -47,14 +52,14 @@ object SqueezeNetOnnx {
       dataTimer.startTimer
 
       // reading ONNX model
-      val model = readONNX(model_file)
+      val model = readONNX(root_dir + model_file)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val res = model.training_func(input).logSoftmaxB().nllLossB(target)
         res.sum() / 64.0f
       }
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
@@ -105,9 +110,8 @@ object SqueezeNetOnnx {
   }
 
   def main(args: Array[String]) {
-    val squeezenet_file = new PrintWriter(new File(root_dir + cpu_file_dir))
-    squeezenet_file.println(squeezenetCPU.code)
-    squeezenet_file.flush()
+    val squeezenet_cpu_inference_file = new PrintWriter(new File(root_dir + cpu_inference_file_dir))
+    squeezenet_cpu_inference_file.println(squeezenetInferenceCPU.code)
+    squeezenet_cpu_inference_file.flush()
   }
-
 }

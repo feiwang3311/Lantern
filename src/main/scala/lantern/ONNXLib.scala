@@ -184,8 +184,8 @@ trait ONNXLib extends TensorDsl {
     writer.close()
 
     // read and save int parameters as non-Rep type
-    val intMap: Map[String, (Seq[Int], Array[Int])] =
-      int_init.map(ParseHelper.extract_init(_)).map{case (name, (dims, dt, arr)) => (name -> (dims, arr.map(_.toInt))) }.toMap
+    val intMap: MMap[String, (Seq[Int], Array[Int])] =
+      MMap(int_init.map(ParseHelper.extract_init(_)).map{case (name, (dims, dt, arr)) => (name -> (dims, arr.map(_.toInt))) }.toMap.toSeq: _*)
 
     // set up reading from parameters
     // because the parameterFileName is also used in the generated file for reading in parameters, we must make sure (for robustness) that the path is absolute
@@ -603,10 +603,26 @@ trait ONNXLib extends TensorDsl {
           }
 
           case concatNode(inputs, output, axis) => {
+            try {
+              val input_s = inputs.map(x => get_from_two_maps(x))
+              val out = input_s.head.concat(axis, input_s.tail: _*)
+              intermediate_map_tensor += (output -> out)
+            } catch {
+              case e: RuntimeException => {
+                // TODO (Fei Wang): need to be more robust For now this means that the inputs are in tntMaps
+                val input_s = inputs.map(x => intMap.get(x).get)
+                // TODO: (Fei Wang): not general code for now
+                assert(input_s.size == 2, "TODO: not general code")
+                assert(axis == 0, s"TODO: not general code, axis got ${axis}")
+                val (dim0, data0) = input_s(0)
+                val (dim1, data1) = input_s(1)
+                assert(dim0 == Seq(1), "TODO: not general code")
+                assert(dim1 == Seq(1), "TODO: not general code")
+                intMap += (output -> (Seq(1), data0 ++ data1))
 
-            val input_s = inputs.map(x => get_from_two_maps(x))
-            val out = input_s.head.concat(axis, input_s.tail: _*)
-            intermediate_map_tensor += (output -> out)
+              }
+              case e => throw e
+            }
           }
 
           case dropoutNode(input, outputs, ratio) => {
@@ -689,6 +705,60 @@ trait ONNXLib extends TensorDsl {
             assert(inputs.size == 2, s"inputs for addNode should be size 2, got ${inputs.size}")
             val (input1 :: input2 :: Nil)  = inputs.map(a => get_from_two_maps(a)).take(2).toList
             intermediate_map_tensor += (output -> (input1 + input2))
+          }
+
+          case shapeNode(input, output) => {
+            val input1 = get_from_two_maps(input)
+            val out: Seq[Int] = input1.shape
+            // TODO (Fei Wang): for now, saving Int typed Tensor to intMap (mutable map of type String -> (Seq[Int], Array[Int]))
+            intMap += (output -> (Seq(out.size), out.toArray))
+          }
+
+          case sliceNode(input, output, attMap: Map[String, List[Int]]) => {
+            // TODO (Fei Wang): make this robust by something like get_from_three_maps
+            val (_, input1: Array[Int]) = intMap.get(input) match {
+              case Some(v) => v
+              case _ => ???
+            }
+            // TODO (Fei Wang): for now, we KNOW that slice is working on the result of a shapeNode (should fix with more robust way later)
+            val axes: List[Int] = attMap.get("axes").get
+            val starts: List[Int] = attMap.get("starts").get
+            val ends: List[Int] = attMap.get("ends").get
+            assert(axes == List(0), s"TODO: not generalized code at all, axes got ${axes}")
+            assert(starts == List(0), s"TODO: not generalize code at all, starts got ${starts}")
+            assert(ends == List(1), s"TODO: not generalized code at all, ends got ${ends}")
+            val out: Int = input1(0)
+            // TODO (Fei Wang): for now, save the int typed Tensor to intMap
+            intMap += (output -> (Seq(1), scala.Array(out)))
+          }
+
+          case squeezeNode(input, output, axes) => {
+            // TODO (Fei Wang): make this robust by something like get_from_three_maps
+            val (dims: Seq[Int], input1: Array[Int]) = intMap.get(input) match {
+              case Some(v) => v
+              case _ => ???
+            }
+            // TODO (Fei Wang): for now, we KNOW that slice is working on the result of a shapeNode (should fix with more robust way later)
+            assert(axes == List(0),  s"TODO: not generalized code at all, axes got ${axes}")
+            // TODO (Fei Wang): for now, save the int typed Tensor to intMap
+            intMap += (output -> (Seq[Int](), input1))
+          }
+
+          case constantNode(output, data) => {
+            // TODO (Fei Wang): for now we know constantNode are Int
+            intMap += (output -> (Seq[Int](), scala.Array(data.toInt)))
+          }
+
+          case unsqueezeNode(input, output, axes) => {
+            // TODO (Fei Wang): make this robust by something like get_from_three_maps
+            val (dims: Seq[Int], input1: Array[Int]) = intMap.get(input) match {
+              case Some(v) => v
+              case _ => ???
+            }
+            // TODO (Fei Wang): for now, we KNOW that axes is List(0),(should fix with more robust way later)
+            assert(axes == List(0),  s"TODO: not generalized code at all, axes got ${axes}")
+            assert(dims == Seq[Int](),  s"TODO: not generalized code at all, dims got ${dims}")
+            intMap += (output -> (Seq(1), input1))
           }
 
           case x =>

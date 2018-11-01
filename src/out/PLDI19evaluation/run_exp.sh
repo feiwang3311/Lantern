@@ -25,6 +25,11 @@ cd pytorch
 # training pytorch version of squeezenet
 python3 train.py
 python3 train.py --generate_onnx ../squeezenetCifar10.onnx
+
+# lantern read onnx and train here:
+
+
+
 #cd tensorflow2
 #python3 train.py
 
