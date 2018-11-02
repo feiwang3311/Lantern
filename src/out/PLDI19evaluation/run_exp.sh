@@ -23,8 +23,8 @@ source python3-env/bin/activate
 cd squeezenet
 cd pytorch
 # training pytorch version of squeezenet
-python3 train.py --use_gpu
-python3 train.py --generate_onnx ../squeezenetCifar10.onnx
+python3 train.py --use_gpu=True
+# python3 train.py --generate_onnx ../squeezenetCifar10.onnx
 cd ../lantern
 nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
 ./LanternOnnxTrainingCu	result_Lantern

@@ -107,13 +107,11 @@ object SqueezeNetOnnx {
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(1))
           trainLoss += loss.data(0)
           parameters foreach { case (name, tr) =>
-            tr.d.printHead(10, name)
             tr.d.changeTo { i =>
               tr.x.data(i) = tr.x.data(i) - learning_rate * tr.d.data(i)
               0.0f
             }
           }
-          error("stop")
           // model.initializer_map_tensorR.toList.sortBy(x => x._1.toInt).foreach {
           //   case (name, tr) => tr.x.printHead(10, name)
           // }
@@ -179,11 +177,9 @@ object SqueezeNetOnnx {
           val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(1))  // loss is guaranteed to be on CPU
           trainLoss += loss.data(0)
           parameters foreach { case (name, tr) =>
-            // tr.d.toCPU().printHead(10, name)
-            backend.geam(tr.x, 1.0f, tr.d, -1.0f * learning_rate / batchSize, tr.x)
+            backend.geam(tr.x, 1.0f, tr.d, -1.0f * learning_rate, tr.x)
             tr.clear_grad()
           }
-          // error("stop")
 
           // selective printing
           if ((batchIndex + 1) % (train.length / batchSize / 10) == 0) {

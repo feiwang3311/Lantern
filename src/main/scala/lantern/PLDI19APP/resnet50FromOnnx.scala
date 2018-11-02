@@ -20,8 +20,9 @@ object Resnet50Onnx {
 
   val root_dir = "src/out/PLDI19evaluation/"
   val inference_cpu_file_dir = "resnet50/lantern/LanternOnnxInference.cpp"
-  val cpu_file_dir = "resnet50/lantern/LanternOnnx.cpp"
-  val gpu_file_dir = "resnet50/lantern/LanternOnnx.cu"
+  val training_cpu_file_dir = "resnet50/lantern/LanternOnnxTraining.cpp"
+  val inference_gpu_file_dir = "resnet50/lantern/LanternOnnxInference.cu"
+  val training_gpu_file_dir = "resnet50/lantern/LanternOnnxTraining.cu"
   val model_file = "resnet50/resnet50.onnx"
   val relative_data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
 
@@ -44,78 +45,176 @@ object Resnet50Onnx {
     }
   }
 
-  // // to here
-  // val resnetCPU = new LanternDriverC[String, Unit] with ONNXLib {
-  //   @virtualize
-  //   def snippet(a: Rep[String]): Rep[Unit] = {
-  //     Random.srand(Some(42))
-  //     val dataTimer = Timer2()
-  //     dataTimer.startTimer
+  val resnet50InferenceGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
+    @virtualize
+    def snippet(a: Rep[String]): Rep[Unit] = {
+      // reading ONNX model
+      val model = readONNX(root_dir + model_file)
+      val initMap = model.initializer_map_tensor.map{case (name, tr) => (name, tr.toGPU())}
+      val (func, x_dims, y_dims) = (model.inference_func(initMap), model.x_dims, model.y_dims)
 
-  //     // reading ONNX model
-  //     val model = readONNX(model_file)
-  //     def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
-  //       val res = model.training_func(input).logSoftmaxB().nllLossB(target)
-  //       res.sum() / 64.0f
-  //     }
+      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
-  //     val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-  //     val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+        input.printHead(10, "input")
+        val out = func(input)
+        out.toCPU().printHead(10, "output")
+        error("stop")
+      }
+    }
+  }
 
-  //     val prepareTime = dataTimer.getElapsedTime / 1e6f
-  //     printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
+  val resnet50TrainingCPU = new LanternDriverC[String, Unit] with ONNXLib {
+    @virtualize
+    def snippet(a: Rep[String]): Rep[Unit] = {
+      Random.srand(Some(42))
+      val dataTimer = Timer2()
+      dataTimer.startTimer
 
-  //     // Training
-  //     val nbEpoch = 4
-  //     val loss_save = NewArray[Double](nbEpoch)
-  //     val addr = getMallocAddr() // remember current allocation pointer here
+      // reading ONNX model
+      val model = readONNX(root_dir + model_file)
+      val (func, parameters) = model.training_func(model.initializer_map_tensor)
+      def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
+        val res = func(input).logSoftmaxB().nllLossB(target)
+        res.mean()
+      }
 
-  //     generateRawComment("training loop starts here")
-  //     for (epoch <- 0 until nbEpoch: Rep[Range]) {
-  //       val trainTimer = Timer2()
-  //       var trainLoss = var_new(0.0f)
-  //       printf("Start training epoch %d\\n", epoch + 1)
-  //       trainTimer.startTimer
+      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
+      val learning_rate = 0.005f
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
-  //       train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-  //         val inputR = TensorR(input, isInput=true)
-  //         val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(1))
-  //         // loss.print("loss")
-  //         trainLoss += loss.data(0)
-  //         model.initializer_map_tensorR foreach { case (name, tr) =>
-  //           tr.d.changeTo { i =>
-  //             tr.x.data(i) = tr.x.data(i) - 0.005f * tr.d.data(i)
-  //             0.0f
-  //           }
-  //         }
-  //         // model.initializer_map_tensorR.toList.sortBy(x => x._1.toInt).foreach {
-  //         //   case (name, tr) => tr.x.printHead(10, name)
-  //         // }
+      val prepareTime = dataTimer.getElapsedTime / 1e6f
+      printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
 
-  //         // selective printing
-  //         if ((batchIndex + 1) % (train.length / batchSize / 10) == 0) {
-  //           val trained = batchIndex * batchSize
-  //           val total = train.length
-  //           printf(s"Train epoch %d: [%d/%d (%.0f%%)] Average Loss: %.6f\\n", epoch, trained, total, 100.0*trained/total, trainLoss/batchIndex)
-  //           unchecked[Unit]("fflush(stdout)")
-  //         }
-  //         resetMallocAddr(addr)
-  //       }
-  //       val delta = trainTimer.getElapsedTime
-  //       printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
-  //       error("stop")
-  //       loss_save(epoch) = trainLoss / train.length
-  //     }
+      // Training
+      val nbEpoch = 4
+      val loss_save = NewArray[Double](nbEpoch)
+      val addr = getMallocAddr() // remember current allocation pointer here
 
-  //   }
-  // }
+      generateRawComment("training loop starts here")
+      for (epoch <- 0 until nbEpoch: Rep[Range]) {
+        val trainTimer = Timer2()
+        var trainLoss = var_new(0.0f)
+        printf("Start training epoch %d\\n", epoch + 1)
+        trainTimer.startTimer
+
+        train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+          val inputR = TensorR(input, isInput=true)
+          val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(1))
+          trainLoss += loss.data(0)
+          parameters foreach { case (name, tr) =>
+            tr.d.changeTo { i =>
+              tr.x.data(i) = tr.x.data(i) - learning_rate * tr.d.data(i)
+              0.0f
+            }
+          }
+          // model.initializer_map_tensorR.toList.sortBy(x => x._1.toInt).foreach {
+          //   case (name, tr) => tr.x.printHead(10, name)
+          // }
+
+          // selective printing
+          if ((batchIndex + 1) % (train.length / batchSize / 10) == 0) {
+            val trained = batchIndex * batchSize
+            val total = train.length
+            printf(s"Train epoch %d: [%d/%d (%.0f%%)] Average Loss: %.6f\\n", epoch, trained, total, 100.0*trained/total, trainLoss/batchIndex)
+            unchecked[Unit]("fflush(stdout)")
+          }
+          resetMallocAddr(addr)
+        }
+        val delta = trainTimer.getElapsedTime
+        printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
+        loss_save(epoch) = trainLoss / train.length
+      }
+    }
+  }
+
+  val resnet50TrainingGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
+    @virtualize
+    def snippet(a: Rep[String]): Rep[Unit] = {
+      Random.srand(Some(42))
+      val dataTimer = Timer2()
+      dataTimer.startTimer
+
+      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
+      val learning_rate = 0.005f
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val prepareTime = dataTimer.getElapsedTime / 1e6f
+      printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
+
+      // reading ONNX model
+      val model = readONNX(root_dir + model_file)
+      val initMap = model.initializer_map_tensor.map{case (name, tr) => (name, tr.toGPU())}
+      val (func, parameters) = model.training_func(initMap)
+      def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
+        val res = func(input).logSoftmaxB().nllLossB(target)
+        res.mean()
+      }
+
+      // Training
+      val nbEpoch = 4
+      val loss_save = NewArray[Double](nbEpoch)
+      val addr = getMallocAddr() // remember current allocation pointer here
+      val addrCuda = getCudaMallocAddr()
+
+      generateRawComment("training loop starts here")
+      for (epoch <- 0 until nbEpoch: Rep[Range]) {
+        val trainTimer = Timer2()
+        var trainLoss = var_new(0.0f)
+        printf("Start training epoch %d\\n", epoch + 1)
+        trainTimer.startTimer
+
+        train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+          val inputR = TensorR(input.toGPU(), isInput=true)
+          val targetR = target.toGPU(batchSize)
+          val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(1))
+          trainLoss += loss.data(0)
+          parameters foreach { case (name, tr) =>
+            backend.geam(tr.x, 1.0f, tr.d, -1.0f * learning_rate, tr.x)
+            tr.clear_grad()
+          }
+
+          // selective printing
+          if ((batchIndex + 1) % (train.length / batchSize / 10) == 0) {
+            val trained = batchIndex * batchSize
+            val total = train.length
+            printf(s"Train epoch %d: [%d/%d (%.0f%%)] Average Loss: %.6f\\n", epoch, trained, total, 100.0*trained/total, trainLoss/batchIndex)
+            unchecked[Unit]("fflush(stdout)")
+          }
+          resetMallocAddr(addr)
+          resetCudaMallocAddr(addrCuda)
+        }
+        val delta = trainTimer.getElapsedTime
+        printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
+        loss_save(epoch) = trainLoss / train.length
+      }
+
+      val totalTime = dataTimer.getElapsedTime / 1e6f
+      val loopTime = totalTime - prepareTime
+      val timePerEpoc = loopTime / nbEpoch
+
+      val fp2 = openf(a, "w")
+      fprintf(fp2, "unit: %s\\n", "1 epoch")
+      for (i <- (0 until loss_save.length): Rep[Range]) {
+        fprintf(fp2, "%lf\\n", loss_save(i))
+      }
+      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+      closef(fp2)
+    }
+  }
 
   def main(args: Array[String]) {
     val resnet_cpu_inference_file = new PrintWriter(new File(root_dir + inference_cpu_file_dir))
     resnet_cpu_inference_file.println(resnet50InferenceCPU.code)
-    // val squeezenet_file = new PrintWriter(new File(root_dir + cpu_file_dir))
-    // squeezenet_file.println(squeezenetCPU.code)
     resnet_cpu_inference_file.flush()
+    val resnet_cpu_training_file = new PrintWriter(new File(root_dir + training_cpu_file_dir))
+    resnet_cpu_training_file.println(resnet50TrainingCPU.code)
+    resnet_cpu_training_file.flush()
+    val resnet_gpu_inference_file = new PrintWriter(new File(root_dir + inference_gpu_file_dir))
+    resnet_gpu_inference_file.println(resnet50InferenceGPU.code)
+    resnet_gpu_inference_file.flush()
+    val resnet_gpu_training_file = new PrintWriter(new File(root_dir + training_gpu_file_dir))
+    resnet_gpu_training_file.println(resnet50TrainingGPU.code)
+    resnet_gpu_training_file.flush()
   }
-
 }

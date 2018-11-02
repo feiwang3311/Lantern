@@ -982,6 +982,17 @@ trait ONNXLib extends TensorDsl {
               intMap += (output -> (Seq(1), input1))
             }
 
+          } else if (node.isInstanceOf[padNode]) {
+            val padNode(input, output, mode, pads, value) = node
+            if (inTwoMaps(input)) {
+              val input1 = twoMaps(input)
+              assert(pads.sum == 0 , s"TODO: only supporting no padding so far, got ${pads}")
+              // TODO (Fei Wang): implement real padding later, for now we assume that padding is all 0
+              intermediate_map_tensorR += (output -> input1)
+            } else {
+              ???
+            }
+
           } else {
             System.out.println(s"node $node is not implemented")
             shift{ (k: Tensor => Unit) => ???}
