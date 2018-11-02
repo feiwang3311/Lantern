@@ -150,7 +150,7 @@ object SqueezeNetOnnx {
       val model = readONNX(root_dir + model_file)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val res = model.training_func(input).logSoftmaxB().nllLossB(target)
-        res.sum() / batchSize  // TODO (Fei Wang) should implement a mean() reduction op instead
+        res.sum()  // TODO (Fei Wang) should implement a mean() reduction op instead
       }
 
       // Training

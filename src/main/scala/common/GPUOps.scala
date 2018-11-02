@@ -62,7 +62,7 @@ trait CudaGenGPUOps extends CGenBase {
 
   // Copy an array in the specified direction.
   def cudaMemcpy(dest: String, src: String, count: String, dataType: String, direction: CopyDirection.Value): String =
-    s"CUDA_CALL(cudaMemcpy($dest, $src, $count * sizeof($dataType), ${direction.toString}))"
+    s"CUDA_CALL(cudaMemcpy($dest, $src, $count * sizeof($dataType), ${direction.toString}));"
 
   // Allocate unified memory, accessible by CPU and GPU.
   // FIXME: I encountered "bus error" when performing CPU ops on managed memory:
