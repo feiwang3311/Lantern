@@ -57,7 +57,7 @@ object SqueezeNetOnnx {
       val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-        input.printHead(10, "input")
+        input.toCPU().printHead(10, "input")
         val out = func(input.toGPU())
         out.toCPU().printHead(10, "out")
         error("stop")
@@ -157,6 +157,7 @@ object SqueezeNetOnnx {
       val nbEpoch = 4
       val loss_save = NewArray[Double](nbEpoch)
       val addr = getMallocAddr() // remember current allocation pointer here
+      val addrCuda = getCudaMallocAddr()
 
       generateRawComment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
@@ -166,7 +167,7 @@ object SqueezeNetOnnx {
         trainTimer.startTimer
 
         train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-          val inputR = TensorR(input.toGPU(), isInput=true)
+          val inputR = TensorR(input, isInput=true)
           val targetR = target.toGPU(batchSize)
           val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(1))
           trainLoss += loss.toCPU().data(0)
@@ -183,6 +184,7 @@ object SqueezeNetOnnx {
             unchecked[Unit]("fflush(stdout)")
           }
           resetMallocAddr(addr)
+          resetCudaMallocAddr(addrCuda)
         }
         val delta = trainTimer.getElapsedTime
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
