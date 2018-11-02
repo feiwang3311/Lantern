@@ -529,11 +529,12 @@ trait ONNXLib extends TensorDsl {
 
     lazy val initializer_map_tensor: Map[String, Tensor] =
       byteMap.map{ case (name, (dims, dt, offset)) => (name -> Tensor(reader.getOffset(offset), dims: _*)) }
-    lazy val initializer_map_tensorR: Map[String, TensorR] =
-      initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
+    // lazy val initializer_map_tensorR: Map[String, TensorR] =
+    //   initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
     // read the nodes and build the function for inference
-    lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
+    def inference_func(initializer_map_tensor: Map[String, Tensor]): (Tensor => Tensor) = { x: Tensor =>
+    // lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
       assert(x.dimensions == x_dims, "input tensor is not of the correct dimensions")
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
@@ -746,6 +747,17 @@ trait ONNXLib extends TensorDsl {
             }
           }
 
+          case padNode(input, output, mode, pads, value) => {
+            if (inTwoMaps(input)) {
+              val input1 = twoMaps(input)
+              assert(pads.sum == 0 , s"TODO: only supporting no padding so far, got ${pads}")
+              // TODO (Fei Wang): implement real padding later, for now we assume that padding is all 0
+              intermediate_map_tensor += (output -> input1)
+            } else {
+              ???
+            }
+          }
+
           case x =>
             throw new RuntimeException(s"not yet implemented, $x")
         }
@@ -755,225 +767,230 @@ trait ONNXLib extends TensorDsl {
     }
 
     // read the nodes and build the function for training
-    lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
-      assert(x.x.dimensions == x_dims, "input tensor is not of the correct dimensions")
+    def training_func(initializer_map_tensor: Map[String, Tensor]): ((TensorR => TensorR @diff), Map[String, TensorR]) = {
+      val initializer_map_tensorR: Map[String, TensorR] = initializer_map_tensor.map { case(name, tensor) => (name -> TensorR(tensor))}
+      val func = { x: TensorR =>
+        // lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
+        assert(x.x.dimensions == x_dims, "input tensor is not of the correct dimensions")
 
-      // generate Tensors (or TensorRs) of intermediate steps and inputs
-      val intermediate_map_tensorR: MMap[String, TensorR] = MMap()
-      intermediate_map_tensorR.update(x_name, x)
+        // generate Tensors (or TensorRs) of intermediate steps and inputs
+        val intermediate_map_tensorR: MMap[String, TensorR] = MMap()
+        intermediate_map_tensorR.update(x_name, x)
 
-      // TODO (Fei Wang): ask Greg, is there a better way to do this?
-      def twoMaps = initializer_map_tensorR orElse intermediate_map_tensorR
-      def inTwoMaps(key: String) = initializer_map_tensorR.contains(key) || intermediate_map_tensorR.contains(key)
+        // TODO (Fei Wang): ask Greg, is there a better way to do this?
+        def twoMaps = initializer_map_tensorR orElse intermediate_map_tensorR
+        def inTwoMaps(key: String) = initializer_map_tensorR.contains(key) || intermediate_map_tensorR.contains(key)
 
-      val iter = allNodes.iterator
+        val iter = allNodes.iterator
 
-      while (iter.hasNext) {
+        while (iter.hasNext) {
 
-        val node = iter.next
+          val node = iter.next
 
-        if (node.isInstanceOf[convNode]) {
-          val convNode(inputs, output, atts) = node
-          val input1 = twoMaps(inputs.head)
-          val input2 = twoMaps(inputs.tail.head)
-          val input3 = if (inputs.size == 2) None else Some(twoMaps(inputs.last))
+          if (node.isInstanceOf[convNode]) {
+            val convNode(inputs, output, atts) = node
+            val input1 = twoMaps(inputs.head)
+            val input2 = twoMaps(inputs.tail.head)
+            val input3 = if (inputs.size == 2) None else Some(twoMaps(inputs.last))
 
-          val strides = atts("strides")
-          val pads = atts("pads")
-          val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
+            val strides = atts("strides")
+            val pads = atts("pads")
+            val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
-          val out = input1.convBBP(input2, input3, strides, pads)
-          intermediate_map_tensorR.update(output, out)
-        } else if (node.isInstanceOf[reluNode]) {
-          val reluNode(input, output) = node
-          val in = twoMaps(input)
-          val out = in.relu()
-          intermediate_map_tensorR.update(output, out)
-        } else if (node.isInstanceOf[maxpoolNode]) {
-          val maxpoolNode(input, output, atts) = node
-          val in = twoMaps(input)
-          val strides = atts("strides")
-          val pads = atts("pads")
-          val kernel_shape = atts("kernel_shape")
-          // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
-          val out = in.maxPoolBK(kernel_shape, strides, None)
-          intermediate_map_tensorR.update(output, out)
-        } else if (node.isInstanceOf[concatNode]) {
-          val concatNode(inputs, output, axis) = node
-          if (inTwoMaps(inputs.head)) {
-            val input_s = inputs.map(x => twoMaps(x))
-            val out = input_s.head.concat(axis, input_s.tail: _*)
+            val out = input1.convBBP(input2, input3, strides, pads)
             intermediate_map_tensorR.update(output, out)
+          } else if (node.isInstanceOf[reluNode]) {
+            val reluNode(input, output) = node
+            val in = twoMaps(input)
+            val out = in.relu()
+            intermediate_map_tensorR.update(output, out)
+          } else if (node.isInstanceOf[maxpoolNode]) {
+            val maxpoolNode(input, output, atts) = node
+            val in = twoMaps(input)
+            val strides = atts("strides")
+            val pads = atts("pads")
+            val kernel_shape = atts("kernel_shape")
+            // TODO: (Fei Wang) erroneous code, the implementation assumes that pads are all 0
+            val out = in.maxPoolBK(kernel_shape, strides, None)
+            intermediate_map_tensorR.update(output, out)
+          } else if (node.isInstanceOf[concatNode]) {
+            val concatNode(inputs, output, axis) = node
+            if (inTwoMaps(inputs.head)) {
+              val input_s = inputs.map(x => twoMaps(x))
+              val out = input_s.head.concat(axis, input_s.tail: _*)
+              intermediate_map_tensorR.update(output, out)
+            } else {
+              val input_s = inputs.map(x => intMap.get(x).get)
+              val dims = input_s.map{case (d, a) => d}
+              val datas = input_s.map{case (d, a) => a}
+              dims foreach (d => assert(d.size == 1, s"intMaps (for shapeTensors) should all be rank 1, got ${d}"))
+              val con_dims = dims.foldLeft(Seq(0))((a, b) => Seq(a(0) + b(0)))
+              val con_datas = datas.foldLeft(scala.Array[Int]())((a, b) => a ++ b)
+              intMap += (output -> (con_dims, con_datas))
+            }
+
+          } else if (node.isInstanceOf[dropoutNode]) {
+
+            val dropoutNode(input, outputs, ratio) = node
+            val in = twoMaps(input)
+            val out = in.dropout(ratio)
+            intermediate_map_tensorR.update(outputs.head, out)
+            // intermediate_map_tensor += (outputs.last -> out2)
+
+          } else if (node.isInstanceOf[globalAveragePoolNode]) {
+
+            val globalAveragePoolNode(input, output) = node
+            val in = twoMaps(input)
+            val out = in.global_ave_batch()
+            intermediate_map_tensorR.update(output, out)
+
+          } else if (node.isInstanceOf[softmaxNode]) {
+
+            val softmaxNode(input, output) = node
+            val in = twoMaps(input)
+            val out = in.logSoftmaxB()
+            intermediate_map_tensorR.update(output, out)
+
+          } else if (node.isInstanceOf[averagePoolNode]) {
+
+            val averagePoolNode(input, output, atts) = node
+            val input1 = twoMaps(input)
+            val strides = atts("strides")
+            val kernel = atts("kernel_shape")
+            val pads = atts("pads")           // pads may be zero
+            val out = input1.averagePoolBK(kernel, strides, Some(pads))
+            intermediate_map_tensorR.update(output, out)
+
+          } else if (node.isInstanceOf[bnNode]) {
+
+            val bnNode(inputs, output, attMap) = node
+
+            val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(twoMaps(_))
+            val diff = in - in.batchNormAv()
+            val vari = diff.square().batchNormAv()
+            val epsilon = attMap.getOrElse("epsilon", 0.000001f)
+            val xhat = diff / (vari + epsilon).sqrt()
+            val outy = xhat * scale.resize(-1, 1, 1) + bias.resize(-1, 1, 1)
+
+            intermediate_map_tensorR.update(output, outy)
+
+          } else if (node.isInstanceOf[sumNode]) {
+
+            val sumNode(inputs, output) = node
+
+            val input1 = twoMaps(inputs.head)
+            val input2 = twoMaps(inputs.last)
+            val out = input1 + input2
+            intermediate_map_tensorR.update(output, out)
+
+          } else if (node.isInstanceOf[reshapeNode]) {
+
+            val reshapeNode(inputs, output) = node
+
+            val input1 = twoMaps(inputs.head)
+            // input2 should be Int64 tensor (we can find it in intMap)
+            val (dim2, input2: Array[Int]) = intMap(inputs.last)
+            assert (dim2.size == 1, s"reshape parameter (if presented as a tensor) should be dim 1, got ${dim2.size}")
+            val out = input1.resize(input2.toSeq: _*)
+
+            intermediate_map_tensorR.update(output, out)
+
+          } else if (node.isInstanceOf[gemmNode]) {
+
+            val gemmNode(inputs, output, attInts, attFloats) = node
+
+            val input1 = twoMaps(inputs.head)
+            val input2 = twoMaps(inputs.tail.head)
+            val input3 = twoMaps(inputs.last)
+
+            val alpha = attFloats.getOrElse("alpha", 1.0f)
+            val beta  = attFloats.getOrElse("beta", 1.0f)
+            val transA = attInts.getOrElse("transA", 0)
+            val transB = attInts.getOrElse("transB", 0)
+
+            val out = (transA, transB) match {
+              case (0, 0) => input1.dot(input2) * alpha + input3 * beta
+              case (0, 1) => input1.dot(input2.trans()) * alpha + input3 * beta
+              case (1, 0) => input1.trans().dot(input2) * alpha + input3 * beta
+              case (1, 1) => input1.trans().dot(input2.trans()) * alpha + input3 * beta
+            }
+            intermediate_map_tensorR.update(output, out)
+
+          } else if (node.isInstanceOf[flattenNode]) {
+            val flattenNode(input, output, axis) = node
+            val input1 = twoMaps(input)
+            val shape = input1.x.shape.take(axis) :+ -1
+            val out = input1.resize(shape: _*)
+            intermediate_map_tensorR.update(output, out)
+
+          } else if (node.isInstanceOf[addNode]) {
+            val addNode(inputs, output) = node
+            assert(inputs.size == 2)
+            val (input1 :: input2::Nil) = inputs.map(twoMaps).take(2).toList
+            val out = input1 + input2
+            intermediate_map_tensorR.update(output, out)
+
+          } else if (node.isInstanceOf[shapeNode]) {
+            val shapeNode(input, output) = node
+            val input1 = twoMaps(input)
+            val shape: Seq[Int] = input1.x.shape
+            // Note: shape information, which is non Rep type, should be saved in intMap
+            intMap += (output -> (Seq[Int](shape.size), shape.toArray))
+
+          } else if (node.isInstanceOf[constantNode]) {
+            val constantNode(output, data) = node
+            // For now we assume constantNode are Int (for shape)
+            intMap += (output -> (Seq[Int](), scala.Array(data.toInt)))
+
+          } else if (node.isInstanceOf[sliceNode]) {
+            val sliceNode(input, output, attMap) = node
+            if (inTwoMaps(input)) {
+              ???  // TODO (Fei Wang) handle general slice case
+            } else {
+              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              val axes: List[Int] = attMap.getOrElse("axes", List[Int]())
+              val starts: List[Int] = attMap.getOrElse("starts", List[Int]())
+              val ends: List[Int] = attMap.getOrElse("ends", List[Int]())
+              assert(axes == List(0), s"for slice shape tensor, axes must be 0, axes got ${axes}")
+              assert(starts.size == 1, s"for slice shape tensor, starts must be size 1, starts got ${starts}")
+              assert(ends.size == 1, s"for slice shape tensor, ends must be size 1, ends got ${ends}")
+              val start = starts(0); val end = ends(0)
+              intMap += (output -> (Seq(end - start), input1.take(end).drop(start)))
+            }
+
+          } else if (node.isInstanceOf[squeezeNode]) {
+            val squeezeNode(input, output, axes) = node
+            if (inTwoMaps(input)) {
+              ???  // TODO (Fei Wang) handle general slice case
+            } else {
+              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              assert(axes == List(0),  s"squeeze on shape tensor must be on dim 0, axes got ${axes}")
+              assert(dim1 == Seq(1), s"the dimension to squeeze must be dim 1, got ${dim1}")
+              assert(input1.size == 1, s"to squeeze on the shape tensor, it must have 1 element, got ${input1}")
+              intMap += (output -> (Seq[Int](), input1))
+            }
+
+          } else if (node.isInstanceOf[unsqueezeNode]) {
+            val unsqueezeNode(input, output, axes) = node
+            if (inTwoMaps(input)) {
+              ??? // TODO: (Fei Wang) handle the general unsqueeze case
+            } else {
+              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              assert(axes == List(0),  s"unsqueeze on shape tensor must be on dim 0, axes got ${axes}")
+              assert(dim1 == Seq[Int](),  s"unsqueeze on shape tensor must be empty seq, dims got ${dim1}")
+              assert(input1.size == 1, s"unsqueeze on shape tensor must have 1 element, got ${input1}")
+              intMap += (output -> (Seq(1), input1))
+            }
+
           } else {
-            val input_s = inputs.map(x => intMap.get(x).get)
-            val dims = input_s.map{case (d, a) => d}
-            val datas = input_s.map{case (d, a) => a}
-            dims foreach (d => assert(d.size == 1, s"intMaps (for shapeTensors) should all be rank 1, got ${d}"))
-            val con_dims = dims.foldLeft(Seq(0))((a, b) => Seq(a(0) + b(0)))
-            val con_datas = datas.foldLeft(scala.Array[Int]())((a, b) => a ++ b)
-            intMap += (output -> (con_dims, con_datas))
+            System.out.println(s"node $node is not implemented")
+            shift{ (k: Tensor => Unit) => ???}
           }
-
-        } else if (node.isInstanceOf[dropoutNode]) {
-
-          val dropoutNode(input, outputs, ratio) = node
-          val in = twoMaps(input)
-          val out = in.dropout(ratio)
-          intermediate_map_tensorR.update(outputs.head, out)
-          // intermediate_map_tensor += (outputs.last -> out2)
-
-        } else if (node.isInstanceOf[globalAveragePoolNode]) {
-
-          val globalAveragePoolNode(input, output) = node
-          val in = twoMaps(input)
-          val out = in.global_ave_batch()
-          intermediate_map_tensorR.update(output, out)
-
-        } else if (node.isInstanceOf[softmaxNode]) {
-
-          val softmaxNode(input, output) = node
-          val in = twoMaps(input)
-          val out = in.logSoftmaxB()
-          intermediate_map_tensorR.update(output, out)
-
-        } else if (node.isInstanceOf[averagePoolNode]) {
-
-          val averagePoolNode(input, output, atts) = node
-          val input1 = twoMaps(input)
-          val strides = atts("strides")
-          val kernel = atts("kernel_shape")
-          val pads = atts("pads")           // pads may be zero
-          val out = input1.averagePoolBK(kernel, strides, Some(pads))
-          intermediate_map_tensorR.update(output, out)
-
-        } else if (node.isInstanceOf[bnNode]) {
-
-          val bnNode(inputs, output, attMap) = node
-
-          val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(twoMaps(_))
-          val diff = in - in.batchNormAv()
-          val vari = diff.square().batchNormAv()
-          val epsilon = attMap.getOrElse("epsilon", 0.000001f)
-          val xhat = diff / (vari + epsilon).sqrt()
-          val outy = xhat * scale.resize(-1, 1, 1) + bias.resize(-1, 1, 1)
-
-          intermediate_map_tensorR.update(output, outy)
-
-        } else if (node.isInstanceOf[sumNode]) {
-
-          val sumNode(inputs, output) = node
-
-          val input1 = twoMaps(inputs.head)
-          val input2 = twoMaps(inputs.last)
-          val out = input1 + input2
-          intermediate_map_tensorR.update(output, out)
-
-        } else if (node.isInstanceOf[reshapeNode]) {
-
-          val reshapeNode(inputs, output) = node
-
-          val input1 = twoMaps(inputs.head)
-          // input2 should be Int64 tensor (we can find it in intMap)
-          val (dim2, input2: Array[Int]) = intMap(inputs.last)
-          assert (dim2.size == 1, s"reshape parameter (if presented as a tensor) should be dim 1, got ${dim2.size}")
-          val out = input1.resize(input2.toSeq: _*)
-
-          intermediate_map_tensorR.update(output, out)
-
-        } else if (node.isInstanceOf[gemmNode]) {
-
-          val gemmNode(inputs, output, attInts, attFloats) = node
-
-          val input1 = twoMaps(inputs.head)
-          val input2 = twoMaps(inputs.tail.head)
-          val input3 = twoMaps(inputs.last)
-
-          val alpha = attFloats.getOrElse("alpha", 1.0f)
-          val beta  = attFloats.getOrElse("beta", 1.0f)
-          val transA = attInts.getOrElse("transA", 0)
-          val transB = attInts.getOrElse("transB", 0)
-
-          val out = (transA, transB) match {
-            case (0, 0) => input1.dot(input2) * alpha + input3 * beta
-            case (0, 1) => input1.dot(input2.trans()) * alpha + input3 * beta
-            case (1, 0) => input1.trans().dot(input2) * alpha + input3 * beta
-            case (1, 1) => input1.trans().dot(input2.trans()) * alpha + input3 * beta
-          }
-          intermediate_map_tensorR.update(output, out)
-
-        } else if (node.isInstanceOf[flattenNode]) {
-          val flattenNode(input, output, axis) = node
-          val input1 = twoMaps(input)
-          val shape = input1.x.shape.take(axis) :+ -1
-          val out = input1.resize(shape: _*)
-          intermediate_map_tensorR.update(output, out)
-
-        } else if (node.isInstanceOf[addNode]) {
-          val addNode(inputs, output) = node
-          assert(inputs.size == 2)
-          val (input1 :: input2::Nil) = inputs.map(twoMaps).take(2).toList
-          val out = input1 + input2
-          intermediate_map_tensorR.update(output, out)
-
-        } else if (node.isInstanceOf[shapeNode]) {
-          val shapeNode(input, output) = node
-          val input1 = twoMaps(input)
-          val shape: Seq[Int] = input1.x.shape
-          // Note: shape information, which is non Rep type, should be saved in intMap
-          intMap += (output -> (Seq[Int](shape.size), shape.toArray))
-
-        } else if (node.isInstanceOf[constantNode]) {
-          val constantNode(output, data) = node
-          // For now we assume constantNode are Int (for shape)
-          intMap += (output -> (Seq[Int](), scala.Array(data.toInt)))
-
-        } else if (node.isInstanceOf[sliceNode]) {
-          val sliceNode(input, output, attMap) = node
-          if (inTwoMaps(input)) {
-            ???  // TODO (Fei Wang) handle general slice case
-          } else {
-            val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
-            val axes: List[Int] = attMap.getOrElse("axes", List[Int]())
-            val starts: List[Int] = attMap.getOrElse("starts", List[Int]())
-            val ends: List[Int] = attMap.getOrElse("ends", List[Int]())
-            assert(axes == List(0), s"for slice shape tensor, axes must be 0, axes got ${axes}")
-            assert(starts.size == 1, s"for slice shape tensor, starts must be size 1, starts got ${starts}")
-            assert(ends.size == 1, s"for slice shape tensor, ends must be size 1, ends got ${ends}")
-            val start = starts(0); val end = ends(0)
-            intMap += (output -> (Seq(end - start), input1.take(end).drop(start)))
-          }
-
-        } else if (node.isInstanceOf[squeezeNode]) {
-          val squeezeNode(input, output, axes) = node
-          if (inTwoMaps(input)) {
-            ???  // TODO (Fei Wang) handle general slice case
-          } else {
-            val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
-            assert(axes == List(0),  s"squeeze on shape tensor must be on dim 0, axes got ${axes}")
-            assert(dim1 == Seq(1), s"the dimension to squeeze must be dim 1, got ${dim1}")
-            assert(input1.size == 1, s"to squeeze on the shape tensor, it must have 1 element, got ${input1}")
-            intMap += (output -> (Seq[Int](), input1))
-          }
-
-        } else if (node.isInstanceOf[unsqueezeNode]) {
-          val unsqueezeNode(input, output, axes) = node
-          if (inTwoMaps(input)) {
-            ??? // TODO: (Fei Wang) handle the general unsqueeze case
-          } else {
-            val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
-            assert(axes == List(0),  s"unsqueeze on shape tensor must be on dim 0, axes got ${axes}")
-            assert(dim1 == Seq[Int](),  s"unsqueeze on shape tensor must be empty seq, dims got ${dim1}")
-            assert(input1.size == 1, s"unsqueeze on shape tensor must have 1 element, got ${input1}")
-            intMap += (output -> (Seq(1), input1))
-          }
-
-        } else {
-          System.out.println(s"node $node is not implemented")
-          shift{ (k: Tensor => Unit) => ???}
         }
-      }
 
-      intermediate_map_tensorR(y_name)
+        intermediate_map_tensorR(y_name)
+      }
+      (func, initializer_map_tensorR)
     }
 
     // TODO: (Fei Wang) define nicer API for inferencing and training

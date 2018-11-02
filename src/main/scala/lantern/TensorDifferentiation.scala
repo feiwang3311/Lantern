@@ -429,9 +429,7 @@ trait TensorDsl extends DslOps with Diff {
       for (i <- DataLoop(length)) dest(i) = src(i)
     }
 
-    override def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor = {
-      new Tensor(array, dims)
-    }
+    override def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor = new Tensor(array, dims)
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
       Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
@@ -2042,6 +2040,7 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   object Tensor {
+    // this function actually SHOULD NOT be different for different backend
     def apply(data: Rep[Array[Float]], dims: Int*) =
       backend.arrayToTensor(data, dims: _*)
 
@@ -2921,7 +2920,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // Get a GPU-allocated copy of this tensor.
     def toGPU(): Tensor = {
       generateRawComment("Tensor 'toGPU' invocation.")
-      val res = BackendGPU.mallocArray[Float](t.scalarCount)
+      // val res = BackendGPU.mallocArray[Float](t.scalarCount)
       new Tensor(t.data.toGPU(t.scalarCount), t.shape)
     }
 
@@ -2973,8 +2972,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
       gpu_array_copy_device_to_device(src, dest, length)
 
-    override def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor =
-      BackendCPU().arrayToTensor(array, dims: _*).toGPU()
+    override def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor = new Tensor(array, dims)
+      // BackendCPU().arrayToTensor(array, dims: _*).toGPU()
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor =
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()

@@ -452,7 +452,7 @@ class ONNXTest extends LanternFunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
 
         val model = readONNX(model_file)
-        val (func, x_dims) = (model.inference_func, model.x_dims)
+        val (func, x_dims) = (model.inference_func(model.initializer_map_tensor), model.x_dims)
 
         // get test data as TensorProto
         val input_file =  model_dir + "test_data_set_0/input_0.pb"
@@ -483,7 +483,7 @@ class ONNXTest extends LanternFunSuite {
 
         // reading ONNX model
         val model = readONNX(model_file)
-        val (func, x_dims, y_dims) = (model.training_func, model.x_dims, model.y_dims)
+        val ((func, _), x_dims, y_dims) = (model.training_func(model.initializer_map_tensor), model.x_dims, model.y_dims)
 
         // fake input and target
         val input_file = model_dir + "test_data_set_0/input_0.pb"

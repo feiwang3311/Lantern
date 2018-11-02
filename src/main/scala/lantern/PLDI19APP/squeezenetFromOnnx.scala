@@ -32,7 +32,7 @@ object SqueezeNetOnnx {
     def snippet(a: Rep[String]): Rep[Unit] = {
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
-      val (func, x_dims, y_dims) = (model.inference_func, model.x_dims, model.y_dims)
+      val (func, x_dims, y_dims) = (model.inference_func(model.initializer_map_tensor), model.x_dims, model.y_dims)
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
       val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
@@ -51,13 +51,14 @@ object SqueezeNetOnnx {
     def snippet(a: Rep[String]): Rep[Unit] = {
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
-      val (func, x_dims, y_dims) = (model.inference_func, model.x_dims, model.y_dims)
+      val initMap = model.initializer_map_tensor.map{case (name, tr) => (name, tr.toGPU())}
+      val (func, x_dims, y_dims) = (model.inference_func(initMap), model.x_dims, model.y_dims)
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
       val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-        input.toCPU().printHead(10, "input")
+        input.printHead(10, "input")
         val out = func(input.toGPU())
         out.toCPU().printHead(10, "out")
         error("stop")
@@ -83,8 +84,9 @@ object SqueezeNetOnnx {
 
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
+      val (func, parameters) = model.training_func(model.initializer_map_tensor)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
-        val res = model.training_func(input).logSoftmaxB().nllLossB(target)
+        val res = func(input).logSoftmaxB().nllLossB(target)
         res.sum() / batchSize  // TODO (Fei Wang) should implement a mean() reduction op instead
       }
 
@@ -104,12 +106,14 @@ object SqueezeNetOnnx {
           val inputR = TensorR(input, isInput=true)
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(1))
           trainLoss += loss.data(0)
-          model.initializer_map_tensorR foreach { case (name, tr) =>
+          parameters foreach { case (name, tr) =>
+            tr.d.printHead(10, name)
             tr.d.changeTo { i =>
               tr.x.data(i) = tr.x.data(i) - learning_rate * tr.d.data(i)
               0.0f
             }
           }
+          error("stop")
           // model.initializer_map_tensorR.toList.sortBy(x => x._1.toInt).foreach {
           //   case (name, tr) => tr.x.printHead(10, name)
           // }
@@ -148,14 +152,17 @@ object SqueezeNetOnnx {
 
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
+      val initMap = model.initializer_map_tensor.map{case (name, tr) => (name, tr.toGPU())}
+      val (func, parameters) = model.training_func(initMap)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
-        val res = model.training_func(input).logSoftmaxB().nllLossB(target)
+        val res = func(input).logSoftmaxB().nllLossB(target)
         res.sum()  // TODO (Fei Wang) should implement a mean() reduction op instead
       }
 
       // Training
       val nbEpoch = 4
       val loss_save = NewArray[Double](nbEpoch)
+
       val addr = getMallocAddr() // remember current allocation pointer here
       val addrCuda = getCudaMallocAddr()
 
@@ -167,14 +174,16 @@ object SqueezeNetOnnx {
         trainTimer.startTimer
 
         train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-          val inputR = TensorR(input, isInput=true)
+          val inputR = TensorR(input.toGPU(), isInput=true)
           val targetR = target.toGPU(batchSize)
-          val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(1))
-          trainLoss += loss.toCPU().data(0)
-          model.initializer_map_tensorR foreach { case (name, tr) =>
-            backend.geam(tr.x, 1.0f, tr.d, -1.0f * learning_rate, tr.x)
+          val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(1))  // loss is guaranteed to be on CPU
+          trainLoss += loss.data(0)
+          parameters foreach { case (name, tr) =>
+            // tr.d.toCPU().printHead(10, name)
+            backend.geam(tr.x, 1.0f, tr.d, -1.0f * learning_rate / batchSize, tr.x)
             tr.clear_grad()
           }
+          // error("stop")
 
           // selective printing
           if ((batchIndex + 1) % (train.length / batchSize / 10) == 0) {
@@ -190,6 +199,18 @@ object SqueezeNetOnnx {
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
         loss_save(epoch) = trainLoss / train.length
       }
+
+      val totalTime = dataTimer.getElapsedTime / 1e6f
+      val loopTime = totalTime - prepareTime
+      val timePerEpoc = loopTime / nbEpoch
+
+      val fp2 = openf(a, "w")
+      fprintf(fp2, "unit: %s\\n", "1 epoch")
+      for (i <- (0 until loss_save.length): Rep[Range]) {
+        fprintf(fp2, "%lf\\n", loss_save(i))
+      }
+      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+      closef(fp2)
     }
   }
 
