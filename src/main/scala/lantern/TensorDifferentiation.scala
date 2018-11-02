@@ -258,6 +258,9 @@ trait TensorDsl extends DslOps with Diff {
       copyFloatArray(dest.data, src.data, dest.scalarCount)
     }
 
+    // wrap array to tensor
+    def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor
+
     // Initialize a tensor with the specified dimensions and scalar values.
     def makeTensor(dims: Seq[Int], scalars: Float*): Tensor
 
@@ -424,6 +427,10 @@ trait TensorDsl extends DslOps with Diff {
 
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit = {
       for (i <- DataLoop(length)) dest(i) = src(i)
+    }
+
+    override def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor = {
+      new Tensor(array, dims)
     }
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
@@ -2035,10 +2042,8 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   object Tensor {
-    def apply(data: Rep[Array[Float]], dims: Int*) = {
-      assert(dims.size > 0, "dims has to be nonEmpty")
-      new Tensor(data, dims)
-    }
+    def apply(data: Rep[Array[Float]], dims: Int*) =
+      backend.arrayToTensor(data, dims: _*)
 
     def dimCompatible(a: Tensor, b: Tensor) = {
       (a.shape == b.shape) || a.isScalar || b.isScalar
@@ -2910,14 +2915,14 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // Get a CPU-allocated copy of this tensor.
     def toCPU(): Tensor = {
       generateRawComment("Tensor 'toCPU' invocation.")
-      Tensor(t.data.toCPU(t.scalarCount), t.shape: _*)
+      new Tensor(t.data.toCPU(t.scalarCount), t.shape)
     }
 
     // Get a GPU-allocated copy of this tensor.
     def toGPU(): Tensor = {
       generateRawComment("Tensor 'toGPU' invocation.")
       val res = BackendGPU.mallocArray[Float](t.scalarCount)
-      Tensor(t.data.toGPU(t.scalarCount), t.shape: _*)
+      new Tensor(t.data.toGPU(t.scalarCount), t.shape)
     }
 
     // Move the underlying data of this tensor to the CPU.
@@ -2967,6 +2972,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
       gpu_array_copy_device_to_device(src, dest, length)
+
+    override def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor =
+      BackendCPU().arrayToTensor(array, dims: _*).toGPU()
 
     override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor =
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()

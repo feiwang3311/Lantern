@@ -176,6 +176,10 @@ trait ONNXLib extends TensorDsl {
     // partition initializer by data type
     val (float_init, int_init) = initializer.partition(_.getDataType.name == "FLOAT")
 
+    // read and save int parameters as non-Rep type
+    val intMap: MMap[String, (Seq[Int], Array[Int])] =
+      MMap(int_init.map(ParseHelper.extract_init(_)).map{case (name, (dims, dt, arr)) => (name -> (dims, arr.map(_.toInt))) }.toMap.toSeq: _*)
+
     // record all float parameters
     val parameterFileName = model_file + ".bin"
     val writer = ParameterWriter(parameterFileName)
@@ -183,20 +187,12 @@ trait ONNXLib extends TensorDsl {
       float_init.map(init => writer.record_init(init)).toMap
     writer.close()
 
-    // read and save int parameters as non-Rep type
-    val intMap: MMap[String, (Seq[Int], Array[Int])] =
-      MMap(int_init.map(ParseHelper.extract_init(_)).map{case (name, (dims, dt, arr)) => (name -> (dims, arr.map(_.toInt))) }.toMap.toSeq: _*)
-
     // set up reading from parameters
     // because the parameterFileName is also used in the generated file for reading in parameters, we must make sure (for robustness) that the path is absolute
     val whereami = System.getProperty("user.dir")
     val absoluteParameterFileName = if (parameterFileName startsWith "/") parameterFileName
                                     else new File(System.getProperty("user.dir"), parameterFileName).getPath
     val reader = ParameterReader(absoluteParameterFileName)
-    val initializer_map_tensor: Map[String, Tensor] =
-      byteMap.map{ case (name, (dims, dt, offset)) => (name -> Tensor(reader.getOffset(offset), dims: _*)) }
-    val initializer_map_tensorR: Map[String, TensorR] =
-      initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
 
     val input_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = inputs.map(i => ParseHelper.extract_value(i)).toMap
     val output_map: Map[String, (Seq[Int], onnx_ml.TensorProto.DataType)] = outputs.map(o => ParseHelper.extract_value(o)).toMap
@@ -204,7 +200,8 @@ trait ONNXLib extends TensorDsl {
     // find out the real input (a entry of input_map that is not in initializer)
     def real_input(): (String, Seq[Int]) = {
       val all_inputs = input_map.keys
-      val non_initialized_inputs = all_inputs.filter(k => !initializer_map_tensor.contains(k) && !intMap.contains(k))
+      val init_names = byteMap.map{ case (name, _) => name}.toSet
+      val non_initialized_inputs = all_inputs.filter(k => !init_names.contains(k) && !intMap.contains(k))
       assert(non_initialized_inputs.size == 1, s"there should be one uninitialized input, got ${non_initialized_inputs}")
       val x_name: String = non_initialized_inputs.head
       val x_dims: Seq[Int] = input_map(x_name)._1.map(x => x.toInt)
@@ -530,6 +527,11 @@ trait ONNXLib extends TensorDsl {
       "all nodes:" -> allNodes,
     )
 
+    lazy val initializer_map_tensor: Map[String, Tensor] =
+      byteMap.map{ case (name, (dims, dt, offset)) => (name -> Tensor(reader.getOffset(offset), dims: _*)) }
+    lazy val initializer_map_tensorR: Map[String, TensorR] =
+      initializer_map_tensor.map { case (name, tensor) => (name -> TensorR(tensor))}
+
     // read the nodes and build the function for inference
     lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
       assert(x.dimensions == x_dims, "input tensor is not of the correct dimensions")
@@ -754,7 +756,6 @@ trait ONNXLib extends TensorDsl {
 
     // read the nodes and build the function for training
     lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
-
       assert(x.x.dimensions == x_dims, "input tensor is not of the correct dimensions")
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
