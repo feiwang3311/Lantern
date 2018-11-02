@@ -403,6 +403,8 @@ trait TensorDsl extends DslOps with Diff {
     // Reduction operations.
     def sum(x: Tensor): Tensor
     def sum_grad(input: TensorR, res: TensorR): Unit
+    def mean(x: Tensor): Tensor
+    def mean_grad(input: TensorR, res: TensorR): Unit
 
     // concatenate and split
     def concat(dim: Int, tensors: Seq[Tensor]): Tensor
@@ -1269,6 +1271,12 @@ trait TensorDsl extends DslOps with Diff {
       Tensor.scalar(x.fold(0.0f)(_ + _))
     }
     override def sum_grad(input: TensorR, res: TensorR): Unit = { +=(input.d, res.d) }
+    override def mean(x: Tensor): Tensor = {
+      this.sum(x) / x.scalarCount
+    }
+    override def mean_grad(input: TensorR, res: TensorR): Unit = {
+      += (input.d, res.d / input.x.scalarCount)  // TODO (Fei Wang): optimize
+    }
 
     override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
       // prepare result tensor
@@ -1513,6 +1521,8 @@ trait TensorDsl extends DslOps with Diff {
       }
       res
     }
+
+    def mean() = backend.mean(this)
 
     def batchNormInference(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor =
       backend.batchNormInference(this, scale, bias, runningMean, runningVar)  
@@ -2380,6 +2390,12 @@ trait TensorDsl extends DslOps with Diff {
       val y = new TensorR(x.sum(), Tensor.zeros(1)); k(y)
       generateRawComment("'sum' gradient.")
       backend.sum_grad(this, y)
+    }
+
+    def mean(): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = new TensorR(x.mean(), Tensor.zeros(1)); k(y)
+      generateRawComment("'mean' gradient")
+      backend.mean_grad(this, y)
     }
 
     def sum(dim: Int): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -3289,8 +3305,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     }
 
     override def sum(x: Tensor): Tensor = ???
-
     override def sum_grad(input: TensorR, res: TensorR): Unit = ???
+    override def mean(x: Tensor): Tensor = ???
+    override def mean_grad(input: TensorR, res: TensorR): Unit = ???
 
     override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
       assert(dim == 1, "TODO (Fei Wang): only support dim = 1 so far")
@@ -3359,7 +3376,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
     // Note: this function performs in-place addition for `res`.
-    def cudnnAddBiasTensor(bias: Tensor, res: Tensor): Unit = {
+    def cudnnAddBiasTensor(bias: Tensor, res: Tensor, scale: Float = 1.0f): Unit = {
       val (biasShape, resShape) = if (bias.shape == res.shape) {
         (bias.shape.padTo(4, 1), res.shape.padTo(4, 1))
       } else {
@@ -3367,6 +3384,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         // assert(res.rank >= 2, "if not equal shape, res must be rank 2 or more")
         (Seq(1, bias.shape(0), 1, 1), res.shape.padTo(4, 1))
       }
+      val scaled = NewArray[Float](1); scaled(0) = scale
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -3386,7 +3404,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnAddTensor(\n" +
-          "    cudnnHandle, ", one, ", bias_desc, ", bias.data, ", ", one, ", out_desc, ", res.data, "));\n" +
+          "    cudnnHandle, ", scaled, ", bias_desc, ", bias.data, ", ", one, ", out_desc, ", res.data, "));\n" +
           "}"): _*
       )
     }
@@ -4270,6 +4288,17 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for sum op")
       cudnnAddBiasTensor(res.d, input.d)
+    }
+
+    override def mean(x: Tensor): Tensor = {
+      val xx = x.resize(x.shape.padTo(4, 1): _*)
+      val res = cudnnReduceTensor(xx, ReductionOp.Avg, xx.shape.indices)
+      res.resize(1)
+    }
+
+    override def mean_grad(input: TensorR, res: TensorR): Unit = {
+      generateRawComment("backprop for mean op")
+      cudnnAddBiasTensor(res.d, input.d, scale = 1.0f / input.x.scalarCount)
     }
   }
 

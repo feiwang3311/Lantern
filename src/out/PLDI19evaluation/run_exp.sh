@@ -15,7 +15,7 @@ export CUDA_VISIBLE_DEVICES=0
 
 # python3 -m venv python3-env
 source python3-env/bin/activate
-pip3 install --upgrade pip wheel
+# pip3 install --upgrade pip wheel
 # pip3 install --upgrade tensorflow-gpu==1.4.1  # this version of tensorflow works with cuda 8. the later versions work with cuda 9.0, which is not installed in ml machines
 # pip3 install torch torchvision
 # pip3 install matplotlib
@@ -25,18 +25,14 @@ cd pytorch
 # training pytorch version of squeezenet
 python3 train.py --use_gpu
 python3 train.py --generate_onnx ../squeezenetCifar10.onnx
-
-# lantern read onnx and train here:
-
-
+cd ../lantern
+nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
+./LanternOnnxTrainingCu	result_Lantern
 
 #cd tensorflow2
 #python3 train.py
 
 exit 1
-
-nvcc -g -ccbin gcc-5 -std=c++11 -O1 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxInference.cu -o LanternOnnxInferenceCu -lcublas -lcudnn
-./LanternOnnxInferenceCu a
 
 export OPENBLAS_NUM_THREADS=1
 

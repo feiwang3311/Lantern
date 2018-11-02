@@ -87,7 +87,7 @@ object SqueezeNetOnnx {
       val (func, parameters) = model.training_func(model.initializer_map_tensor)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val res = func(input).logSoftmaxB().nllLossB(target)
-        res.sum() / batchSize  // TODO (Fei Wang) should implement a mean() reduction op instead
+        res.mean()
       }
 
       // Training
@@ -156,7 +156,7 @@ object SqueezeNetOnnx {
       val (func, parameters) = model.training_func(initMap)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val res = func(input).logSoftmaxB().nllLossB(target)
-        res.sum()  // TODO (Fei Wang) should implement a mean() reduction op instead
+        res.mean()
       }
 
       // Training
