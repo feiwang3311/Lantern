@@ -6,11 +6,6 @@ echo "Note: the script must be run in PLDIevaluation directory"
 echo "Note: Maybe downloading cifar10_data"
 python3 generate_cifar10_data.py --data-dir cifar10_data
 
-# git clone https://github.com/tensorflow/models.git
-# export PYTHONPATH=$(pwd)/models/research:$PYTHONPATH
-# cd squeezenet/
-# export PYTHONPATH=$(pwd):$PYTHONPATH
-
 export CUDA_VISIBLE_DEVICES=0
 
 # python3 -m venv python3-env

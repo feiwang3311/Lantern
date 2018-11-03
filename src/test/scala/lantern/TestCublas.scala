@@ -10,14 +10,18 @@ class TestCublas extends LanternFunSuite {
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
+        generateRawComment("tensor computation")
         val v1 = Tensor.fromData(Seq(4), 1, 2, 3, 4)
         val v2 = Tensor.fromData(Seq(4), -1, -2, -3, -4)
         val result = v1.dot(v2)
+
+        generateRawComment("tensor computation with gradient")
         val v1r = TensorR(v1)
         val v2r = TensorR(v2)
         gradR(dummy => v1r dot v2r)(Tensor.zeros(1))
 
         backend = BackendCPU()
+        generateRawComment("checking")
         val expected = Tensor.scalar(-30)
         Tensor.assertEqual(result.toCPU(), expected)
         Tensor.assertEqual(v1r.d.toCPU(), v2.toCPU())

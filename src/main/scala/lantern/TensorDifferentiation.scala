@@ -1040,7 +1040,7 @@ trait TensorDsl extends DslOps with Diff {
       }
       assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
       assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
-      assert(input.shape(2) >= kernelRow && input.shape(3) >= kernelCol, "Image too small for maxPool_k: " + input.shape + "|" + (kernelRow, kernelCol))
+      assert(input.shape(2) + 2 * padUp >= kernelRow && input.shape(3) + 2 * padUp >= kernelCol, "Image too small for maxPool_k: " + input.shape + "|" + (kernelRow, kernelCol))
       assert(padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
 
       val resWidth = convSize(input.shape(2) + padUp + padDown, kernelRow, strideRow)
@@ -1217,9 +1217,24 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    override def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = ???
-    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = ???
-    override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = ???
+    override def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = {
+      val epsilon: Float = 0.00001f
+      val out1 = (x - runningMean.resize(-1,1,1)) / (runningVar + epsilon).sqrt().resize(-1, 1, 1)
+      out1 * scale.resize(-1,1,1) + bias.resize(-1,1,1)
+    }
+    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = {
+      val saveMean = x.batchNormAv()
+      val diff = x - saveMean
+      val saveInvVariance = diff.square().batchNormAv()
+      val epsilon = 0.00001f
+      val xhat = diff / (saveInvVariance + epsilon).sqrt()
+      val outy = xhat * scale.resize(-1, 1, 1) + bias.resize(-1, 1, 1)
+      // runningMean and runningVariance should also be updated???
+      (outy, Some(saveMean), Some(saveInvVariance))
+    }
+    override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = {
+      ???
+    }
 
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
@@ -1525,7 +1540,7 @@ trait TensorDsl extends DslOps with Diff {
     def mean() = backend.mean(this)
 
     def batchNormInference(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor =
-      backend.batchNormInference(this, scale, bias, runningMean, runningVar)  
+      backend.batchNormInference(this, scale, bias, runningMean, runningVar)
 
     @virtualize
     def batchNormTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) =
@@ -1881,7 +1896,7 @@ trait TensorDsl extends DslOps with Diff {
       assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")
       assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
       assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
-      assert(this.shape(2) >= kernelRow && this.shape(3) >= kernelCol, "Image too small for averagePool_batch: " + this.shape + "|" + (kernelRow, kernelCol))
+      assert(this.shape(2) + 2 * padUp >= kernelRow && this.shape(3) + 2 * padUp >= kernelCol, "Image too small for averagePool_batch: " + this.shape + "|" + (kernelRow, kernelCol))
       assert(padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
 
       backend.averagePool2D_batch(this, kernels, strides, paddings match {case None => Seq(0, 0, 0, 0); case Some(paddings) => paddings})
@@ -2430,7 +2445,6 @@ trait TensorDsl extends DslOps with Diff {
         backend.batchNorm_grad(this, ty, scale, bias, saveMean, saveInvVariance)
       }
 
-    // NOTE: this function has nothing to do with Batch Normalization. Sorry for the confusion of the name
     def batchNormAv(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.batchNormAv()); k(y)
 
@@ -3017,17 +3031,15 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // NOTE: `sdot` fails when the cuBLAS pointer mode is host (as opposed to device).
     // Investigate performance impact.
     def sdot(n: Int, a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      // cublasSetPointerModeDevice()
+      generateRawComment("calling Sdot API function")
       unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",", 1, ",", b, ",", 1, ",", result, "))")
-      // cublasSetPointerModeHost()
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
-      // val res = mallocArray[Float](1)
       val res = BackendCPU().mallocArray[Float](1)
+      generateRawComment("calling sdot from vectorVectorDot function")
       sdot(x.scalarCount, x.data, y.data, res)
-      // Tensor(res)
-      Tensor(res).toGPU()  // TODO (Fei Wang): need optimization here!!
+      Tensor(res, 1).toGPU()  // TODO (Fei Wang): if use GPU memory for result, there is segfault
     }
 
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
@@ -3534,10 +3546,12 @@ trait TensorDslCudnn extends TensorDslCublas {
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias
     // This is effectively the gradient of `cudnnAddBiasTensor`.
     def cudnnConvolutionBackwardBias(biasGrad: Tensor, resGrad: Tensor): Unit = {
-      assert(biasGrad.rank == 1, "Bias gradient must have rank 1")
-      // assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      val biasShape: Seq[Int] =
+        if (biasGrad.rank == 1) Seq(1, biasGrad.shape(0), 1, 1)
+        else if (biasGrad.rank == 4) biasGrad.shape
+        else { assert(false, s"Bias gradient is neither rank 1 or rank 4, got ${biasGrad.shape}"); ???}
       assert(resGrad.rank >= 2, "Convolution result gradient must have rank no less than 2")
-      assert(resGrad.shape(1) == biasGrad.shape(0), "Convolution result gradient shape(1) must equal to Bias gradient shape(0)")
+      if (biasGrad.rank == 1) assert(resGrad.shape(1) == biasGrad.shape(0), "Convolution result gradient shape(1) must equal to Bias gradient shape(0)")
       val resGradShape = resGrad.shape.padTo(4, 1)
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -3547,7 +3561,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_bias_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    grad_bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    1, ${biasGrad.shape(0)}, 1, 1));
+          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
           |
           |cudnnTensorDescriptor_t grad_out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
@@ -3687,8 +3701,6 @@ trait TensorDslCudnn extends TensorDslCublas {
           assert(bias.shape(0) == kernel.shape(0), "Bias length must equal number of out-channels")
         case None => ()
       }
-      assert(kernel.shape(1) == input.shape(1), s"In-channel count mismatch: input.shape[1] ${input.shape(1)} should match kernel.shape[1] ${kernel.shape(1)}")
-      assert(input.shape(2) >= kernel.shape(2) && input.shape(3) >= kernel.shape(3), "Image too small for conv")
 
       assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
       assert(pads.size == 4, "Pads should have length 4: [padTop, padBottom, padLeft, padRight]")
@@ -3697,6 +3709,10 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(strideRow >= 1, "Row stride must be at least 1")
       assert(strideCol >= 1, "Column stride must be at least 1")
       assert(padUp == padDown && padUp == padLeft && padUp == padRight, "All paddings must be equal (for now)")
+
+      assert(kernel.shape(1) == input.shape(1), s"In-channel count mismatch: input.shape[1] ${input.shape(1)} should match kernel.shape[1] ${kernel.shape(1)}")
+      assert(input.shape(2) + 2 * padUp >= kernel.shape(2) && input.shape(3) + 2 * padUp >= kernel.shape(3),
+        s"Image too small for conv: input is ${input.shape}, kernel is ${kernel.shape}")
 
       // Execute `cudnnConvolutionForward`.
       val resWidth = convSize(input.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
@@ -3851,7 +3867,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnBatchNormalizationForwardInference(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                 runningMean: Tensor, runningVar: Tensor,
                                                 momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
-      // TODO: Look into `resultSaveMean` and `resultSaveInvVariance`.
+      val biasShape = if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1) else {???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -3873,7 +3889,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${bias.shape(0)}, ${bias.shape(1)}, ${bias.shape(2)}, ${bias.shape(3)}));
+          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
           |
           |""".stripMargin) ++
         Seq(
@@ -3889,6 +3905,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnBatchNormalizationForwardTraining(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                runningMean: Tensor, runningVar: Tensor, saveMean: Tensor, saveInvVariance: Tensor,
                                                momentum: Double = 0.1, epsilon: Double = 1e-5): Unit = {
+      val biasShape = if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1) else {???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -3910,7 +3927,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${bias.shape(0)}, ${bias.shape(1)}, ${bias.shape(2)}, ${bias.shape(3)}));
+          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
           |
           |""".stripMargin) ++
         Seq(
@@ -3926,7 +3943,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnBatchNormalizationBackward(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
                                         saveMean: Tensor, saveInvVariance: Tensor,
                                         momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
-      // TODO: Look into `resultSaveMean` and `resultSaveInvVariance`.
+      val biasShape = if (bias.x.rank == 1) Seq(1, bias.x.shape(0), 1, 1) else {???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -3948,7 +3965,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${bias.x.shape(0)}, ${bias.x.shape(1)}, ${bias.x.shape(2)}, ${bias.x.shape(3)}));
+          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
           |
           |""".stripMargin) ++
         Seq(

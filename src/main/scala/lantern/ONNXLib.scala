@@ -638,16 +638,15 @@ trait ONNXLib extends TensorDsl {
 
             assert(inputs.size == 5, "For inference mode, BatchNormalization should have 5 inputs")
             val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(twoMaps(_))
-            val epsilon: Float = attMap.getOrElse("epsilon", 0.000001f)
-            val out1 = (in - runningMean.resize(-1,1,1)) / (runningVariance + epsilon).sqrt().resize(-1, 1, 1)
-            val out2 = out1 * scale.resize(-1,1,1) + bias.resize(-1,1,1)
-            intermediate_map_tensor += (output -> out2)
+            val out = in.batchNormInference(scale, bias, runningMean, runningVariance)
+            intermediate_map_tensor += (output -> out)
           }
 
           case sumNode(inputs, output) => {
 
             val input1 = twoMaps(inputs.head)
             val input2 = twoMaps(inputs.last)
+            // val out = input1 plusBias input2
             val out = input1 + input2
             intermediate_map_tensor += (output -> out)
           }
@@ -675,10 +674,10 @@ trait ONNXLib extends TensorDsl {
             val transB = attInts.getOrElse("transB", 0)
 
             val out = (transA, transB) match {
-              case (0, 0) => input1.dot(input2) * alpha + input3 * beta
-              case (0, 1) => input1.dot(input2.trans()) * alpha + input3 * beta
-              case (1, 0) => input1.trans().dot(input2) * alpha + input3 * beta
-              case (1, 1) => input1.trans().dot(input2.trans()) * alpha + input3 * beta
+              case (0, 0) => input1.dot(input2) * alpha plusBias input3 * beta
+              case (0, 1) => input1.dot(input2.trans()) * alpha plusBias input3 * beta
+              case (1, 0) => input1.trans().dot(input2) * alpha plusBias input3 * beta
+              case (1, 1) => input1.trans().dot(input2.trans()) * alpha plusBias input3 * beta
             }
             intermediate_map_tensor += (output -> out)
           }
@@ -692,7 +691,9 @@ trait ONNXLib extends TensorDsl {
           case addNode(inputs, output) => {
             assert(inputs.size == 2, s"inputs for addNode should be size 2, got ${inputs.size}")
             val (input1 :: input2 :: Nil)  = inputs.map(a => twoMaps(a)).take(2).toList
-            intermediate_map_tensor += (output -> (input1 + input2))
+            // TODO (Fix Me): not general enough to use plasBias
+            intermediate_map_tensor += (output -> (input1 plusBias input2))
+            // intermediate_map_tensor += (output -> (input1 + input2))
           }
 
           case shapeNode(input, output) => {
@@ -864,15 +865,10 @@ trait ONNXLib extends TensorDsl {
           } else if (node.isInstanceOf[bnNode]) {
 
             val bnNode(inputs, output, attMap) = node
-
             val (in::scale::bias::runningMean::runningVariance::Nil) = inputs.toList.map(twoMaps(_))
-            val diff = in - in.batchNormAv()
-            val vari = diff.square().batchNormAv()
-            val epsilon = attMap.getOrElse("epsilon", 0.000001f)
-            val xhat = diff / (vari + epsilon).sqrt()
-            val outy = xhat * scale.resize(-1, 1, 1) + bias.resize(-1, 1, 1)
+            val out = in.batchNorm(scale, bias, runningMean.x, runningVariance.x)
 
-            intermediate_map_tensorR.update(output, outy)
+            intermediate_map_tensorR.update(output, out)
 
           } else if (node.isInstanceOf[sumNode]) {
 
@@ -880,6 +876,7 @@ trait ONNXLib extends TensorDsl {
 
             val input1 = twoMaps(inputs.head)
             val input2 = twoMaps(inputs.last)
+            // val out = input1 plusBias input2
             val out = input1 + input2
             intermediate_map_tensorR.update(output, out)
 
@@ -909,10 +906,10 @@ trait ONNXLib extends TensorDsl {
             val transB = attInts.getOrElse("transB", 0)
 
             val out = (transA, transB) match {
-              case (0, 0) => input1.dot(input2) * alpha + input3 * beta
-              case (0, 1) => input1.dot(input2.trans()) * alpha + input3 * beta
-              case (1, 0) => input1.trans().dot(input2) * alpha + input3 * beta
-              case (1, 1) => input1.trans().dot(input2.trans()) * alpha + input3 * beta
+              case (0, 0) => input1.dot(input2) * alpha plusBias input3 * beta
+              case (0, 1) => input1.dot(input2.trans()) * alpha plusBias input3 * beta
+              case (1, 0) => input1.trans().dot(input2) * alpha plusBias input3 * beta
+              case (1, 1) => input1.trans().dot(input2.trans()) * alpha plusBias input3 * beta
             }
             intermediate_map_tensorR.update(output, out)
 
@@ -927,7 +924,9 @@ trait ONNXLib extends TensorDsl {
             val addNode(inputs, output) = node
             assert(inputs.size == 2)
             val (input1 :: input2::Nil) = inputs.map(twoMaps).take(2).toList
-            val out = input1 + input2
+            // TODO (Fix Me): not general enough to use plusBias
+            val out = input1 plusBias input2
+            // val out = input1 + input2
             intermediate_map_tensorR.update(output, out)
 
           } else if (node.isInstanceOf[shapeNode]) {

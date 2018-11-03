@@ -97,6 +97,7 @@ class ResNetCifar10(nn.Module):
     def __init__(self, block, layers, num_classes = 10):
         self.inplanes = 64
         super(ResNetCifar10, self).__init__()
+        self.block = block
         self.conv1 = nn.Conv2d(3, 64, kernel_size = 3, stride=1, padding=1, bias=False)  # 32 * 32
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
@@ -141,7 +142,7 @@ class ResNetCifar10(nn.Module):
         x = self.layer4(x)
 
         x = self.avgpool(x)
-        x = x.view(x.size(0), 512 * block.expansion)
+        x = x.view(x.size(0), 512 * self.block.expansion)
         x = self.fc(x)
 
         return x
