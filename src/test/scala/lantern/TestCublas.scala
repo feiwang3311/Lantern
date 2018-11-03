@@ -163,4 +163,80 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(binops)
   }
+
+  testGPU("elementwiseOpNoBroadCastSqrt") {
+    val sqrt = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-sqrt"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(3, 2, 3, 3), 16)
+        val result = x.sqrt()
+        val grad = gradR(x => x.sqrt())(x)
+
+        backend = BackendCPU()
+        val expected = Tensor.fill(Seq(3, 2, 3, 3), 4.0f)
+        val expectedGrad = Tensor.fill(Seq(3, 2, 3, 3), 0.125f)
+        Tensor.assertEqual(expected, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(sqrt)
+  }
+
+  testGPU("elementwiseOpNoBroadCastSquare") {
+    val square = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-square"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(3, 2, 3, 3), 3)
+        val result = x.square()
+        val grad = gradR(x => x.square())(x)
+
+        backend = BackendCPU()
+        val expected = Tensor.fill(Seq(3, 2, 3, 3), 9.0f)
+        val expectedGrad = Tensor.fill(Seq(3, 2, 3, 3), 6.0f)
+        Tensor.assertEqual(expected, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(square)
+  }
+
+  testGPU("elementwiseOpNoBroadCastExp") {
+    val exp = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-exp"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(3, 2, 3, 3), 0.5f)
+        val result = x.exp()
+        val grad = gradR(x => x.exp())(x)
+
+        backend = BackendCPU()
+        val expected = Tensor.fill(Seq(3, 2, 3, 3), 1.64872127f)
+        val expectedGrad = Tensor.fill(Seq(3, 2, 3, 3), 1.64872127f)
+        Tensor.assertEqual(expected, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(exp)
+  }
+
+  testGPU("elementwiseOpNoBroadCastLog") {
+    val exp = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-log"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(3, 2, 3, 3), 2)
+        val result = x.log()
+        val grad = gradR(x => x.log())(x)
+
+        backend = BackendCPU()
+        val expected = Tensor.fill(Seq(3, 2, 3, 3), 0.6931471f)
+        val expectedGrad = Tensor.fill(Seq(3, 2, 3, 3), 0.5f)
+        Tensor.assertEqual(expected, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(exp)
+  }
 }

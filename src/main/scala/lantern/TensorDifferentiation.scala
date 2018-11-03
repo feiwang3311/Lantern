@@ -950,16 +950,16 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def exp(x: Tensor) = buildTensor(x.shape, i => Math.exp(x.data(i)).toFloat)
-    override def exp_grad(x: TensorR, y: TensorR): Unit = ???
+    override def exp_grad(x: TensorR, y: TensorR): Unit = x.d.mutate { (i: Rep[Int]) => y.d.data(i) * y.x.data(i) }
 
     override def log(x: Tensor) = buildTensor(x.shape, i => Math.log(x.data(i)).toFloat)
-    override def log_grad(x: TensorR, y: TensorR): Unit = ???
+    override def log_grad(x: TensorR, y: TensorR): Unit = x.d.mutate { (i: Rep[Int]) => y.d.data(i) / x.x.data(i) }
 
     override def sqrt(x: Tensor) = buildTensor(x.shape, i => Math.sqrt(x.data(i)).toFloat)
-    override def sqrt_grad(x: TensorR, y: TensorR): Unit = ???
+    override def sqrt_grad(x: TensorR, y: TensorR): Unit = x.d.mutate { (i: Rep[Int]) => y.d.data(i) / y.x.data(i) / 2.0f }
 
     override def square(x: Tensor) = buildTensor(x.shape, {i => val t = x.data(i); t * t})
-    override def square_grad(x: TensorR, y: TensorR): Unit = ???
+    override def square_grad(x: TensorR, y: TensorR): Unit = x.d.mutate { (i: Rep[Int]) => y.d.data(i) * x.x.data(i) * 2.0f }
 
     @virtualize
     override def softmax(x: Tensor): Tensor = {
@@ -2351,24 +2351,27 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.exp()); k(y)
-      this.d.add_mult(y.x, y.d)
+      val y = TensorR(backend.exp(x)); k(y)
+      generateRawComment("backprop for exp")
+      backend.exp_grad(this, y)
     }
 
     def log(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.log()); k(y)
-      this.d.add_div(y.d, x)
+      val y = TensorR(backend.log(x)); k(y)
+      generateRawComment("backprop for log")
+      backend.log_grad(this, y)
     }
 
     def sqrt(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.sqrt()); k(y)
-      // this.d += y.d / y.x / 2
-      this.d.mutate { (i: Rep[Int]) => y.d.data(i) / y.x.data(i) / 2.0f }
+      val y = TensorR(backend.sqrt(x)); k(y)
+      generateRawComment("backprop for sqrt")
+      backend.sqrt_grad(this, y)
     }
 
     def square(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.square()); k(y)
-      this.d.mutate { (i: Rep[Int]) => y.d.data(i) * this.x.data(i) * 2.0f }
+      generateRawComment("backprop for square")
+      backend.square_grad(this, y)
     }
 
     def relu(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -3271,21 +3274,71 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
     override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = ???
 
-    override def exp(x: Tensor) = ???
-    override def exp_grad(x: TensorR, y: TensorR): Unit = ???
+    override def exp(x: Tensor) = elementwiseOpNoBroadcast(x, ElementWiseNoBroadCastOpt.Exp)
+    override def exp_grad(x: TensorR, y: TensorR): Unit = elementwiseOpNoBroadcastGrad(x, y, ElementWiseNoBroadCastOpt.ExpGrad)
 
-    override def log(x: Tensor) = ???
-    override def log_grad(x: TensorR, y: TensorR): Unit = ???
+    override def log(x: Tensor) = elementwiseOpNoBroadcast(x, ElementWiseNoBroadCastOpt.Log)
+    override def log_grad(x: TensorR, y: TensorR): Unit = elementwiseOpNoBroadcastGrad(x, y, ElementWiseNoBroadCastOpt.LogGrad)
 
-    override def sqrt(x: Tensor) = ???
-    override def sqrt_grad(x: TensorR, y: TensorR): Unit = ???
+    override def sqrt(x: Tensor) = elementwiseOpNoBroadcast(x, ElementWiseNoBroadCastOpt.Sqrt)
+    override def sqrt_grad(x: TensorR, y: TensorR): Unit = elementwiseOpNoBroadcastGrad(x, y, ElementWiseNoBroadCastOpt.SqrtGrad)
 
-    override def square(x: Tensor) = ???
-    override def square_grad(x: TensorR, y: TensorR): Unit = ???
+    override def square(x: Tensor) = elementwiseOpNoBroadcast(x, ElementWiseNoBroadCastOpt.Square)
+    override def square_grad(x: TensorR, y: TensorR): Unit = elementwiseOpNoBroadcastGrad(x, y, ElementWiseNoBroadCastOpt.SquareGrad)
 
+    object ElementWiseNoBroadCastOpt extends Enumeration {
+      val Log = Value("LOG")
+      val LogGrad = Value("LOG_GRAD")
+      val Exp = Value("EXP")
+      val ExpGrad = Value("EXP_GRAD")
+      val Sqrt = Value("SQRT")
+      val SqrtGrad = Value("SQRT_GRAD")
+      val Square = Value("SQUARE")
+      val SquareGrad = Value("SQUARE_GRAD")
+    }
 
-    // TODO: Implement using custom GPU kernel generation.
-    // All that's really necessary is GPU array indexing.
+    def elementwiseOpNoBroadcast(input: Tensor, op: ElementWiseNoBroadCastOpt.Value, inplace: Boolean = false): Tensor = {
+      if (input.scalarCount <= 512 * 65535) {
+        val numBlocks = (input.scalarCount + 511) / 512
+        val res = if (inplace) input.data else mallocArray[Float](input.scalarCount)
+        op match {
+          case ElementWiseNoBroadCastOpt.Log =>
+            unchecked[Unit](s"elementwise_1D_1D_log<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
+          case ElementWiseNoBroadCastOpt.Exp =>
+            unchecked[Unit](s"elementwise_1D_1D_exp<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
+          case ElementWiseNoBroadCastOpt.Sqrt =>
+            unchecked[Unit](s"elementwise_1D_1D_sqrt<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
+          case ElementWiseNoBroadCastOpt.Square =>
+            unchecked[Unit](s"elementwise_1D_1D_square<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
+          case _ => ???
+        }
+        Tensor(res, input.shape: _*)
+      } else {
+        assert(false, s"not implemented for tensors larger than 1D grid * 1D block, got ${input.shape}")
+        ???
+      }
+    }
+
+    def elementwiseOpNoBroadcastGrad(input: TensorR, output: TensorR, op: ElementWiseNoBroadCastOpt.Value): Unit = {
+      if (input.x.scalarCount <= 512 * 65535) {
+        val numBlocks = (input.x.scalarCount + 511) / 512
+        op match {
+          case ElementWiseNoBroadCastOpt.LogGrad =>
+            unchecked[Unit](s"elementwise_1D_1D_log_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
+          case ElementWiseNoBroadCastOpt.ExpGrad =>
+            unchecked[Unit](s"elementwise_1D_1D_exp_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
+          case ElementWiseNoBroadCastOpt.SqrtGrad =>
+            unchecked[Unit](s"elementwise_1D_1D_sqrt_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
+          case ElementWiseNoBroadCastOpt.SquareGrad =>
+            unchecked[Unit](s"elementwise_1D_1D_square_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
+          case _ => ???
+        }
+      } else {
+        assert(false, s"not implemented for tensors larger than 1D grid * 1D block, got ${input.x.shape}")
+        ???
+      }
+    }
+
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
       assert(x.rank == 2, "Input must be a 2-D tensor")
 
@@ -3297,7 +3350,6 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       res
     }
 
-    // TODO: Implement using custom GPU kernel generation.
     override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
       unchecked[Unit](
         s"nllLoss_grad<<<${input.d.shape(0)}, 1>>>(", input.d.shape.strides(0), ",",
@@ -4104,17 +4156,17 @@ trait TensorDslCudnn extends TensorDslCublas {
       cudnnActivationBackward(input, res, Activation.Sigmoid)
     }
 
-    override def exp(x: Tensor) = ???
-    override def exp_grad(x: TensorR, y: TensorR): Unit = ???
+    // override def exp(x: Tensor) = ???
+    // override def exp_grad(x: TensorR, y: TensorR): Unit = ???
 
-    override def log(x: Tensor) = ???
-    override def log_grad(x: TensorR, y: TensorR): Unit = ???
+    // override def log(x: Tensor) = ???
+    // override def log_grad(x: TensorR, y: TensorR): Unit = ???
 
-    override def sqrt(x: Tensor) = ???
-    override def sqrt_grad(x: TensorR, y: TensorR): Unit = ???
+    // override def sqrt(x: Tensor) = ???
+    // override def sqrt_grad(x: TensorR, y: TensorR): Unit = ???
 
-    override def square(x: Tensor) = ???
-    override def square_grad(x: TensorR, y: TensorR): Unit = ???
+    // override def square(x: Tensor) = ???
+    // override def square_grad(x: TensorR, y: TensorR): Unit = ???
 
 
     object SoftmaxMode extends Enumeration {

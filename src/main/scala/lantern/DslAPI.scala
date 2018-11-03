@@ -551,6 +551,42 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
+      |__global__ void elementwise_1D_1D_exp(float* in, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] = exp(in[tid]);
+      |}
+      |__global__ void elementwise_1D_1D_log(float* in, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] = log(in[tid]);
+      |}
+      |__global__ void elementwise_1D_1D_sqrt(float* in, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] = sqrt(in[tid]);
+      |}
+      |
+      |__global__ void elementwise_1D_1D_square(float* in, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] = in[tid] * in[tid];
+      |}
+      |
+      |__global__ void elementwise_1D_1D_exp_grad(float* in_x, float* in_d, float* out_x, float * out_d, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) in_d[tid] += out_d[tid] * out_x[tid];
+      |}
+      |__global__ void elementwise_1D_1D_log_grad(float* in_x, float* in_d, float* out_x, float * out_d, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) in_d[tid] += out_d[tid] / in_x[tid];
+      |}
+      |__global__ void elementwise_1D_1D_sqrt_grad(float* in_x, float* in_d, float* out_x, float * out_d, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) in_d[tid] += out_d[tid] / out_x[tid] / 2;
+      |}
+      |
+      |__global__ void elementwise_1D_1D_square_grad(float* in_x, float* in_d, float* out_x, float * out_d, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) in_d[tid] += out_d[tid] * 2 * in_x[tid];
+      |}
+      |
       |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/THC/THCIntegerDivider.cuh
       |// Result of div/mod operation stored together.
       |template <typename Value>

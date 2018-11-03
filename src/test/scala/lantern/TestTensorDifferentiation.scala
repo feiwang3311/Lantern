@@ -1161,4 +1161,76 @@ class AdLMSVectorTest extends LanternFunSuite {
     }
     runTest(deb)
   }
+
+  test("elementwiseOpNoBroadCastSqrt") {
+    val sqrt = new LanternDriverC[String, Unit] {
+      override val fileName = "lantern-cublas-sqrt"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(3, 2, 3, 3), 16)
+        val result = x.sqrt()
+        val grad = gradR(x => x.sqrt())(x)
+
+        val expected = Tensor.fill(Seq(3, 2, 3, 3), 4.0f)
+        val expectedGrad = Tensor.fill(Seq(3, 2, 3, 3), 0.125f)
+        Tensor.assertEqual(expected, result)
+        Tensor.assertEqual(expectedGrad, grad)
+      }
+    }
+    runTest(sqrt)
+  }
+
+  test("elementwiseOpNoBroadCastSquare") {
+    val square = new LanternDriverC[String, Unit] {
+      override val fileName = "lantern-cublas-square"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(3, 2, 3, 3), 3)
+        val result = x.square()
+        val grad = gradR(x => x.square())(x)
+
+        val expected = Tensor.fill(Seq(3, 2, 3, 3), 9.0f)
+        val expectedGrad = Tensor.fill(Seq(3, 2, 3, 3), 6.0f)
+        Tensor.assertEqual(expected, result)
+        Tensor.assertEqual(expectedGrad, grad)
+      }
+    }
+    runTest(square)
+  }
+
+  test("elementwiseOpNoBroadCastExp") {
+    val exp = new LanternDriverC[String, Unit] {
+      override val fileName = "lantern-cublas-exp"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(3, 2, 3, 3), 0.5f)
+        val result = x.exp()
+        val grad = gradR(x => x.exp())(x)
+
+        val expected = Tensor.fill(Seq(3, 2, 3, 3), 1.64872127f)
+        val expectedGrad = Tensor.fill(Seq(3, 2, 3, 3), 1.64872127f)
+        Tensor.assertEqual(expected, result)
+        Tensor.assertEqual(expectedGrad, grad)
+      }
+    }
+    runTest(exp)
+  }
+
+  test("elementwiseOpNoBroadCastLog") {
+    val exp = new LanternDriverC[String, Unit] {
+      override val fileName = "lantern-cublas-log"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(3, 2, 3, 3), 2)
+        val result = x.log()
+        val grad = gradR(x => x.log())(x)
+
+        val expected = Tensor.fill(Seq(3, 2, 3, 3), 0.6931471f)
+        val expectedGrad = Tensor.fill(Seq(3, 2, 3, 3), 0.5f)
+        Tensor.assertEqual(expected, result)
+        Tensor.assertEqual(expectedGrad, grad)
+      }
+    }
+    runTest(exp)
+  }
 }
