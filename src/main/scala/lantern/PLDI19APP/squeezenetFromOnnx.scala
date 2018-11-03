@@ -30,18 +30,37 @@ object SqueezeNetOnnx {
   val squeezenetInferenceCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      // init timer
+      Random.srand(Some(42))
+      val dataTimer = Timer2()
+      dataTimer.startTimer
+
+      // set up data
+      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val prepareTime = dataTimer.getElapsedTime / 1e6f
+      printf("Data reading in %lf sec\\n", prepareTime)
+
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
       val (func, x_dims, y_dims) = (model.inference_func(model.initializer_map_tensor), model.x_dims, model.y_dims)
 
-      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      // Inferencing
+      val nbEpoch = 4
+      val addr = getMallocAddr() // remember current allocation pointer here
 
-      train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-        input.printHead(10, "input")
-        val out = func(input)
-        out.printHead(10, "out")
-        error("stop")
+      generateRawComment("inferencing loop starts here")
+      for (epoch <- 0 until nbEpoch: Rep[Range]) {
+        val trainTimer = Timer2()
+        printf("Start inferencing epoch %d\\n", epoch + 1)
+        trainTimer.startTimer
+
+        train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+          func(input)
+          resetMallocAddr(addr)
+        }
+        val delta = trainTimer.getElapsedTime
+        printf("Inferencing completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
       }
     }
   }
@@ -49,19 +68,41 @@ object SqueezeNetOnnx {
   val squeezenetInferenceGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      // init timer
+      Random.srand(Some(42))
+      val dataTimer = Timer2()
+      dataTimer.startTimer
+
+      // set up data
+      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
+      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val prepareTime = dataTimer.getElapsedTime / 1e6f
+      printf("Data reading in %lf sec\\n", prepareTime)
+
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
       val initMap = model.initializer_map_tensor.map{case (name, tr) => (name, tr.toGPU())}
       val (func, x_dims, y_dims) = (model.inference_func(initMap), model.x_dims, model.y_dims)
 
-      val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      // Inferencing
+      val nbEpoch = 4
+      val addr = getMallocAddr() // remember current allocation pointer here
+      val addrCuda = getCudaMallocAddr()
 
-      train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-        input.printHead(10, "input")
-        val out = func(input.toGPU())
-        out.toCPU().printHead(10, "out")
-        error("stop")
+      generateRawComment("inferencing loop starts here")
+      for (epoch <- 0 until nbEpoch: Rep[Range]) {
+        val trainTimer = Timer2()
+        printf("Start inferencing epoch %d\\n", epoch + 1)
+        trainTimer.startTimer
+
+        train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
+          func(input.toGPU())
+          resetMallocAddr(addr)
+          resetCudaMallocAddr(addrCuda)
+          error("stop")
+        }
+        val delta = trainTimer.getElapsedTime
+        printf("Inferencing completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
       }
     }
   }

@@ -19,6 +19,9 @@ cd squeezenet
 cd pytorch
 # training pytorch version of squeezenet
 python3 train.py --use_gpu=True
+python3 train.py --use_gpu=True --inference=True --write_to=result_PyTorch_inference_GPU
+python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
+
 # python3 train.py --generate_onnx ../squeezenetCifar10.onnx
 cd ../lantern
 nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
@@ -35,7 +38,7 @@ source python3-env/bin/activate
 cd evaluationRNN
 echo "Note: Let's run vanilla RNN experiment first"
 echo "RUN: run Lantern"
-g++ -std=c++11 -O3 -Wno-pointer-arith Lantern.cpp -o Lantern -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
+g++ -std=c++11 -O3 Lantern.cpp -o Lantern -Wno-pointer-arith -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas
 numactl -C 0 ./Lantern result_Lantern.txt
 echo "RUN: run PyTorch"
 numactl -C 0 python3 min-char-rnn-pytorch.py result_PyTorch.txt

@@ -44,13 +44,28 @@ def train(args):
         print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, tloss / (i)))
     return tloss / (batch.batch_size)
 
+  def inference_epoch(epoch):
+    for i in range(batch.total_size // batch.batch_size):
+      (input_x, input_y) = batch.batch()
+      if args.use_gpu:
+        inputX = Variable(torch.from_numpy(input_x)).cuda()
+      else:
+        inputX = Variable(torch.from_numpy(input_x))
+      res = model(inputX)
+    return 0
+
   loopStart = time.time()
   loss_save = []
   for epoch in range(args.epochs):
     start = time.time()
-    loss_save.append(train_epoch(epoch))
-    stop = time.time()
-    print('Training completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
+    if args.inference:
+      loss_save.append(inference_epoch(epoch))
+      stop = time.time()
+      print('Inferencing completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
+    else:
+      loss_save.append(train_epoch(epoch))
+      stop = time.time()
+      print('Training completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
   loopEnd = time.time()
 
   prepareTime = loopStart - startTime
@@ -89,6 +104,8 @@ if __name__ == '__main__':
            help='Directory for outputing onnx model')
   parser.add_argument('--use_gpu', type=bool, default=False,
            help='Set to true if you want to use GPU')
+  parser.add_argument('--inference', type=bool, default=False,
+           help='Set to false if you want to measure inference time')
   args = parser.parse_args()
 
   if args.generate_onnx == '':
