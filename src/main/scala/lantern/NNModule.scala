@@ -202,10 +202,10 @@ trait NNModule extends TensorDsl {
       // }
       // tr.clip_grad(gradClip)
       if (descent)
-        backend.geam(tr.x, 1.0f, tr.d, -1.0f * learning_rate, tr.x)
+        backend.geam(tr.x, false, 1.0f, tr.d, false, -1.0f * learning_rate, tr.x)
         // tr.x -= tr.d * learning_rate
       else
-        backend.geam(tr.x, 1.0f, tr.d, learning_rate, tr.x)
+        backend.geam(tr.x, false, 1.0f, tr.d, false, learning_rate, tr.x)
         // tr.x += tr.d * learning_rate
       tr.clear_grad()
     }

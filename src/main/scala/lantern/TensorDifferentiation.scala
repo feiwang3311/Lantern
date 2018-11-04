@@ -341,7 +341,12 @@ trait TensorDsl extends DslOps with Diff {
     def plusBias_grad(main: TensorR, bias: TensorR): Unit
 
     // output = x * alpha + y * beta (can be in-place if output is x or y)
-    def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit
+    def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean, beta: Float, output: Tensor): Unit
+    def trans(x: Tensor): Tensor
+    def trans_grad(x: TensorR, y: TensorR): Unit
+
+    def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor
+    def gemm_grad(x: TensorR, transX: Boolean, y: TensorR, transY: Boolean, alpha: Float, output: TensorR): Unit
 
     /**
       * 2D convolution.
@@ -685,9 +690,132 @@ trait TensorDsl extends DslOps with Diff {
     override def /=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s / y)
     override def /=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ / _))
 
-    override def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = {
-      output.changeTo { i =>
-        x.data(i) * alpha + y.data(i) * beta
+    override def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean,  beta: Float, output: Tensor): Unit = {
+      (transX, transY) match {
+        case (false, false) => output.changeTo { i => x.data(i) * alpha + y.data(i) * beta }
+        case _ => ???
+      }
+    }
+
+    override def trans(x: Tensor): Tensor = {
+      assert(x.rank == 2, "transpose is only for matrix. Tensor transpose is not supported here")
+      val res = backend.mallocArray[Float](x.scalarCount)
+      val offT = var_new(0)
+      for (i <- DataLoop(x.shape(1))) {
+        val off = var_new(0)
+        for (j <- DataLoop(x.shape(0))) {
+          res(offT + j) = x.data(off + i)
+          off += x.shape(1)
+        }
+        offT += x.shape(0)
+      }
+      new Tensor(res, x.shape.reverse)
+    }
+
+    override def trans_grad(x: TensorR, y: TensorR): Unit = {
+      val offT = var_new(0)
+      for (i <- DataLoop(x.x.shape(1))) {
+        val off = var_new(0)
+        for (j <- DataLoop(x.x.shape(0))) {
+          x.d.data(off + i) += y.d.data(offT + j)
+          off += x.x.shape(1)
+        }
+        offT += x.x.shape(0)
+      }
+    }
+
+    override def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor = {
+      (transX, transY) match {
+        case (false, false) =>
+          assert(x.shape(1) == y.shape(0))
+          val dim1 = x.shape(0)
+          val dim2 = x.shape(1)
+          val dim3 = y.shape(1)
+          val res = mallocArray[Float](dim1 * dim3)
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+            dim1, ",", dim3, ",", dim2, ",", alpha, ",",
+            x.data, ",", dim2, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
+          Tensor(res, dim1, dim3)
+        case (false, true) =>
+          assert(x.shape(1) == y.shape(1))
+          val dim1 = x.shape(0)
+          val dim2 = x.shape(1)
+          val dim3 = y.shape(0)
+          val res = mallocArray[Float](dim1 * dim3)
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+            dim1, ",", dim3, ",", dim2, ",", alpha, ",",
+            x.data, ",", dim2, ",", y.data, ",", dim2, ",", 0, ",", res, ",", dim3, ")")
+          Tensor(res, dim1, dim3)
+        case (true, false) =>
+          assert(x.shape(0) == y.shape(0), s"gemm dims don't match, got ${x.shape.seq}, ${y.shape.seq}")
+          val dim1 = x.shape(1)
+          val dim2 = x.shape(0)
+          val dim3 = y.shape(1)
+          val res = mallocArray[Float](dim1 * dim3)
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+            dim1, ",", dim3, ",", dim2, ",", alpha, ",",
+            x.data, ",", dim1, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
+          Tensor(res, dim1, dim3)
+        case (true, true) =>
+          assert(x.shape(0) == y.shape(1))
+          val dim1 = x.shape(1)
+          val dim2 = x.shape(0)
+          val dim3 = y.shape(0)
+          val res = mallocArray[Float](dim1 * dim3)
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
+            dim1, ",", dim3, ",", dim2, ",", alpha, ",",
+            x.data, ",", dim1, ",", y.data, ",", dim2, ",", 0, ",", res, ",", dim3, ")")
+          Tensor(res, dim1, dim3)
+      }
+    }
+
+    override def gemm_grad(x: TensorR, transX: Boolean, y: TensorR, transY: Boolean, alpha: Float, output: TensorR): Unit = {
+      generateRawComment(s"backprop of gemm ${x.x.shape.seq}, ${transX}, ${y.x.shape.seq}, ${transY}")
+      (transX, transY) match {
+        case (false, false) =>
+          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+            dim1, ",", dim2, ",", dim3, ",", alpha, ",",
+            output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim2, ")")
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+            dim2, ",", dim3, ",", dim1, ",", alpha, ",",
+            x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
+        case (false, true) =>
+          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(0)
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+            dim1, ",", dim2, ",", dim3, ",", alpha, ",",
+            output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", 1, ",", x.d.data, ",", dim2, ")")
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+            dim3, ",", dim2, ",", dim1, ",", alpha, ",",
+            output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", 1, ",", y.d.data, ",", dim2, ")")
+        case (true, false) =>
+          val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(1)
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+            dim2, ",", dim1, ",", dim3, ",", alpha, ",",
+            y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim1, ")")
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+            dim2, ",", dim3, ",", dim1, ",", alpha, ",",
+            x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
+        case (true, true) =>
+          val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(0)
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
+            dim2, ",", dim1, ",", dim3, ",", alpha, ",",
+            y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim1, ")")
+          unchecked[Unit](
+            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
+            dim3, ",", dim2, ",", dim1, ",", alpha, ",",
+            output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", 1, ",", y.d.data, ",", dim2, ")")
       }
     }
 
@@ -1467,6 +1595,11 @@ trait TensorDsl extends DslOps with Diff {
       backend.dot(this, that)
     }
 
+    def gemm(that: Tensor, transX: Boolean, transY: Boolean, alpha: Float): Tensor = {
+      generateRawComment(s"gemm: ${this.shape.seq}, ${that.shape.seq}")
+      backend.gemm(this, transX, that, transY, alpha)
+    }
+
     // NOTE: only handles (Vector Cartesian Vector)
     // limited support for GPU backend. Do not recommend using this function
     @deprecated
@@ -1483,21 +1616,7 @@ trait TensorDsl extends DslOps with Diff {
       Tensor(res, this.shape(0), that.shape(0))
     }
 
-    @deprecated // limited support for GPU backend, Do not recommend using this function
-    def trans() = {
-      assert(this.rank == 2, "transpose is only for matrix. Tensor transpose is not supported here")
-      val res = backend.mallocArray[Float](this.scalarCount)
-      val offT = var_new(0)
-      for (i <- DataLoop(this.shape(1))) {
-        val off = var_new(0)
-        for (j <- DataLoop(this.shape(0))) {
-          res(offT + j) = data(off + i)
-          off += this.shape(1)
-        }
-        offT += this.shape(0)
-      }
-      new Tensor(res, this.shape.reverse)
-    }
+    def trans() = backend.trans(this)
 
     def exp() = backend.exp(this)
     def log() = backend.log(this)
@@ -2351,18 +2470,16 @@ trait TensorDsl extends DslOps with Diff {
       backend.dot_grad(this, that, y)
     }
 
+    def gemm(that: TensorR, transX: Boolean, transY: Boolean, alpha: Float): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val ty = TensorR(x.gemm(that.x, transX, transY, alpha)); k(ty)
+      generateRawComment(s"backprop for gemm ${x.shape.seq}, ${that.x.shape.seq}")
+      backend.gemm_grad(this, transX, that, transY, alpha, ty)
+    }
+
     def trans(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(this.x.trans()); k(y)
+      val y = TensorR(x.trans()); k(y)
       // back-propagate
-      val offT = var_new(0)
-      for (i <- DataLoop(this.x.shape(1))) {
-        val off = var_new(0)
-        for (j <- DataLoop(this.x.shape(0))) {
-          this.d.data(off + i) = y.d.data(offT + j)
-          off += this.x.shape(1)
-        }
-        offT += this.x.shape(0)
-      }
+      backend.trans_grad(this, y)
     }
 
     def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -3244,20 +3361,159 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def plusBias(main: Tensor, bias: Tensor): Tensor = { ??? }
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = { ??? }
 
-    override def geam(x: Tensor, alpha: Float, y: Tensor, beta: Float, output: Tensor): Unit = {
-      assert(x.shape == y.shape && x.shape == output.shape, "TODO: only handle uniform shape (no transpose) for now")
-      val m = x.shape(0)
-      val n = x.shape.drop(1).product
+    override def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean, beta: Float, output: Tensor): Unit = {
       val alpha1 = NewArray[Float](1); alpha1(0) = alpha
       val beta1 = NewArray[Float](1); beta1(0) = beta
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-        n, ",", m, ",", alpha1, ",",
-        x.data, ",", n, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
+      (transX, transY) match {
+        case (false, false) =>
+          assert(x.shape == y.shape && x.shape == output.shape, "TODO: only handle uniform shape (no transpose) for now")
+          val m = x.shape(0)
+          val n = x.shape.drop(1).product
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+            n, ",", m, ",", alpha1, ",",
+            x.data, ",", n, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
+        case (false, true) =>
+          assert(x.rank == 2 && y.rank == 2 && x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0))
+          val m = x.shape(0)
+          val n = x.shape(1)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+            n, ",", m, ",", alpha1, ",",
+            x.data, ",", n, ",", beta1, ", ", y.data, ", ", m, ", ", output.data, ",", n, "))")
+        case (true, false) =>
+          assert(x.rank == 2 && y.rank == 2 && x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0))
+          val m = x.shape(1)
+          val n = x.shape(0)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+            n, ",", m, ",", alpha1, ",",
+            x.data, ",", m, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
+        case (true, true) =>
+          assert(x.rank == 2 && y.rank == 2 && x.shape == y.shape)
+          val m = x.shape(1)
+          val n = x.shape(0)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
+            n, ",", m, ",", alpha1, ",",
+            x.data, ",", m, ",", beta1, ", ", y.data, ", ", m, ", ", output.data, ",", n, "))")
+      }
     }
 
-    // TODO: Implement these functions in terms of primitive ops.
-    // Reuse CPU implementation?
+    override def trans(x: Tensor): Tensor = {
+      assert(x.rank == 2, s"trans only supported for 2D matrix, got ${x.shape.seq}")
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape.reverse: _*)
+      generateRawComment("trans casted as geam call")
+      this.geam(x, true, 1.0f, x, true, 0.0f, res)
+      res
+    }
+
+    override def trans_grad(x: TensorR, y: TensorR): Unit = {
+      assert(x.x.rank == 2 && y.x.rank == 2 && x.x.shape.reverse == y.x.shape)
+      this.geam(x.d, false, 1.0f, y.d, true, 1.0f, x.d)
+    }
+
+    override def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor = {
+      (transX, transY) match {
+        case (false, false) =>
+          val m = x.shape(0)
+          val n = y.shape(1)
+          val k = y.shape(0)
+          val res = mallocArray[Float](m * n)
+          val zero = NewArray[Float](1); zero(0) = 0
+          val Alpha = NewArray[Float](1); Alpha(0) = alpha
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+            n, ",", m, ",", k, ",", Alpha, ",",
+            y.data, ",", n, ",", x.data, ",", k, ",", zero, ",", res, ",", n, "))")
+          Tensor(res, m, n)
+        case (false, true) =>
+          val m = x.shape(0)
+          val n = y.shape(0)
+          val k = y.shape(1)
+          val res = mallocArray[Float](m * n)
+          val zero = NewArray[Float](1); zero(0) = 0
+          val Alpha = NewArray[Float](1); Alpha(0) = alpha
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+            n, ",", m, ",", k, ",", Alpha, ",",
+            y.data, ",", k, ",", x.data, ",", k, ",", zero, ",", res, ",", n, "))")
+          Tensor(res, m, n)
+        case (true, false) =>
+          val m = x.shape(1)
+          val n = y.shape(1)
+          val k = y.shape(0)
+          val res = mallocArray[Float](m * n)
+          val zero = NewArray[Float](1); zero(0) = 0
+          val Alpha = NewArray[Float](1); Alpha(0) = alpha
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+            n, ",", m, ",", k, ",", Alpha, ",",
+            y.data, ",", n, ",", x.data, ",", m, ",", zero, ",", res, ",", n, "))")
+          Tensor(res, m, n)
+        case (true, true) =>
+          val m = x.shape(1)
+          val n = y.shape(0)
+          val k = y.shape(1)
+          val res = mallocArray[Float](m * n)
+          val zero = NewArray[Float](1); zero(0) = 0
+          val Alpha = NewArray[Float](1); Alpha(0) = alpha
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
+            n, ",", m, ",", k, ",", Alpha, ",",
+            y.data, ",", k, ",", x.data, ",", m, ",", zero, ",", res, ",", n, "))")
+          Tensor(res, m, n)
+      }
+    }
+
+    override def gemm_grad(x: TensorR, transX: Boolean, y: TensorR, transY: Boolean, alpha: Float, output: TensorR): Unit = {
+      val alpha1 = NewArray[Float](1); alpha1(0) = alpha;
+      val one = NewArray[Float](1); one(0) = 1.0f;
+      generateRawComment("backprop of gemm")
+      (transX, transY) match {
+        case (false, false) =>
+          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+            dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
+            y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+            dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
+            output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", one, ",", y.d.data, ",", dim3, "))")
+        case (false, true) =>
+          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(0)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+            dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
+            y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+            dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
+            x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
+        case (true, false) =>
+          val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(1)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+            dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
+            output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", one, ",", x.d.data, ",", dim1, "))")
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+            dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
+            output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", one, ",", y.d.data, ",", dim3, "))")
+        case (true, true) =>
+          val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(0)
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
+            dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
+            output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", one, ",", x.d.data, ",", dim1, "))")
+          unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
+            dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
+            x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
+      }
+    }
+
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = ???
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = ???

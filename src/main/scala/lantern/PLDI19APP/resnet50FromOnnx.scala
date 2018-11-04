@@ -170,7 +170,7 @@ object Resnet50Onnx {
           val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(1))
           trainLoss += loss.data(0)
           parameters foreach { case (name, tr) =>
-            backend.geam(tr.x, 1.0f, tr.d, -1.0f * learning_rate, tr.x)
+            backend.geam(tr.x, false, 1.0f, tr.d, false, -1.0f * learning_rate, tr.x)
             tr.clear_grad()
           }
 

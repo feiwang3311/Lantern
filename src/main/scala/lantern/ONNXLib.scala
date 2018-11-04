@@ -673,12 +673,7 @@ trait ONNXLib extends TensorDsl {
             val transA = attInts.getOrElse("transA", 0)
             val transB = attInts.getOrElse("transB", 0)
 
-            val out = (transA, transB) match {
-              case (0, 0) => input1.dot(input2) * alpha plusBias input3 * beta
-              case (0, 1) => input1.dot(input2.trans()) * alpha plusBias input3 * beta
-              case (1, 0) => input1.trans().dot(input2) * alpha plusBias input3 * beta
-              case (1, 1) => input1.trans().dot(input2.trans()) * alpha plusBias input3 * beta
-            }
+            val out = input1.gemm(input2, transA == 1, transB == 1, alpha) plusBias (if (beta == 1.0f) input3 else input3 * beta)
             intermediate_map_tensor += (output -> out)
           }
 
@@ -905,13 +900,13 @@ trait ONNXLib extends TensorDsl {
             val transA = attInts.getOrElse("transA", 0)
             val transB = attInts.getOrElse("transB", 0)
 
-            val out = (transA, transB) match {
-              case (0, 0) => input1.dot(input2) * alpha plusBias input3 * beta
-              case (0, 1) => input1.dot(input2.trans()) * alpha plusBias input3 * beta
-              case (1, 0) => input1.trans().dot(input2) * alpha plusBias input3 * beta
-              case (1, 1) => input1.trans().dot(input2.trans()) * alpha plusBias input3 * beta
+            if (beta == 1.0f) {
+              val out = input1.gemm(input2, transA == 1, transB == 1, alpha) plusBias input3
+              intermediate_map_tensorR.update(output, out)
+            } else {
+              val out = input1.gemm(input2, transA == 1, transB == 1, alpha) plusBias (input3 * beta)
+              intermediate_map_tensorR.update(output, out)
             }
-            intermediate_map_tensorR.update(output, out)
 
           } else if (node.isInstanceOf[flattenNode]) {
             val flattenNode(input, output, axis) = node

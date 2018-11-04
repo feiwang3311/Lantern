@@ -81,6 +81,79 @@ class TestCublas extends LanternFunSuite {
     runTest(mmdot)
   }
 
+  testGPU("gemm") {
+    val gemm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-gemm"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.rand(2,3)
+        val m2 = Tensor.rand(3,4)
+        val viaDot = (m1 dot m2) * 0.5f
+        val viaGemm = m1.gemm(m2, false, false, 0.5f)
+        Tensor.assertEqual(viaDot.toCPU(), viaGemm.toCPU())
+
+        val m3 = Tensor.rand(4,3)
+        val temp = m3.trans()
+        val viaDot01 = (m1 dot temp) * 0.5f
+        val viaGemm01 = m1.gemm(m3, false, true, 0.5f)
+        Tensor.assertEqual(viaDot01.toCPU(), viaGemm01.toCPU())
+
+        val m4 = Tensor.rand(3,2)
+        val viaDot10 = (m4.trans() dot m2) * 0.5f
+        val viaGemm10 = m4.gemm(m2, true, false, 0.5f)
+        Tensor.assertEqual(viaDot10.toCPU(), viaGemm10.toCPU())
+
+        val viaDot11 = (m4.trans() dot m3.trans()) * 0.5f
+        val viaGemm11 = m4.gemm(m3, true, true, 0.5f)
+        Tensor.assertEqual(viaDot11.toCPU(), viaGemm11.toCPU())
+      }
+    }
+    runTest(gemm)
+  }
+
+  testGPU("gemm_grad") {
+    val gemm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-gemm-grad"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.rand(2,3)
+        val m2 = Tensor.rand(3,4)
+        val tr1 = TensorR(m1); val tr2 = TensorR(m2)
+        val tr3 = TensorR(m1); val tr4 = TensorR(m2)
+        gradR(x => (tr1 dot tr2))(Tensor.zeros(1))
+        gradR(x => tr3.gemm(tr4, false, false, 0.5f))(Tensor.zeros(1))
+
+        val m3 = Tensor.rand(4,3)
+        val tr5 = TensorR(m1); val tr6 = TensorR(m3)
+        val tr7 = TensorR(m1); val tr8 = TensorR(m3)
+        gradR(x => (tr5 dot tr6.trans()))(Tensor.zeros(1))
+        gradR(x => tr7.gemm(tr8, false, true, 0.5f))(Tensor.zeros(1))
+
+        val m4 = Tensor.rand(3,2)
+        val tr9 = TensorR(m4); val tr10 = TensorR(m2)
+        val tr11 = TensorR(m4); val tr12 = TensorR(m2)
+        gradR(x => (tr9.trans() dot tr10))(Tensor.zeros(1))
+        gradR(x => tr11.gemm(tr12, true, false, 0.5f))(Tensor.zeros(1))
+
+        val tr13 = TensorR(m4); val tr14 = TensorR(m3)
+        val tr15 = TensorR(m4); val tr16 = TensorR(m3)
+        gradR(x => (tr13.trans() dot tr14.trans()))(Tensor.zeros(1))
+        gradR(x => tr15.gemm(tr16, true, true, 0.5f))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        Tensor.assertEqual(tr1.d.toCPU() * 0.5f, tr3.d.toCPU())
+        Tensor.assertEqual(tr2.d.toCPU() * 0.5f, tr4.d.toCPU())
+        Tensor.assertEqual(tr5.d.toCPU() * 0.5f, tr7.d.toCPU())
+        Tensor.assertEqual(tr6.d.toCPU() * 0.5f, tr8.d.toCPU())
+        Tensor.assertEqual(tr9.d.toCPU() * 0.5f, tr11.d.toCPU())
+        Tensor.assertEqual(tr10.d.toCPU() * 0.5f, tr12.d.toCPU())
+        Tensor.assertEqual(tr13.d.toCPU() * 0.5f, tr15.d.toCPU())
+        Tensor.assertEqual(tr14.d.toCPU() * 0.5f, tr16.d.toCPU())
+      }
+    }
+    runTest(gemm)
+  }
+
   testGPU("binary-ops") {
     val binops = new LanternDriverCublas[String, Unit] {
       override val fileName = "lantern-cublas-binops"
