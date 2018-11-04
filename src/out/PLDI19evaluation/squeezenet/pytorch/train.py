@@ -42,30 +42,37 @@ def train(args):
       optimizer.step()
       if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:
         print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, tloss / (i)))
-    return tloss / (batch.batch_size)
+    return tloss / (batch.batch_size), copytime
 
   def inference_epoch(epoch):
+    copytime=0.0
+    firstConvTime = 0.0
     for i in range(batch.total_size // batch.batch_size):
       (input_x, input_y) = batch.batch()
       if args.use_gpu:
+        before_cuda = time.time()
         inputX = Variable(torch.from_numpy(input_x)).cuda()
+        after_cuda = time.time()
+        copytime += (after_cuda - before_cuda)
       else:
         inputX = Variable(torch.from_numpy(input_x))
-      res = model(inputX)
-    return 0
+      res, diff = model(inputX)
+      firstConvTime += diff
+    return copytime, firstConvTime
 
   loopStart = time.time()
   loss_save = []
   for epoch in range(args.epochs):
     start = time.time()
     if args.inference:
-      loss_save.append(inference_epoch(epoch))
+      cptime, fctime = inference_epoch(epoch)
       stop = time.time()
-      print('Inferencing completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
+      print('move data to GPU used {} sec, first conv used {} sec'.format(cptime, fctime))
+      print('Inferencing completed in {} sec ({} sec/image)'.format((stop - start), (stop - start)/60000))
     else:
       loss_save.append(train_epoch(epoch))
       stop = time.time()
-      print('Training completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
+      print('Training completed in {} sec ({} sec/image)'.format((stop - start), (stop - start)/60000))
   loopEnd = time.time()
 
   prepareTime = loopStart - startTime

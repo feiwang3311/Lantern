@@ -3,8 +3,6 @@ echo "Note: make sure you are using the most updated .cpp file!"
 echo "Note: we assume the system has python-pip python-dev python-virtualenv"
 
 echo "Note: the script must be run in PLDIevaluation directory"
-echo "Note: Maybe downloading cifar10_data"
-python3 generate_cifar10_data.py --data-dir cifar10_data
 
 export CUDA_VISIBLE_DEVICES=0
 
@@ -14,6 +12,9 @@ source python3-env/bin/activate
 # pip3 install --upgrade tensorflow-gpu==1.4.1  # this version of tensorflow works with cuda 8. the later versions work with cuda 9.0, which is not installed in ml machines
 # pip3 install torch torchvision
 # pip3 install matplotlib
+
+echo "Note: Maybe downloading cifar10_data"
+python3 generate_cifar10_data.py --data-dir cifar10_data
 
 cd squeezenet
 cd pytorch

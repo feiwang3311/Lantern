@@ -6,6 +6,7 @@ import inputs
 from torch.autograd import Variable
 import torch.nn.functional as F
 import torch.optim as optim
+import time
 
 __all__ = ['SqueezeNet', 'squeezenet1_0', 'squeezenet1_1']
 
@@ -44,8 +45,8 @@ class SqueezeNet(nn.Module):
   def __init__(self, num_classes=10):
     super(SqueezeNet, self).__init__()
     self.num_classes = num_classes
+    self.firstConv = nn.Conv2d(3, 96, kernel_size=3, stride=1, padding=1)
     self.features = nn.Sequential(
-      nn.Conv2d(3, 96, kernel_size=3, stride=1, padding=1),
       nn.ReLU(inplace=True),
       nn.MaxPool2d(kernel_size=2, stride=2),
       Fire(96, 16, 64, 64),
@@ -78,9 +79,12 @@ class SqueezeNet(nn.Module):
           weight_init.constant(m.bias, 0)
 
   def forward(self, x):
+    before = time.time()
+    x = self.firstConv(x)
+    after = time.time()
     x = self.features(x)
     x = self.final_conv(x)
-    return x.view(x.size(0), self.num_classes)
+    return x.view(x.size(0), self.num_classes), (after - before)
 
 class Test(nn.Module):
   def __init__(self, num_classes = 10):

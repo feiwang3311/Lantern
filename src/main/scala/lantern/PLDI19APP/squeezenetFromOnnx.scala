@@ -99,7 +99,6 @@ object SqueezeNetOnnx {
           func(input.toGPU())
           resetMallocAddr(addr)
           resetCudaMallocAddr(addrCuda)
-          error("stop")
         }
         val delta = trainTimer.getElapsedTime
         printf("Inferencing completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
