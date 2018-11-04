@@ -20,7 +20,8 @@ def train(args):
   torch.manual_seed(args.seed)
 
   model = resnet50.resnet50Cifar10()
-  model.cuda()
+  if args.use_gpu:
+    model.cuda()
   optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
   batch = inputs.Batch(args.input_file, args.batch_size)
 
@@ -28,8 +29,13 @@ def train(args):
     tloss = 0.0
     for i in range(batch.total_size // batch.batch_size):
       (input_x, input_y) = batch.batch()
+      inputX = Variable(torch.from_numpy(input_x))
+      inputY = Variable(torch.from_numpy(input_y))
+      if args.use_gpu:
+        inputX = inputX.cuda()
+        inputY = inputY.cuda()
       optimizer.zero_grad()
-      loss = F.nll_loss(F.log_softmax(model(Variable(torch.from_numpy(input_x)).cuda()), dim=1), Variable(torch.from_numpy(input_y)).cuda())
+      loss = F.nll_loss(F.log_softmax(model(inputX), dim=1), inputY)
       tloss += loss.data.item()
       loss.backward()
       optimizer.step()
@@ -37,11 +43,29 @@ def train(args):
         print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, tloss / (i)))
     return tloss / (batch.batch_size)
 
+  def inference_epoch(epoch):
+    model.eval()
+    for i in range(batch.total_size // batch.batch_size):
+      (input_x, input_y) = batch.batch()
+      inputX = Variable(torch.from_numpy(input_x))
+      if args.use_gpu:
+        inputX = inputX.cuda()
+      resnet50.printHead(10, inputX, "input")
+      res = model(inputX)
+      resnet50.printHead(10, res, "output")
+      exit(0)
+      if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:
+        print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, tloss / (i)))
+    return 0
+
   loopStart = time.time()
   loss_save = []
   for epoch in range(args.epochs):
     start = time.time()
-    loss_save.append(train_epoch(epoch))
+    if args.inference:
+      loss_save.append(inference_epoch(epoch))
+    else:
+      loss_save.append(train_epoch(epoch))
     stop = time.time()
     print('Training completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
   loopEnd = time.time()
@@ -80,6 +104,10 @@ if __name__ == '__main__':
            help='Directory for saving performance data')
   parser.add_argument('--generate_onnx', type=str, default='',
            help='Directory for saving ONNX model')
+  parser.add_argument('--use_gpu', type=bool, default=False,
+           help='Set to true if you want to use GPU')
+  parser.add_argument('--inference', type=bool, default=False,
+           help='Set to false if you want to measure inference time')
   args = parser.parse_args()
 
   if args.generate_onnx == '':

@@ -276,3 +276,16 @@ def resnet152(pretrained=False, **kwargs):
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet152']))
     return model
+
+def printHead(n, tensor, name):
+    print(name, tensor.shape)
+    tensor = tensor.view(tensor.numel())
+    smin = float(tensor.min().data)
+    smax = float(tensor.max().data)
+    if abs(smin) < abs(smax):
+      print("Max Abs: {0:0.5f}".format(smax), end = " || ")
+    else:
+      print("Max Abs: {0:0.5f}".format(smin), end = " || ")
+    for i in range(n):
+      print("{0:0.5f}".format(float(tensor[i].data)), end=" ")
+    print()

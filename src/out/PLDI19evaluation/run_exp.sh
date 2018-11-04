@@ -18,18 +18,27 @@ python3 generate_cifar10_data.py --data-dir cifar10_data
 
 cd squeezenet
 cd pytorch
-# training pytorch version of squeezenet
+# python3 train.py --generate_onnx ../squeezenetCifar10.onnx
 python3 train.py --use_gpu=True
 python3 train.py --use_gpu=True --inference=True --write_to=result_PyTorch_inference_GPU
 python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
 
-# python3 train.py --generate_onnx ../squeezenetCifar10.onnx
+
 cd ../lantern
 nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
 ./LanternOnnxTrainingCu	result_Lantern
 
 #cd tensorflow2
 #python3 train.py
+
+cd ..
+cd resnet50
+cd pytorch
+# python3 train.py --generate_onnx ../resnet50.onnx
+python3 train.py --use_gpu=True
+python3 train.py --use_gpu=True --inference=True --write_to=result_PyTorch_inference_GPU
+python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
+
 
 exit 1
 
