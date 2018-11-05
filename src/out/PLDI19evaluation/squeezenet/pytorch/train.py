@@ -36,7 +36,8 @@ def train(args):
       else:
         inputX = Variable(torch.from_numpy(input_x))
         inputY = Variable(torch.from_numpy(input_y))
-      loss = F.nll_loss(F.log_softmax(model(inputX), dim=1), inputY)
+      (res, _) = model(inputX)
+      loss = F.nll_loss(F.log_softmax(res, dim=1), inputY)
       tloss += loss.data[0]
       loss.backward()
       optimizer.step()
