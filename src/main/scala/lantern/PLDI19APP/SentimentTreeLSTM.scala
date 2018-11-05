@@ -17,9 +17,9 @@ import java.io.File;
 
 object SentimentTreeLSTM {
 
-  val file_dir_cpu = "evaluationTreeLSTM/Lantern/Lantern.cpp"
-  val file_dir_gpu = "evaluationTreeLSTM/Lantern/Lantern.cu"
-  val root_dir = "src/out/NIPS18evaluation/"
+  val file_dir_cpu = "treelstm/lantern/LanternTraining.cpp"
+  val file_dir_gpu = "treelstm/lantern/LanternTraining.cu"
+  val root_dir = "src/out/PLDI19evaluation/"
 
   val sentimental_lstm_cpu = new LanternDriverC[String, Unit] {
 
@@ -355,8 +355,8 @@ object SentimentTreeLSTM {
     val sentit_file_cpu = new PrintWriter(new File(root_dir + file_dir_cpu))
     sentit_file_cpu.println(sentimental_lstm_cpu.code)
     sentit_file_cpu.flush()
-    val sentit_file_gpu = new PrintWriter(new File(root_dir + file_dir_gpu))
-    sentit_file_gpu.println(sentimental_lstm_gpu.code)
-    sentit_file_gpu.flush()
+    // val sentit_file_gpu = new PrintWriter(new File(root_dir + file_dir_gpu))
+    // sentit_file_gpu.println(sentimental_lstm_gpu.code)
+    // sentit_file_gpu.flush()
   }
 }
