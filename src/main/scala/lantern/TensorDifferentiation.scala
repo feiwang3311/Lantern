@@ -3806,8 +3806,12 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = {
-      // use cudnnConvolutionBackwardBias (or TensorReduce) for bias.d += main.d
-      cudnnConvolutionBackwardBias(bias.d, main.d)
+      // WARN (Fei Wang): plusBias is abused for non-bias case as well (add residual in resnet)
+      // TODO (Fei Wang): Bandit solution: if bias and main are of the same shape, use AddTensor (by calling cudnnAddBiasTensor)
+      if (main.x.shape == bias.x.shape) cudnnAddBiasTensor(main.d, bias.d)  // add main.d into bias.d (in place)
+      // otherwise: use BackwardBias (which may fail if bias,d is more than 1D)
+      else cudnnConvolutionBackwardBias(bias.d, main.d)  // add main.d into bias.d (with reduction)
+      // TODO (Fei Wang): be more general, use ReduceTensor!
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias

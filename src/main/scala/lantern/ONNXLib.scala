@@ -235,7 +235,6 @@ trait ONNXLib extends TensorDsl {
     case class gemmNode(inputs: Seq[String], output: String, attInts: Map[String, Int], attFloats: Map[String, Float]) extends Node
     case class flattenNode(input: String, output: String, axis: Int) extends Node
     case class addNode(inputs: Seq[String], output: String) extends Node
-    // not yet implemented for inference and training
     case class padNode(input: String, output: String, mode: String, pads: List[Int], value: Float) extends Node
     case class shapeNode(input: String, output: String) extends Node
     case class sliceNode(input: String, output: String, attMap: Map[String, List[Int]]) extends Node
@@ -673,6 +672,7 @@ trait ONNXLib extends TensorDsl {
             val transA = attInts.getOrElse("transA", 0)
             val transB = attInts.getOrElse("transB", 0)
 
+            // TODO (Fei Wang) Not well generalized (We assume the input3 is bias, which is mostly true, but not always)
             val out = input1.gemm(input2, transA == 1, transB == 1, alpha) plusBias (if (beta == 1.0f) input3 else input3 * beta)
             intermediate_map_tensor += (output -> out)
           }
@@ -686,9 +686,8 @@ trait ONNXLib extends TensorDsl {
           case addNode(inputs, output) => {
             assert(inputs.size == 2, s"inputs for addNode should be size 2, got ${inputs.size}")
             val (input1 :: input2 :: Nil)  = inputs.map(a => twoMaps(a)).take(2).toList
-            // TODO (Fix Me): not general enough to use plasBias
+            // WARN (Fei Wang) abusing the plusBias semantics for add residual
             intermediate_map_tensor += (output -> (input1 plusBias input2))
-            // intermediate_map_tensor += (output -> (input1 + input2))
           }
 
           case shapeNode(input, output) => {
@@ -899,7 +898,7 @@ trait ONNXLib extends TensorDsl {
             val beta  = attFloats.getOrElse("beta", 1.0f)
             val transA = attInts.getOrElse("transA", 0)
             val transB = attInts.getOrElse("transB", 0)
-
+            // TODO (Fei Wang): not general enough (we assume input3 is a bias, which is mostly true, but not always)
             if (beta == 1.0f) {
               val out = input1.gemm(input2, transA == 1, transB == 1, alpha) plusBias input3
               intermediate_map_tensorR.update(output, out)
@@ -919,10 +918,8 @@ trait ONNXLib extends TensorDsl {
             val addNode(inputs, output) = node
             assert(inputs.size == 2)
             val (input1 :: input2::Nil) = inputs.map(twoMaps).take(2).toList
-            // TODO (Fix Me): not general enough to use plusBias
-            val out = input1 plusBias input2
-            // val out = input1 + input2
-            intermediate_map_tensorR.update(output, out)
+            // WARN (Fei Wang): abusing plusBias semantics for add residual
+            intermediate_map_tensorR.update(output, input1 plusBias input2)
 
           } else if (node.isInstanceOf[shapeNode]) {
             val shapeNode(input, output) = node
