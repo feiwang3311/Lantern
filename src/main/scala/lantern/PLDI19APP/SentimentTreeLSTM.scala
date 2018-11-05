@@ -312,6 +312,7 @@ object SentimentTreeLSTM {
       val loss_save = NewArray[Double](epocN)
 
       val addr = getMallocAddr() // remember current allocation pointer here
+      val cudaAddr = getCudaMallocAddr()
       val loopStart = get_time()
 
       for (epoc <- (0 until epocN): Rep[Range]) {
@@ -322,11 +323,12 @@ object SentimentTreeLSTM {
           val words    = tree_data(index * 4 + 1)
           val leftchs  = tree_data(index * 4 + 2)
           val rightchs = tree_data(index * 4 + 3)
-          val loss = gradR_loss(net(scores, words, leftchs, rightchs))(Tensor.zeros(1))
+          val loss = gradR_loss(net(scores.toGPU(scores.length), words.toGPU(words.length), leftchs.toGPU(leftchs.length), rightchs.toGPU(rightchs.length)))(Tensor.zeros(1))
           val loss_value = loss.data(0)
           average_loss = average_loss * (n) / (n+1) + loss_value / (n+1)
           opt.step()
           resetMallocAddr(addr)
+          resetCudaMallocAddr(addr)
         }
 
         loss_save(epoc) = average_loss
@@ -355,8 +357,8 @@ object SentimentTreeLSTM {
     val sentit_file_cpu = new PrintWriter(new File(root_dir + file_dir_cpu))
     sentit_file_cpu.println(sentimental_lstm_cpu.code)
     sentit_file_cpu.flush()
-    // val sentit_file_gpu = new PrintWriter(new File(root_dir + file_dir_gpu))
-    // sentit_file_gpu.println(sentimental_lstm_gpu.code)
-    // sentit_file_gpu.flush()
+    val sentit_file_gpu = new PrintWriter(new File(root_dir + file_dir_gpu))
+    sentit_file_gpu.println(sentimental_lstm_gpu.code)
+    sentit_file_gpu.flush()
   }
 }

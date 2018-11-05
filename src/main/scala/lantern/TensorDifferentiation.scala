@@ -4361,7 +4361,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     def cudnnActivationForward(x: Tensor, activation: Activation.Value): Tensor = {
-      assert(x.rank == 4, "Currently, activation functions only support tensors of rank 4")
+      val xShape = x.shape.padTo(4, 1) //activation functions only support tensors of rank 4
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
@@ -4372,7 +4372,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |    ${xShape(0)}, ${xShape(1)}, ${xShape(2)}, ${xShape(3)}));
           |
           |cudnnActivationDescriptor_t act_desc;
           |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
@@ -4391,7 +4391,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value): Unit = {
-      assert(input.x.rank == 4, "Currently, activation functions only support tensors of rank 4")
+      val inputXShape = input.x.shape.padTo(4, 1) // activation functions only support tensors of rank 4
       assert(input.x.shape == res.x.shape,
         "Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
       assert(input.d.shape == res.d.shape,
@@ -4405,7 +4405,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |    ${inputXShape(0)}, ${inputXShape(1)}, ${inputXShape(2)}, ${inputXShape(3)}));
           |
           |cudnnActivationDescriptor_t act_desc;
           |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
