@@ -58,7 +58,7 @@ object Resnet50Onnx {
 
       train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
         input.printHead(10, "input")
-        val out = func(input)
+        val out = func(input.toGPU())
         out.toCPU().printHead(10, "output")
         error("stop")
       }
@@ -167,7 +167,7 @@ object Resnet50Onnx {
         train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
           val inputR = TensorR(input.toGPU(), isInput=true)
           val targetR = target.toGPU(batchSize)
-          val loss = gradR_loss(lossFun(inputR, target))(Tensor.zeros(1))
+          val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(1))
           trainLoss += loss.data(0)
           parameters foreach { case (name, tr) =>
             backend.geam(tr.x, false, 1.0f, tr.d, false, -1.0f * learning_rate, tr.x)

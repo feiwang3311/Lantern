@@ -57,8 +57,6 @@ def train(args):
       else:
         inputX = Variable(torch.from_numpy(input_x))
       res, diff = model(inputX)
-      print(before_cuda)
-      print(diff)
       firstConvTime += diff
     return copytime, firstConvTime
 
