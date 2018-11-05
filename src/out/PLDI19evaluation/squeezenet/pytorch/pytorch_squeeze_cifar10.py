@@ -81,10 +81,10 @@ class SqueezeNet(nn.Module):
   def forward(self, x):
     before = time.time()
     x = self.firstConv(x)
-    after = time.time()
+    # after = time.time()
     x = self.features(x)
     x = self.final_conv(x)
-    return x.view(x.size(0), self.num_classes), (after - before)
+    return x.view(x.size(0), self.num_classes), before
 
 class Test(nn.Module):
   def __init__(self, num_classes = 10):

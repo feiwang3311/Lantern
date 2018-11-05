@@ -512,6 +512,27 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
+      |__global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid >= sizeLow) return;
+      |  if (blockIdx.y < sizeHigh) { // the first input
+      |    int index_out = tid + blockIdx.y * sizeLow * (sizeDim1 + sizeDim2);
+      |    int index_in1 = tid + blockIdx.y * sizeLow * sizeDim1;
+      |    for (int i = 0; i < sizeDim1; i++) {
+      |      out[index_out] = in1[index_in1];
+      |      index_out += sizeLow; index_in1 += sizeLow;
+      |    }
+      |  } else { // the second input
+      |    int index_out = tid + (blockIdx.y - sizeHigh) * sizeLow * (sizeDim1 + sizeDim2) + sizeLow * sizeDim1;
+      |    int index_in2 = tid + (blockIdx.y - sizeHigh) * sizeLow * sizeDim2;
+      |    for (int i = 0; i < sizeDim2; i++) {
+      |      out[index_out] = in2[index_in2];
+      |      index_out += sizeLow; index_in2 += sizeLow;
+      |    }
+      |  }
+      |}
+      |
+      |
       |__global__ void concat2D_1D(float* in1, float* in2, float* out, int dim2, int bound) {
       |  int tid = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
       |  if (blockIdx.x < bound * dim2) {

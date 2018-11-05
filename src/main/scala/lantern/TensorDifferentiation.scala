@@ -3641,12 +3641,23 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val resShape = Seq(dim0, dim1, dim2, dim3)
       val res = this.mallocArray[Float](resShape.product)
 
-      // concatenate with user-define kernel function (1D grid 3D block)
+      val sizeLow = dim2 * dim3
+      val sizeHigh = dim0
+      val sizeDim1 = tensors(0).shape(1)
+      val sizeDim2 = tensors(1).shape(1)
+
       unchecked[Unit](
         "{\n",
-        "dim3 grid(", dim1 * dim2, ", ", dim0, "); \n",
-        "concat2D_1D<<<grid", ", ", dim3, ">>>(", tensors(0).data, ",", tensors(1).data, ",", res, ", ", dim2, ", ", tensors(0).shape(1), ");\n",
+        "dim3 grid(", (sizeLow+511) / 512, ", ", sizeHigh * 2, ");\n",
+        "concat2D_1D_loop<<<grid, 512>>>(", tensors(0).data, ", ", tensors(1).data, ", ", res, ", ", sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
         "}")
+
+      // // concatenate with user-define kernel function (1D grid 3D block)
+      // unchecked[Unit](
+      //   "{\n",
+      //   "dim3 grid(", dim1 * dim2, ", ", dim0, "); \n",
+      //   "concat2D_1D<<<grid", ", ", dim3, ">>>(", tensors(0).data, ",", tensors(1).data, ",", res, ", ", dim2, ", ", tensors(0).shape(1), ");\n",
+      //   "}")
       Tensor(res, dim0, dim1, dim2, dim3)
     }
 
