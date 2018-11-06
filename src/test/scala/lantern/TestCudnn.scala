@@ -495,4 +495,26 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(rnnInference)
   }
+
+  testGPU("rnn-module") {
+    val rnnInference = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-rnn-training"
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        Tensor.randseed(42)
+        val inputSize = 10
+        val hiddenSize = 40
+        val numLayers = 2
+        val seqLength = 5
+        val batchSize = 3
+
+        val input = TensorR(Tensor.ones(seqLength, batchSize, inputSize))
+        val rnn = Rnn(inputSize, hiddenSize, numLayers)
+        val y = rnn(input)
+        backend = BackendCPU()
+        y.toCPU().print()
+      }
+    }
+    runTest(rnnInference)
+  }
 }
