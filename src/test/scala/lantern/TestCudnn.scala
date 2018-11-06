@@ -460,4 +460,39 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(batchNorm)
   }
+
+  testGPU("rnn-inference") {
+    val rnnInference = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-rnn-inference"
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val inputSize = 10
+        val hiddenSize = 40
+        val numLayers = 2
+        val seqLength = 5
+        val batchSize = 3
+        val bidirectional = false
+        val numDirections = if (bidirectional) 2 else 1
+
+        def getParameterSize(): Int = {
+          val gateSize = hiddenSize
+          val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections
+          val w_hh_size = numLayers * gateSize * hiddenSize
+          val b_ih_size = numLayers * gateSize
+          val b_hh_size = numLayers * gateSize
+          w_ih_size + w_hh_size + b_ih_size + b_hh_size
+        }
+
+        val x = Tensor.ones(seqLength, batchSize, inputSize)
+        val hx = Tensor.ones(numLayers, batchSize, hiddenSize)
+        val w = Tensor.fill(Seq(getParameterSize), 0.01f)
+        val res1 = BackendCudnn().cudnnRNNForwardInference(x, hx, w, numLayers = numLayers, hiddenSize = hiddenSize)
+        val res2 = BackendCudnn().cudnnRNNForwardTraining(x, hx, w, numLayers = numLayers, hiddenSize = hiddenSize)
+        backend = BackendCPU()
+        res2.toCPU().print()
+        Tensor.assertEqual(res1.toCPU(), res2.toCPU())
+      }
+    }
+    runTest(rnnInference)
+  }
 }
