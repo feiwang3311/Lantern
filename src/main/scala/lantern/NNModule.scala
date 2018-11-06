@@ -299,9 +299,9 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
       assert(hx.x.rank == 3, "RNN hidden state should have rank 3: [numLayers x batchSize x hiddenSize]")
       assert(batchSize == hx.x.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
 
-      val y = TensorR(BackendCudnn().cudnnRNNForwardTraining(
-        input.x, hx.x, parameterBuffer, numLayers, hiddenSize, dropout, bidirectional = bidirectional))
-      y
+      val (y, _, _) = BackendCudnn().cudnnRNNForwardTraining(
+        input.x, hx.x, parameterBuffer, numLayers, hiddenSize, dropout, bidirectional = bidirectional)
+      TensorR(y)
 
       // TODO: Implement backward pass.
     }
