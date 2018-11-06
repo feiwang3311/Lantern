@@ -3701,7 +3701,6 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val dim3 = tensors(0).shape(3)
       val resShape = Seq(dim0, dim1, dim2, dim3)
       val res = this.mallocArray[Float](resShape.product)
-
       val sizeLow = dim2 * dim3
       val sizeHigh = dim0
       val sizeDim1 = tensors(0).shape(1)
@@ -3710,15 +3709,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       unchecked[Unit](
         "{\n",
         "dim3 grid(", (sizeLow+511) / 512, ", ", sizeHigh * 2, ");\n",
-        "concat2D_1D_loop<<<grid, 512>>>(", tensors(0).data, ", ", tensors(1).data, ", ", res, ", ", sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
+        "concat2D_1D_loop<<<grid, 512>>>(", tensors(0).data, ", ", tensors(1).data, ", ", res, ", ",
+        sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
         "}")
-
-      // // concatenate with user-define kernel function (1D grid 3D block)
-      // unchecked[Unit](
-      //   "{\n",
-      //   "dim3 grid(", dim1 * dim2, ", ", dim0, "); \n",
-      //   "concat2D_1D<<<grid", ", ", dim3, ">>>(", tensors(0).data, ",", tensors(1).data, ",", res, ", ", dim2, ", ", tensors(0).shape(1), ");\n",
-      //   "}")
       Tensor(res, dim0, dim1, dim2, dim3)
     }
 
@@ -3731,12 +3724,19 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val dim1 = tensorRs(0).x.shape(1) + tensorRs(1).x.shape(1)
       val dim2 = tensorRs(0).x.shape(2)
       val dim3 = tensorRs(0).x.shape(3)
+      val resShape = Seq(dim0, dim1, dim2, dim3)
+      val res = this.mallocArray[Float](resShape.product)
+      val sizeLow = dim2 * dim3
+      val sizeHigh = dim0
+      val sizeDim1 = tensors(0).shape(1)
+      val sizeDim2 = tensors(1).shape(1)
 
       // concatenate with user-define kernel function (1D grid 3D block)
       unchecked[Unit](
         "{\n",
-        "dim3 grid(", dim1 * dim2, ", ", dim0, ");\n",
-        "concat2D_1D_grad<<<grid", ", ", dim3, ">>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ", dim2, ", ", tensorRs(0).x.shape(1), ");\n",
+        "dim3 grid(", (sizeLow+511) / 512, ", ",  sizeHigh * 2, ");\n",
+        "concat2D_1D_loop_grad<<<grid, 512>>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ",
+        sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
         "}")
     }
 
