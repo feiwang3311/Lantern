@@ -463,6 +463,7 @@ class TestCudnn extends LanternFunSuite {
   }
 */
 
+  /*
   testGPU("rnn-forward") {
     val rnnInference = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-rnn-forward"
@@ -488,8 +489,8 @@ class TestCudnn extends LanternFunSuite {
         val x = Tensor.ones(seqLength, batchSize, inputSize)
         val hx = Tensor.ones(numLayers, batchSize, hiddenSize)
         val w = Tensor.fill(Seq(getParameterSize), 0.01f)
-        val res1 = BackendCudnn().cudnnRNNForwardInference(x, hx, w, numLayers = numLayers, hiddenSize = hiddenSize)
-        val res2 = BackendCudnn().cudnnRNNForwardTraining(x, hx, w, numLayers = numLayers, hiddenSize = hiddenSize)._1
+        val res1 = BackendCudnn().cudnnRNNForwardInference(RnnReluMode, x, Some(hx), cx = None, w, numLayers, hiddenSize)
+        val res2 = BackendCudnn().cudnnRNNForwardTraining(RnnReluMode, x, Some(hx), cx = None, w, numLayers, hiddenSize)._1
         backend = BackendCPU()
         res2.toCPU().print()
         Tensor.assertEqual(res1.toCPU(), res2.toCPU())
@@ -497,6 +498,7 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(rnnInference)
   }
+  */
 
   testGPU("rnn-module") {
     val rnnInference = new LanternDriverCudnn[String, Unit] {
@@ -514,7 +516,7 @@ class TestCudnn extends LanternFunSuite {
 
         val input = Tensor.ones(seqLength, batchSize, inputSize)
         val h0 = TensorR(Tensor.ones(numLayers * numDirections, batchSize, hiddenSize))
-        val rnn = Rnn(inputSize, hiddenSize, numLayers, bidirectional = bidirectional)
+        val rnn = RNNRelu(inputSize, hiddenSize, numLayers, bidirectional = bidirectional)
 
         /*
         def lossFun(input: TensorR) = {
@@ -525,8 +527,7 @@ class TestCudnn extends LanternFunSuite {
         */
 
         def lossFun(input: TensorR) = {
-          val res = rnn(input, Some(h0))
-          res
+          rnn(input, Some(h0))
         }
         val dInput = gradR(lossFun)(input)
 
@@ -551,6 +552,58 @@ class TestCudnn extends LanternFunSuite {
           rnn.b_ih_reverse(layer).d.toCPU().printHead()
           printf("b_hh_reverse[%d]\\n", layer)
           rnn.b_hh_reverse(layer).d.toCPU().printHead()
+        }
+      }
+    }
+    runTest(rnnInference)
+  }
+
+  testGPU("lstm-module") {
+    val rnnInference = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-lstm-module"
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        Tensor.randseed(42)
+        val inputSize = 2
+        val hiddenSize = 2
+        val numLayers = 2
+        val seqLength = 2
+        val batchSize = 2
+        val bidirectional = true
+        val numDirections = if (bidirectional) 2 else 1
+
+        val input = Tensor.ones(seqLength, batchSize, inputSize)
+        val h0 = TensorR(Tensor.ones(numLayers * numDirections, batchSize, hiddenSize))
+        val c0 = TensorR(Tensor.ones(numLayers * numDirections, batchSize, hiddenSize))
+        val rnn = LSTM(inputSize, hiddenSize, numLayers, bidirectional = bidirectional)
+
+        def lossFun(input: TensorR) = {
+          rnn(input, Some(h0), Some(c0))
+          rnn(input, Some(h0), Some(c0))
+        }
+        val dInput = gradR(lossFun)(input)
+
+        backend = BackendCPU()
+        dInput.toCPU().print()
+
+        for (layer <- (0 until numLayers): Range) {
+          printf("w_ih[%d]\\n", layer)
+          rnn.w_ih(layer).d.toCPU().print()
+          printf("w_hh[%d]\\n", layer)
+          rnn.w_hh(layer).d.toCPU().print()
+          printf("b_ih[%d]\\n", layer)
+          rnn.b_ih(layer).d.toCPU().print()
+          printf("b_hh[%d]\\n", layer)
+          rnn.b_hh(layer).d.toCPU().print()
+
+          printf("w_ih_reverse[%d]\\n", layer)
+          rnn.w_ih_reverse(layer).d.toCPU().print()
+          printf("w_hh_reverse[%d]\\n", layer)
+          rnn.w_hh_reverse(layer).d.toCPU().print()
+          printf("b_ih_reverse[%d]\\n", layer)
+          rnn.b_ih_reverse(layer).d.toCPU().print()
+          printf("b_hh_reverse[%d]\\n", layer)
+          rnn.b_hh_reverse(layer).d.toCPU().print()
         }
       }
     }

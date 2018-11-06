@@ -3806,6 +3806,26 @@ trait TensorDslCudnn extends TensorDslCublas {
   }
 
   // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnRNNMode_t
+  sealed trait RnnMode {
+    val numGates: Int
+  }
+  case object RnnReluMode extends RnnMode {
+    override def toString: String = "CUDNN_RNN_RELU"
+    override val numGates: Int = 1
+  }
+  case object RnnTanhMode extends RnnMode {
+    override def toString: String = "CUDNN_RNN_TANH"
+    override val numGates: Int = 1
+  }
+  case object LstmMode extends RnnMode {
+    override def toString: String = "CUDNN_LSTM"
+    override val numGates: Int = 4
+  }
+  case object GruMode extends RnnMode {
+    override def toString: String = "CUDNN_GRU"
+    override val numGates: Int = 3
+  }
+
   object RNNMode extends Enumeration {
     val RnnRelu = Value("CUDNN_RNN_RELU")
     val RnnTanh = Value("CUDNN_RNN_TANH")
@@ -4718,15 +4738,30 @@ trait TensorDslCudnn extends TensorDslCublas {
       cudnnAddBiasTensor(res.d, input.d, scale = 1.0f / input.x.scalarCount)
     }
 
-    def cudnnRNNForwardHelper(x: Tensor, hx: Tensor, w: Tensor,
+    def cudnnRNNForwardHelper(mode: RnnMode,
                               training: Boolean,
+                              x: Tensor, hx: Option[Tensor], cx: Option[Tensor], w: Tensor,
                               numLayers: Int, hiddenSize: Int,
                               dropout: Float = 0f,
-                              mode: RNNMode.Value = RNNMode.RnnRelu,
-                              bidirectional: Boolean = false): (Tensor, Tensor, Option[(Rep[Array[Float]], Rep[Int])]) = {
+                              bidirectional: Boolean = false): (Tensor, Option[Tensor], Option[(Rep[Array[Float]], Rep[Int])]) = {
       assert(x.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
-      assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
-      assert(x.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+      hx match {
+        case None =>
+        case Some(hx) =>
+          assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
+          assert(x.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+      }
+      cx match {
+        case None =>
+        case Some(cx) =>
+          assert(cx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
+          assert(x.shape(1) == cx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+      }
+      val hxData = hx.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
+      val cxData = cx.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
+      // TODO: Optionally calculate final hidden state `hy` based on flag.
+      val hy = hx.map(hx => Tensor(mallocArray[Float](hx.scalarCount), hx.shape: _*))
+      val hyData = hy.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
 
       val seqLength = x.shape(0)
       val batchSize = x.shape(1)
@@ -4735,9 +4770,6 @@ trait TensorDslCudnn extends TensorDslCublas {
 
       val resShape = Seq(seqLength, batchSize, hiddenSize * numDirections)
       val res = Tensor(mallocArray[Float](resShape.product), resShape: _*)
-
-      // TODO: Optionally calculate final hidden state `hy` based on flag.
-      val hy = Tensor(mallocArray[Float](hx.scalarCount), hx.shape: _*)
 
       val reserveSpace = unchecked[Array[Float]]("(float*)NULL")
       val reserveSpaceSize = unchecked[Int]("0")
@@ -4830,16 +4862,16 @@ trait TensorDslCudnn extends TensorDslCublas {
           Seq(
             "CUDNN_CALL(cudnnRNNForwardTraining(\n" +
             s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", x.data, ",\n" +
-            "    hx_desc,", hx.data, ", cx_desc, NULL, w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
-            "    hy_desc,", hy.data, ", cy_desc, NULL, workspace, workspaceSize, reserveSpace, reserveSize));\n")
+            "    hx_desc,", hxData, ", cx_desc,", cxData, ", w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
+            "    hy_desc,", hyData, ", cy_desc, NULL, workspace, workspaceSize, reserveSpace, reserveSize));\n")
 
         // If inference, call `ForwardInference` function.
         else
           Seq(
             "CUDNN_CALL(cudnnRNNForwardInference(\n" +
             s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", x.data, ",\n" +
-            "    hx_desc,", hx.data, ", cx_desc, NULL, w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
-            "    hy_desc,", hy.data, ", cy_desc, NULL, workspace, workspaceSize));\n")
+            "    hx_desc,", hxData, ", cx_desc,", cxData, ", w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
+            "    hy_desc,", hyData, ", cy_desc, NULL, workspace, workspaceSize));\n")
         ) ++
 
         Seq("}"): _*)
@@ -4850,21 +4882,21 @@ trait TensorDslCudnn extends TensorDslCublas {
         (res, hy, None)
     }
 
-    def cudnnRNNForwardInference(x: Tensor, hx: Tensor, w: Tensor,
+    def cudnnRNNForwardInference(mode: RnnMode,
+                                 x: Tensor, hx: Option[Tensor] = None, cx: Option[Tensor] = None, w: Tensor,
                                  numLayers: Int, hiddenSize: Int,
                                  dropout: Float = 0f,
-                                 mode: RNNMode.Value = RNNMode.RnnRelu,
                                  bidirectional: Boolean = false): Tensor = {
-      cudnnRNNForwardHelper(x, hx, w, training = false, numLayers, hiddenSize, dropout, mode, bidirectional)._1
+      cudnnRNNForwardHelper(mode, training = false, x, hx, cx, w, numLayers, hiddenSize, dropout, bidirectional)._1
     }
 
-    def cudnnRNNForwardTraining(x: Tensor, hx: Tensor, w: Tensor,
+    def cudnnRNNForwardTraining(mode: RnnMode,
+                                x: Tensor, hx: Option[Tensor] = None, cx: Option[Tensor] = None, w: Tensor,
                                 numLayers: Int, hiddenSize: Int,
                                 dropout: Float = 0f,
-                                mode: RNNMode.Value = RNNMode.RnnRelu,
-                                bidirectional: Boolean = false): (Tensor, Tensor, Rep[Array[Float]], Rep[Int]) = {
+                                bidirectional: Boolean = false): (Tensor, Option[Tensor], Rep[Array[Float]], Rep[Int]) = {
       val (output, hy, reserve) =
-        cudnnRNNForwardHelper(x, hx, w, training = true, numLayers, hiddenSize, dropout, mode, bidirectional)
+        cudnnRNNForwardHelper(mode, training = true, x, hx, cx, w, numLayers, hiddenSize, dropout, bidirectional)
       reserve match {
         case None => throw new IllegalArgumentException("Expected RNN reserve space to be defined")
         case Some((reserveSpace, reserveSpaceSize)) => (output, hy, reserveSpace, reserveSpaceSize)
@@ -4872,18 +4904,30 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnRNNBackwardData
-    def cudnnRNNBackwardData(input: TensorR, hx: Tensor, w: TensorR, output: TensorR,
+    def cudnnRNNBackwardData(mode: RnnMode,
+                             input: TensorR, hx: Option[Tensor], cx: Option[Tensor], w: TensorR, output: TensorR,
                              numLayers: Int, hiddenSize: Int,
                              dropout: Float = 0f,
-                             mode: RNNMode.Value = RNNMode.RnnRelu,
                              bidirectional: Boolean = false,
                              reserve: Rep[Array[Float]],
                              reserveSize: Rep[Int]): Unit = {
+      // TODO: Calculate hidden state gradients?
       assert(input.d.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
-      assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
-      assert(input.d.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
-
       assert(output.d.rank == 3, "RNN output should have rank 3: [seqLength x batchSize x hiddenSize * numDirections]")
+      hx match {
+        case None =>
+        case Some(hx) =>
+          assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
+          assert(input.d.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+      }
+      cx match {
+        case None =>
+        case Some(cx) =>
+          assert(cx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
+          assert(input.d.shape(1) == cx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+      }
+      val hxData = hx.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
+      val cxData = cx.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
 
       val seqLength = input.d.shape(0)
       val batchSize = input.d.shape(1)
@@ -4971,8 +5015,8 @@ trait TensorDslCudnn extends TensorDslCublas {
         Seq(
           "CUDNN_CALL(cudnnRNNBackwardData(\n" +
           s"    cudnnHandle, rnn_desc, $seqLength, y_descs, ", output.x.data, ", y_descs, ", output.d.data, ",\n" +
-          "    dhy_desc, NULL, dcy_desc, NULL, w_desc, ", w.x.data, ", hx_desc, ", hx.data, ",\n" +
-          "    cx_desc, NULL, dx_descs, ", input.d.data, ", dhx_desc, NULL, dcx_desc, NULL,\n" +
+          "    dhy_desc, NULL, dcy_desc, NULL, w_desc, ", w.x.data, ", hx_desc, ", hxData, ",\n" +
+          "    cx_desc, ", cxData, ", dx_descs, ", input.d.data, ", dhx_desc, NULL, dcx_desc, NULL,\n" +
           "    workspace, workspaceSize, ", reserve, ", ", reserveSize, "));\n" +
           "}"): _*)
       /*
@@ -5008,17 +5052,22 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnRNNBackwardWeights
-    def cudnnRNNBackwardWeights(input: TensorR, hx: Tensor, w: TensorR, output: TensorR,
+    def cudnnRNNBackwardWeights(mode: RnnMode,
+                                input: TensorR, hx: Option[Tensor], w: TensorR, output: TensorR,
                                 numLayers: Int, hiddenSize: Int,
                                 dropout: Float = 0f,
-                                mode: RNNMode.Value = RNNMode.RnnRelu,
                                 bidirectional: Boolean = false,
                                 reserve: Rep[Array[Float]],
                                 reserveSize: Rep[Int]): Unit = {
       assert(input.d.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
-      assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
-      assert(input.d.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
       assert(output.d.rank == 3, "RNN output should have rank 3: [seqLength x batchSize x hiddenSize * numDirections]")
+      hx match {
+        case None =>
+        case Some(hx) =>
+          assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
+          assert(input.d.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+      }
+      val hxData = hx.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
 
       val seqLength = input.d.shape(0)
       val batchSize = input.d.shape(1)
@@ -5096,7 +5145,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnRNNBackwardWeights(\n" +
-          s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", input.x.data, ", hx_desc, ", hx.data, ",\n" +
+          s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", input.x.data, ", hx_desc, ", hxData, ",\n" +
           "    y_descs, ", output.x.data, ", workspace, workspaceSize,\n" +
           "    dw_desc, ", w.d.data, ", ", reserve, ", ", reserveSize, "));\n" +
           "}"): _*)
@@ -5120,16 +5169,17 @@ trait TensorDslCudnn extends TensorDslCublas {
        */
     }
 
-    def cudnnRNNBackward(input: TensorR, hx: Tensor, w: TensorR, output: TensorR,
+    def cudnnRNNBackward(mode: RnnMode,
+                         input: TensorR, hx: Option[Tensor], cx: Option[Tensor],
+                         w: TensorR, output: TensorR,
                          numLayers: Int, hiddenSize: Int,
                          dropout: Float = 0f,
-                         mode: RNNMode.Value = RNNMode.RnnRelu,
                          bidirectional: Boolean = false,
                          reserve: Rep[Array[Float]],
                          reserveSize: Rep[Int]): Unit = {
-      cudnnRNNBackwardData(input, hx, w, output, numLayers, hiddenSize, dropout, mode, bidirectional, reserve, reserveSize)
+      cudnnRNNBackwardData(mode, input, hx, cx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
       // TODO: Need to update `BackwardWeights` to accumulate gradients.
-      cudnnRNNBackwardWeights(input, hx, w, output, numLayers, hiddenSize, dropout, mode, bidirectional, reserve, reserveSize)
+      cudnnRNNBackwardWeights(mode, input, hx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
     }
   }
 
