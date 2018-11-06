@@ -3759,6 +3759,62 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 }
 
 trait TensorDslCudnn extends TensorDslCublas {
+
+  // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnActivationMode_t
+  object Activation extends Enumeration {
+    val Sigmoid = Value("CUDNN_ACTIVATION_SIGMOID")
+    val Relu = Value("CUDNN_ACTIVATION_RELU")
+    val Tanh = Value("CUDNN_ACTIVATION_TANH")
+    val ClippedRelu = Value("CUDNN_ACTIVATION_CLIPPED_RELU")
+    val Elu = Value("CUDNN_ACTIVATION_ELU")
+  }
+
+  // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnPoolingMode_t
+  object PoolModes extends Enumeration {
+    val Max = Value("CUDNN_POOLING_MAX")
+    val AverageIP = Value("CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING")
+    val AverageEP = Value("CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING")
+    val MaxD = Value("CUDNN_POOLING_MAX_DETERMINISTIC")
+  }
+
+  // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnNanPropagation_t
+  object NanOpt extends Enumeration {
+    val NotProp = Value("CUDNN_NOT_PROPAGATE_NAN")
+    val Prop = Value("CUDNN_PROPAGATE_NAN")
+  }
+
+  // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnSoftmaxMode_t
+  object SoftmaxMode extends Enumeration {
+    val Fast = Value("CUDNN_SOFTMAX_FAST")
+    val Accurate = Value("CUDNN_SOFTMAX_ACCURATE")
+    val Log = Value("CUDNN_SOFTMAX_LOG")
+  }
+
+  // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnReduceTensorOp_t
+  object ReductionOp extends Enumeration {
+    val Add = Value("CUDNN_REDUCE_TENSOR_ADD")
+    val Mul = Value("CUDNN_REDUCE_TENSOR_MUL")
+    val Min = Value("CUDNN_REDUCE_TENSOR_MIN")
+    val Max = Value("CUDNN_REDUCE_TENSOR_MAX")
+    val Avg = Value("CUDNN_REDUCE_TENSOR_AVG")
+    // Maximum of absolute values.
+    val Amax = Value("CUDNN_REDUCE_TENSOR_AMAX")
+    // Addition of absolute values.
+    val Norm1 = Value("CUDNN_REDUCE_TENSOR_NORM1")
+    // Square root of sum of squares.
+    val Norm2 = Value("CUDNN_REDUCE_TENSOR_NORM2")
+    // Multiplication, ignoring zero elements.
+    val MulNoZeros = Value("CUDNN_REDUCE_TENSOR_MUL_NO_ZEROS")
+  }
+
+  // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnRNNMode_t
+  object RNNMode extends Enumeration {
+    val RnnRelu = Value("CUDNN_RNN_RELU")
+    val RnnTanh = Value("CUDNN_RNN_TANH")
+    val Lstm = Value("CUDNN_LSTM")
+    val Gru = Value("CUDNN_GRU")
+  }
+
   /**
     * cuDNN tensor operation backend. WIP.
     * Extends `BackendCublas` to leverage cuBLAS primitives.
@@ -4090,18 +4146,6 @@ trait TensorDslCudnn extends TensorDslCublas {
       // error("")
     }
 
-    object PoolModes extends Enumeration {
-      val Max = Value("CUDNN_POOLING_MAX")
-      val AverageIP = Value("CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING")
-      val AverageEP = Value("CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING")
-      val MaxD = Value("CUDNN_POOLING_MAX_DETERMINISTIC")
-    }
-
-    object NanOpt extends Enumeration {
-      val NotProp = Value("CUDNN_NOT_PROPAGATE_NAN")
-      val Prop = Value("CUDNN_PROPAGATE_NAN")
-    }
-
     def Pool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]], mode: PoolModes.Value, nanOpt: NanOpt.Value): Tensor = {
       val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
       val (verticalPadding, horizontalPadding) = pads match {
@@ -4421,14 +4465,6 @@ trait TensorDslCudnn extends TensorDslCublas {
           "}")
     }
 
-    object Activation extends Enumeration {
-      val Sigmoid = Value("CUDNN_ACTIVATION_SIGMOID")
-      val Relu = Value("CUDNN_ACTIVATION_RELU")
-      val Tanh = Value("CUDNN_ACTIVATION_TANH")
-      val ClippedRelu = Value("CUDNN_ACTIVATION_CLIPPED_RELU")
-      val Elu = Value("CUDNN_ACTIVATION_ELU")
-    }
-
     def cudnnActivationForward(x: Tensor, activation: Activation.Value): Tensor = {
       val xShape = x.shape.padTo(4, 1) //activation functions only support tensors of rank 4
       val zero = NewArray[Float](1); zero(0) = 0
@@ -4525,12 +4561,6 @@ trait TensorDslCudnn extends TensorDslCublas {
     // override def square(x: Tensor) = ???
     // override def square_grad(x: TensorR, y: TensorR): Unit = ???
 
-    object SoftmaxMode extends Enumeration {
-      val Fast = Value("CUDNN_SOFTMAX_FAST")
-      val Accurate = Value("CUDNN_SOFTMAX_ACCURATE")
-      val Log = Value("CUDNN_SOFTMAX_LOG")
-    }
-
     def cudnnSoftmaxForward(x: Tensor, mode: SoftmaxMode.Value): Tensor = {
       assert(x.rank == 4, "Currently, softmax functions only support tensors of rank 4")
       val zero = NewArray[Float](1); zero(0) = 0
@@ -4612,23 +4642,6 @@ trait TensorDslCudnn extends TensorDslCublas {
       softmaxBackwardHelper(input, res, SoftmaxMode.Log)
     }
 
-    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnReduceTensorOp_t
-    object ReductionOp extends Enumeration {
-      val Add = Value("CUDNN_REDUCE_TENSOR_ADD")
-      val Mul = Value("CUDNN_REDUCE_TENSOR_MUL")
-      val Min = Value("CUDNN_REDUCE_TENSOR_MIN")
-      val Max = Value("CUDNN_REDUCE_TENSOR_MAX")
-      val Avg = Value("CUDNN_REDUCE_TENSOR_AVG")
-      // Maximum of absolute values.
-      val Amax = Value("CUDNN_REDUCE_TENSOR_AMAX")
-      // Addition of absolute values.
-      val Norm1 = Value("CUDNN_REDUCE_TENSOR_NORM1")
-      // Square root of sum of squares.
-      val Norm2 = Value("CUDNN_REDUCE_TENSOR_NORM2")
-      // Multiplication, ignoring zero elements.
-      val MulNoZeros = Value("CUDNN_REDUCE_TENSOR_MUL_NO_ZEROS")
-    }
-
     // TODO: Relax rank 4 requirement after implementing tensor descriptor helper functions.
     // `cudnnReduceTensor` supports tensors up to dimension 8.
     def cudnnReduceTensor(x: Tensor, op: ReductionOp.Value, indices: Seq[Int], flatten: Boolean = true): Tensor = {
@@ -4705,13 +4718,6 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for mean op")
       cudnnAddBiasTensor(res.d, input.d, scale = 1.0f / input.x.scalarCount)
-    }
-
-    object RNNMode extends Enumeration {
-      val RnnRelu = Value("CUDNN_RNN_RELU")
-      val RnnTanh = Value("CUDNN_RNN_TANH")
-      val Lstm = Value("CUDNN_LSTM")
-      val Gru = Value("CUDNN_GRU")
     }
 
     def cudnnRNNForwardHelper(x: Tensor, hx: Tensor, w: Tensor,
