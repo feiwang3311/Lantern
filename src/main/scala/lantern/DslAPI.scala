@@ -386,17 +386,19 @@ trait DslGenBase extends CGenNumericOpsExtra
         |  return hash;
         |}
         |
-        |long HEAP_SIZE = 4294967304; // 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; //
-        |void *mallocBase = calloc(HEAP_SIZE, 1);
+        |long HEAP_SIZE_CPU = 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; // 4294967304; //
+        |void *mallocBase = calloc(HEAP_SIZE_CPU, 1);
         |void *mallocAddr = mallocBase;
         |void *waterMark = mallocBase;
         |void *myMalloc(size_t bytes) {
         |  void *res = mallocAddr;
         |  mallocAddr = (void *)((char *)mallocAddr + bytes);
-        |  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE)
-        |    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE\n");
+        |  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE_CPU)
+        |    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE_CPU\n");
         |  return res;
         |}
+        |
+        |long HEAP_SIZE = 4294967304; // this is for GPU
         |
         |int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
         |  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
@@ -495,23 +497,6 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  xGrad[offset] += -1 * yGrad[tid];
       |}
       |
-      |__global__ void concat(float* in1, float* in2, float* out, int bound) {
-      |  int tid = blockIdx.x * blockDim.x * blockDim.y * blockDim.z +
-      |            threadIdx.z * blockDim.y * blockDim.x +
-      |            threadIdx.y * blockDim.x + threadIdx.x;
-      |  if (threadIdx.z < bound) {
-      |    int subid = blockIdx.x * blockDim.x * blockDim.y * bound +
-      |                threadIdx.z * blockDim.y * blockDim.x +
-      |                threadIdx.y * blockDim.x + threadIdx.x;
-      |    out[tid] = in1[subid];
-      |  } else {
-      |    int subid = blockIdx.x * blockDim.x * blockDim.y * (blockDim.z - bound) +
-      |                (threadIdx.z - bound) * blockDim.y * blockDim.x +
-      |                threadIdx.y * blockDim.x + threadIdx.x;
-      |    out[tid] = in2[subid];
-      |  }
-      |}
-      |
       |__global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  if (tid >= sizeLow) return;
@@ -531,7 +516,6 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |    }
       |  }
       |}
-      |
       |
       |__global__ void concat2D_1D(float* in1, float* in2, float* out, int dim2, int bound) {
       |  int tid = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
@@ -555,21 +539,24 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
-      |__global__ void concat_grad(float* in1, float* in2, float* out, int bound) {
-      |  int tid = blockIdx.x * blockDim.x * blockDim.y * blockDim.z +
-      |            threadIdx.z * blockDim.y * blockDim.x +
-      |            threadIdx.y * blockDim.x + threadIdx.x;
-      |  if (threadIdx.z < bound) {
-      |    int subid = blockIdx.x * blockDim.x * blockDim.y * bound +
-      |                threadIdx.z * blockDim.y * blockDim.x +
-      |                threadIdx.y * blockDim.x + threadIdx.x;
-      |     in1[subid] += out[tid];
-      |  } else {
-      |    int subid = blockIdx.x * blockDim.x * blockDim.y * (blockDim.z - bound) +
-      |                (threadIdx.z - bound) * blockDim.y * blockDim.x +
-      |                threadIdx.y * blockDim.x + threadIdx.x;
-      |    in2[subid] += out[tid];
-      |  }
+      |__global__ void elementwise_1D_1D_mul(float* in1, float* in2, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] = in1[tid] * in2[tid];
+      |}
+      |
+      |__global__ void elementwise_1D_1D_add(float* in1, float* in2, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] = in1[tid] + in2[tid];
+      |}
+      |
+      |__global__ void elementwise_1D_1D_minus(float* in1, float* in2, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] = in1[tid] - in2[tid];
+      |}
+      |
+      |__global__ void elementwise_1D_1D_div(float* in1, float* in2, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] = in1[tid] / in2[tid];
       |}
       |
       |__global__ void elementwise_1D_1D_exp(float* in, float* out, int size) {
@@ -804,6 +791,7 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  });
       |}
       |""".stripMargin
+
 }
 
 trait DslGenCudnn extends DslGenCublas {

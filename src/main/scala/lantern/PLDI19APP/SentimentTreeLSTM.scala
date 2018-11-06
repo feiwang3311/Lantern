@@ -111,9 +111,9 @@ object SentimentTreeLSTM {
       case class Out(val name: String = "output", val hSize: Int, outSize: Int) extends Module {
         val Why = TensorR(Tensor.randinit(outSize, hSize, 0.01f))
         val by  = TensorR(Tensor.zeros(outSize))
-        def apply(in: TensorR, score: Rep[Int]) = {
+        def apply(in: TensorR, score: Rep[Array[Int]]) = {
           val pred1 = Why.dot(in) plusBias by
-          val loss = pred1.logSoftmax().nllLoss(score)
+          val loss = pred1.logSoftmax().nllLossB(score)
           loss
         }
       }
@@ -128,11 +128,11 @@ object SentimentTreeLSTM {
             IFm (lchs(i) < 0) {
               val embedding_tensor = TensorR(Tensor(word_embedding_data(words(i)), word_embedding_size))
               val ArrayBuffer(cell, hidden) = leaf(embedding_tensor)
-              val loss = out(hidden, scores(i))
+              val loss = out(hidden, slice(scores, i))
               ArrayBuffer(loss, hidden, cell)
             } {
               val ArrayBuffer(cell, hidden) = node(l, r)
-              val loss = out(hidden, scores(i)) plusBias l(0) plusBias r(0)
+              val loss = out(hidden, slice(scores, i)) plusBias l(0) plusBias r(0)
               ArrayBuffer(loss, hidden, cell)
             }
           }
@@ -206,15 +206,23 @@ object SentimentTreeLSTM {
       }
       closef(fp)
 
+      // explicitly send word embedding to GPU (as input, so no gradient needed)
+      val word_embedding_data_gpu = NewArray[Array[Float]](word_embedding_length)
+      for (i <- (0 until word_embedding_length): Rep[Range]) {
+        word_embedding_data_gpu(i) = word_embedding_data(i).toGPU(word_embedding_size)
+      }
+
       // read in the data for trees
       val readingSlot2 = NewArray[Int](1) // need a new readingSlot, other wise have error
       val fp1 = openf("array_tree.txt", "r")
       getInt(fp1, readingSlot2, 0)
       val tree_number = readingSlot2(0)
       val tree_data = NewArray[Array[Int]](tree_number * 4) // each tree data has 4 lines (score, word, lch, rch)
+      val tree_size = NewArray[Int](tree_number)
       val readingSlot3 = NewArray[Int](1) // yet another readingSlot, not sure if this one can be reused
       for (i <- (0 until tree_number): Rep[Range]) {
         getInt(fp1, readingSlot3, 0)
+        tree_size(i) = readingSlot3(0)
         for (j <- (0 until 4): Rep[Range]) {
           tree_data(i * 4 + j) = NewArray[Int](readingSlot3(0))
           for (k <- (0 until readingSlot3(0)): Rep[Range]) getInt(fp1, tree_data(i * 4 + j), k)
@@ -260,8 +268,8 @@ object SentimentTreeLSTM {
         val U1u  = TensorR(Tensor.randinit(hSize, hSize, 0.01f))
         val bbu  = TensorR(Tensor.zeros(hSize))
         def apply(l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR]) = {
-          val ArrayBuffer(lossl, hiddenl, celll) = l
-          val ArrayBuffer(lossr, hiddenr, cellr) = r
+          val ArrayBuffer(lossl, hiddenl, celll) = l  // this tensors are in GPU as well
+          val ArrayBuffer(lossr, hiddenr, cellr) = r  // this tensors are in GPU as well
           val i_gate = (U0i.dot(hiddenl) plusBias U1i.dot(hiddenr) plusBias bbi).sigmoid()
           val fl_gate = (U00f.dot(hiddenl) plusBias U01f.dot(hiddenr) plusBias bbf).sigmoid()
           val fr_gate = (U10f.dot(hiddenl) plusBias U11f.dot(hiddenr) plusBias bbf).sigmoid()
@@ -276,9 +284,9 @@ object SentimentTreeLSTM {
       case class Out(val name: String = "output", val hSize: Int, outSize: Int) extends Module {
         val Why = TensorR(Tensor.randinit(outSize, hSize, 0.01f))
         val by  = TensorR(Tensor.zeros(outSize))
-        def apply(in: TensorR, score: Rep[Int]) = {
+        def apply(in: TensorR, score: Rep[Array[Int]]) = {
           val pred1 = Why.dot(in) plusBias by
-          val loss = pred1.logSoftmax().nllLoss(score)
+          val loss = pred1.logSoftmax().nllLossB(score)
           loss
         }
       }
@@ -287,17 +295,17 @@ object SentimentTreeLSTM {
         val leaf = Leaf(inSize = inSize, hSize = hSize)
         val node = Node(hSize = hSize)
         val out = Out(hSize = hSize, outSize = outSize)
-        val inBuffer = ArrayBuffer(TensorR(Tensor.zeros(1)), TensorR(Tensor.zeros(hSize)), TensorR(Tensor.zeros(hSize)))
+        val inBuffer = ArrayBuffer(TensorR(Tensor.zeros(1), isInput = true), TensorR(Tensor.zeros(hSize), isInput = true), TensorR(Tensor.zeros(hSize), isInput = true))
         def apply(scores: Rep[Array[Int]], words: Rep[Array[Int]], lchs: Rep[Array[Int]], rchs: Rep[Array[Int]])(dummy: TensorR) = {
           val outBuffer = LOOPTM(0)(inBuffer)(lchs, rchs) { (l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR], i: Rep[Int]) =>
             IFm (lchs(i) < 0) {
-              val embedding_tensor = TensorR(Tensor(word_embedding_data(words(i)), word_embedding_size))
+              val embedding_tensor = TensorR(Tensor(word_embedding_data_gpu(words(i)), word_embedding_size), isInput=true)
               val ArrayBuffer(cell, hidden) = leaf(embedding_tensor)
-              val loss = out(hidden, scores(i))
+              val loss = out(hidden, slice(scores, i))
               ArrayBuffer(loss, hidden, cell)
             } {
               val ArrayBuffer(cell, hidden) = node(l, r)
-              val loss = out(hidden, scores(i)) plusBias l(0) plusBias r(0)
+              val loss = out(hidden, slice(scores, i)) plusBias l(0) plusBias r(0)
               ArrayBuffer(loss, hidden, cell)
             }
           }
@@ -318,12 +326,13 @@ object SentimentTreeLSTM {
       for (epoc <- (0 until epocN): Rep[Range]) {
         var average_loss = 0.0f
         for (n <- (0 until tree_number): Rep[Range]) {
-          val index = n % tree_number
+          val index = n
+          val size = tree_size(n)
           val scores   = tree_data(index * 4)
           val words    = tree_data(index * 4 + 1)
           val leftchs  = tree_data(index * 4 + 2)
           val rightchs = tree_data(index * 4 + 3)
-          val loss = gradR_loss(net(scores.toGPU(scores.length), words.toGPU(words.length), leftchs.toGPU(leftchs.length), rightchs.toGPU(rightchs.length)))(Tensor.zeros(1))
+          val loss = gradR_loss(net(scores.toGPU(size), words, leftchs, rightchs))(Tensor.zeros(1))
           val loss_value = loss.data(0)
           average_loss = average_loss * (n) / (n+1) + loss_value / (n+1)
           opt.step()

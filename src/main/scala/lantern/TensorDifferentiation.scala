@@ -530,21 +530,26 @@ trait TensorDsl extends DslOps with Diff {
 
     override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
       (x.x.rank, y.x.rank) match {
-        case (1, 1) => x.d.addMul(output.d.data(0), y.x); y.d.addMul(output.d.data(0), x.x)
-        case (2, 1) => x.d.add_cartesian(y.x, output.d); // that.d.add_composion(this.x, y.d)
-          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
-          unchecked[Unit](
-            "cblas_sgemv(CblasRowMajor, CblasTrans, ",
-            dim1, ",", dim2, ",", 1, ",",
-            x.x.data, ",", dim2, ",", output.d.data, ",", 1, ",", 1, ",", y.d.data, ",", 1, ")")
+        case (1, 1) =>
+          if (!x.isInput) x.d.addMul(output.d.data(0), y.x)
+          if (!y.isInput) y.d.addMul(output.d.data(0), x.x)
+        case (2, 1) =>
+          if (!x.isInput) x.d.add_cartesian(y.x, output.d); // that.d.add_composion(this.x, y.d)
+          if (!y.isInput) {
+            val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
+            unchecked[Unit](
+              "cblas_sgemv(CblasRowMajor, CblasTrans, ",
+              dim1, ",", dim2, ",", 1, ",",
+              x.x.data, ",", dim2, ",", output.d.data, ",", 1, ",", 1, ",", y.d.data, ",", 1, ")")
+          }
         case (2, 2) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
           generateRawComment("backprop of matrix-matrix-dot")
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
             dim1, ",", dim2, ",", dim3, ",", 1, ",",
             output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim2, ")")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
             dim2, ",", dim3, ",", dim1, ",", 1, ",",
             x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
@@ -663,7 +668,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = {
-      this.inplaceElementWiseOpWithBroadCastOrReduce(bias.d, main.d, (_ + _))
+      if (!bias.isInput) this.inplaceElementWiseOpWithBroadCastOrReduce(bias.d, main.d, (_ + _))
     }
 
     override def +(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s + y)
@@ -778,41 +783,41 @@ trait TensorDsl extends DslOps with Diff {
       (transX, transY) match {
         case (false, false) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
             dim1, ",", dim2, ",", dim3, ",", alpha, ",",
             output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim2, ")")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
             dim2, ",", dim3, ",", dim1, ",", alpha, ",",
             x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
         case (false, true) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(0)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
             dim1, ",", dim2, ",", dim3, ",", alpha, ",",
             output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", 1, ",", x.d.data, ",", dim2, ")")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
             dim3, ",", dim2, ",", dim1, ",", alpha, ",",
             output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", 1, ",", y.d.data, ",", dim2, ")")
         case (true, false) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(1)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
             dim2, ",", dim1, ",", dim3, ",", alpha, ",",
             y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim1, ")")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
             dim2, ",", dim3, ",", dim1, ",", alpha, ",",
             x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
         case (true, true) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(0)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
             dim2, ",", dim1, ",", dim3, ",", alpha, ",",
             y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim1, ")")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
             dim3, ",", dim2, ",", dim1, ",", alpha, ",",
             output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", 1, ",", y.d.data, ",", dim2, ")")
@@ -1753,10 +1758,10 @@ trait TensorDsl extends DslOps with Diff {
     @virtualize
     def logSoftmax() = {
       assert(this.rank == 1, "TODO: logSoftmax only handles 1d vectors so far")
-
-      val m = this.max
-      val logsum = m + Math.log(this.fold(0.0f)((agg, x) => agg + Math.exp(x - m).toFloat)).toFloat
-      this.map(x => x - logsum)
+      backend.logSoftmax(this.resize(1, this.shape(0)))
+      // val m = this.max
+      // val logsum = m + Math.log(this.fold(0.0f)((agg, x) => agg + Math.exp(x - m).toFloat)).toFloat
+      // this.map(x => x - logsum)
     }
 
     def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
@@ -1764,9 +1769,10 @@ trait TensorDsl extends DslOps with Diff {
     @virtualize
     def nllLoss(target: Rep[Int]) = {
       assert(this.rank == 1, "Input must be a 1-D tensor")
-
-      // assertC(0 <= target && target < this.nbElem, "Incorrect target")
-      Tensor.scalar(-1.0f * this.data(target))
+      val targets = backend.mallocArray[Int](1); targets(0) = target
+      backend.nllLoss(this.resize(1, this.shape(0)), targets)
+      // // assertC(0 <= target && target < this.nbElem, "Incorrect target")
+      // Tensor.scalar(-1.0f * this.data(target))
     }
 
     def reshape(dims: Int*) = {
@@ -2585,12 +2591,13 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def logSoftmax(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.logSoftmax()); k(y)
-
-      val s = y.d.sum().data(0)
-      for (i <- 0 until y.x.scalarCount: Rep[Range]) {
-        this.d.data(i) += y.d.data(i) - Math.exp(y.x.data(i)).toFloat * s
-      }
+      assert(this.x.rank == 1, s"logSoftmax are for 1D vectors, got ${this.x.shape}")
+      val y = TensorR(x.logSoftmax()); k(y)  // note that y is 2D (batchSize = 1, length)
+      backend.logSoftmax_grad(resizeHelperNoChecker(this, 1, this.x.shape(0)), y)
+      // val s = y.d.sum().data(0)
+      // for (i <- 0 until y.x.scalarCount: Rep[Range]) {
+      //   this.d.data(i) += y.d.data(i) - Math.exp(y.x.data(i)).toFloat * s
+      // }
     }
 
     def logSoftmaxB(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2603,15 +2610,22 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+      assert (this.x.rank == 2, s"nllLossB() function only takes tensor of rank 2, got ${this.x.shape}")
       val y = TensorR(x.nllLossB(target)); k(y)
       generateRawComment("'nllLossB' gradient.")
       backend.nllLoss_grad(this, y, target)
     }
 
+    def resizeHelperNoChecker(t: TensorR, dims: Int*) = new TensorR(t.x.resize(dims: _*), t.d.resize(dims: _*))
+
     def nllLoss(target: Rep[Int]): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.nllLoss(target)); k(y)
-      assert(y.x.isScalar, "y need to be a scalar")
-      this.d.data(target) += -1.0f * y.d.data(0)
+      assert (this.x.rank == 1, s"nllLoss() function only takes tensor of rank 1, got ${this.x.shape}")
+      val targets = backend.mallocArray[Int](1); targets(0) = target
+      val y = TensorR(x.nllLossB(targets)); k(y)  // note that y is now 2D (batchSize = 1, length)
+      generateRawComment("nllLoss gradient")
+      backend.nllLoss_grad(resizeHelperNoChecker(this, 1, this.x.shape(0)), y, targets)
+      // assert(y.x.isScalar, "y need to be a scalar")
+      // this.d.data(target) += -1.0f * y.d.data(0)
     }
 
     @virtualize
@@ -3203,37 +3217,37 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       (x.x.rank, y.x.rank) match {
         case (1, 1) =>
           val dim = x.x.shape(0)
-          val scale = output.d.toCPU()
+          val scale = output.d.toCPU()  // TODO (Fei Wang) fix this for optimization
           // x.d.addMul(output.d.data(0), y.x)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
             dim, ",", 1, ",", one, ",",
             x.d.data, ",", dim, ",", scale.data, ", ", y.x.data, ", ", dim, ", ", x.d.data, ",", dim, "))")
           // y.d.addMul(output.d.data(0), x.x)
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
             dim, ",", 1, ",", one, ",",
             y.d.data, ",", dim, ",", scale.data, ", ", x.x.data, ", ", dim, ", ", y.d.data, ",", dim, "))")
         case (2, 1) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
-          // that.d.add_composion(this.x, y.d)
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
-            dim2, ",", dim1, ",", one, ",",
-            x.x.data, ",", dim2, ",", output.d.data, ",", 1, ",", one, ",", y.d.data, ",", 1, "))")
           // x.d.add_cartesian(y.x, output.d);
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
             dim2, ", ", dim1, ", ", 1, ", ", one, ", ",
             y.x.data, ", ", dim2, ", ", output.d.data, ", ", 1, ", ", one, ", ", x.d.data, ", ", dim2, "))")
+          // that.d.add_composion(this.x, y.d)
+          if (!y.isInput) unchecked[Unit](
+            "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
+            dim2, ",", dim1, ",", one, ",",
+            x.x.data, ",", dim2, ",", output.d.data, ",", 1, ",", one, ",", y.d.data, ",", 1, "))")
         case (2, 2) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
           generateRawComment("backprop of matrix-matrix-dot")
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
             dim2, ",", dim1, ",", dim3, ",", one, ",",
             y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
             dim3, ",", dim2, ",", dim1, ",", one, ",",
             output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", one, ",", y.d.data, ",", dim3, "))")
@@ -3315,13 +3329,28 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     }
 
     def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Tensor = {
-      Tensor.dimBroadcast(x.shape, y.shape) match {
-        case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
-        case Some((xShape, yShape, resShape)) =>
-          val resData = mallocArray[Float](resShape.scalarCount)
-          val res = Tensor(resData, resShape: _*)
-          launchBinaryKernel(res, x, y)(op)
-          res
+      // TODO (Fei Wang): bandit solution, since the broadcasted solution is buggy now, and we don't need broadcast for now, let's have a same-shape special case
+      if (x.shape == y.shape) {
+        val gridDimX = (x.scalarCount + 511) / 512
+        assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
+
+        val resData = mallocArray[Float](x.scalarCount)
+        val res = Tensor(resData, x.shape: _*)
+        if (op("1", "1") == "1 * 1") unchecked[Unit](s"elementwise_1D_1D_mul<<<${gridDimX}, 512>>>(", x.data, ", ", y.data, ", ", resData, ", ", x.scalarCount, ")")
+        else if (op("1", "1") == "1 + 1") unchecked[Unit](s"elementwise_1D_1D_add<<<${gridDimX}, 512>>>(", x.data, ", ", y.data, ", ", resData, ", ", x.scalarCount, ")")
+        else if (op("1", "1") == "1 / 1") unchecked[Unit](s"elementwise_1D_1D_div<<<${gridDimX}, 512>>>(", x.data, ", ", y.data, ", ", resData, ", ", x.scalarCount, ")")
+        else if (op("1", "1") == "1 - 1") unchecked[Unit](s"elementwise_1D_1D_minus<<<${gridDimX}, 512>>>(", x.data, ", ", y.data, ", ", resData, ", ", x.scalarCount, ")")
+        else ???
+        res
+      } else {
+        Tensor.dimBroadcast(x.shape, y.shape) match {
+          case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
+          case Some((xShape, yShape, resShape)) =>
+            val resData = mallocArray[Float](resShape.scalarCount)
+            val res = Tensor(resData, resShape: _*)
+            launchBinaryKernel(res, x, y)(op)
+            res
+        }
       }
     }
 
@@ -3473,41 +3502,41 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       (transX, transY) match {
         case (false, false) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
             dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
             y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
             dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
             output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", one, ",", y.d.data, ",", dim3, "))")
         case (false, true) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(0)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
             dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
             y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
             dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
             x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
         case (true, false) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(1)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
             dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
             output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", one, ",", x.d.data, ",", dim1, "))")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
             dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
             output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", one, ",", y.d.data, ",", dim3, "))")
         case (true, true) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(0)
-          unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
             dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
             output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", one, ",", x.d.data, ",", dim1, "))")
-          unchecked[Unit](
+          if (!y.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
             dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
             x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
@@ -3805,7 +3834,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       main
     }
 
-    override def plusBias_grad(main: TensorR, bias: TensorR): Unit = {
+    override def plusBias_grad(main: TensorR, bias: TensorR): Unit = if (!bias.isInput) {
       // WARN (Fei Wang): plusBias is abused for non-bias case as well (add residual in resnet)
       // TODO (Fei Wang): Bandit solution: if bias and main are of the same shape, use AddTensor (by calling cudnnAddBiasTensor)
       if (main.x.shape == bias.x.shape) cudnnAddBiasTensor(main.d, bias.d)  // add main.d into bias.d (in place)
