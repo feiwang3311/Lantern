@@ -509,9 +509,12 @@ class TestCudnn extends LanternFunSuite {
         val numLayers = 2
         val seqLength = 5
         val batchSize = 3
+        val bidirectional = true
+        val numDirections = if (bidirectional) 2 else 1
 
         val input = Tensor.ones(seqLength, batchSize, inputSize)
-        val rnn = Rnn(inputSize, hiddenSize, numLayers)
+        val h0 = TensorR(Tensor.ones(numLayers * numDirections, batchSize, hiddenSize))
+        val rnn = Rnn(inputSize, hiddenSize, numLayers, bidirectional = bidirectional)
 
         /*
         def lossFun(input: TensorR) = {
@@ -522,23 +525,32 @@ class TestCudnn extends LanternFunSuite {
         */
 
         def lossFun(input: TensorR) = {
-          val res = rnn(input)
+          val res = rnn(input, Some(h0))
           res
         }
         val dInput = gradR(lossFun)(input)
 
         backend = BackendCPU()
         dInput.toCPU().print()
-        System.out.println(s"How many parameters? ${rnn.w_hh.length}")
+
         for (layer <- (0 until numLayers): Range) {
           printf("w_ih[%d]\\n", layer)
-          rnn.w_ih(layer).d.toCPU().print()
+          rnn.w_ih(layer).d.toCPU().printHead()
           printf("w_hh[%d]\\n", layer)
-          rnn.w_hh(layer).d.toCPU().print()
+          rnn.w_hh(layer).d.toCPU().printHead()
           printf("b_ih[%d]\\n", layer)
-          rnn.b_ih(layer).d.toCPU().print()
+          rnn.b_ih(layer).d.toCPU().printHead()
           printf("b_hh[%d]\\n", layer)
-          rnn.b_hh(layer).d.toCPU().print()
+          rnn.b_hh(layer).d.toCPU().printHead()
+
+          printf("w_ih_reverse[%d]\\n", layer)
+          rnn.w_ih_reverse(layer).d.toCPU().printHead()
+          printf("w_hh_reverse[%d]\\n", layer)
+          rnn.w_hh_reverse(layer).d.toCPU().printHead()
+          printf("b_ih_reverse[%d]\\n", layer)
+          rnn.b_ih_reverse(layer).d.toCPU().printHead()
+          printf("b_hh_reverse[%d]\\n", layer)
+          rnn.b_hh_reverse(layer).d.toCPU().printHead()
         }
       }
     }

@@ -246,10 +246,21 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
                  override val bidirectional: Boolean = false,
                  val name: String = "rnn") extends RnnBase {
 
+    assert(inputSize >= 1, "Input size must be at least 1")
+    assert(hiddenSize >= 1, "Hidden size must be at least 1")
+    assert(numLayers >= 1, "Number of layers must be at least 1")
+    assert(dropout >= 0 && dropout <= 1, "Dropout must be between 0 and 1")
+
     val w_ih = ArrayBuffer[TensorR]()
     val w_hh = ArrayBuffer[TensorR]()
     val b_ih = ArrayBuffer[TensorR]()
     val b_hh = ArrayBuffer[TensorR]()
+
+    // Reverse parameters for bidirectional RNNs.
+    val w_ih_reverse = ArrayBuffer[TensorR]()
+    val w_hh_reverse = ArrayBuffer[TensorR]()
+    val b_ih_reverse = ArrayBuffer[TensorR]()
+    val b_hh_reverse = ArrayBuffer[TensorR]()
 
     val numDirections = if (bidirectional) 2 else 1
     val gateSize = hiddenSize
@@ -263,7 +274,8 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
       val w_hh_size = numLayers * gateSize * hiddenSize
       val b_ih_size = numLayers * gateSize
       val b_hh_size = numLayers * gateSize
-      w_ih_size + w_hh_size + b_ih_size + b_hh_size
+      val total = w_ih_size + w_hh_size + b_ih_size + b_hh_size
+      if (bidirectional) total * 2 else total
     }
 
     def setupParameters(): Unit = {
@@ -280,8 +292,18 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
         val layerInputSize = if (layer == 0) inputSize else hiddenSize * numDirections
         w_ih += getParameter(gateSize, layerInputSize)
         w_hh += getParameter(gateSize, hiddenSize)
+        if (bidirectional) {
+          w_ih_reverse += getParameter(gateSize, layerInputSize)
+          w_hh_reverse += getParameter(gateSize, hiddenSize)
+        }
+      }
+      for (layer <- (0 until numLayers): Range) {
         b_ih += getParameter(gateSize)
         b_hh += getParameter(gateSize)
+        if (bidirectional) {
+          b_ih_reverse += getParameter(gateSize)
+          b_hh_reverse += getParameter(gateSize)
+        }
       }
     }
 

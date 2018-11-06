@@ -4755,7 +4755,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetRNNDescriptor(
           |    cudnnHandle, rnn_desc,
           |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
-          |    dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_UNIDIRECTIONAL,
+          |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
           |
           |cudnnTensorDescriptor_t x_descs[$seqLength];
@@ -4903,7 +4903,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetRNNDescriptor(
           |    cudnnHandle, rnn_desc,
           |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
-          |    dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_UNIDIRECTIONAL,
+          |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
           |
           |cudnnTensorDescriptor_t dx_descs[$seqLength];
@@ -5038,7 +5038,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetRNNDescriptor(
           |    cudnnHandle, rnn_desc,
           |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
-          |    dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_UNIDIRECTIONAL,
+          |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
           |
           |cudnnTensorDescriptor_t x_descs[$seqLength];
@@ -5065,6 +5065,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t paramsSize;
           |CUDNN_CALL(cudnnGetRNNParamsSize(
           |    cudnnHandle, rnn_desc, x_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
+          |printf("paramsSize: %zu\\n", paramsSize / sizeof(float));
           |assert(paramsSize / sizeof(float) == ${w.d.scalarCount} && "Expected parameter size mismatch");
           |
           |cudnnFilterDescriptor_t dw_desc;
