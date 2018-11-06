@@ -268,8 +268,8 @@ object SentimentTreeLSTM {
         val U1u  = TensorR(Tensor.randinit(hSize, hSize, 0.01f))
         val bbu  = TensorR(Tensor.zeros(hSize))
         def apply(l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR]) = {
-          val ArrayBuffer(lossl, hiddenl, celll) = l  // this tensors are in GPU as well
-          val ArrayBuffer(lossr, hiddenr, cellr) = r  // this tensors are in GPU as well
+          val ArrayBuffer(_, hiddenl, celll) = l  // this tensors are in GPU as well
+          val ArrayBuffer(_, hiddenr, cellr) = r  // this tensors are in GPU as well
           val i_gate = (U0i.dot(hiddenl) plusBias U1i.dot(hiddenr) plusBias bbi).sigmoid()
           val fl_gate = (U00f.dot(hiddenl) plusBias U01f.dot(hiddenr) plusBias bbf).sigmoid()
           val fr_gate = (U10f.dot(hiddenl) plusBias U11f.dot(hiddenr) plusBias bbf).sigmoid()

@@ -3254,7 +3254,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         case (2, 1) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
           // x.d.add_cartesian(y.x, output.d);
-          if (!y.isInput) unchecked[Unit](
+          if (!x.isInput) unchecked[Unit](
             "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
             dim2, ", ", dim1, ", ", 1, ", ", one, ", ",
             y.x.data, ", ", dim2, ", ", output.d.data, ", ", 1, ", ", one, ", ", x.d.data, ", ", dim2, "))")
