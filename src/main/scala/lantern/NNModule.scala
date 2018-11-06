@@ -215,21 +215,7 @@ trait NNModule extends TensorDsl {
     module.enrichParameter()
     @virtualize
     def step_func = { case (tr, Some(t)) =>
-      tr.d.changeTo { i =>
-        val temp = var_new(tr.d.data(i))
-        if (temp > gradClip) temp = gradClip
-        if (temp < -gradClip) temp = -gradClip
-        t.data(i) += temp * temp
-        if (descent)
-          tr.x.data(i) -= learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
-        else
-          tr.x.data(i) += learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
-        0.0f
-      }
-      // par.clip_grad(5.0f)
-      // mem += par.d * par.d
-      // par.x -= par.d * lr / (mem + hp).sqrt()
-      // par.clear_grad()
+      backend.adagrad_update(tr, t, learning_rate, gradClip, descent)
     }
   }
 }

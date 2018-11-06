@@ -27,9 +27,9 @@ class GregTest extends FunSuite {
       }
     }
     //println("Test 1")
-    //test1.eval("1")  
+    //test1.eval("1")
   }
-  
+
   test("2") {
     val test2 = new DslDriverC[String, Unit] with TestExp {
       @virtualize
@@ -76,7 +76,7 @@ class GregTest extends FunSuite {
     //test3.eval("2")
   }
 
-    
+
   test("4") {
     val test4 = new DslDriverC[String, Unit] with TestExp {
       @virtualize
@@ -96,5 +96,5 @@ class GregTest extends FunSuite {
     //println("Test 4")
     //test4.eval("2")
   }
-    
+
 }

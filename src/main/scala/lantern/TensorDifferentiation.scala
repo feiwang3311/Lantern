@@ -422,6 +422,8 @@ trait TensorDsl extends DslOps with Diff {
     //   - Roll out own reduction op kernels? There may be significant boilerplate.
     //   - Use thrust library reduction ops? Need to consider device_vector initialization overhead.
     // - Fused multiply add operations?
+
+    def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit
   }
 
   /**
@@ -1478,6 +1480,21 @@ trait TensorDsl extends DslOps with Diff {
             targetId += 1
           }
         }
+      }
+    }
+
+    @virtualize
+    override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
+      tr.d.changeTo { i =>
+        val temp = var_new(tr.d.data(i))
+        if (temp > gradClip) temp = gradClip
+        if (temp < -gradClip) temp = -gradClip
+        t.data(i) += temp * temp
+        if (descent)
+          tr.x.data(i) -= learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
+        else
+          tr.x.data(i) += learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
+        0.0f
       }
     }
 
@@ -3721,6 +3738,14 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         "dim3 grid(", dim1 * dim2, ", ", dim0, ");\n",
         "concat2D_1D_grad<<<grid", ", ", dim3, ">>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ", dim2, ", ", tensorRs(0).x.shape(1), ");\n",
         "}")
+    }
+
+    override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
+      assert(descent, s"TODO: only handle gradent descent (not accent) so far")
+      assert(tr.x.shape == t.shape, s"tensor and momentum should have the same shape, got ${tr.x.shape} and ${t.shape}")
+      val gridDimX = (t.scalarCount + 511) / 512
+      assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
+      unchecked[Unit](s"adagrad_update_1D_1D<<<${gridDimX}, 512>>>(", tr.x.data, ", ", tr.d.data, ", ", t.data, ", ", gradClip, ", ", learning_rate, ", ", t.scalarCount, ")")
     }
   }
 
