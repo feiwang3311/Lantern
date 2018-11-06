@@ -237,8 +237,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     val dropout: Float = 0f
     val bidirectional: Boolean = false
 
-    // def apply(input: TensorR, hidden: Option[TensorR] = None): TensorR @diff
-    def apply(input: TensorR, hidden: Option[TensorR] = None): TensorR
+    def apply(input: TensorR, hidden: Option[TensorR] = None): TensorR @diff
   }
 
   case class Rnn(inputSize: Int, hiddenSize: Int,
@@ -247,17 +246,17 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
                  override val bidirectional: Boolean = false,
                  val name: String = "rnn") extends RnnBase {
 
-    val w_ih = ArrayBuffer[Tensor]()
-    val w_hh = ArrayBuffer[Tensor]()
-    val b_ih = ArrayBuffer[Tensor]()
-    val b_hh = ArrayBuffer[Tensor]()
+    val w_ih = ArrayBuffer[TensorR]()
+    val w_hh = ArrayBuffer[TensorR]()
+    val b_ih = ArrayBuffer[TensorR]()
+    val b_hh = ArrayBuffer[TensorR]()
 
     val numDirections = if (bidirectional) 2 else 1
     val gateSize = hiddenSize
 
     // NOTE: Choose different initialization strategy?
     // parameterBuffer = Tensor(backend.mallocArray[Float](getParameterSize()), getParameterSize())
-    val parameterBuffer = Tensor.fill(Seq(getParameterSize()), 0.1f)
+    val parameterBuffer = TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f))
 
     def getParameterSize(): Int = {
       val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections
@@ -268,13 +267,13 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     }
 
     def setupParameters(): Unit = {
-      val address = parameterBuffer.data
       var offset = var_new(0)
 
-      def getParameter(dims: Int*): Tensor = {
-        val x = Tensor(slice(parameterBuffer.data, offset), dims: _*)
+      def getParameter(dims: Int*): TensorR = {
+        val x = Tensor(slice(parameterBuffer.x.data, offset), dims: _*)
+        val d = Tensor(slice(parameterBuffer.d.data, offset), dims: _*)
         offset += dims.product
-        x
+        new TensorR(x, d)
       }
 
       for (layer <- (0 until numLayers): Range) {
@@ -288,8 +287,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
 
     setupParameters()
 
-    // def apply(input: TensorR, hidden: Option[TensorR] = None): TensorR @diff = {
-    def apply(input: TensorR, hidden: Option[TensorR] = None): TensorR = {
+    def apply(input: TensorR, hidden: Option[TensorR] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert(input.x.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
       val seqLength = input.x.shape(0)
       val batchSize = input.x.shape(1)
@@ -299,11 +297,14 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
       assert(hx.x.rank == 3, "RNN hidden state should have rank 3: [numLayers x batchSize x hiddenSize]")
       assert(batchSize == hx.x.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
 
-      val (y, _, _) = BackendCudnn().cudnnRNNForwardTraining(
-        input.x, hx.x, parameterBuffer, numLayers, hiddenSize, dropout, bidirectional = bidirectional)
-      TensorR(y)
+      val (y, hy, reserve, reserveSize) = BackendCudnn().cudnnRNNForwardTraining(
+        input.x, hx.x, parameterBuffer.x, numLayers, hiddenSize, dropout, bidirectional = bidirectional)
+      val output = TensorR(y)
+      k(output)
 
-      // TODO: Implement backward pass.
+      BackendCudnn().cudnnRNNBackward(
+        input, hx.x, parameterBuffer, output, numLayers, hiddenSize, dropout,
+        bidirectional = bidirectional, reserve = reserve, reserveSize = reserveSize)
     }
   }
 }
