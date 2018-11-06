@@ -463,9 +463,9 @@ class TestCudnn extends LanternFunSuite {
   }
 */
 
-  testGPU("rnn-inference") {
+  testGPU("rnn-forward") {
     val rnnInference = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cudnn-rnn-inference"
+      override val fileName = "lantern-cudnn-rnn-forward"
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val inputSize = 10
@@ -500,7 +500,7 @@ class TestCudnn extends LanternFunSuite {
 
   testGPU("rnn-module") {
     val rnnInference = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cudnn-rnn-training"
+      override val fileName = "lantern-cudnn-rnn-module"
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         Tensor.randseed(42)
@@ -510,11 +510,36 @@ class TestCudnn extends LanternFunSuite {
         val seqLength = 5
         val batchSize = 3
 
-        val input = TensorR(Tensor.ones(seqLength, batchSize, inputSize))
+        val input = Tensor.ones(seqLength, batchSize, inputSize)
         val rnn = Rnn(inputSize, hiddenSize, numLayers)
-        val y = rnn(input)
+
+        /*
+        def lossFun(input: TensorR) = {
+          val res = rnn(input)
+          res.sum()
+        }
+        val loss = gradR_loss(lossFun)(input)
+        */
+
+        def lossFun(input: TensorR) = {
+          val res = rnn(input)
+          res
+        }
+        val dInput = gradR(lossFun)(input)
+
         backend = BackendCPU()
-        y.toCPU().print()
+        dInput.toCPU().print()
+        System.out.println(s"How many parameters? ${rnn.w_hh.length}")
+        for (layer <- (0 until numLayers): Range) {
+          printf("w_ih[%d]\\n", layer)
+          rnn.w_ih(layer).d.toCPU().print()
+          printf("w_hh[%d]\\n", layer)
+          rnn.w_hh(layer).d.toCPU().print()
+          printf("b_ih[%d]\\n", layer)
+          rnn.b_ih(layer).d.toCPU().print()
+          printf("b_hh[%d]\\n", layer)
+          rnn.b_hh(layer).d.toCPU().print()
+        }
       }
     }
     runTest(rnnInference)
