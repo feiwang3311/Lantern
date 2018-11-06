@@ -44,17 +44,19 @@ long hash(char *str0, int len) {
   return hash;
 }
 
-long HEAP_SIZE = 4294967304; // 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; //
-void *mallocBase = calloc(HEAP_SIZE, 1);
+long HEAP_SIZE_CPU = 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; // 4294967304; //
+void *mallocBase = calloc(HEAP_SIZE_CPU, 1);
 void *mallocAddr = mallocBase;
 void *waterMark = mallocBase;
 void *myMalloc(size_t bytes) {
   void *res = mallocAddr;
   mallocAddr = (void *)((char *)mallocAddr + bytes);
-  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE)
-    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE\n");
+  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE_CPU)
+    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE_CPU\n");
   return res;
 }
+
+long HEAP_SIZE = 4294967304; // this is for GPU
 
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
   long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
@@ -128,7 +130,7 @@ printf("Data reading in %lf sec\n",x38);
 int64_t x95 = (long)mallocAddr;
 // inferencing loop starts here
 int32_t x103 = x10 / 64;
-int32_t x40 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
+int32_t x40 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
 int32_t x41 = fsize(x40);
 float* x42 = (float*)mmap(0, x41, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x40, 0);
 float* x85 = x42+2592;

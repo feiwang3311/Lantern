@@ -79,12 +79,10 @@ class SqueezeNet(nn.Module):
           weight_init.constant(m.bias, 0)
 
   def forward(self, x):
-    before = time.time()
     x = self.firstConv(x)
-    # after = time.time()
     x = self.features(x)
     x = self.final_conv(x)
-    return x.view(x.size(0), self.num_classes), before
+    return x.view(x.size(0), self.num_classes)
 
 class Test(nn.Module):
   def __init__(self, num_classes = 10):

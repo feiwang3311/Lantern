@@ -83,10 +83,12 @@ class Squeezenet_CIFAR(object):
     def build(self, x, is_training):
         self._is_built = True
         with tf.variable_scope(self.name, values=[x]):
-            with arg_scope(_arg_scope(is_training,
-                                      self._weight_decay,
-                                      self._batch_norm_decay)):
-                return self._squeezenet(x)
+#            with arg_scope(_arg_scope(is_training,
+#                                      self._weight_decay,
+#                                      self._batch_norm_decay)):
+             with arg_scope([conv2d, avg_pool2d, max_pool2d, batch_norm],
+                                      data_format='NCHW'):
+                 return self._squeezenet(x)
 
     @staticmethod
     def _squeezenet(images, num_classes=10):

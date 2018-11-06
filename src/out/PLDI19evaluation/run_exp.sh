@@ -1,13 +1,15 @@
 #!/bin/bash
 echo "Note: make sure you are using the most updated .cpp file!"
 echo "Note: we assume the system has python-pip python-dev python-virtualenv"
-
 echo "Note: the script must be run in PLDIevaluation directory"
+echo "Note: the evaluation is done with a single GPU"
+echo "Note: we assume that a proper python virtual environment has be installed"
+export CUDA_VISIBLE_DEVICES=3
 
-export CUDA_VISIBLE_DEVICES=0
-
+echo "Note: if you have not set up the virtual env for python, uncomment the following lines to set up venv"
+source /u/data/u99/wang603/TiarkMlEnv/python3-env/bin/activate
 # python3 -m venv python3-env
-source python3-env/bin/activate
+# source python3-env/bin/activate
 # pip3 install --upgrade pip wheel
 # pip3 install --upgrade tensorflow-gpu==1.4.1  # this version of tensorflow works with cuda 8. the later versions work with cuda 9.0, which is not installed in ml machines
 # pip3 install torch torchvision
@@ -16,20 +18,32 @@ source python3-env/bin/activate
 echo "Note: Maybe downloading cifar10_data"
 python3 generate_cifar10_data.py --data-dir cifar10_data
 
+echo "Exp: run squeezenet models first"
 cd squeezenet
 cd pytorch
+echo "Note: if you haven't generate onnx model from the PyTorch implementation, do it now by uncommenting the command below."
+echo "Note: without the onnx model, you cannot generate Lantern code. You need to generate Lantern code too."
 # python3 train.py --generate_onnx ../squeezenetCifar10.onnx
+echo "Exp: run PyTorch training with GPU"
 python3 train.py --use_gpu=True
+echo "Exp: run PyTorch inference with GPU"
 python3 train.py --use_gpu=True --inference=True --write_to=result_PyTorch_inference_GPU
+echo "Exp: run PyTorch interence with CPU"
 python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
-
-
 cd ../lantern
+echo "Exp: run Lantern training with GPU"
 nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
 ./LanternOnnxTrainingCu	result_Lantern
-
-#cd tensorflow2
-#python3 train.py
+cd ../tensorflow2
+echo "Exp: run TensorFlow training with GPU"
+python3 train.py
+echo "Plot: plot squeezenet result"
+cd ..
+cp pytorch/result_PyTorch result_PyTorch.txt
+cp lantern/result_Lantern result_Lantern.txt
+cp tensorflow2/result_TensorFlow result_TensorFlow.txt
+python3 ../plot.py SqueezeNet result_Lantern.txt result_PyTorch.txt result_TensorFlow.txt
+exit 1
 
 cd ..
 cd resnet50
