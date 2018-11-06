@@ -5,6 +5,7 @@ import org.scala_lang.virtualized.SourceContext
 
 class TestCudnn extends LanternFunSuite {
 
+/*
   testGPU("conv2D-forward") {
     val conv2D = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-conv2d"
@@ -460,6 +461,7 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(batchNorm)
   }
+*/
 
   testGPU("rnn-inference") {
     val rnnInference = new LanternDriverCudnn[String, Unit] {
@@ -487,7 +489,7 @@ class TestCudnn extends LanternFunSuite {
         val hx = Tensor.ones(numLayers, batchSize, hiddenSize)
         val w = Tensor.fill(Seq(getParameterSize), 0.01f)
         val res1 = BackendCudnn().cudnnRNNForwardInference(x, hx, w, numLayers = numLayers, hiddenSize = hiddenSize)
-        val res2 = BackendCudnn().cudnnRNNForwardTraining(x, hx, w, numLayers = numLayers, hiddenSize = hiddenSize)
+        val res2 = BackendCudnn().cudnnRNNForwardTraining(x, hx, w, numLayers = numLayers, hiddenSize = hiddenSize)._1
         backend = BackendCPU()
         res2.toCPU().print()
         Tensor.assertEqual(res1.toCPU(), res2.toCPU())

@@ -4630,14 +4630,16 @@ trait TensorDslCudnn extends TensorDslCublas {
       val Gru = Value("CUDNN_GRU")
     }
 
-    def cudnnRNNForwardInference(x: Tensor, hx: Tensor, w: Tensor,
-                                 numLayers: Int, hiddenSize: Int,
-                                 dropout: Float = 0f,
-                                 mode: RNNMode.Value = RNNMode.RnnRelu,
-                                 bidirectional: Boolean = false): Tensor = {
+    def cudnnRNNForwardHelper(x: Tensor, hx: Tensor, w: Tensor,
+                              training: Boolean,
+                              numLayers: Int, hiddenSize: Int,
+                              dropout: Float = 0f,
+                              mode: RNNMode.Value = RNNMode.RnnRelu,
+                              bidirectional: Boolean = false): (Tensor, Option[(Rep[Array[Float]], Rep[Int])]) = {
       assert(x.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
-      assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers x batchSize x hiddenSize]")
+      assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
       assert(x.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+
       val seqLength = x.shape(0)
       val batchSize = x.shape(1)
       val inputSize = x.shape(2)
@@ -4645,6 +4647,10 @@ trait TensorDslCudnn extends TensorDslCublas {
 
       val resShape = Seq(seqLength, batchSize, hiddenSize * numDirections)
       val res = Tensor(mallocArray[Float](resShape.product), resShape: _*)
+
+      val reserveSpace = unchecked[Array[Float]]("(float*)NULL")
+      val reserveSpaceSize = unchecked[Int]("0")
+
       unchecked[Unit](
         Seq(s"""
           |{
@@ -4666,16 +4672,19 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
           |
           |cudnnTensorDescriptor_t x_descs[$seqLength];
+          |cudnnTensorDescriptor_t x_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+          |int x_dims[] = {$batchSize, $inputSize, 1};
+          |int x_strides[] = {x_dims[1] * x_dims[2], x_dims[2], 1};
+          |CUDNN_CALL(cudnnSetTensorNdDescriptor(
+          |    x_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, x_dims, x_strides));
           |for (int i = 0; i < $seqLength; i++) {
-          |  cudnnTensorDescriptor_t x_desc;
-          |  CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |  int dims[] = {$batchSize, $inputSize, 1};
-          |  int strides[] = {dims[1] * dims[2], dims[2], 1};
-          |  CUDNN_CALL(cudnnSetTensorNdDescriptor(
-          |      x_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, dims, strides));
           |  x_descs[i] = x_desc;
           |}
           |
+          |// The first dimension of the tensor depends on the direction argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
+          |// The second dimension must match the first dimension of the tensors described in xDesc.
+          |// The third dimension must match the hiddenSize argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
           |cudnnTensorDescriptor_t hx_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&hx_desc));
           |int hx_dims[] = {${numLayers * numDirections}, $batchSize, $hiddenSize};
@@ -4683,6 +4692,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    hx_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, hx_dims, hx_strides));
           |
+          |// The first dimension of the tensor depends on the direction argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
+          |// The second dimension must match the first dimension of the tensors described in xDesc.
+          |// The third dimension must match the hiddenSize argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
           |cudnnTensorDescriptor_t cx_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&cx_desc));
           |int cx_dims[] = {${numLayers * numDirections}, $batchSize, $hiddenSize};
@@ -4702,13 +4714,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    w_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, /*nbDims*/ 3, w_dims));
           |
           |cudnnTensorDescriptor_t y_descs[$seqLength];
+          |cudnnTensorDescriptor_t y_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc));
+          |int y_dims[] = {$batchSize, ${hiddenSize * numDirections}, 1};
+          |int y_strides[] = {y_dims[1] * y_dims[2], y_dims[2], 1};
+          |CUDNN_CALL(cudnnSetTensorNdDescriptor(
+          |    y_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, y_dims, y_strides));
           |for (int i = 0; i < $seqLength; i++) {
-          |  cudnnTensorDescriptor_t y_desc;
-          |  CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc));
-          |  int dims[] = {$batchSize, ${hiddenSize * numDirections}, 1};
-          |  int strides[] = {dims[1] * dims[2], dims[2], 1};
-          |  CUDNN_CALL(cudnnSetTensorNdDescriptor(
-          |      y_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, dims, strides));
           |  y_descs[i] = y_desc;
           |}
           |
@@ -4720,123 +4732,60 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    cudnnHandle, rnn_desc, $seqLength, x_descs, &workspaceSize));
           |void* workspace = myGpuMalloc(workspaceSize);
           |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnRNNForwardInference(\n" +
-          s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", x.data, ",\n" +
-          "    hx_desc,", hx.data, ", cx_desc, NULL, w_desc,", w.data, ", y_descs, ", res.data, ",\n" +
-          "    hy_desc, NULL, cy_desc, NULL, workspace, workspaceSize));\n" +
-          "}"): _*)
-      res
+
+        // If training, create reserve space and call `ForwardTraining` function.
+        (if (training)
+          Seq(s"""
+            |// Reserve space used by `ForwardTraining` function.
+            |size_t reserveSize;
+            |CUDNN_CALL(cudnnGetRNNTrainingReserveSize(
+            |    cudnnHandle, rnn_desc, $seqLength, x_descs, &reserveSize));
+            |void* reserveSpace = myGpuMalloc(reserveSize);
+            |""".stripMargin,
+            reserveSpace, " = (float*)reserveSpace;\n",
+            reserveSpaceSize, " = (int)reserveSize;\n") ++
+          Seq(
+            "CUDNN_CALL(cudnnRNNForwardTraining(\n" +
+            s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", x.data, ",\n" +
+            "    hx_desc,", hx.data, ", cx_desc, NULL, w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
+            "    hy_desc, NULL, cy_desc, NULL, workspace, workspaceSize, reserveSpace, reserveSize));\n")
+
+        // If inference, call `ForwardInference` function.
+        else
+          Seq(
+            "CUDNN_CALL(cudnnRNNForwardInference(\n" +
+            s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", x.data, ",\n" +
+            "    hx_desc,", hx.data, ", cx_desc, NULL, w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
+            "    hy_desc, NULL, cy_desc, NULL, workspace, workspaceSize));\n")
+        ) ++
+
+        Seq("}"): _*)
+
+      if (training)
+        (res, Some(reserveSpace, reserveSpaceSize))
+      else
+        (res, None)
+    }
+
+    def cudnnRNNForwardInference(x: Tensor, hx: Tensor, w: Tensor,
+                                 numLayers: Int, hiddenSize: Int,
+                                 dropout: Float = 0f,
+                                 mode: RNNMode.Value = RNNMode.RnnRelu,
+                                 bidirectional: Boolean = false): Tensor = {
+      cudnnRNNForwardHelper(x, hx, w, training = false, numLayers, hiddenSize, dropout, mode, bidirectional)._1
     }
 
     def cudnnRNNForwardTraining(x: Tensor, hx: Tensor, w: Tensor,
                                 numLayers: Int, hiddenSize: Int,
                                 dropout: Float = 0f,
                                 mode: RNNMode.Value = RNNMode.RnnRelu,
-                                bidirectional: Boolean = false): Tensor = {
-      assert(x.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
-      assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
-      val seqLength = x.shape(0)
-      val batchSize = x.shape(1)
-      val inputSize = x.shape(2)
-      val numDirections = if (bidirectional) 2 else 1
-
-      val resShape = Seq(seqLength, batchSize, hiddenSize * numDirections)
-      val res = Tensor(mallocArray[Float](resShape.product), resShape: _*)
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |size_t dropoutStateSize;
-          |CUDNN_CALL(cudnnDropoutGetStatesSize(cudnnHandle, &dropoutStateSize));
-          |void* dropoutStates = myGpuMalloc(dropoutStateSize);
-          |
-          |cudnnDropoutDescriptor_t dropout_desc;
-          |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropout_desc));
-          |CUDNN_CALL(cudnnSetDropoutDescriptor(
-          |    dropout_desc, cudnnHandle, $dropout, dropoutStates, dropoutStateSize, time(NULL)));
-          |
-          |cudnnRNNDescriptor_t rnn_desc;
-          |CUDNN_CALL(cudnnCreateRNNDescriptor(&rnn_desc));
-          |CUDNN_CALL(cudnnSetRNNDescriptor(
-          |    cudnnHandle, rnn_desc,
-          |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
-          |    dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_UNIDIRECTIONAL,
-          |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-          |
-          |cudnnTensorDescriptor_t x_descs[$seqLength];
-          |for (int i = 0; i < $seqLength; i++) {
-          |  cudnnTensorDescriptor_t x_desc;
-          |  CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |  int dims[] = {$batchSize, $inputSize, 1};
-          |  int strides[] = {dims[1] * dims[2], dims[2], 1};
-          |  CUDNN_CALL(cudnnSetTensorNdDescriptor(
-          |      x_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, dims, strides));
-          |  x_descs[i] = x_desc;
-          |}
-          |
-          |// The first dimension of the tensor depends on the direction argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
-          |// The second dimension must match the first dimension of the tensors described in xDesc.
-          |// The third dimension must match the hiddenSize argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
-          |cudnnTensorDescriptor_t hx_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&hx_desc));
-          |int hx_dims[] = {${numLayers * numDirections}, $batchSize, $hiddenSize};
-          |int hx_strides[] = {hx_dims[1] * hx_dims[2], hx_dims[2], 1};
-          |CUDNN_CALL(cudnnSetTensorNdDescriptor(
-          |    hx_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, hx_dims, hx_strides));
-          |
-          |// The first dimension of the tensor depends on the direction argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
-          |// The second dimension must match the first dimension of the tensors described in xDesc.
-          |// The third dimension must match the hiddenSize argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
-          |cudnnTensorDescriptor_t cx_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&cx_desc));
-          |int cx_dims[] = {${numLayers * numDirections}, $batchSize, $hiddenSize};
-          |int cx_strides[] = {cx_dims[1] * cx_dims[2], cx_dims[2], 1};
-          |CUDNN_CALL(cudnnSetTensorNdDescriptor(
-          |    cx_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, cx_dims, cx_strides));
-          |
-          |size_t paramsSize;
-          |CUDNN_CALL(cudnnGetRNNParamsSize(
-          |    cudnnHandle, rnn_desc, x_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
-          |assert(paramsSize / sizeof(float) == ${w.scalarCount} && "Expected parameter size mismatch");
-          |
-          |cudnnFilterDescriptor_t w_desc;
-          |CUDNN_CALL(cudnnCreateFilterDescriptor(&w_desc));
-          |int w_dims[] = {int(paramsSize / sizeof(float)), 1, 1};
-          |CUDNN_CALL(cudnnSetFilterNdDescriptor(
-          |    w_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, /*nbDims*/ 3, w_dims));
-          |
-          |cudnnTensorDescriptor_t y_descs[$seqLength];
-          |for (int i = 0; i < $seqLength; i++) {
-          |  cudnnTensorDescriptor_t y_desc;
-          |  CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc));
-          |  int dims[] = {$batchSize, ${hiddenSize * numDirections}, 1};
-          |  int strides[] = {dims[1] * dims[2], dims[2], 1};
-          |  CUDNN_CALL(cudnnSetTensorNdDescriptor(
-          |      y_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, dims, strides));
-          |  y_descs[i] = y_desc;
-          |}
-          |
-          |cudnnTensorDescriptor_t hy_desc = hx_desc;
-          |cudnnTensorDescriptor_t cy_desc = cx_desc;
-          |
-          |// Reserve space used by `ForwardTraining` function.
-          |size_t reserveSize;
-          |CUDNN_CALL(cudnnGetRNNTrainingReserveSize(
-          |    cudnnHandle, rnn_desc, $seqLength, x_descs, &reserveSize));
-          |void* reserveSpace = myGpuMalloc(reserveSize);
-          |
-          |size_t workspaceSize;
-          |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
-          |    cudnnHandle, rnn_desc, $seqLength, x_descs, &workspaceSize));
-          |void* workspace = myGpuMalloc(workspaceSize);
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnRNNForwardTraining(\n" +
-          s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", x.data, ",\n" +
-          "    hx_desc,", hx.data, ", cx_desc, NULL, w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
-          "    hy_desc, NULL, cy_desc, NULL, workspace, workspaceSize, reserveSpace, reserveSize));\n" +
-          "}"): _*)
-      res
+                                bidirectional: Boolean = false): (Tensor, Rep[Array[Float]], Rep[Int]) = {
+      val (output, reserve) =
+        cudnnRNNForwardHelper(x, hx, w, training = true, numLayers, hiddenSize, dropout, mode, bidirectional)
+      reserve match {
+        case None => throw new IllegalArgumentException("Expected RNN reserve space to be defined")
+        case Some((reserveSpace, reserveSpaceSize)) => (output, reserveSpace, reserveSpaceSize)
+      }
     }
   }
 
