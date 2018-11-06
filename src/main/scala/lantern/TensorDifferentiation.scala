@@ -318,6 +318,7 @@ trait TensorDsl extends DslOps with Diff {
     // Elementwise multiplication.
     def *(x: Tensor, y: Rep[Float]): Tensor
     def *(x: Tensor, y: Tensor): Tensor
+    def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit
 
     // In-place elementwise multiplication.
     def *=(x: Tensor, y: Rep[Float]): Unit
@@ -685,6 +686,12 @@ trait TensorDsl extends DslOps with Diff {
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s * y)
     override def *(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ * _)
+    override def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+      // this.d.add_mult(that.x, y.d); that.d.add_mult(this.x, y.d)
+      val opThis = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c * b
+      val opThat = (a: Rep[Float], _: Rep[Float], c: Rep[Float]) => c * a
+      backpropElementWiseOpWithBroadCast(x, y, output, opThis, opThat)
+    }
 
     override def *=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s * y)
     override def *=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ * _))
@@ -2436,15 +2443,14 @@ trait TensorDsl extends DslOps with Diff {
     // this is element wise multiplication
     def * (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that); k(y)
-      // this.d += y.d * that  // TODO (Fei Wang) can be optimized to save space
+      // this.d += y.d * that
+      // TODO (Fei Wang) this is LOCKED TO CPU: should be flexible on backend and use geam for GPU
       this.d.addMul(that, y.d)
     }
     def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that.x); k(y)
-      // this.d.add_mult(that.x, y.d); that.d.add_mult(this.x, y.d)
-      val opThis = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c * b
-      val opThat = (a: Rep[Float], _: Rep[Float], c: Rep[Float]) => c * a
-      backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
+      generateRawComment("backprop for * op")
+      backend.mul_grad(this, that, y)
     }
 
     // element wise division
@@ -3343,6 +3349,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         else ???
         res
       } else {
+        // TODO (Fei Wang): we know this function probably has bug
         Tensor.dimBroadcast(x.shape, y.shape) match {
           case None => throw new IllegalArgumentException(s"Shapes cannot be broadcasted: ${x.shape.seq}, ${y.shape.seq}")
           case Some((xShape, yShape, resShape)) =>
@@ -3377,6 +3384,14 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " * ", y))
     override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " * " + _ }
+    override def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+      // x.d += y.x * output.d; y.d += x.x * output.d
+      assert (x.x.shape == y.x.shape && y.x.shape == output.x.shape, s"only applicable to same-shape element wise mul")
+      val gridDimX = (x.x.scalarCount + 511) / 512
+      assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
+      unchecked[Unit](s"elementwise_1D_1D_mul_mutate<<<${gridDimX}, 512>>>(", y.x.data, ", ", output.d.data, ", ", x.d.data, ", ", x.x.scalarCount, ")")
+      unchecked[Unit](s"elementwise_1D_1D_mul_mutate<<<${gridDimX}, 512>>>(", x.x.data, ", ", output.d.data, ", ", y.d.data, ", ", x.x.scalarCount, ")")
+    }
 
     override def *=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " * ", y))
     override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " * " + _ }

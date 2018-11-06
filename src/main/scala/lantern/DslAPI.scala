@@ -544,6 +544,11 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  if (tid < size) out[tid] = in1[tid] * in2[tid];
       |}
       |
+      |__global__ void elementwise_1D_1D_mul_mutate(float* in1, float* in2, float* out, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  if (tid < size) out[tid] += in1[tid] * in2[tid];
+      |}
+      |
       |__global__ void elementwise_1D_1D_add(float* in1, float* in2, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  if (tid < size) out[tid] = in1[tid] + in2[tid];
