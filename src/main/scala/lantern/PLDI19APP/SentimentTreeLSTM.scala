@@ -337,7 +337,7 @@ object SentimentTreeLSTM {
           average_loss = average_loss * (n) / (n+1) + loss_value / (n+1)
           opt.step()
           resetMallocAddr(addr)
-          resetCudaMallocAddr(addr)
+          resetCudaMallocAddr(cudaAddr)
         }
 
         loss_save(epoc) = average_loss
