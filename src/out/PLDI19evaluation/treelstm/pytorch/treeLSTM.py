@@ -10,9 +10,9 @@ import numpy as np
 import torch.nn.functional as F
 
 
-torch.set_num_threads(1)
+# torch.set_num_threads(1)
 startTime = time.time()
-torch.manual_seed(7)
+# torch.manual_seed(7)
 # read word embedding
 word_embedding_size   = 300
 word_embedding_file = "small_glove.txt"

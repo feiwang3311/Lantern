@@ -3734,7 +3734,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val sizeDim1 = tensors(0).shape(1)
       val sizeDim2 = tensors(1).shape(1)
 
-      val nGrid = tensors(0).scalarCount / 512 / 5 + 1
+      val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
       unchecked[Unit](
         "{\n",
         s"dim3 grid(${nGrid}, 2);\n",
@@ -3767,7 +3767,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val sizeDim1 = tensorRs(0).x.shape(1)
       val sizeDim2 = tensorRs(1).x.shape(1)
       
-      val nGrid = tensorRs(0).x.scalarCount / 512 / 5 + 1
+      val nGrid = 28 //tensorRs(0).x.scalarCount / 512 / 5 + 1
       unchecked[Unit](
         "{\n",
         s"dim3 grid(${nGrid}, 2);\n",
