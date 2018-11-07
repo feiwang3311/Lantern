@@ -357,6 +357,19 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     }
   }
 
+  // Helper object for getting an RNN module instance given the specified RNN mode and hyperparameters.
+  object RNNBase {
+    def apply(mode: RnnMode, inputSize: Int, hiddenSize: Int, numLayers: Int = 1,
+              dropout: Float = 0f, bidirectional: Boolean = false): RNNBase = {
+      mode match {
+        case RnnReluMode => RNNRelu(inputSize, hiddenSize, numLayers, dropout, bidirectional)
+        case RnnTanhMode => RNNTanh(inputSize, hiddenSize, numLayers, dropout, bidirectional)
+        case LstmMode => LSTM(inputSize, hiddenSize, numLayers, dropout, bidirectional)
+        case GruMode => GRU(inputSize, hiddenSize, numLayers, dropout, bidirectional)
+      }
+    }
+  }
+
   case class RNNRelu(override val inputSize: Int,
                      override val hiddenSize: Int,
                      override val numLayers: Int = 1,

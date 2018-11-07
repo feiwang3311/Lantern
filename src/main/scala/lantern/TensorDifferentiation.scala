@@ -3851,13 +3851,6 @@ trait TensorDslCudnn extends TensorDslCublas {
     override val numGates: Int = 3
   }
 
-  object RNNMode extends Enumeration {
-    val RnnRelu = Value("CUDNN_RNN_RELU")
-    val RnnTanh = Value("CUDNN_RNN_TANH")
-    val Lstm = Value("CUDNN_LSTM")
-    val Gru = Value("CUDNN_GRU")
-  }
-
   /**
     * cuDNN tensor operation backend. WIP.
     * Extends `BackendCublas` to leverage cuBLAS primitives.
