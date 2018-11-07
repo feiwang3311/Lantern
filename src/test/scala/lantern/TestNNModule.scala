@@ -40,8 +40,8 @@ class ModuleTest extends FunSuite {
         }
 
         val li = MyModule(3, 4)
-        li.registerParamters("")
-        li.forEachNamedParameter{ case (name, (tensorR, _)) => System.out.println(s"$name: $tensorR") }
+        li.registerParameters("")
+        li.forEachNamedParameter { case (name, (tensorR, _)) => System.out.println(s"$name: $tensorR") }
       }
     }
     test1.eval("a")

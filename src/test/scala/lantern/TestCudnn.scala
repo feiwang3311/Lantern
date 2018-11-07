@@ -501,7 +501,7 @@ class TestCudnn extends LanternFunSuite {
   */
 
   testGPU("rnn-module") {
-    val rnnInference = new LanternDriverCudnn[String, Unit] {
+    val rnnModule = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-rnn-module"
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -555,11 +555,11 @@ class TestCudnn extends LanternFunSuite {
         }
       }
     }
-    runTest(rnnInference)
+    runTest(rnnModule)
   }
 
   testGPU("lstm-module") {
-    val rnnInference = new LanternDriverCudnn[String, Unit] {
+    val lstmModule = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-lstm-module"
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -576,6 +576,14 @@ class TestCudnn extends LanternFunSuite {
         val h0 = TensorR(Tensor.ones(numLayers * numDirections, batchSize, hiddenSize))
         val c0 = TensorR(Tensor.ones(numLayers * numDirections, batchSize, hiddenSize))
         val rnn = LSTM(inputSize, hiddenSize, numLayers, bidirectional = bidirectional)
+
+        // Test parameter registration.
+        rnn.registerParameters("lstm")
+        System.out.println(rnn.parameters)
+        System.out.println(rnn.parameters.size)
+        val expectedParameterCount = numLayers * numDirections * 4
+        assert(rnn.parameters.size == expectedParameterCount,
+               "Expected $expectedParameterCount parameters, got ${rnn.parameters.size}")
 
         def lossFun(input: TensorR) = {
           rnn(input, Some(h0), Some(c0))
@@ -607,6 +615,6 @@ class TestCudnn extends LanternFunSuite {
         }
       }
     }
-    runTest(rnnInference)
+    runTest(lstmModule)
   }
 }

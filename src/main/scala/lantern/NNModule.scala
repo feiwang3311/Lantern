@@ -21,43 +21,72 @@ trait NNModule extends TensorDsl {
     val name: String
     val parameters = Map[String, (TensorR, Option[Tensor])]() // option of tensor is for axillary info needed in gradient descent
     val modules = Map[String, Module]()
+
+    /**
+      * A wrapper for non-parameter tensors.
+      *
+      * All `TensorR` fields are implicitly assumed to be parameters.
+      * To declare a non-parameter `TensorR` field, wrap it using `Nonparameter`.
+      * Note: this is a slight hack. A more robust solution is an explicit parameter registration system.
+      */
+    case class Nonparameter(t: TensorR)
+    implicit def nonparameterToTensorR(n: Nonparameter): TensorR = n.t
+
     def forEachNamedParameter(f: (String, (TensorR, Option[Tensor])) => Unit): Unit = {
       parameters.foreach{ case (k, v) => f(k, v) }
       for ((_, module) <- modules) module.forEachNamedParameter(f)
     }
+
     def enrichParameter(): Unit = {
       for ((k, (tensorR, _)) <- parameters) parameters(k) = (tensorR, Some(Tensor.zeros_like(tensorR.x)))
       for ((_, module) <- modules) module.enrichParameter()
     }
-    def forEachParameter(f: TensorR => Unit) = forEachNamedParameter{case (_, (tensorR, _)) => f(tensorR)}
-    def forEachPairParameter(f: (TensorR, Option[Tensor]) => Unit) = forEachNamedParameter{case (_, (tr, t)) => f(tr, t)}
 
-    def registerParamters(nameScope: String): Unit = {
+    def forEachParameter(f: TensorR => Unit) =
+      forEachNamedParameter { case (_, (tensorR, _)) => f(tensorR) }
+    def forEachPairParameter(f: (TensorR, Option[Tensor]) => Unit) =
+      forEachNamedParameter { case (_, (tr, t)) => f(tr, t) }
+
+    // Implicit parameter registration system.
+    def registerParameters(nameScope: String): Unit = {
       def oops[T](field: Field)(read: Field => T) = {
         val acc = field.isAccessible
-        field.setAccessible(true);
+        field.setAccessible(true)
         val res = read(field)
         field.setAccessible(acc)
         res
       }
-      val allParams = this.getClass.getDeclaredFields
-      val subParameters = allParams.filter { t => classOf[Option[TensorR]].isAssignableFrom(t.getType) || classOf[TensorR].isAssignableFrom(t.getType) }
-      val subModules = allParams.filter { t => classOf[Module].isAssignableFrom(t.getType) && oops[Boolean](t) { _.get(this) != this }}
 
-      subParameters.map{ field => oops[Unit](field) { x =>
+      val allFields = this.getClass.getDeclaredFields
+      val subParameters = allFields.filter { f =>
+        classOf[Option[TensorR]].isAssignableFrom(f.getType) ||
+        classOf[TensorR].isAssignableFrom(f.getType) ||
+        classOf[ArrayBuffer[TensorR]].isAssignableFrom(f.getType)
+      }
+      val subModules = allFields.filter { f =>
+        classOf[Module].isAssignableFrom(f.getType) && oops[Boolean](f) { _.get(this) != this }
+      }
+
+      subParameters.foreach { field => oops[Unit](field) { x =>
         val field = x.get(this)
-        val name = x.getName()
-        val fullName = s"$nameScope${name}"
-        if (field.isInstanceOf[TensorR]) parameters.update(fullName, (field.asInstanceOf[TensorR], None))
-        else field match {
-          case Some(field) => parameters.update(fullName, (field.asInstanceOf[TensorR], None))
+        val name = x.getName
+        val fullName = s"$nameScope$name"
+        field match {
+          case t: TensorR => parameters.update(fullName, (t, None))
+          // FIXME: Type argument `TensorR` is eliminated by type erasure.
+          case arr: ArrayBuffer[TensorR] =>
+            arr.zipWithIndex.foreach { case (t, i) =>
+              val name = s"$fullName$i"
+              parameters.update(name, (t, None))
+            }
+          case Some(t: TensorR) => parameters.update(fullName, (t, None))
           case None => ()
         }
       }}
-      subModules.map{ field => oops[Unit](field) { x =>
-        val a = x.get(this).asInstanceOf[Module]
-        modules.update(s"$nameScope${x.getName()}", a)
-        a.registerParamters(s"$nameScope${x.getName()}/")
+      subModules.foreach { field => oops[Unit](field) { x =>
+        val module = x.get(this).asInstanceOf[Module]
+        modules.update(s"$nameScope${x.getName}", module)
+        module.registerParameters(s"$nameScope${x.getName}/")
       }}
     }
   }
@@ -179,11 +208,11 @@ trait NNModule extends TensorDsl {
 
   abstract class Optim {
     val module: Module
-    module.registerParamters(s"${module.name}/")
+    module.registerParameters(s"${module.name}/")
     def step_func: (TensorR, Option[Tensor]) => Unit
     def zero_grad() = module.forEachParameter(_.clear_grad())
     def step() = module.forEachPairParameter(step_func)
-    def show() = module.forEachNamedParameter{case (name, (tr, ot)) => tr.d.printHead(5, name)}
+    def show() = module.forEachNamedParameter { case (name, (tr, ot)) => tr.d.printHead(5, name) }
     def perform(f: (String, (TensorR, Option[Tensor])) => Unit) = module.forEachNamedParameter(f)
   }
 
@@ -260,7 +289,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     // Initialize parameter buffer.
     // cuDNN requires that all parameters are stored in a contiguous buffer.
     // NOTE: Choose different initialization strategy?
-    lazy val parameterBuffer = TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f))
+    lazy val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
 
     def getParameterSize(): Int = {
       val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections

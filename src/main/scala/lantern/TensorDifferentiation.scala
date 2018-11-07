@@ -3739,7 +3739,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     }
 
     override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
-      assert(descent, s"TODO: only handle gradent descent (not accent) so far")
+      assert(descent, s"TODO: only handle gradient descent (not ascent) so far")
       assert(tr.x.shape == t.shape, s"tensor and momentum should have the same shape, got ${tr.x.shape} and ${t.shape}")
       val gridDimX = (t.scalarCount + 511) / 512
       assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
