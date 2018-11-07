@@ -5,7 +5,6 @@ import org.scala_lang.virtualized.SourceContext
 
 class TestCudnn extends LanternFunSuite {
 
-/*
   testGPU("conv2D-forward") {
     val conv2D = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-conv2d"
@@ -461,7 +460,6 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(batchNorm)
   }
-*/
 
   /*
   testGPU("rnn-forward") {

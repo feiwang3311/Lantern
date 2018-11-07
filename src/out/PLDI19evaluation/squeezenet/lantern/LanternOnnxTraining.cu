@@ -124,6 +124,41 @@ __global__ void nllLoss_grad(int x_stride, float *yGrad, int* target, float* xGr
   xGrad[offset] += -1 * yGrad[tid];
 }
 
+following - https://github.com/torch/cutorch/blob/master/lib/THC/THCTensorMath.cuh#L49
+static inline __device__ int compute(const int outputSize[4],
+                                     const int outputStride[4],
+                                     const int dimSize, const int concatDim, int linearIndex) {
+  int offset = 0;
+  for (int i = 3; i >= 1; i--) {
+    int curDimSize = i == concatDim ? dimSize : outputSize[i];
+    int nextDimIndex = linearIndex / curDimSize;
+    int curDimIndex = linearIndex - curDimSize * nextDimIndex;
+    int curDimOffset = curDimIndex * outputStride[i];
+    offset += curDimOffset;
+    linearIndex = nextDimIndex;
+  }
+  return offset + linearIndex * outputStride[0];
+}
+
+// dimSize: size on concat dimension. Only for Dim of rank 4
+__global__ void concat2D_1D_greg(float* in1, int dimSize1, int nElement1,
+                                 float* in2, int dimSize2, int nElement2,
+                                 float* out, int concatDim, int[4] outSize, int[4] outStride) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
+  if (tid >= nElement) return;
+  float* data = blockIdx.y == 0 ? in1 : in2;
+  int offset = blockIdx.y == 0 ? 0 : dimSize1;
+  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
+  int dataOffset = offset * outStride[concatDim];
+  int stride = gridDim.x * blockDim.x;
+  while (tid < nElement) {
+    int elementOffset = compute(outSize, outStride, dimSize, concatDim, tid);
+    out[dataOffset + elementOffset] = data[tid];
+    tid += stride;
+  }
+}
+
 __global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= sizeLow) return;
@@ -139,6 +174,26 @@ __global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow
     int index_in2 = tid + (blockIdx.y - sizeHigh) * sizeLow * sizeDim2;
     for (int i = 0; i < sizeDim2; i++) {
       out[index_out] = in2[index_in2];
+      index_out += sizeLow; index_in2 += sizeLow;
+    }
+  }
+}
+
+__global__ void concat2D_1D_loop_grad(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid >= sizeLow) return;
+  if (blockIdx.y < sizeHigh) { // the first input
+    int index_out = tid + blockIdx.y * sizeLow * (sizeDim1 + sizeDim2);
+    int index_in1 = tid + blockIdx.y * sizeLow * sizeDim1;
+    for (int i = 0; i < sizeDim1; i++) {
+      in1[index_in1] += out[index_out];
+      index_out += sizeLow; index_in1 += sizeLow;
+    }
+  } else { // the second input
+    int index_out = tid + (blockIdx.y - sizeHigh) * sizeLow * (sizeDim1 + sizeDim2) + sizeLow * sizeDim1;
+    int index_in2 = tid + (blockIdx.y - sizeHigh) * sizeLow * sizeDim2;
+    for (int i = 0; i < sizeDim2; i++) {
+      in2[index_in2] += out[index_out];
       index_out += sizeLow; index_in2 += sizeLow;
     }
   }
@@ -1229,8 +1284,8 @@ CUDNN_CALL(cudnnActivationForward(
 float* x417 = (float*)myGpuMalloc(1048576 * sizeof(float));
 float* x418 = (float*)myGpuMalloc(2097152 * sizeof(float));
 {
-dim3 grid(1, 128);
-concat2D_1D_loop<<<grid, 512>>>(x396, x415, x418, 256, 64, 64, 64);
+dim3 grid(65535, 2);
+concat2D_1D_greg<<<grid, 512>>>(x396, 64, 1048576, x415, 64, 1048576, x418, 1, [I@2072d6a7, List(32768, 256, 16, 1));
 };
 float* x420 = (float*)myGpuMalloc(2097152 * sizeof(float));
 float* x421 = (float*)myGpuMalloc(262144 * sizeof(float));
@@ -1526,8 +1581,8 @@ CUDNN_CALL(cudnnActivationForward(
 float* x477 = (float*)myGpuMalloc(1048576 * sizeof(float));
 float* x478 = (float*)myGpuMalloc(2097152 * sizeof(float));
 {
-dim3 grid(1, 128);
-concat2D_1D_loop<<<grid, 512>>>(x456, x475, x478, 256, 64, 64, 64);
+dim3 grid(65535, 2);
+concat2D_1D_greg<<<grid, 512>>>(x456, 64, 1048576, x475, 64, 1048576, x478, 1, [I@7502eaa5, List(32768, 256, 16, 1));
 };
 float* x480 = (float*)myGpuMalloc(2097152 * sizeof(float));
 float* x481 = (float*)myGpuMalloc(524288 * sizeof(float));
@@ -1823,8 +1878,8 @@ CUDNN_CALL(cudnnActivationForward(
 float* x537 = (float*)myGpuMalloc(2097152 * sizeof(float));
 float* x538 = (float*)myGpuMalloc(4194304 * sizeof(float));
 {
-dim3 grid(1, 128);
-concat2D_1D_loop<<<grid, 512>>>(x516, x535, x538, 256, 64, 128, 128);
+dim3 grid(65535, 2);
+concat2D_1D_greg<<<grid, 512>>>(x516, 128, 2097152, x535, 128, 2097152, x538, 1, [I@4a1ebd7d, List(65536, 256, 16, 1));
 };
 float* x540 = (float*)myGpuMalloc(4194304 * sizeof(float));
 float* x541 = (float*)myMalloc(1 * sizeof(float));;
@@ -2152,8 +2207,8 @@ CUDNN_CALL(cudnnActivationForward(
 float* x604 = (float*)myGpuMalloc(524288 * sizeof(float));
 float* x605 = (float*)myGpuMalloc(1048576 * sizeof(float));
 {
-dim3 grid(1, 128);
-concat2D_1D_loop<<<grid, 512>>>(x583, x602, x605, 64, 64, 128, 128);
+dim3 grid(65535, 2);
+concat2D_1D_greg<<<grid, 512>>>(x583, 128, 524288, x602, 128, 524288, x605, 1, [I@6106c12e, List(16384, 64, 8, 1));
 };
 float* x607 = (float*)myGpuMalloc(1048576 * sizeof(float));
 float* x608 = (float*)myGpuMalloc(196608 * sizeof(float));
@@ -2449,8 +2504,8 @@ CUDNN_CALL(cudnnActivationForward(
 float* x664 = (float*)myGpuMalloc(786432 * sizeof(float));
 float* x665 = (float*)myGpuMalloc(1572864 * sizeof(float));
 {
-dim3 grid(1, 128);
-concat2D_1D_loop<<<grid, 512>>>(x643, x662, x665, 64, 64, 192, 192);
+dim3 grid(65535, 2);
+concat2D_1D_greg<<<grid, 512>>>(x643, 192, 786432, x662, 192, 786432, x665, 1, [I@5777f447, List(24576, 64, 8, 1));
 };
 float* x667 = (float*)myGpuMalloc(1572864 * sizeof(float));
 float* x668 = (float*)myGpuMalloc(196608 * sizeof(float));
@@ -2746,8 +2801,8 @@ CUDNN_CALL(cudnnActivationForward(
 float* x724 = (float*)myGpuMalloc(786432 * sizeof(float));
 float* x725 = (float*)myGpuMalloc(1572864 * sizeof(float));
 {
-dim3 grid(1, 128);
-concat2D_1D_loop<<<grid, 512>>>(x703, x722, x725, 64, 64, 192, 192);
+dim3 grid(65535, 2);
+concat2D_1D_greg<<<grid, 512>>>(x703, 192, 786432, x722, 192, 786432, x725, 1, [I@35426bce, List(24576, 64, 8, 1));
 };
 float* x727 = (float*)myGpuMalloc(1572864 * sizeof(float));
 float* x728 = (float*)myGpuMalloc(262144 * sizeof(float));
@@ -3043,8 +3098,8 @@ CUDNN_CALL(cudnnActivationForward(
 float* x784 = (float*)myGpuMalloc(1048576 * sizeof(float));
 float* x785 = (float*)myGpuMalloc(2097152 * sizeof(float));
 {
-dim3 grid(1, 128);
-concat2D_1D_loop<<<grid, 512>>>(x763, x782, x785, 64, 64, 256, 256);
+dim3 grid(65535, 2);
+concat2D_1D_greg<<<grid, 512>>>(x763, 256, 1048576, x782, 256, 1048576, x785, 1, [I@a88cd4e, List(32768, 64, 8, 1));
 };
 float* x787 = (float*)myGpuMalloc(2097152 * sizeof(float));
 float* x788 = (float*)myMalloc(1 * sizeof(float));;
@@ -3372,8 +3427,8 @@ CUDNN_CALL(cudnnActivationForward(
 float* x851 = (float*)myGpuMalloc(262144 * sizeof(float));
 float* x852 = (float*)myGpuMalloc(524288 * sizeof(float));
 {
-dim3 grid(1, 128);
-concat2D_1D_loop<<<grid, 512>>>(x830, x849, x852, 16, 64, 256, 256);
+dim3 grid(65535, 2);
+concat2D_1D_greg<<<grid, 512>>>(x830, 256, 262144, x849, 256, 262144, x852, 1, [I@5d507280, List(8192, 16, 4, 1));
 };
 float* x854 = (float*)myGpuMalloc(524288 * sizeof(float));
 float* x855 = (float*)myGpuMalloc(640 * sizeof(float));
@@ -3511,7 +3566,7 @@ CUDNN_CALL(cudnnReduceTensor(
 // resize to WrappedArray(1)
 float* x887 = (float*)myGpuMalloc(1 * sizeof(float));
 arrayFill<<<1, 1>>>(x887, 1.0f);
-// backend is lantern.TensorDslCudnn$BackendCudnn@a7917
+// backend is lantern.TensorDslCudnn$BackendCudnn@12cdbfc2
 CUDA_CALL(cudaMemcpy(x334, x880, 1 * sizeof(float), cudaMemcpyDeviceToHost));
 // 'mean' gradient
 // backprop for mean op
@@ -3668,8 +3723,8 @@ CUDNN_CALL(cudnnConvolutionBackwardBias(
     x910, grad_bias_desc, x303));
 };
 {
-dim3 grid(2048, 64);
-concat2D_1D_grad<<<grid, 4>>>(x832,x851,x854, 4, 256);
+dim3 grid(1, 128);
+concat2D_1D_loop_grad<<<grid, 512>>>(x832,x851,x854, 16, 64, 256, 256);
 };
 float* x914 = (float*)myMalloc(1 * sizeof(float));;
 x914[0] = 1.0f;
@@ -4113,8 +4168,8 @@ CUDNN_CALL(cudnnPoolingBackward(
     x958, out_desc, x792, out_desc, x794, in_desc, x785  , x956, in_desc, x787));
 };
 {
-dim3 grid(4096, 64);
-concat2D_1D_grad<<<grid, 8>>>(x765,x784,x787, 8, 256);
+dim3 grid(1, 128);
+concat2D_1D_loop_grad<<<grid, 512>>>(x765,x784,x787, 64, 64, 256, 256);
 };
 float* x962 = (float*)myMalloc(1 * sizeof(float));;
 x962[0] = 1.0f;
@@ -4528,8 +4583,8 @@ CUDNN_CALL(cudnnConvolutionBackwardBias(
     x1001, grad_bias_desc, x261));
 };
 {
-dim3 grid(3072, 64);
-concat2D_1D_grad<<<grid, 8>>>(x705,x724,x727, 8, 192);
+dim3 grid(1, 128);
+concat2D_1D_loop_grad<<<grid, 512>>>(x705,x724,x727, 64, 64, 192, 192);
 };
 float* x1005 = (float*)myMalloc(1 * sizeof(float));;
 x1005[0] = 1.0f;
@@ -4943,8 +4998,8 @@ CUDNN_CALL(cudnnConvolutionBackwardBias(
     x1044, grad_bias_desc, x254));
 };
 {
-dim3 grid(3072, 64);
-concat2D_1D_grad<<<grid, 8>>>(x645,x664,x667, 8, 192);
+dim3 grid(1, 128);
+concat2D_1D_loop_grad<<<grid, 512>>>(x645,x664,x667, 64, 64, 192, 192);
 };
 float* x1048 = (float*)myMalloc(1 * sizeof(float));;
 x1048[0] = 1.0f;
@@ -5358,8 +5413,8 @@ CUDNN_CALL(cudnnConvolutionBackwardBias(
     x1087, grad_bias_desc, x304));
 };
 {
-dim3 grid(2048, 64);
-concat2D_1D_grad<<<grid, 8>>>(x585,x604,x607, 8, 128);
+dim3 grid(1, 128);
+concat2D_1D_loop_grad<<<grid, 512>>>(x585,x604,x607, 64, 64, 128, 128);
 };
 float* x1091 = (float*)myMalloc(1 * sizeof(float));;
 x1091[0] = 1.0f;
@@ -5803,8 +5858,8 @@ CUDNN_CALL(cudnnPoolingBackward(
     x1135, out_desc, x545, out_desc, x547, in_desc, x538  , x1133, in_desc, x540));
 };
 {
-dim3 grid(4096, 64);
-concat2D_1D_grad<<<grid, 16>>>(x518,x537,x540, 16, 128);
+dim3 grid(1, 128);
+concat2D_1D_loop_grad<<<grid, 512>>>(x518,x537,x540, 256, 64, 128, 128);
 };
 float* x1139 = (float*)myMalloc(1 * sizeof(float));;
 x1139[0] = 1.0f;
@@ -6218,8 +6273,8 @@ CUDNN_CALL(cudnnConvolutionBackwardBias(
     x1178, grad_bias_desc, x275));
 };
 {
-dim3 grid(2048, 64);
-concat2D_1D_grad<<<grid, 16>>>(x458,x477,x480, 16, 64);
+dim3 grid(1, 128);
+concat2D_1D_loop_grad<<<grid, 512>>>(x458,x477,x480, 256, 64, 64, 64);
 };
 float* x1182 = (float*)myMalloc(1 * sizeof(float));;
 x1182[0] = 1.0f;
@@ -6633,8 +6688,8 @@ CUDNN_CALL(cudnnConvolutionBackwardBias(
     x1221, grad_bias_desc, x277));
 };
 {
-dim3 grid(2048, 64);
-concat2D_1D_grad<<<grid, 16>>>(x398,x417,x420, 16, 64);
+dim3 grid(1, 128);
+concat2D_1D_loop_grad<<<grid, 512>>>(x398,x417,x420, 256, 64, 64, 64);
 };
 float* x1225 = (float*)myMalloc(1 * sizeof(float));;
 x1225[0] = 1.0f;

@@ -3701,18 +3701,35 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val dim3 = tensors(0).shape(3)
       val resShape = Seq(dim0, dim1, dim2, dim3)
       val res = this.mallocArray[Float](resShape.product)
+      val resTensor = Tensor(res, dim0, dim1, dim2, dim3)
       val sizeLow = dim2 * dim3
       val sizeHigh = dim0
       val sizeDim1 = tensors(0).shape(1)
       val sizeDim2 = tensors(1).shape(1)
+      val outSize = NewArray[Int](4); 
+      outSize(0) = dim0; outSize(1) = dim1; outSize(2) = dim2; outSize(3) = dim3;
+      val outStride = NewArray[Int](4);
+      outStride(0) = resTensor.shape.strides(0);
+      outStride(1) = resTensor.shape.strides(1); 
+      outStride(2) = resTensor.shape.strides(2); 
+      outStride(3) = resTensor.shape.strides(3); 
 
       unchecked[Unit](
         "{\n",
-        "dim3 grid(", (sizeLow+511) / 512, ", ", sizeHigh * 2, ");\n",
-        "concat2D_1D_loop<<<grid, 512>>>(", tensors(0).data, ", ", tensors(1).data, ", ", res, ", ",
-        sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
+        "dim3 grid(65535, 2);\n",
+        "concat2D_1D_greg<<<grid, 512>>>(", tensors(0).data, ", ", sizeDim1, ", ", tensors(0).scalarCount, ", ",
+        tensors(1).data, ", ", sizeDim2, ", ", tensors(1).scalarCount, ", ",
+        res, ", ", 1, ", ", 
+        dim0, ", ", dim1, ", ", dim2, ", ", dim3, ", ",
+        resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ",resTensor.shape.strides(2), ", ",resTensor.shape.strides(3), ");\n",
         "}")
-      Tensor(res, dim0, dim1, dim2, dim3)
+//      unchecked[Unit](
+//        "{\n",
+//        "dim3 grid(", (sizeLow+511) / 512, ", ", sizeHigh * 2, ");\n",
+//        "concat2D_1D_loop<<<grid, 512>>>(", tensors(0).data, ", ", tensors(1).data, ", ", res, ", ",
+//        sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
+//        "}")
+      resTensor
     }
 
     override def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit = {
