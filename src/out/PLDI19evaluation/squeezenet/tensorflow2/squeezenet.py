@@ -21,10 +21,14 @@ def fire_module(inputs,
             net = _expand(net, expand_depth)
         return net
 
+def fire_module1(inputs, squeeze_depth, expand_depth, reuse=None, scope=None):
+    with tf.variable_scope(scope, 'fire', [inputs], reuse = reuse):
+        net = _squeeze(inputs, squeeze_depth)
+        net = _expand(net, expand_depth)
+        return net
 
 def _squeeze(inputs, num_outputs):
     return conv2d(inputs, num_outputs, [1, 1], stride=1, scope='squeeze')
-
 
 def _expand(inputs, num_outputs):
     with tf.variable_scope('expand'):
@@ -70,6 +74,35 @@ class Squeezenet(object):
         logits = tf.squeeze(net, [2], name='logits')
         return logits
 
+
+class Squeezenet_CIFAR1(object):
+    name = 'squeezenet_cifar'
+    def __init__(self, args):
+        self._is_built = False
+    def build(self, x, is_training):
+        self._is_built = True
+        with tf.variable_scope(self.name, values=[x]):
+            return self._squeezenet(x)
+    def _squeezenet(images, num_classes = 10):
+        net = conv2d(images, 96, [3, 3], scope='conv1')
+        net = max_pool2d(net, [2, 2], scope='maxpool1')
+        net = fire_module1(net, 16, 64, scope='fire2')
+        net = fire_module1(net, 16, 64, scope='fire3')
+        net = fire_module1(net, 32, 128, scope='fire4')
+        net = max_pool2d(net, [2, 2], scope='maxpool4')
+        net = fire_module1(net, 32, 128, scope='fire5')
+        net = fire_module1(net, 48, 192, scope='fire6')
+        net = fire_module1(net, 48, 192, scope='fire7')
+        net = fire_module1(net, 64, 256, scope='fire8')
+        net = max_pool2d(net, [2, 2], scope='maxpool8')
+        net = fire_module1(net, 64, 256, scope='fire9')
+        net = avg_pool2d(net, [4, 4], scope='avgpool10')
+        net = conv2d(net, num_classes, [1, 1],
+                     activation_fn=None,
+                     normalizer_fn=None,
+                     scope='conv10')
+        logits = tf.squeeze(net, [2], name='logits')
+        return logits
 
 class Squeezenet_CIFAR(object):
     """Modified version of squeezenet for CIFAR images"""

@@ -12,7 +12,7 @@ def train(args):
   startTime = time.time()
   x = tf.placeholder(tf.float32, shape = (args.batch_size, 3, 32, 32))
   y = tf.placeholder(tf.int32, shape = (args.batch_size))
-  logits = squeezenet.Squeezenet_CIFAR(args).build(x, is_training = True)
+  logits = squeezenet.Squeezenet_CIFAR1(args).build(x, is_training = True)
   with tf.name_scope('loss'):
     cross_entropy = tf.losses.sparse_softmax_cross_entropy(
       labels=y, logits=logits)
