@@ -44,17 +44,19 @@ long hash(char *str0, int len) {
   return hash;
 }
 
-long HEAP_SIZE = 4294967304; // 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; //
-void *mallocBase = calloc(HEAP_SIZE, 1);
+long HEAP_SIZE_CPU = 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; // 4294967304; //
+void *mallocBase = calloc(HEAP_SIZE_CPU, 1);
 void *mallocAddr = mallocBase;
 void *waterMark = mallocBase;
 void *myMalloc(size_t bytes) {
   void *res = mallocAddr;
   mallocAddr = (void *)((char *)mallocAddr + bytes);
-  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE)
-    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE\n");
+  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE_CPU)
+    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE_CPU\n");
   return res;
 }
+
+long HEAP_SIZE = 4294967304; // this is for GPU
 
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
   long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
@@ -117,7 +119,7 @@ x279[x290] = x295;
 
 }
 int32_t x301 = x277 / 64;
-int32_t x2 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
+int32_t x2 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
 int32_t x3 = fsize(x2);
 float* x4 = (float*)mmap(0, x3, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x2, 0);
 float* x151 = x4+0;
@@ -17610,8 +17612,8 @@ x17318[x17319] = x17334;
 }
 
 }
-// resize to WrappedArray(64, -1)
-// gemm: ArrayBuffer(64, 2048), Vector(10, 2048)
+// resize to WrappedArray(64, 2048)
+// gemm: WrappedArray(64, 2048), Vector(10, 2048)
 float* x17342 = (float*)myMalloc(640 * sizeof(float));;
 cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 64,10,2048,1.0,x17313,2048,x226,2048,0,x17342,10);
 int32_t x17344 = 0;

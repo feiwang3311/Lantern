@@ -100,7 +100,7 @@ if __name__ == '__main__':
            default='../../cifar10_data/cifar-10-batches-py/data_batch_1',
            help='Directory for storing input data')
   parser.add_argument('--write_to', type=str,
-           default='result_PyTorch.txt',
+           default='result_PyTorch',
            help='Directory for saving performance data')
   parser.add_argument('--generate_onnx', type=str, default='',
            help='Directory for saving ONNX model')

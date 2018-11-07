@@ -48,17 +48,19 @@ long hash(char *str0, int len) {
   return hash;
 }
 
-long HEAP_SIZE = 4294967304; // 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; //
-void *mallocBase = calloc(HEAP_SIZE, 1);
+long HEAP_SIZE_CPU = 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; // 4294967304; //
+void *mallocBase = calloc(HEAP_SIZE_CPU, 1);
 void *mallocAddr = mallocBase;
 void *waterMark = mallocBase;
 void *myMalloc(size_t bytes) {
   void *res = mallocAddr;
   mallocAddr = (void *)((char *)mallocAddr + bytes);
-  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE)
-    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE\n");
+  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE_CPU)
+    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE_CPU\n");
   return res;
 }
+
+long HEAP_SIZE = 4294967304; // this is for GPU
 
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
   long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
@@ -109,6 +111,11 @@ __global__ void arrayFill(float *data, float value) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   data[tid] = value;
 }
+__global__ void arrayFill_greg(float* data, float value, int size) {
+  int stride = gridDim.x * blockDim.x;
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  for (int i = tid; i < size; i += stride) data[i] = value;
+}
 
 __global__ void nllLoss(float *x, int x_stride, float *y, int* target) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -122,20 +129,122 @@ __global__ void nllLoss_grad(int x_stride, float *yGrad, int* target, float* xGr
   xGrad[offset] += -1 * yGrad[tid];
 }
 
-__global__ void concat(float* in1, float* in2, float* out, int bound) {
-  int tid = blockIdx.x * blockDim.x * blockDim.y * blockDim.z +
-            threadIdx.z * blockDim.y * blockDim.x +
-            threadIdx.y * blockDim.x + threadIdx.x;
-  if (threadIdx.z < bound) {
-    int subid = blockIdx.x * blockDim.x * blockDim.y * bound +
-                threadIdx.z * blockDim.y * blockDim.x +
-                threadIdx.y * blockDim.x + threadIdx.x;
-    out[tid] = in1[subid];
-  } else {
-    int subid = blockIdx.x * blockDim.x * blockDim.y * (blockDim.z - bound) +
-                (threadIdx.z - bound) * blockDim.y * blockDim.x +
-                threadIdx.y * blockDim.x + threadIdx.x;
-    out[tid] = in2[subid];
+//following - https://github.com/torch/cutorch/blob/master/lib/THC/THCTensorMath.cuh#L49
+static inline __device__ int compute(int outputSize0, int outputSize1, int outputSize2, int outputSize3,
+                                     int outputStride0, int outputStride1, int outputStride2, int outputStride3,
+                                     const int dimSize, const int concatDim, int linearIndex) {
+  int offset = 0;
+  int curDimSize = 3 == concatDim ? dimSize : outputSize3;
+  int nextDimIndex = linearIndex / curDimSize;
+  int curDimIndex = linearIndex - curDimSize * nextDimIndex;
+  int curDimOffset = curDimIndex * outputStride3;
+  offset += curDimOffset;
+  linearIndex = nextDimIndex;
+  curDimSize = 2 == concatDim ? dimSize : outputSize2;
+  nextDimIndex = linearIndex / curDimSize;
+  curDimIndex = linearIndex - curDimSize * nextDimIndex;
+  curDimOffset = curDimIndex * outputStride2;
+  offset += curDimOffset;
+  linearIndex = nextDimIndex;
+  curDimSize = 1 == concatDim ? dimSize : outputSize1;
+  nextDimIndex = linearIndex / curDimSize;
+  curDimIndex = linearIndex - curDimSize * nextDimIndex;
+  curDimOffset = curDimIndex * outputStride1;
+  offset += curDimOffset;
+  linearIndex = nextDimIndex;
+  return offset + linearIndex * outputStride0;
+//  for (int i = 3; i >= 1; i--) {
+//    int curDimSize = i == concatDim ? dimSize : outputSize[i];
+//    int nextDimIndex = linearIndex / curDimSize;
+//    int curDimIndex = linearIndex - curDimSize * nextDimIndex;
+//    int curDimOffset = curDimIndex * outputStride[i];
+//    offset += curDimOffset;
+//    linearIndex = nextDimIndex;
+//  }
+//  return offset + linearIndex * outputStride[0];
+}
+
+// TODO: Only for Dim of rank 4, and only for 2 inputs, and only for concat at dim = 1
+__global__ void concat2D_1D_greg(float* in1, int dimSize1, int nElement1,
+                                 float* in2, int dimSize2, int nElement2,
+                                 float* out, int concatDim,
+                                 int outSize0, int outSize1, int outSize2, int outSize3,
+                                 int outStride0, int outStride1, int outStride2, int outStride3) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
+  if (tid >= nElement) return;
+  float* data = blockIdx.y == 0 ? in1 : in2;
+  int offset = blockIdx.y == 0 ? 0 : dimSize1;
+  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
+  int dataOffset = offset * outStride1;
+  int stride = gridDim.x * blockDim.x;
+  while (tid < nElement) {
+    int elementOffset = compute(outSize0, outSize1, outSize2, outSize3,
+                                outStride0, outStride1, outStride2, outStride3, dimSize, concatDim, tid);
+    out[dataOffset + elementOffset] = data[tid];
+    tid += stride;
+  }
+}
+
+// TODO: Only for Dim of rank 4, and only for 2 inputs, and only for concat at dim = 1
+__global__ void concat2D_1D_greg_grad(float* in1, int dimSize1, int nElement1,
+                                      float* in2, int dimSize2, int nElement2,
+                                      float* out, int concatDim,
+                                      int outSize0, int outSize1, int outSize2, int outSize3,
+                                      int outStride0, int outStride1, int outStride2, int outStride3) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
+  if (tid >= nElement) return;
+  float* data = blockIdx.y == 0 ? in1 : in2;
+  int offset = blockIdx.y == 0 ? 0 : dimSize1;
+  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
+  int dataOffset = offset * outStride1;
+  int stride = gridDim.x * blockDim.x;
+  while (tid < nElement) {
+    int elementOffset = compute(outSize0, outSize1, outSize2, outSize3,
+                                outStride0, outStride1, outStride2, outStride3, dimSize, concatDim, tid);
+    data[tid] += out[dataOffset + elementOffset];
+    tid += stride;
+  }
+}
+
+__global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid >= sizeLow) return;
+  if (blockIdx.y < sizeHigh) { // the first input
+    int index_out = tid + blockIdx.y * sizeLow * (sizeDim1 + sizeDim2);
+    int index_in1 = tid + blockIdx.y * sizeLow * sizeDim1;
+    for (int i = 0; i < sizeDim1; i++) {
+      out[index_out] = in1[index_in1];
+      index_out += sizeLow; index_in1 += sizeLow;
+    }
+  } else { // the second input
+    int index_out = tid + (blockIdx.y - sizeHigh) * sizeLow * (sizeDim1 + sizeDim2) + sizeLow * sizeDim1;
+    int index_in2 = tid + (blockIdx.y - sizeHigh) * sizeLow * sizeDim2;
+    for (int i = 0; i < sizeDim2; i++) {
+      out[index_out] = in2[index_in2];
+      index_out += sizeLow; index_in2 += sizeLow;
+    }
+  }
+}
+
+__global__ void concat2D_1D_loop_grad(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid >= sizeLow) return;
+  if (blockIdx.y < sizeHigh) { // the first input
+    int index_out = tid + blockIdx.y * sizeLow * (sizeDim1 + sizeDim2);
+    int index_in1 = tid + blockIdx.y * sizeLow * sizeDim1;
+    for (int i = 0; i < sizeDim1; i++) {
+      in1[index_in1] += out[index_out];
+      index_out += sizeLow; index_in1 += sizeLow;
+    }
+  } else { // the second input
+    int index_out = tid + (blockIdx.y - sizeHigh) * sizeLow * (sizeDim1 + sizeDim2) + sizeLow * sizeDim1;
+    int index_in2 = tid + (blockIdx.y - sizeHigh) * sizeLow * sizeDim2;
+    for (int i = 0; i < sizeDim2; i++) {
+      in2[index_in2] += out[index_out];
+      index_out += sizeLow; index_in2 += sizeLow;
+    }
   }
 }
 
@@ -161,21 +270,40 @@ __global__ void concat2D_1D_grad(float* in1, float* in2, float* out, int dim2, i
   }
 }
 
-__global__ void concat_grad(float* in1, float* in2, float* out, int bound) {
-  int tid = blockIdx.x * blockDim.x * blockDim.y * blockDim.z +
-            threadIdx.z * blockDim.y * blockDim.x +
-            threadIdx.y * blockDim.x + threadIdx.x;
-  if (threadIdx.z < bound) {
-    int subid = blockIdx.x * blockDim.x * blockDim.y * bound +
-                threadIdx.z * blockDim.y * blockDim.x +
-                threadIdx.y * blockDim.x + threadIdx.x;
-     in1[subid] += out[tid];
-  } else {
-    int subid = blockIdx.x * blockDim.x * blockDim.y * (blockDim.z - bound) +
-                (threadIdx.z - bound) * blockDim.y * blockDim.x +
-                threadIdx.y * blockDim.x + threadIdx.x;
-    in2[subid] += out[tid];
+__global__ void adagrad_update_1D_1D(float* x, float* d, float* m, float clip, float lr, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < size) {
+    if (d[tid] > clip) d[tid] = clip;
+    if (d[tid] < -clip) d[tid] = -clip;
+    m[tid] += d[tid] * d[tid];
+    x[tid] -= lr * d[tid] / sqrt(m[tid] + 0.00000001);
+    d[tid] = 0;
   }
+}
+
+__global__ void elementwise_1D_1D_mul(float* in1, float* in2, float* out, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < size) out[tid] = in1[tid] * in2[tid];
+}
+
+__global__ void elementwise_1D_1D_mul_mutate(float* in1, float* in2, float* out, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < size) out[tid] += in1[tid] * in2[tid];
+}
+
+__global__ void elementwise_1D_1D_add(float* in1, float* in2, float* out, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < size) out[tid] = in1[tid] + in2[tid];
+}
+
+__global__ void elementwise_1D_1D_minus(float* in1, float* in2, float* out, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < size) out[tid] = in1[tid] - in2[tid];
+}
+
+__global__ void elementwise_1D_1D_div(float* in1, float* in2, float* out, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < size) out[tid] = in1[tid] / in2[tid];
 }
 
 __global__ void elementwise_1D_1D_exp(float* in, float* out, int size) {
@@ -454,7 +582,7 @@ cudnnHandle_t cudnnHandle;
 CUDNN_CALL(cudnnCreate(&cudnnHandle));
 // Tensor 'toGPU' invocation.
 float* x275 = (float*)myGpuMalloc(262144 * sizeof(float));
-int32_t x4 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
+int32_t x4 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
 int32_t x5 = fsize(x4);
 float* x6 = (float*)mmap(0, x5, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x4, 0);
 float* x7 = x6+5205440;
@@ -1581,11 +1709,14 @@ printf("%.5f ",x1128);
 
 }
 printf("\n");
-float* x1133 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1134 = (float*)myMalloc(1 * sizeof(float));;
-x1134[0] = 0.0f;
-float* x1136 = (float*)myMalloc(1 * sizeof(float));;
-x1136[0] = 1.0f;
+// Tensor 'toGPU' invocation.
+float* x1134 = (float*)myGpuMalloc(196608 * sizeof(float));
+CUDA_CALL(cudaMemcpy(x1134, x1109, 196608 * sizeof(float), cudaMemcpyHostToDevice));
+float* x1136 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1137 = (float*)myMalloc(1 * sizeof(float));;
+x1137[0] = 0.0f;
+float* x1139 = (float*)myMalloc(1 * sizeof(float));;
+x1139[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -1628,15 +1759,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1136, in_desc, x1109, filt_desc, x713,
+    x1139, in_desc, x1134, filt_desc, x713,
     conv_desc, algo, ws_data, ws_size,
-    x1134, out_desc, x1133));
+    x1137, out_desc, x1136));
 };
-float* x1139 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1140 = (float*)myMalloc(1 * sizeof(float));;
-x1140[0] = 0.0f;
-float* x1142 = (float*)myMalloc(1 * sizeof(float));;
-x1142[0] = 1.0f;
+float* x1142 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1143 = (float*)myMalloc(1 * sizeof(float));;
+x1143[0] = 0.0f;
+float* x1145 = (float*)myMalloc(1 * sizeof(float));;
+x1145[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -1659,14 +1790,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1142, x1142, in_desc, x1133, out_desc, x1139, sbmv_desc, x875,
+    x1145, x1145, in_desc, x1136, out_desc, x1142, sbmv_desc, x875,
     x1010, x377, x587, 1.0E-5));
 };
-float* x1145 = (float*)myMalloc(1 * sizeof(float));;
-x1145[0] = 0.0f;
-float* x1147 = (float*)myMalloc(1 * sizeof(float));;
-x1147[0] = 1.0f;
-float* x1149 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1148 = (float*)myMalloc(1 * sizeof(float));;
+x1148[0] = 0.0f;
+float* x1150 = (float*)myMalloc(1 * sizeof(float));;
+x1150[0] = 1.0f;
+float* x1152 = (float*)myGpuMalloc(4194304 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -1683,13 +1814,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1147, x_desc, x1139, x1145, x_desc, x1149));
+    x1150, x_desc, x1142, x1148, x_desc, x1152));
 };
-float* x1151 = (float*)myMalloc(1 * sizeof(float));;
-x1151[0] = 0.0f;
-float* x1153 = (float*)myMalloc(1 * sizeof(float));;
-x1153[0] = 1.0f;
-float* x1155 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1154 = (float*)myMalloc(1 * sizeof(float));;
+x1154[0] = 0.0f;
+float* x1156 = (float*)myMalloc(1 * sizeof(float));;
+x1156[0] = 1.0f;
+float* x1158 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -1714,13 +1845,13 @@ CUDNN_CALL(cudnnSetPooling2dDescriptor(
 CUDNN_CALL(cudnnPoolingForward(
     cudnnHandle, 
     poolingDesc, 
-    x1153, in_desc, x1149, x1151, out_desc, x1155));
+    x1156, in_desc, x1152, x1154, out_desc, x1158));
 };
-float* x1157 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1158 = (float*)myMalloc(1 * sizeof(float));;
-x1158[0] = 0.0f;
-float* x1160 = (float*)myMalloc(1 * sizeof(float));;
-x1160[0] = 1.0f;
+float* x1160 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1161 = (float*)myMalloc(1 * sizeof(float));;
+x1161[0] = 0.0f;
+float* x1163 = (float*)myMalloc(1 * sizeof(float));;
+x1163[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -1763,15 +1894,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1160, in_desc, x1155, filt_desc, x956,
+    x1163, in_desc, x1158, filt_desc, x956,
     conv_desc, algo, ws_data, ws_size,
-    x1158, out_desc, x1157));
+    x1161, out_desc, x1160));
 };
-float* x1163 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1164 = (float*)myMalloc(1 * sizeof(float));;
-x1164[0] = 0.0f;
-float* x1166 = (float*)myMalloc(1 * sizeof(float));;
-x1166[0] = 1.0f;
+float* x1166 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1167 = (float*)myMalloc(1 * sizeof(float));;
+x1167[0] = 0.0f;
+float* x1169 = (float*)myMalloc(1 * sizeof(float));;
+x1169[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -1794,14 +1925,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1166, x1166, in_desc, x1157, out_desc, x1163, sbmv_desc, x335,
+    x1169, x1169, in_desc, x1160, out_desc, x1166, sbmv_desc, x335,
     x416, x599, x410, 1.0E-5));
 };
-float* x1169 = (float*)myMalloc(1 * sizeof(float));;
-x1169[0] = 0.0f;
-float* x1171 = (float*)myMalloc(1 * sizeof(float));;
-x1171[0] = 1.0f;
-float* x1173 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1172 = (float*)myMalloc(1 * sizeof(float));;
+x1172[0] = 0.0f;
+float* x1174 = (float*)myMalloc(1 * sizeof(float));;
+x1174[0] = 1.0f;
+float* x1176 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -1818,13 +1949,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1171, x_desc, x1163, x1169, x_desc, x1173));
+    x1174, x_desc, x1166, x1172, x_desc, x1176));
 };
-float* x1175 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1176 = (float*)myMalloc(1 * sizeof(float));;
-x1176[0] = 0.0f;
-float* x1178 = (float*)myMalloc(1 * sizeof(float));;
-x1178[0] = 1.0f;
+float* x1178 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1179 = (float*)myMalloc(1 * sizeof(float));;
+x1179[0] = 0.0f;
+float* x1181 = (float*)myMalloc(1 * sizeof(float));;
+x1181[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -1867,15 +1998,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1178, in_desc, x1173, filt_desc, x527,
+    x1181, in_desc, x1176, filt_desc, x527,
     conv_desc, algo, ws_data, ws_size,
-    x1176, out_desc, x1175));
+    x1179, out_desc, x1178));
 };
-float* x1181 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1182 = (float*)myMalloc(1 * sizeof(float));;
-x1182[0] = 0.0f;
-float* x1184 = (float*)myMalloc(1 * sizeof(float));;
-x1184[0] = 1.0f;
+float* x1184 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1185 = (float*)myMalloc(1 * sizeof(float));;
+x1185[0] = 0.0f;
+float* x1187 = (float*)myMalloc(1 * sizeof(float));;
+x1187[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -1898,14 +2029,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1184, x1184, in_desc, x1175, out_desc, x1181, sbmv_desc, x749,
+    x1187, x1187, in_desc, x1178, out_desc, x1184, sbmv_desc, x749,
     x404, x572, x731, 1.0E-5));
 };
-float* x1187 = (float*)myMalloc(1 * sizeof(float));;
-x1187[0] = 0.0f;
-float* x1189 = (float*)myMalloc(1 * sizeof(float));;
-x1189[0] = 1.0f;
-float* x1191 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1190 = (float*)myMalloc(1 * sizeof(float));;
+x1190[0] = 0.0f;
+float* x1192 = (float*)myMalloc(1 * sizeof(float));;
+x1192[0] = 1.0f;
+float* x1194 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -1922,13 +2053,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1189, x_desc, x1181, x1187, x_desc, x1191));
+    x1192, x_desc, x1184, x1190, x_desc, x1194));
 };
-float* x1193 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1194 = (float*)myMalloc(1 * sizeof(float));;
-x1194[0] = 0.0f;
-float* x1196 = (float*)myMalloc(1 * sizeof(float));;
-x1196[0] = 1.0f;
+float* x1196 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1197 = (float*)myMalloc(1 * sizeof(float));;
+x1197[0] = 0.0f;
+float* x1199 = (float*)myMalloc(1 * sizeof(float));;
+x1199[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -1971,15 +2102,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1196, in_desc, x1191, filt_desc, x353,
+    x1199, in_desc, x1194, filt_desc, x353,
     conv_desc, algo, ws_data, ws_size,
-    x1194, out_desc, x1193));
+    x1197, out_desc, x1196));
 };
-float* x1199 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1200 = (float*)myMalloc(1 * sizeof(float));;
-x1200[0] = 0.0f;
-float* x1202 = (float*)myMalloc(1 * sizeof(float));;
-x1202[0] = 1.0f;
+float* x1202 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1203 = (float*)myMalloc(1 * sizeof(float));;
+x1203[0] = 0.0f;
+float* x1205 = (float*)myMalloc(1 * sizeof(float));;
+x1205[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2002,14 +2133,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1202, x1202, in_desc, x1193, out_desc, x1199, sbmv_desc, x854,
+    x1205, x1205, in_desc, x1196, out_desc, x1202, sbmv_desc, x854,
     x635, x470, x365, 1.0E-5));
 };
-float* x1205 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1206 = (float*)myMalloc(1 * sizeof(float));;
-x1206[0] = 0.0f;
-float* x1208 = (float*)myMalloc(1 * sizeof(float));;
-x1208[0] = 1.0f;
+float* x1208 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1209 = (float*)myMalloc(1 * sizeof(float));;
+x1209[0] = 0.0f;
+float* x1211 = (float*)myMalloc(1 * sizeof(float));;
+x1211[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2052,44 +2183,44 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1208, in_desc, x1155, filt_desc, x743,
+    x1211, in_desc, x1158, filt_desc, x743,
     conv_desc, algo, ws_data, ws_size,
-    x1206, out_desc, x1205));
+    x1209, out_desc, x1208));
 };
-float* x1211 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1212 = (float*)myMalloc(1 * sizeof(float));;
-x1212[0] = 0.0f;
-float* x1214 = (float*)myMalloc(1 * sizeof(float));;
-x1214[0] = 1.0f;
-
-{
-cudnnTensorDescriptor_t in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, 16, 16));
-
-cudnnTensorDescriptor_t out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, 16, 16));
-
-cudnnTensorDescriptor_t sbmv_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    1, 256, 1, 1));
-
-CUDNN_CALL(cudnnBatchNormalizationForwardInference(
-    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1214, x1214, in_desc, x1205, out_desc, x1211, sbmv_desc, x485,
-    x866, x1049, x986, 1.0E-5));
-};
+float* x1214 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1215 = (float*)myMalloc(1 * sizeof(float));;
+x1215[0] = 0.0f;
 float* x1217 = (float*)myMalloc(1 * sizeof(float));;
 x1217[0] = 1.0f;
-float* x1219 = (float*)myMalloc(1 * sizeof(float));;
-x1219[0] = 1.0f;
+
+{
+cudnnTensorDescriptor_t in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, 16, 16));
+
+cudnnTensorDescriptor_t out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, 16, 16));
+
+cudnnTensorDescriptor_t sbmv_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    1, 256, 1, 1));
+
+CUDNN_CALL(cudnnBatchNormalizationForwardInference(
+    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
+    x1217, x1217, in_desc, x1208, out_desc, x1214, sbmv_desc, x485,
+    x866, x1049, x986, 1.0E-5));
+};
+float* x1220 = (float*)myMalloc(1 * sizeof(float));;
+x1220[0] = 1.0f;
+float* x1222 = (float*)myMalloc(1 * sizeof(float));;
+x1222[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -2105,13 +2236,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, 16, 16));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1217, bias_desc, x1211, x1219, out_desc, x1199));
+    cudnnHandle, x1220, bias_desc, x1214, x1222, out_desc, x1202));
 };
-float* x1222 = (float*)myMalloc(1 * sizeof(float));;
-x1222[0] = 0.0f;
-float* x1224 = (float*)myMalloc(1 * sizeof(float));;
-x1224[0] = 1.0f;
-float* x1226 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1225 = (float*)myMalloc(1 * sizeof(float));;
+x1225[0] = 0.0f;
+float* x1227 = (float*)myMalloc(1 * sizeof(float));;
+x1227[0] = 1.0f;
+float* x1229 = (float*)myGpuMalloc(4194304 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -2128,13 +2259,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1224, x_desc, x1199, x1222, x_desc, x1226));
+    x1227, x_desc, x1202, x1225, x_desc, x1229));
 };
-float* x1228 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1229 = (float*)myMalloc(1 * sizeof(float));;
-x1229[0] = 0.0f;
-float* x1231 = (float*)myMalloc(1 * sizeof(float));;
-x1231[0] = 1.0f;
+float* x1231 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1232 = (float*)myMalloc(1 * sizeof(float));;
+x1232[0] = 0.0f;
+float* x1234 = (float*)myMalloc(1 * sizeof(float));;
+x1234[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2177,15 +2308,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1231, in_desc, x1226, filt_desc, x770,
+    x1234, in_desc, x1229, filt_desc, x770,
     conv_desc, algo, ws_data, ws_size,
-    x1229, out_desc, x1228));
+    x1232, out_desc, x1231));
 };
-float* x1234 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1235 = (float*)myMalloc(1 * sizeof(float));;
-x1235[0] = 0.0f;
-float* x1237 = (float*)myMalloc(1 * sizeof(float));;
-x1237[0] = 1.0f;
+float* x1237 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1238 = (float*)myMalloc(1 * sizeof(float));;
+x1238[0] = 0.0f;
+float* x1240 = (float*)myMalloc(1 * sizeof(float));;
+x1240[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2208,14 +2339,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1237, x1237, in_desc, x1228, out_desc, x1234, sbmv_desc, x683,
+    x1240, x1240, in_desc, x1231, out_desc, x1237, sbmv_desc, x683,
     x437, x287, x563, 1.0E-5));
 };
-float* x1240 = (float*)myMalloc(1 * sizeof(float));;
-x1240[0] = 0.0f;
-float* x1242 = (float*)myMalloc(1 * sizeof(float));;
-x1242[0] = 1.0f;
-float* x1244 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1243 = (float*)myMalloc(1 * sizeof(float));;
+x1243[0] = 0.0f;
+float* x1245 = (float*)myMalloc(1 * sizeof(float));;
+x1245[0] = 1.0f;
+float* x1247 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -2232,13 +2363,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1242, x_desc, x1234, x1240, x_desc, x1244));
+    x1245, x_desc, x1237, x1243, x_desc, x1247));
 };
-float* x1246 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1247 = (float*)myMalloc(1 * sizeof(float));;
-x1247[0] = 0.0f;
-float* x1249 = (float*)myMalloc(1 * sizeof(float));;
-x1249[0] = 1.0f;
+float* x1249 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1250 = (float*)myMalloc(1 * sizeof(float));;
+x1250[0] = 0.0f;
+float* x1252 = (float*)myMalloc(1 * sizeof(float));;
+x1252[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2281,15 +2412,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1249, in_desc, x1244, filt_desc, x506,
+    x1252, in_desc, x1247, filt_desc, x506,
     conv_desc, algo, ws_data, ws_size,
-    x1247, out_desc, x1246));
+    x1250, out_desc, x1249));
 };
-float* x1252 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1253 = (float*)myMalloc(1 * sizeof(float));;
-x1253[0] = 0.0f;
-float* x1255 = (float*)myMalloc(1 * sizeof(float));;
-x1255[0] = 1.0f;
+float* x1255 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1256 = (float*)myMalloc(1 * sizeof(float));;
+x1256[0] = 0.0f;
+float* x1258 = (float*)myMalloc(1 * sizeof(float));;
+x1258[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2312,14 +2443,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1255, x1255, in_desc, x1246, out_desc, x1252, sbmv_desc, x881,
+    x1258, x1258, in_desc, x1249, out_desc, x1255, sbmv_desc, x881,
     x716, x389, x989, 1.0E-5));
 };
-float* x1258 = (float*)myMalloc(1 * sizeof(float));;
-x1258[0] = 0.0f;
-float* x1260 = (float*)myMalloc(1 * sizeof(float));;
-x1260[0] = 1.0f;
-float* x1262 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1261 = (float*)myMalloc(1 * sizeof(float));;
+x1261[0] = 0.0f;
+float* x1263 = (float*)myMalloc(1 * sizeof(float));;
+x1263[0] = 1.0f;
+float* x1265 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -2336,13 +2467,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1260, x_desc, x1252, x1258, x_desc, x1262));
+    x1263, x_desc, x1255, x1261, x_desc, x1265));
 };
-float* x1264 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1265 = (float*)myMalloc(1 * sizeof(float));;
-x1265[0] = 0.0f;
-float* x1267 = (float*)myMalloc(1 * sizeof(float));;
-x1267[0] = 1.0f;
+float* x1267 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1268 = (float*)myMalloc(1 * sizeof(float));;
+x1268[0] = 0.0f;
+float* x1270 = (float*)myMalloc(1 * sizeof(float));;
+x1270[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2385,15 +2516,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1267, in_desc, x1262, filt_desc, x647,
+    x1270, in_desc, x1265, filt_desc, x647,
     conv_desc, algo, ws_data, ws_size,
-    x1265, out_desc, x1264));
+    x1268, out_desc, x1267));
 };
-float* x1270 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1271 = (float*)myMalloc(1 * sizeof(float));;
-x1271[0] = 0.0f;
-float* x1273 = (float*)myMalloc(1 * sizeof(float));;
-x1273[0] = 1.0f;
+float* x1273 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1274 = (float*)myMalloc(1 * sizeof(float));;
+x1274[0] = 0.0f;
+float* x1276 = (float*)myMalloc(1 * sizeof(float));;
+x1276[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2416,13 +2547,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1273, x1273, in_desc, x1264, out_desc, x1270, sbmv_desc, x431,
+    x1276, x1276, in_desc, x1267, out_desc, x1273, sbmv_desc, x431,
     x278, x530, x755, 1.0E-5));
 };
-float* x1276 = (float*)myMalloc(1 * sizeof(float));;
-x1276[0] = 1.0f;
-float* x1278 = (float*)myMalloc(1 * sizeof(float));;
-x1278[0] = 1.0f;
+float* x1279 = (float*)myMalloc(1 * sizeof(float));;
+x1279[0] = 1.0f;
+float* x1281 = (float*)myMalloc(1 * sizeof(float));;
+x1281[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -2438,13 +2569,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, 16, 16));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1276, bias_desc, x1226, x1278, out_desc, x1270));
+    cudnnHandle, x1279, bias_desc, x1229, x1281, out_desc, x1273));
 };
-float* x1281 = (float*)myMalloc(1 * sizeof(float));;
-x1281[0] = 0.0f;
-float* x1283 = (float*)myMalloc(1 * sizeof(float));;
-x1283[0] = 1.0f;
-float* x1285 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1284 = (float*)myMalloc(1 * sizeof(float));;
+x1284[0] = 0.0f;
+float* x1286 = (float*)myMalloc(1 * sizeof(float));;
+x1286[0] = 1.0f;
+float* x1288 = (float*)myGpuMalloc(4194304 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -2461,13 +2592,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1283, x_desc, x1270, x1281, x_desc, x1285));
+    x1286, x_desc, x1273, x1284, x_desc, x1288));
 };
-float* x1287 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1288 = (float*)myMalloc(1 * sizeof(float));;
-x1288[0] = 0.0f;
-float* x1290 = (float*)myMalloc(1 * sizeof(float));;
-x1290[0] = 1.0f;
+float* x1290 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1291 = (float*)myMalloc(1 * sizeof(float));;
+x1291[0] = 0.0f;
+float* x1293 = (float*)myMalloc(1 * sizeof(float));;
+x1293[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2510,15 +2641,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1290, in_desc, x1285, filt_desc, x707,
+    x1293, in_desc, x1288, filt_desc, x707,
     conv_desc, algo, ws_data, ws_size,
-    x1288, out_desc, x1287));
+    x1291, out_desc, x1290));
 };
-float* x1293 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1294 = (float*)myMalloc(1 * sizeof(float));;
-x1294[0] = 0.0f;
-float* x1296 = (float*)myMalloc(1 * sizeof(float));;
-x1296[0] = 1.0f;
+float* x1296 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1297 = (float*)myMalloc(1 * sizeof(float));;
+x1297[0] = 0.0f;
+float* x1299 = (float*)myMalloc(1 * sizeof(float));;
+x1299[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2541,14 +2672,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1296, x1296, in_desc, x1287, out_desc, x1293, sbmv_desc, x500,
+    x1299, x1299, in_desc, x1290, out_desc, x1296, sbmv_desc, x500,
     x329, x1028, x818, 1.0E-5));
 };
-float* x1299 = (float*)myMalloc(1 * sizeof(float));;
-x1299[0] = 0.0f;
-float* x1301 = (float*)myMalloc(1 * sizeof(float));;
-x1301[0] = 1.0f;
-float* x1303 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1302 = (float*)myMalloc(1 * sizeof(float));;
+x1302[0] = 0.0f;
+float* x1304 = (float*)myMalloc(1 * sizeof(float));;
+x1304[0] = 1.0f;
+float* x1306 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -2565,13 +2696,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1301, x_desc, x1293, x1299, x_desc, x1303));
+    x1304, x_desc, x1296, x1302, x_desc, x1306));
 };
-float* x1305 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1306 = (float*)myMalloc(1 * sizeof(float));;
-x1306[0] = 0.0f;
-float* x1308 = (float*)myMalloc(1 * sizeof(float));;
-x1308[0] = 1.0f;
+float* x1308 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1309 = (float*)myMalloc(1 * sizeof(float));;
+x1309[0] = 0.0f;
+float* x1311 = (float*)myMalloc(1 * sizeof(float));;
+x1311[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2614,15 +2745,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1308, in_desc, x1303, filt_desc, x476,
+    x1311, in_desc, x1306, filt_desc, x476,
     conv_desc, algo, ws_data, ws_size,
-    x1306, out_desc, x1305));
+    x1309, out_desc, x1308));
 };
-float* x1311 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1312 = (float*)myMalloc(1 * sizeof(float));;
-x1312[0] = 0.0f;
-float* x1314 = (float*)myMalloc(1 * sizeof(float));;
-x1314[0] = 1.0f;
+float* x1314 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1315 = (float*)myMalloc(1 * sizeof(float));;
+x1315[0] = 0.0f;
+float* x1317 = (float*)myMalloc(1 * sizeof(float));;
+x1317[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2645,14 +2776,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1314, x1314, in_desc, x1305, out_desc, x1311, sbmv_desc, x473,
+    x1317, x1317, in_desc, x1308, out_desc, x1314, sbmv_desc, x473,
     x662, x794, x611, 1.0E-5));
 };
-float* x1317 = (float*)myMalloc(1 * sizeof(float));;
-x1317[0] = 0.0f;
-float* x1319 = (float*)myMalloc(1 * sizeof(float));;
-x1319[0] = 1.0f;
-float* x1321 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1320 = (float*)myMalloc(1 * sizeof(float));;
+x1320[0] = 0.0f;
+float* x1322 = (float*)myMalloc(1 * sizeof(float));;
+x1322[0] = 1.0f;
+float* x1324 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -2669,13 +2800,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1319, x_desc, x1311, x1317, x_desc, x1321));
+    x1322, x_desc, x1314, x1320, x_desc, x1324));
 };
-float* x1323 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1324 = (float*)myMalloc(1 * sizeof(float));;
-x1324[0] = 0.0f;
-float* x1326 = (float*)myMalloc(1 * sizeof(float));;
-x1326[0] = 1.0f;
+float* x1326 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1327 = (float*)myMalloc(1 * sizeof(float));;
+x1327[0] = 0.0f;
+float* x1329 = (float*)myMalloc(1 * sizeof(float));;
+x1329[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2718,15 +2849,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1326, in_desc, x1321, filt_desc, x518,
+    x1329, in_desc, x1324, filt_desc, x518,
     conv_desc, algo, ws_data, ws_size,
-    x1324, out_desc, x1323));
+    x1327, out_desc, x1326));
 };
-float* x1329 = (float*)myGpuMalloc(4194304 * sizeof(float));
-float* x1330 = (float*)myMalloc(1 * sizeof(float));;
-x1330[0] = 0.0f;
-float* x1332 = (float*)myMalloc(1 * sizeof(float));;
-x1332[0] = 1.0f;
+float* x1332 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1333 = (float*)myMalloc(1 * sizeof(float));;
+x1333[0] = 0.0f;
+float* x1335 = (float*)myMalloc(1 * sizeof(float));;
+x1335[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2749,13 +2880,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1332, x1332, in_desc, x1323, out_desc, x1329, sbmv_desc, x368,
+    x1335, x1335, in_desc, x1326, out_desc, x1332, sbmv_desc, x368,
     x998, x809, x656, 1.0E-5));
 };
-float* x1335 = (float*)myMalloc(1 * sizeof(float));;
-x1335[0] = 1.0f;
-float* x1337 = (float*)myMalloc(1 * sizeof(float));;
-x1337[0] = 1.0f;
+float* x1338 = (float*)myMalloc(1 * sizeof(float));;
+x1338[0] = 1.0f;
+float* x1340 = (float*)myMalloc(1 * sizeof(float));;
+x1340[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -2771,13 +2902,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, 16, 16));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1335, bias_desc, x1285, x1337, out_desc, x1329));
+    cudnnHandle, x1338, bias_desc, x1288, x1340, out_desc, x1332));
 };
-float* x1340 = (float*)myMalloc(1 * sizeof(float));;
-x1340[0] = 0.0f;
-float* x1342 = (float*)myMalloc(1 * sizeof(float));;
-x1342[0] = 1.0f;
-float* x1344 = (float*)myGpuMalloc(4194304 * sizeof(float));
+float* x1343 = (float*)myMalloc(1 * sizeof(float));;
+x1343[0] = 0.0f;
+float* x1345 = (float*)myMalloc(1 * sizeof(float));;
+x1345[0] = 1.0f;
+float* x1347 = (float*)myGpuMalloc(4194304 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -2794,13 +2925,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1342, x_desc, x1329, x1340, x_desc, x1344));
+    x1345, x_desc, x1332, x1343, x_desc, x1347));
 };
-float* x1346 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1347 = (float*)myMalloc(1 * sizeof(float));;
-x1347[0] = 0.0f;
-float* x1349 = (float*)myMalloc(1 * sizeof(float));;
-x1349[0] = 1.0f;
+float* x1349 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1350 = (float*)myMalloc(1 * sizeof(float));;
+x1350[0] = 0.0f;
+float* x1352 = (float*)myMalloc(1 * sizeof(float));;
+x1352[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2843,15 +2974,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1349, in_desc, x1344, filt_desc, x290,
+    x1352, in_desc, x1347, filt_desc, x290,
     conv_desc, algo, ws_data, ws_size,
-    x1347, out_desc, x1346));
+    x1350, out_desc, x1349));
 };
-float* x1352 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1353 = (float*)myMalloc(1 * sizeof(float));;
-x1353[0] = 0.0f;
-float* x1355 = (float*)myMalloc(1 * sizeof(float));;
-x1355[0] = 1.0f;
+float* x1355 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1356 = (float*)myMalloc(1 * sizeof(float));;
+x1356[0] = 0.0f;
+float* x1358 = (float*)myMalloc(1 * sizeof(float));;
+x1358[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2874,14 +3005,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1355, x1355, in_desc, x1346, out_desc, x1352, sbmv_desc, x509,
+    x1358, x1358, in_desc, x1349, out_desc, x1355, sbmv_desc, x509,
     x773, x869, x659, 1.0E-5));
 };
-float* x1358 = (float*)myMalloc(1 * sizeof(float));;
-x1358[0] = 0.0f;
-float* x1360 = (float*)myMalloc(1 * sizeof(float));;
-x1360[0] = 1.0f;
-float* x1362 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1361 = (float*)myMalloc(1 * sizeof(float));;
+x1361[0] = 0.0f;
+float* x1363 = (float*)myMalloc(1 * sizeof(float));;
+x1363[0] = 1.0f;
+float* x1365 = (float*)myGpuMalloc(2097152 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -2898,13 +3029,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1360, x_desc, x1352, x1358, x_desc, x1362));
+    x1363, x_desc, x1355, x1361, x_desc, x1365));
 };
-float* x1364 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1365 = (float*)myMalloc(1 * sizeof(float));;
-x1365[0] = 0.0f;
-float* x1367 = (float*)myMalloc(1 * sizeof(float));;
-x1367[0] = 1.0f;
+float* x1367 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1368 = (float*)myMalloc(1 * sizeof(float));;
+x1368[0] = 0.0f;
+float* x1370 = (float*)myMalloc(1 * sizeof(float));;
+x1370[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2947,15 +3078,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1367, in_desc, x1362, filt_desc, x338,
+    x1370, in_desc, x1365, filt_desc, x338,
     conv_desc, algo, ws_data, ws_size,
-    x1365, out_desc, x1364));
+    x1368, out_desc, x1367));
 };
-float* x1370 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1371 = (float*)myMalloc(1 * sizeof(float));;
-x1371[0] = 0.0f;
-float* x1373 = (float*)myMalloc(1 * sizeof(float));;
-x1373[0] = 1.0f;
+float* x1373 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1374 = (float*)myMalloc(1 * sizeof(float));;
+x1374[0] = 0.0f;
+float* x1376 = (float*)myMalloc(1 * sizeof(float));;
+x1376[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -2978,14 +3109,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1373, x1373, in_desc, x1364, out_desc, x1370, sbmv_desc, x1013,
+    x1376, x1376, in_desc, x1367, out_desc, x1373, sbmv_desc, x1013,
     x827, x641, x386, 1.0E-5));
 };
-float* x1376 = (float*)myMalloc(1 * sizeof(float));;
-x1376[0] = 0.0f;
-float* x1378 = (float*)myMalloc(1 * sizeof(float));;
-x1378[0] = 1.0f;
-float* x1380 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1379 = (float*)myMalloc(1 * sizeof(float));;
+x1379[0] = 0.0f;
+float* x1381 = (float*)myMalloc(1 * sizeof(float));;
+x1381[0] = 1.0f;
+float* x1383 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3002,13 +3133,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1378, x_desc, x1370, x1376, x_desc, x1380));
+    x1381, x_desc, x1373, x1379, x_desc, x1383));
 };
-float* x1382 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1383 = (float*)myMalloc(1 * sizeof(float));;
-x1383[0] = 0.0f;
-float* x1385 = (float*)myMalloc(1 * sizeof(float));;
-x1385[0] = 1.0f;
+float* x1385 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1386 = (float*)myMalloc(1 * sizeof(float));;
+x1386[0] = 0.0f;
+float* x1388 = (float*)myMalloc(1 * sizeof(float));;
+x1388[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3051,15 +3182,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1385, in_desc, x1380, filt_desc, x575,
+    x1388, in_desc, x1383, filt_desc, x575,
     conv_desc, algo, ws_data, ws_size,
-    x1383, out_desc, x1382));
+    x1386, out_desc, x1385));
 };
-float* x1388 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1389 = (float*)myMalloc(1 * sizeof(float));;
-x1389[0] = 0.0f;
-float* x1391 = (float*)myMalloc(1 * sizeof(float));;
-x1391[0] = 1.0f;
+float* x1391 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1392 = (float*)myMalloc(1 * sizeof(float));;
+x1392[0] = 0.0f;
+float* x1394 = (float*)myMalloc(1 * sizeof(float));;
+x1394[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3082,14 +3213,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1391, x1391, in_desc, x1382, out_desc, x1388, sbmv_desc, x692,
+    x1394, x1394, in_desc, x1385, out_desc, x1391, sbmv_desc, x692,
     x887, x704, x560, 1.0E-5));
 };
-float* x1394 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1395 = (float*)myMalloc(1 * sizeof(float));;
-x1395[0] = 0.0f;
-float* x1397 = (float*)myMalloc(1 * sizeof(float));;
-x1397[0] = 1.0f;
+float* x1397 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1398 = (float*)myMalloc(1 * sizeof(float));;
+x1398[0] = 0.0f;
+float* x1400 = (float*)myMalloc(1 * sizeof(float));;
+x1400[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3132,44 +3263,44 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1397, in_desc, x1344, filt_desc, x1031,
+    x1400, in_desc, x1347, filt_desc, x1031,
     conv_desc, algo, ws_data, ws_size,
-    x1395, out_desc, x1394));
+    x1398, out_desc, x1397));
 };
-float* x1400 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1401 = (float*)myMalloc(1 * sizeof(float));;
-x1401[0] = 0.0f;
-float* x1403 = (float*)myMalloc(1 * sizeof(float));;
-x1403[0] = 1.0f;
-
-{
-cudnnTensorDescriptor_t in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, 8, 8));
-
-cudnnTensorDescriptor_t out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, 8, 8));
-
-cudnnTensorDescriptor_t sbmv_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    1, 512, 1, 1));
-
-CUDNN_CALL(cudnnBatchNormalizationForwardInference(
-    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1403, x1403, in_desc, x1394, out_desc, x1400, sbmv_desc, x878,
-    x614, x383, x326, 1.0E-5));
-};
+float* x1403 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1404 = (float*)myMalloc(1 * sizeof(float));;
+x1404[0] = 0.0f;
 float* x1406 = (float*)myMalloc(1 * sizeof(float));;
 x1406[0] = 1.0f;
-float* x1408 = (float*)myMalloc(1 * sizeof(float));;
-x1408[0] = 1.0f;
+
+{
+cudnnTensorDescriptor_t in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, 8, 8));
+
+cudnnTensorDescriptor_t out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, 8, 8));
+
+cudnnTensorDescriptor_t sbmv_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    1, 512, 1, 1));
+
+CUDNN_CALL(cudnnBatchNormalizationForwardInference(
+    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
+    x1406, x1406, in_desc, x1397, out_desc, x1403, sbmv_desc, x878,
+    x614, x383, x326, 1.0E-5));
+};
+float* x1409 = (float*)myMalloc(1 * sizeof(float));;
+x1409[0] = 1.0f;
+float* x1411 = (float*)myMalloc(1 * sizeof(float));;
+x1411[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -3185,13 +3316,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, 8, 8));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1406, bias_desc, x1400, x1408, out_desc, x1388));
+    cudnnHandle, x1409, bias_desc, x1403, x1411, out_desc, x1391));
 };
-float* x1411 = (float*)myMalloc(1 * sizeof(float));;
-x1411[0] = 0.0f;
-float* x1413 = (float*)myMalloc(1 * sizeof(float));;
-x1413[0] = 1.0f;
-float* x1415 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1414 = (float*)myMalloc(1 * sizeof(float));;
+x1414[0] = 0.0f;
+float* x1416 = (float*)myMalloc(1 * sizeof(float));;
+x1416[0] = 1.0f;
+float* x1418 = (float*)myGpuMalloc(2097152 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3208,13 +3339,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1413, x_desc, x1388, x1411, x_desc, x1415));
+    x1416, x_desc, x1391, x1414, x_desc, x1418));
 };
-float* x1417 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1418 = (float*)myMalloc(1 * sizeof(float));;
-x1418[0] = 0.0f;
-float* x1420 = (float*)myMalloc(1 * sizeof(float));;
-x1420[0] = 1.0f;
+float* x1420 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1421 = (float*)myMalloc(1 * sizeof(float));;
+x1421[0] = 0.0f;
+float* x1423 = (float*)myMalloc(1 * sizeof(float));;
+x1423[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3257,15 +3388,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1420, in_desc, x1415, filt_desc, x1025,
+    x1423, in_desc, x1418, filt_desc, x1025,
     conv_desc, algo, ws_data, ws_size,
-    x1418, out_desc, x1417));
+    x1421, out_desc, x1420));
 };
-float* x1423 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1424 = (float*)myMalloc(1 * sizeof(float));;
-x1424[0] = 0.0f;
-float* x1426 = (float*)myMalloc(1 * sizeof(float));;
-x1426[0] = 1.0f;
+float* x1426 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1427 = (float*)myMalloc(1 * sizeof(float));;
+x1427[0] = 0.0f;
+float* x1429 = (float*)myMalloc(1 * sizeof(float));;
+x1429[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3288,14 +3419,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1426, x1426, in_desc, x1417, out_desc, x1423, sbmv_desc, x923,
+    x1429, x1429, in_desc, x1420, out_desc, x1426, sbmv_desc, x923,
     x308, x557, x788, 1.0E-5));
 };
-float* x1429 = (float*)myMalloc(1 * sizeof(float));;
-x1429[0] = 0.0f;
-float* x1431 = (float*)myMalloc(1 * sizeof(float));;
-x1431[0] = 1.0f;
-float* x1433 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1432 = (float*)myMalloc(1 * sizeof(float));;
+x1432[0] = 0.0f;
+float* x1434 = (float*)myMalloc(1 * sizeof(float));;
+x1434[0] = 1.0f;
+float* x1436 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3312,13 +3443,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1431, x_desc, x1423, x1429, x_desc, x1433));
+    x1434, x_desc, x1426, x1432, x_desc, x1436));
 };
-float* x1435 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1436 = (float*)myMalloc(1 * sizeof(float));;
-x1436[0] = 0.0f;
-float* x1438 = (float*)myMalloc(1 * sizeof(float));;
-x1438[0] = 1.0f;
+float* x1438 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1439 = (float*)myMalloc(1 * sizeof(float));;
+x1439[0] = 0.0f;
+float* x1441 = (float*)myMalloc(1 * sizeof(float));;
+x1441[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3361,15 +3492,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1438, in_desc, x1433, filt_desc, x962,
+    x1441, in_desc, x1436, filt_desc, x962,
     conv_desc, algo, ws_data, ws_size,
-    x1436, out_desc, x1435));
+    x1439, out_desc, x1438));
 };
-float* x1441 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1442 = (float*)myMalloc(1 * sizeof(float));;
-x1442[0] = 0.0f;
-float* x1444 = (float*)myMalloc(1 * sizeof(float));;
-x1444[0] = 1.0f;
+float* x1444 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1445 = (float*)myMalloc(1 * sizeof(float));;
+x1445[0] = 0.0f;
+float* x1447 = (float*)myMalloc(1 * sizeof(float));;
+x1447[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3392,14 +3523,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1444, x1444, in_desc, x1435, out_desc, x1441, sbmv_desc, x281,
+    x1447, x1447, in_desc, x1438, out_desc, x1444, sbmv_desc, x281,
     x542, x362, x932, 1.0E-5));
 };
-float* x1447 = (float*)myMalloc(1 * sizeof(float));;
-x1447[0] = 0.0f;
-float* x1449 = (float*)myMalloc(1 * sizeof(float));;
-x1449[0] = 1.0f;
-float* x1451 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1450 = (float*)myMalloc(1 * sizeof(float));;
+x1450[0] = 0.0f;
+float* x1452 = (float*)myMalloc(1 * sizeof(float));;
+x1452[0] = 1.0f;
+float* x1454 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3416,13 +3547,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1449, x_desc, x1441, x1447, x_desc, x1451));
+    x1452, x_desc, x1444, x1450, x_desc, x1454));
 };
-float* x1453 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1454 = (float*)myMalloc(1 * sizeof(float));;
-x1454[0] = 0.0f;
-float* x1456 = (float*)myMalloc(1 * sizeof(float));;
-x1456[0] = 1.0f;
+float* x1456 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1457 = (float*)myMalloc(1 * sizeof(float));;
+x1457[0] = 0.0f;
+float* x1459 = (float*)myMalloc(1 * sizeof(float));;
+x1459[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3465,44 +3596,44 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1456, in_desc, x1451, filt_desc, x590,
+    x1459, in_desc, x1454, filt_desc, x590,
     conv_desc, algo, ws_data, ws_size,
-    x1454, out_desc, x1453));
+    x1457, out_desc, x1456));
 };
-float* x1459 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1460 = (float*)myMalloc(1 * sizeof(float));;
-x1460[0] = 0.0f;
-float* x1462 = (float*)myMalloc(1 * sizeof(float));;
-x1462[0] = 1.0f;
-
-{
-cudnnTensorDescriptor_t in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, 8, 8));
-
-cudnnTensorDescriptor_t out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, 8, 8));
-
-cudnnTensorDescriptor_t sbmv_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    1, 512, 1, 1));
-
-CUDNN_CALL(cudnnBatchNormalizationForwardInference(
-    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1462, x1462, in_desc, x1453, out_desc, x1459, sbmv_desc, x413,
-    x995, x698, x521, 1.0E-5));
-};
+float* x1462 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1463 = (float*)myMalloc(1 * sizeof(float));;
+x1463[0] = 0.0f;
 float* x1465 = (float*)myMalloc(1 * sizeof(float));;
 x1465[0] = 1.0f;
-float* x1467 = (float*)myMalloc(1 * sizeof(float));;
-x1467[0] = 1.0f;
+
+{
+cudnnTensorDescriptor_t in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, 8, 8));
+
+cudnnTensorDescriptor_t out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, 8, 8));
+
+cudnnTensorDescriptor_t sbmv_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    1, 512, 1, 1));
+
+CUDNN_CALL(cudnnBatchNormalizationForwardInference(
+    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
+    x1465, x1465, in_desc, x1456, out_desc, x1462, sbmv_desc, x413,
+    x995, x698, x521, 1.0E-5));
+};
+float* x1468 = (float*)myMalloc(1 * sizeof(float));;
+x1468[0] = 1.0f;
+float* x1470 = (float*)myMalloc(1 * sizeof(float));;
+x1470[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -3518,13 +3649,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, 8, 8));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1465, bias_desc, x1415, x1467, out_desc, x1459));
+    cudnnHandle, x1468, bias_desc, x1418, x1470, out_desc, x1462));
 };
-float* x1470 = (float*)myMalloc(1 * sizeof(float));;
-x1470[0] = 0.0f;
-float* x1472 = (float*)myMalloc(1 * sizeof(float));;
-x1472[0] = 1.0f;
-float* x1474 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1473 = (float*)myMalloc(1 * sizeof(float));;
+x1473[0] = 0.0f;
+float* x1475 = (float*)myMalloc(1 * sizeof(float));;
+x1475[0] = 1.0f;
+float* x1477 = (float*)myGpuMalloc(2097152 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3541,13 +3672,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1472, x_desc, x1459, x1470, x_desc, x1474));
+    x1475, x_desc, x1462, x1473, x_desc, x1477));
 };
-float* x1476 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1477 = (float*)myMalloc(1 * sizeof(float));;
-x1477[0] = 0.0f;
-float* x1479 = (float*)myMalloc(1 * sizeof(float));;
-x1479[0] = 1.0f;
+float* x1479 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1480 = (float*)myMalloc(1 * sizeof(float));;
+x1480[0] = 0.0f;
+float* x1482 = (float*)myMalloc(1 * sizeof(float));;
+x1482[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3590,15 +3721,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1479, in_desc, x1474, filt_desc, x845,
+    x1482, in_desc, x1477, filt_desc, x845,
     conv_desc, algo, ws_data, ws_size,
-    x1477, out_desc, x1476));
+    x1480, out_desc, x1479));
 };
-float* x1482 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1483 = (float*)myMalloc(1 * sizeof(float));;
-x1483[0] = 0.0f;
-float* x1485 = (float*)myMalloc(1 * sizeof(float));;
-x1485[0] = 1.0f;
+float* x1485 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1486 = (float*)myMalloc(1 * sizeof(float));;
+x1486[0] = 0.0f;
+float* x1488 = (float*)myMalloc(1 * sizeof(float));;
+x1488[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3621,14 +3752,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1485, x1485, in_desc, x1476, out_desc, x1482, sbmv_desc, x392,
+    x1488, x1488, in_desc, x1479, out_desc, x1485, sbmv_desc, x392,
     x767, x593, x284, 1.0E-5));
 };
-float* x1488 = (float*)myMalloc(1 * sizeof(float));;
-x1488[0] = 0.0f;
-float* x1490 = (float*)myMalloc(1 * sizeof(float));;
-x1490[0] = 1.0f;
-float* x1492 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1491 = (float*)myMalloc(1 * sizeof(float));;
+x1491[0] = 0.0f;
+float* x1493 = (float*)myMalloc(1 * sizeof(float));;
+x1493[0] = 1.0f;
+float* x1495 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3645,13 +3776,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1490, x_desc, x1482, x1488, x_desc, x1492));
+    x1493, x_desc, x1485, x1491, x_desc, x1495));
 };
-float* x1494 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1495 = (float*)myMalloc(1 * sizeof(float));;
-x1495[0] = 0.0f;
-float* x1497 = (float*)myMalloc(1 * sizeof(float));;
-x1497[0] = 1.0f;
+float* x1497 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1498 = (float*)myMalloc(1 * sizeof(float));;
+x1498[0] = 0.0f;
+float* x1500 = (float*)myMalloc(1 * sizeof(float));;
+x1500[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3694,15 +3825,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1497, in_desc, x1492, filt_desc, x830,
+    x1500, in_desc, x1495, filt_desc, x830,
     conv_desc, algo, ws_data, ws_size,
-    x1495, out_desc, x1494));
+    x1498, out_desc, x1497));
 };
-float* x1500 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1501 = (float*)myMalloc(1 * sizeof(float));;
-x1501[0] = 0.0f;
-float* x1503 = (float*)myMalloc(1 * sizeof(float));;
-x1503[0] = 1.0f;
+float* x1503 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1504 = (float*)myMalloc(1 * sizeof(float));;
+x1504[0] = 0.0f;
+float* x1506 = (float*)myMalloc(1 * sizeof(float));;
+x1506[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3725,14 +3856,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1503, x1503, in_desc, x1494, out_desc, x1500, sbmv_desc, x638,
+    x1506, x1506, in_desc, x1497, out_desc, x1503, sbmv_desc, x638,
     x440, x908, x1055, 1.0E-5));
 };
-float* x1506 = (float*)myMalloc(1 * sizeof(float));;
-x1506[0] = 0.0f;
-float* x1508 = (float*)myMalloc(1 * sizeof(float));;
-x1508[0] = 1.0f;
-float* x1510 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1509 = (float*)myMalloc(1 * sizeof(float));;
+x1509[0] = 0.0f;
+float* x1511 = (float*)myMalloc(1 * sizeof(float));;
+x1511[0] = 1.0f;
+float* x1513 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3749,13 +3880,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1508, x_desc, x1500, x1506, x_desc, x1510));
+    x1511, x_desc, x1503, x1509, x_desc, x1513));
 };
-float* x1512 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1513 = (float*)myMalloc(1 * sizeof(float));;
-x1513[0] = 0.0f;
-float* x1515 = (float*)myMalloc(1 * sizeof(float));;
-x1515[0] = 1.0f;
+float* x1515 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1516 = (float*)myMalloc(1 * sizeof(float));;
+x1516[0] = 0.0f;
+float* x1518 = (float*)myMalloc(1 * sizeof(float));;
+x1518[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3798,15 +3929,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1515, in_desc, x1510, filt_desc, x380,
+    x1518, in_desc, x1513, filt_desc, x380,
     conv_desc, algo, ws_data, ws_size,
-    x1513, out_desc, x1512));
+    x1516, out_desc, x1515));
 };
-float* x1518 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1519 = (float*)myMalloc(1 * sizeof(float));;
-x1519[0] = 0.0f;
-float* x1521 = (float*)myMalloc(1 * sizeof(float));;
-x1521[0] = 1.0f;
+float* x1521 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1522 = (float*)myMalloc(1 * sizeof(float));;
+x1522[0] = 0.0f;
+float* x1524 = (float*)myMalloc(1 * sizeof(float));;
+x1524[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3829,13 +3960,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1521, x1521, in_desc, x1512, out_desc, x1518, sbmv_desc, x758,
+    x1524, x1524, in_desc, x1515, out_desc, x1521, sbmv_desc, x758,
     x503, x332, x926, 1.0E-5));
 };
-float* x1524 = (float*)myMalloc(1 * sizeof(float));;
-x1524[0] = 1.0f;
-float* x1526 = (float*)myMalloc(1 * sizeof(float));;
-x1526[0] = 1.0f;
+float* x1527 = (float*)myMalloc(1 * sizeof(float));;
+x1527[0] = 1.0f;
+float* x1529 = (float*)myMalloc(1 * sizeof(float));;
+x1529[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -3851,13 +3982,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, 8, 8));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1524, bias_desc, x1474, x1526, out_desc, x1518));
+    cudnnHandle, x1527, bias_desc, x1477, x1529, out_desc, x1521));
 };
-float* x1529 = (float*)myMalloc(1 * sizeof(float));;
-x1529[0] = 0.0f;
-float* x1531 = (float*)myMalloc(1 * sizeof(float));;
-x1531[0] = 1.0f;
-float* x1533 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1532 = (float*)myMalloc(1 * sizeof(float));;
+x1532[0] = 0.0f;
+float* x1534 = (float*)myMalloc(1 * sizeof(float));;
+x1534[0] = 1.0f;
+float* x1536 = (float*)myGpuMalloc(2097152 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3874,13 +4005,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1531, x_desc, x1518, x1529, x_desc, x1533));
+    x1534, x_desc, x1521, x1532, x_desc, x1536));
 };
-float* x1535 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1536 = (float*)myMalloc(1 * sizeof(float));;
-x1536[0] = 0.0f;
-float* x1538 = (float*)myMalloc(1 * sizeof(float));;
-x1538[0] = 1.0f;
+float* x1538 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1539 = (float*)myMalloc(1 * sizeof(float));;
+x1539[0] = 0.0f;
+float* x1541 = (float*)myMalloc(1 * sizeof(float));;
+x1541[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3923,15 +4054,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1538, in_desc, x1533, filt_desc, x653,
+    x1541, in_desc, x1536, filt_desc, x653,
     conv_desc, algo, ws_data, ws_size,
-    x1536, out_desc, x1535));
+    x1539, out_desc, x1538));
 };
-float* x1541 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1542 = (float*)myMalloc(1 * sizeof(float));;
-x1542[0] = 0.0f;
-float* x1544 = (float*)myMalloc(1 * sizeof(float));;
-x1544[0] = 1.0f;
+float* x1544 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1545 = (float*)myMalloc(1 * sizeof(float));;
+x1545[0] = 0.0f;
+float* x1547 = (float*)myMalloc(1 * sizeof(float));;
+x1547[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -3954,14 +4085,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1544, x1544, in_desc, x1535, out_desc, x1541, sbmv_desc, x374,
+    x1547, x1547, in_desc, x1538, out_desc, x1544, sbmv_desc, x374,
     x983, x965, x1040, 1.0E-5));
 };
-float* x1547 = (float*)myMalloc(1 * sizeof(float));;
-x1547[0] = 0.0f;
-float* x1549 = (float*)myMalloc(1 * sizeof(float));;
-x1549[0] = 1.0f;
-float* x1551 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1550 = (float*)myMalloc(1 * sizeof(float));;
+x1550[0] = 0.0f;
+float* x1552 = (float*)myMalloc(1 * sizeof(float));;
+x1552[0] = 1.0f;
+float* x1554 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -3978,13 +4109,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1549, x_desc, x1541, x1547, x_desc, x1551));
+    x1552, x_desc, x1544, x1550, x_desc, x1554));
 };
-float* x1553 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1554 = (float*)myMalloc(1 * sizeof(float));;
-x1554[0] = 0.0f;
-float* x1556 = (float*)myMalloc(1 * sizeof(float));;
-x1556[0] = 1.0f;
+float* x1556 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1557 = (float*)myMalloc(1 * sizeof(float));;
+x1557[0] = 0.0f;
+float* x1559 = (float*)myMalloc(1 * sizeof(float));;
+x1559[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4027,15 +4158,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1556, in_desc, x1551, filt_desc, x752,
+    x1559, in_desc, x1554, filt_desc, x752,
     conv_desc, algo, ws_data, ws_size,
-    x1554, out_desc, x1553));
+    x1557, out_desc, x1556));
 };
-float* x1559 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1560 = (float*)myMalloc(1 * sizeof(float));;
-x1560[0] = 0.0f;
-float* x1562 = (float*)myMalloc(1 * sizeof(float));;
-x1562[0] = 1.0f;
+float* x1562 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1563 = (float*)myMalloc(1 * sizeof(float));;
+x1563[0] = 0.0f;
+float* x1565 = (float*)myMalloc(1 * sizeof(float));;
+x1565[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4058,14 +4189,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1562, x1562, in_desc, x1553, out_desc, x1559, sbmv_desc, x494,
+    x1565, x1565, in_desc, x1556, out_desc, x1562, sbmv_desc, x494,
     x371, x1061, x701, 1.0E-5));
 };
-float* x1565 = (float*)myMalloc(1 * sizeof(float));;
-x1565[0] = 0.0f;
-float* x1567 = (float*)myMalloc(1 * sizeof(float));;
-x1567[0] = 1.0f;
-float* x1569 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1568 = (float*)myMalloc(1 * sizeof(float));;
+x1568[0] = 0.0f;
+float* x1570 = (float*)myMalloc(1 * sizeof(float));;
+x1570[0] = 1.0f;
+float* x1572 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -4082,13 +4213,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1567, x_desc, x1559, x1565, x_desc, x1569));
+    x1570, x_desc, x1562, x1568, x_desc, x1572));
 };
-float* x1571 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1572 = (float*)myMalloc(1 * sizeof(float));;
-x1572[0] = 0.0f;
-float* x1574 = (float*)myMalloc(1 * sizeof(float));;
-x1574[0] = 1.0f;
+float* x1574 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1575 = (float*)myMalloc(1 * sizeof(float));;
+x1575[0] = 0.0f;
+float* x1577 = (float*)myMalloc(1 * sizeof(float));;
+x1577[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4131,15 +4262,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1574, in_desc, x1569, filt_desc, x422,
+    x1577, in_desc, x1572, filt_desc, x422,
     conv_desc, algo, ws_data, ws_size,
-    x1572, out_desc, x1571));
+    x1575, out_desc, x1574));
 };
-float* x1577 = (float*)myGpuMalloc(2097152 * sizeof(float));
-float* x1578 = (float*)myMalloc(1 * sizeof(float));;
-x1578[0] = 0.0f;
-float* x1580 = (float*)myMalloc(1 * sizeof(float));;
-x1580[0] = 1.0f;
+float* x1580 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1581 = (float*)myMalloc(1 * sizeof(float));;
+x1581[0] = 0.0f;
+float* x1583 = (float*)myMalloc(1 * sizeof(float));;
+x1583[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4162,13 +4293,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1580, x1580, in_desc, x1571, out_desc, x1577, sbmv_desc, x725,
+    x1583, x1583, in_desc, x1574, out_desc, x1580, sbmv_desc, x725,
     x419, x314, x959, 1.0E-5));
 };
-float* x1583 = (float*)myMalloc(1 * sizeof(float));;
-x1583[0] = 1.0f;
-float* x1585 = (float*)myMalloc(1 * sizeof(float));;
-x1585[0] = 1.0f;
+float* x1586 = (float*)myMalloc(1 * sizeof(float));;
+x1586[0] = 1.0f;
+float* x1588 = (float*)myMalloc(1 * sizeof(float));;
+x1588[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -4184,13 +4315,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, 8, 8));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1583, bias_desc, x1533, x1585, out_desc, x1577));
+    cudnnHandle, x1586, bias_desc, x1536, x1588, out_desc, x1580));
 };
-float* x1588 = (float*)myMalloc(1 * sizeof(float));;
-x1588[0] = 0.0f;
-float* x1590 = (float*)myMalloc(1 * sizeof(float));;
-x1590[0] = 1.0f;
-float* x1592 = (float*)myGpuMalloc(2097152 * sizeof(float));
+float* x1591 = (float*)myMalloc(1 * sizeof(float));;
+x1591[0] = 0.0f;
+float* x1593 = (float*)myMalloc(1 * sizeof(float));;
+x1593[0] = 1.0f;
+float* x1595 = (float*)myGpuMalloc(2097152 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -4207,13 +4338,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1590, x_desc, x1577, x1588, x_desc, x1592));
+    x1593, x_desc, x1580, x1591, x_desc, x1595));
 };
-float* x1594 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1595 = (float*)myMalloc(1 * sizeof(float));;
-x1595[0] = 0.0f;
-float* x1597 = (float*)myMalloc(1 * sizeof(float));;
-x1597[0] = 1.0f;
+float* x1597 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1598 = (float*)myMalloc(1 * sizeof(float));;
+x1598[0] = 0.0f;
+float* x1600 = (float*)myMalloc(1 * sizeof(float));;
+x1600[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4256,15 +4387,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1597, in_desc, x1592, filt_desc, x797,
+    x1600, in_desc, x1595, filt_desc, x797,
     conv_desc, algo, ws_data, ws_size,
-    x1595, out_desc, x1594));
+    x1598, out_desc, x1597));
 };
-float* x1600 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1601 = (float*)myMalloc(1 * sizeof(float));;
-x1601[0] = 0.0f;
-float* x1603 = (float*)myMalloc(1 * sizeof(float));;
-x1603[0] = 1.0f;
+float* x1603 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1604 = (float*)myMalloc(1 * sizeof(float));;
+x1604[0] = 0.0f;
+float* x1606 = (float*)myMalloc(1 * sizeof(float));;
+x1606[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4287,14 +4418,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1603, x1603, in_desc, x1594, out_desc, x1600, sbmv_desc, x1067,
+    x1606, x1606, in_desc, x1597, out_desc, x1603, sbmv_desc, x1067,
     x320, x650, x851, 1.0E-5));
 };
-float* x1606 = (float*)myMalloc(1 * sizeof(float));;
-x1606[0] = 0.0f;
-float* x1608 = (float*)myMalloc(1 * sizeof(float));;
-x1608[0] = 1.0f;
-float* x1610 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1609 = (float*)myMalloc(1 * sizeof(float));;
+x1609[0] = 0.0f;
+float* x1611 = (float*)myMalloc(1 * sizeof(float));;
+x1611[0] = 1.0f;
+float* x1613 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -4311,13 +4442,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1608, x_desc, x1600, x1606, x_desc, x1610));
+    x1611, x_desc, x1603, x1609, x_desc, x1613));
 };
-float* x1612 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1613 = (float*)myMalloc(1 * sizeof(float));;
-x1613[0] = 0.0f;
-float* x1615 = (float*)myMalloc(1 * sizeof(float));;
-x1615[0] = 1.0f;
+float* x1615 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1616 = (float*)myMalloc(1 * sizeof(float));;
+x1616[0] = 0.0f;
+float* x1618 = (float*)myMalloc(1 * sizeof(float));;
+x1618[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4360,15 +4491,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1615, in_desc, x1610, filt_desc, x782,
+    x1618, in_desc, x1613, filt_desc, x782,
     conv_desc, algo, ws_data, ws_size,
-    x1613, out_desc, x1612));
+    x1616, out_desc, x1615));
 };
-float* x1618 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1619 = (float*)myMalloc(1 * sizeof(float));;
-x1619[0] = 0.0f;
-float* x1621 = (float*)myMalloc(1 * sizeof(float));;
-x1621[0] = 1.0f;
+float* x1621 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1622 = (float*)myMalloc(1 * sizeof(float));;
+x1622[0] = 0.0f;
+float* x1624 = (float*)myMalloc(1 * sizeof(float));;
+x1624[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4391,14 +4522,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1621, x1621, in_desc, x1612, out_desc, x1618, sbmv_desc, x581,
+    x1624, x1624, in_desc, x1615, out_desc, x1621, sbmv_desc, x581,
     x305, x944, x554, 1.0E-5));
 };
-float* x1624 = (float*)myMalloc(1 * sizeof(float));;
-x1624[0] = 0.0f;
-float* x1626 = (float*)myMalloc(1 * sizeof(float));;
-x1626[0] = 1.0f;
-float* x1628 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1627 = (float*)myMalloc(1 * sizeof(float));;
+x1627[0] = 0.0f;
+float* x1629 = (float*)myMalloc(1 * sizeof(float));;
+x1629[0] = 1.0f;
+float* x1631 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -4415,13 +4546,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1626, x_desc, x1618, x1624, x_desc, x1628));
+    x1629, x_desc, x1621, x1627, x_desc, x1631));
 };
-float* x1630 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1631 = (float*)myMalloc(1 * sizeof(float));;
-x1631[0] = 0.0f;
-float* x1633 = (float*)myMalloc(1 * sizeof(float));;
-x1633[0] = 1.0f;
+float* x1633 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1634 = (float*)myMalloc(1 * sizeof(float));;
+x1634[0] = 0.0f;
+float* x1636 = (float*)myMalloc(1 * sizeof(float));;
+x1636[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4464,15 +4595,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1633, in_desc, x1628, filt_desc, x1064,
+    x1636, in_desc, x1631, filt_desc, x1064,
     conv_desc, algo, ws_data, ws_size,
-    x1631, out_desc, x1630));
+    x1634, out_desc, x1633));
 };
-float* x1636 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1637 = (float*)myMalloc(1 * sizeof(float));;
-x1637[0] = 0.0f;
-float* x1639 = (float*)myMalloc(1 * sizeof(float));;
-x1639[0] = 1.0f;
+float* x1639 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1640 = (float*)myMalloc(1 * sizeof(float));;
+x1640[0] = 0.0f;
+float* x1642 = (float*)myMalloc(1 * sizeof(float));;
+x1642[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4495,14 +4626,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1639, x1639, in_desc, x1630, out_desc, x1636, sbmv_desc, x311,
+    x1642, x1642, in_desc, x1633, out_desc, x1639, sbmv_desc, x311,
     x608, x905, x1058, 1.0E-5));
 };
-float* x1642 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1643 = (float*)myMalloc(1 * sizeof(float));;
-x1643[0] = 0.0f;
-float* x1645 = (float*)myMalloc(1 * sizeof(float));;
-x1645[0] = 1.0f;
+float* x1645 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1646 = (float*)myMalloc(1 * sizeof(float));;
+x1646[0] = 0.0f;
+float* x1648 = (float*)myMalloc(1 * sizeof(float));;
+x1648[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4545,44 +4676,44 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1645, in_desc, x1592, filt_desc, x482,
+    x1648, in_desc, x1595, filt_desc, x482,
     conv_desc, algo, ws_data, ws_size,
-    x1643, out_desc, x1642));
+    x1646, out_desc, x1645));
 };
-float* x1648 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1649 = (float*)myMalloc(1 * sizeof(float));;
-x1649[0] = 0.0f;
-float* x1651 = (float*)myMalloc(1 * sizeof(float));;
-x1651[0] = 1.0f;
-
-{
-cudnnTensorDescriptor_t in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, 4, 4));
-
-cudnnTensorDescriptor_t out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, 4, 4));
-
-cudnnTensorDescriptor_t sbmv_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    1, 1024, 1, 1));
-
-CUDNN_CALL(cudnnBatchNormalizationForwardInference(
-    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1651, x1651, in_desc, x1642, out_desc, x1648, sbmv_desc, x344,
-    x917, x515, x890, 1.0E-5));
-};
+float* x1651 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1652 = (float*)myMalloc(1 * sizeof(float));;
+x1652[0] = 0.0f;
 float* x1654 = (float*)myMalloc(1 * sizeof(float));;
 x1654[0] = 1.0f;
-float* x1656 = (float*)myMalloc(1 * sizeof(float));;
-x1656[0] = 1.0f;
+
+{
+cudnnTensorDescriptor_t in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, 4, 4));
+
+cudnnTensorDescriptor_t out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, 4, 4));
+
+cudnnTensorDescriptor_t sbmv_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    1, 1024, 1, 1));
+
+CUDNN_CALL(cudnnBatchNormalizationForwardInference(
+    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
+    x1654, x1654, in_desc, x1645, out_desc, x1651, sbmv_desc, x344,
+    x917, x515, x890, 1.0E-5));
+};
+float* x1657 = (float*)myMalloc(1 * sizeof(float));;
+x1657[0] = 1.0f;
+float* x1659 = (float*)myMalloc(1 * sizeof(float));;
+x1659[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -4598,13 +4729,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, 4, 4));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1654, bias_desc, x1648, x1656, out_desc, x1636));
+    cudnnHandle, x1657, bias_desc, x1651, x1659, out_desc, x1639));
 };
-float* x1659 = (float*)myMalloc(1 * sizeof(float));;
-x1659[0] = 0.0f;
-float* x1661 = (float*)myMalloc(1 * sizeof(float));;
-x1661[0] = 1.0f;
-float* x1663 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1662 = (float*)myMalloc(1 * sizeof(float));;
+x1662[0] = 0.0f;
+float* x1664 = (float*)myMalloc(1 * sizeof(float));;
+x1664[0] = 1.0f;
+float* x1666 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -4621,13 +4752,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1661, x_desc, x1636, x1659, x_desc, x1663));
+    x1664, x_desc, x1639, x1662, x_desc, x1666));
 };
-float* x1665 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1666 = (float*)myMalloc(1 * sizeof(float));;
-x1666[0] = 0.0f;
-float* x1668 = (float*)myMalloc(1 * sizeof(float));;
-x1668[0] = 1.0f;
+float* x1668 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1669 = (float*)myMalloc(1 * sizeof(float));;
+x1669[0] = 0.0f;
+float* x1671 = (float*)myMalloc(1 * sizeof(float));;
+x1671[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4670,15 +4801,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1668, in_desc, x1663, filt_desc, x296,
+    x1671, in_desc, x1666, filt_desc, x296,
     conv_desc, algo, ws_data, ws_size,
-    x1666, out_desc, x1665));
+    x1669, out_desc, x1668));
 };
-float* x1671 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1672 = (float*)myMalloc(1 * sizeof(float));;
-x1672[0] = 0.0f;
-float* x1674 = (float*)myMalloc(1 * sizeof(float));;
-x1674[0] = 1.0f;
+float* x1674 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1675 = (float*)myMalloc(1 * sizeof(float));;
+x1675[0] = 0.0f;
+float* x1677 = (float*)myMalloc(1 * sizeof(float));;
+x1677[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4701,14 +4832,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1674, x1674, in_desc, x1665, out_desc, x1671, sbmv_desc, x347,
+    x1677, x1677, in_desc, x1668, out_desc, x1674, sbmv_desc, x347,
     x914, x1034, x728, 1.0E-5));
 };
-float* x1677 = (float*)myMalloc(1 * sizeof(float));;
-x1677[0] = 0.0f;
-float* x1679 = (float*)myMalloc(1 * sizeof(float));;
-x1679[0] = 1.0f;
-float* x1681 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1680 = (float*)myMalloc(1 * sizeof(float));;
+x1680[0] = 0.0f;
+float* x1682 = (float*)myMalloc(1 * sizeof(float));;
+x1682[0] = 1.0f;
+float* x1684 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -4725,13 +4856,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1679, x_desc, x1671, x1677, x_desc, x1681));
+    x1682, x_desc, x1674, x1680, x_desc, x1684));
 };
-float* x1683 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1684 = (float*)myMalloc(1 * sizeof(float));;
-x1684[0] = 0.0f;
-float* x1686 = (float*)myMalloc(1 * sizeof(float));;
-x1686[0] = 1.0f;
+float* x1686 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1687 = (float*)myMalloc(1 * sizeof(float));;
+x1687[0] = 0.0f;
+float* x1689 = (float*)myMalloc(1 * sizeof(float));;
+x1689[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4774,15 +4905,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1686, in_desc, x1681, filt_desc, x350,
+    x1689, in_desc, x1684, filt_desc, x350,
     conv_desc, algo, ws_data, ws_size,
-    x1684, out_desc, x1683));
+    x1687, out_desc, x1686));
 };
-float* x1689 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1690 = (float*)myMalloc(1 * sizeof(float));;
-x1690[0] = 0.0f;
-float* x1692 = (float*)myMalloc(1 * sizeof(float));;
-x1692[0] = 1.0f;
+float* x1692 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1693 = (float*)myMalloc(1 * sizeof(float));;
+x1693[0] = 0.0f;
+float* x1695 = (float*)myMalloc(1 * sizeof(float));;
+x1695[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4805,14 +4936,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1692, x1692, in_desc, x1683, out_desc, x1689, sbmv_desc, x1070,
+    x1695, x1695, in_desc, x1686, out_desc, x1692, sbmv_desc, x1070,
     x545, x857, x968, 1.0E-5));
 };
-float* x1695 = (float*)myMalloc(1 * sizeof(float));;
-x1695[0] = 0.0f;
-float* x1697 = (float*)myMalloc(1 * sizeof(float));;
-x1697[0] = 1.0f;
-float* x1699 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1698 = (float*)myMalloc(1 * sizeof(float));;
+x1698[0] = 0.0f;
+float* x1700 = (float*)myMalloc(1 * sizeof(float));;
+x1700[0] = 1.0f;
+float* x1702 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -4829,13 +4960,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1697, x_desc, x1689, x1695, x_desc, x1699));
+    x1700, x_desc, x1692, x1698, x_desc, x1702));
 };
-float* x1701 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1702 = (float*)myMalloc(1 * sizeof(float));;
-x1702[0] = 0.0f;
-float* x1704 = (float*)myMalloc(1 * sizeof(float));;
-x1704[0] = 1.0f;
+float* x1704 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1705 = (float*)myMalloc(1 * sizeof(float));;
+x1705[0] = 0.0f;
+float* x1707 = (float*)myMalloc(1 * sizeof(float));;
+x1707[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -4878,44 +5009,44 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1704, in_desc, x1699, filt_desc, x425,
+    x1707, in_desc, x1702, filt_desc, x425,
     conv_desc, algo, ws_data, ws_size,
-    x1702, out_desc, x1701));
+    x1705, out_desc, x1704));
 };
-float* x1707 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1708 = (float*)myMalloc(1 * sizeof(float));;
-x1708[0] = 0.0f;
-float* x1710 = (float*)myMalloc(1 * sizeof(float));;
-x1710[0] = 1.0f;
-
-{
-cudnnTensorDescriptor_t in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, 4, 4));
-
-cudnnTensorDescriptor_t out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, 4, 4));
-
-cudnnTensorDescriptor_t sbmv_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    1, 1024, 1, 1));
-
-CUDNN_CALL(cudnnBatchNormalizationForwardInference(
-    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1710, x1710, in_desc, x1701, out_desc, x1707, sbmv_desc, x317,
-    x953, x803, x686, 1.0E-5));
-};
+float* x1710 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1711 = (float*)myMalloc(1 * sizeof(float));;
+x1711[0] = 0.0f;
 float* x1713 = (float*)myMalloc(1 * sizeof(float));;
 x1713[0] = 1.0f;
-float* x1715 = (float*)myMalloc(1 * sizeof(float));;
-x1715[0] = 1.0f;
+
+{
+cudnnTensorDescriptor_t in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, 4, 4));
+
+cudnnTensorDescriptor_t out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, 4, 4));
+
+cudnnTensorDescriptor_t sbmv_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    1, 1024, 1, 1));
+
+CUDNN_CALL(cudnnBatchNormalizationForwardInference(
+    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
+    x1713, x1713, in_desc, x1704, out_desc, x1710, sbmv_desc, x317,
+    x953, x803, x686, 1.0E-5));
+};
+float* x1716 = (float*)myMalloc(1 * sizeof(float));;
+x1716[0] = 1.0f;
+float* x1718 = (float*)myMalloc(1 * sizeof(float));;
+x1718[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -4931,13 +5062,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, 4, 4));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1713, bias_desc, x1663, x1715, out_desc, x1707));
+    cudnnHandle, x1716, bias_desc, x1666, x1718, out_desc, x1710));
 };
-float* x1718 = (float*)myMalloc(1 * sizeof(float));;
-x1718[0] = 0.0f;
-float* x1720 = (float*)myMalloc(1 * sizeof(float));;
-x1720[0] = 1.0f;
-float* x1722 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1721 = (float*)myMalloc(1 * sizeof(float));;
+x1721[0] = 0.0f;
+float* x1723 = (float*)myMalloc(1 * sizeof(float));;
+x1723[0] = 1.0f;
+float* x1725 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -4954,13 +5085,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1720, x_desc, x1707, x1718, x_desc, x1722));
+    x1723, x_desc, x1710, x1721, x_desc, x1725));
 };
-float* x1724 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1725 = (float*)myMalloc(1 * sizeof(float));;
-x1725[0] = 0.0f;
-float* x1727 = (float*)myMalloc(1 * sizeof(float));;
-x1727[0] = 1.0f;
+float* x1727 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1728 = (float*)myMalloc(1 * sizeof(float));;
+x1728[0] = 0.0f;
+float* x1730 = (float*)myMalloc(1 * sizeof(float));;
+x1730[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5003,15 +5134,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1727, in_desc, x1722, filt_desc, x911,
+    x1730, in_desc, x1725, filt_desc, x911,
     conv_desc, algo, ws_data, ws_size,
-    x1725, out_desc, x1724));
+    x1728, out_desc, x1727));
 };
-float* x1730 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1731 = (float*)myMalloc(1 * sizeof(float));;
-x1731[0] = 0.0f;
-float* x1733 = (float*)myMalloc(1 * sizeof(float));;
-x1733[0] = 1.0f;
+float* x1733 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1734 = (float*)myMalloc(1 * sizeof(float));;
+x1734[0] = 0.0f;
+float* x1736 = (float*)myMalloc(1 * sizeof(float));;
+x1736[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5034,14 +5165,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1733, x1733, in_desc, x1724, out_desc, x1730, sbmv_desc, x644,
+    x1736, x1736, in_desc, x1727, out_desc, x1733, sbmv_desc, x644,
     x848, x791, x779, 1.0E-5));
 };
-float* x1736 = (float*)myMalloc(1 * sizeof(float));;
-x1736[0] = 0.0f;
-float* x1738 = (float*)myMalloc(1 * sizeof(float));;
-x1738[0] = 1.0f;
-float* x1740 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1739 = (float*)myMalloc(1 * sizeof(float));;
+x1739[0] = 0.0f;
+float* x1741 = (float*)myMalloc(1 * sizeof(float));;
+x1741[0] = 1.0f;
+float* x1743 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5058,13 +5189,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1738, x_desc, x1730, x1736, x_desc, x1740));
+    x1741, x_desc, x1733, x1739, x_desc, x1743));
 };
-float* x1742 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1743 = (float*)myMalloc(1 * sizeof(float));;
-x1743[0] = 0.0f;
-float* x1745 = (float*)myMalloc(1 * sizeof(float));;
-x1745[0] = 1.0f;
+float* x1745 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1746 = (float*)myMalloc(1 * sizeof(float));;
+x1746[0] = 0.0f;
+float* x1748 = (float*)myMalloc(1 * sizeof(float));;
+x1748[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5107,15 +5238,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1745, in_desc, x1740, filt_desc, x299,
+    x1748, in_desc, x1743, filt_desc, x299,
     conv_desc, algo, ws_data, ws_size,
-    x1743, out_desc, x1742));
+    x1746, out_desc, x1745));
 };
-float* x1748 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1749 = (float*)myMalloc(1 * sizeof(float));;
-x1749[0] = 0.0f;
-float* x1751 = (float*)myMalloc(1 * sizeof(float));;
-x1751[0] = 1.0f;
+float* x1751 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1752 = (float*)myMalloc(1 * sizeof(float));;
+x1752[0] = 0.0f;
+float* x1754 = (float*)myMalloc(1 * sizeof(float));;
+x1754[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5138,14 +5269,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1751, x1751, in_desc, x1742, out_desc, x1748, sbmv_desc, x941,
+    x1754, x1754, in_desc, x1745, out_desc, x1751, sbmv_desc, x941,
     x833, x629, x446, 1.0E-5));
 };
-float* x1754 = (float*)myMalloc(1 * sizeof(float));;
-x1754[0] = 0.0f;
-float* x1756 = (float*)myMalloc(1 * sizeof(float));;
-x1756[0] = 1.0f;
-float* x1758 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1757 = (float*)myMalloc(1 * sizeof(float));;
+x1757[0] = 0.0f;
+float* x1759 = (float*)myMalloc(1 * sizeof(float));;
+x1759[0] = 1.0f;
+float* x1761 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5162,13 +5293,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1756, x_desc, x1748, x1754, x_desc, x1758));
+    x1759, x_desc, x1751, x1757, x_desc, x1761));
 };
-float* x1760 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1761 = (float*)myMalloc(1 * sizeof(float));;
-x1761[0] = 0.0f;
-float* x1763 = (float*)myMalloc(1 * sizeof(float));;
-x1763[0] = 1.0f;
+float* x1763 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1764 = (float*)myMalloc(1 * sizeof(float));;
+x1764[0] = 0.0f;
+float* x1766 = (float*)myMalloc(1 * sizeof(float));;
+x1766[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5211,44 +5342,44 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1763, in_desc, x1758, filt_desc, x605,
+    x1766, in_desc, x1761, filt_desc, x605,
     conv_desc, algo, ws_data, ws_size,
-    x1761, out_desc, x1760));
+    x1764, out_desc, x1763));
 };
-float* x1766 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1767 = (float*)myMalloc(1 * sizeof(float));;
-x1767[0] = 0.0f;
-float* x1769 = (float*)myMalloc(1 * sizeof(float));;
-x1769[0] = 1.0f;
-
-{
-cudnnTensorDescriptor_t in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, 4, 4));
-
-cudnnTensorDescriptor_t out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, 4, 4));
-
-cudnnTensorDescriptor_t sbmv_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    1, 1024, 1, 1));
-
-CUDNN_CALL(cudnnBatchNormalizationForwardInference(
-    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1769, x1769, in_desc, x1760, out_desc, x1766, sbmv_desc, x1046,
-    x428, x677, x821, 1.0E-5));
-};
+float* x1769 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1770 = (float*)myMalloc(1 * sizeof(float));;
+x1770[0] = 0.0f;
 float* x1772 = (float*)myMalloc(1 * sizeof(float));;
 x1772[0] = 1.0f;
-float* x1774 = (float*)myMalloc(1 * sizeof(float));;
-x1774[0] = 1.0f;
+
+{
+cudnnTensorDescriptor_t in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, 4, 4));
+
+cudnnTensorDescriptor_t out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, 4, 4));
+
+cudnnTensorDescriptor_t sbmv_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    1, 1024, 1, 1));
+
+CUDNN_CALL(cudnnBatchNormalizationForwardInference(
+    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
+    x1772, x1772, in_desc, x1763, out_desc, x1769, sbmv_desc, x1046,
+    x428, x677, x821, 1.0E-5));
+};
+float* x1775 = (float*)myMalloc(1 * sizeof(float));;
+x1775[0] = 1.0f;
+float* x1777 = (float*)myMalloc(1 * sizeof(float));;
+x1777[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -5264,13 +5395,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, 4, 4));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1772, bias_desc, x1722, x1774, out_desc, x1766));
+    cudnnHandle, x1775, bias_desc, x1725, x1777, out_desc, x1769));
 };
-float* x1777 = (float*)myMalloc(1 * sizeof(float));;
-x1777[0] = 0.0f;
-float* x1779 = (float*)myMalloc(1 * sizeof(float));;
-x1779[0] = 1.0f;
-float* x1781 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1780 = (float*)myMalloc(1 * sizeof(float));;
+x1780[0] = 0.0f;
+float* x1782 = (float*)myMalloc(1 * sizeof(float));;
+x1782[0] = 1.0f;
+float* x1784 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5287,13 +5418,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1779, x_desc, x1766, x1777, x_desc, x1781));
+    x1782, x_desc, x1769, x1780, x_desc, x1784));
 };
-float* x1783 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1784 = (float*)myMalloc(1 * sizeof(float));;
-x1784[0] = 0.0f;
-float* x1786 = (float*)myMalloc(1 * sizeof(float));;
-x1786[0] = 1.0f;
+float* x1786 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1787 = (float*)myMalloc(1 * sizeof(float));;
+x1787[0] = 0.0f;
+float* x1789 = (float*)myMalloc(1 * sizeof(float));;
+x1789[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5336,15 +5467,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1786, in_desc, x1781, filt_desc, x275,
+    x1789, in_desc, x1784, filt_desc, x275,
     conv_desc, algo, ws_data, ws_size,
-    x1784, out_desc, x1783));
+    x1787, out_desc, x1786));
 };
-float* x1789 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1790 = (float*)myMalloc(1 * sizeof(float));;
-x1790[0] = 0.0f;
-float* x1792 = (float*)myMalloc(1 * sizeof(float));;
-x1792[0] = 1.0f;
+float* x1792 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1793 = (float*)myMalloc(1 * sizeof(float));;
+x1793[0] = 0.0f;
+float* x1795 = (float*)myMalloc(1 * sizeof(float));;
+x1795[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5367,14 +5498,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1792, x1792, in_desc, x1783, out_desc, x1789, sbmv_desc, x533,
+    x1795, x1795, in_desc, x1786, out_desc, x1792, sbmv_desc, x533,
     x980, x746, x551, 1.0E-5));
 };
-float* x1795 = (float*)myMalloc(1 * sizeof(float));;
-x1795[0] = 0.0f;
-float* x1797 = (float*)myMalloc(1 * sizeof(float));;
-x1797[0] = 1.0f;
-float* x1799 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1798 = (float*)myMalloc(1 * sizeof(float));;
+x1798[0] = 0.0f;
+float* x1800 = (float*)myMalloc(1 * sizeof(float));;
+x1800[0] = 1.0f;
+float* x1802 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5391,13 +5522,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1797, x_desc, x1789, x1795, x_desc, x1799));
+    x1800, x_desc, x1792, x1798, x_desc, x1802));
 };
-float* x1801 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1802 = (float*)myMalloc(1 * sizeof(float));;
-x1802[0] = 0.0f;
-float* x1804 = (float*)myMalloc(1 * sizeof(float));;
-x1804[0] = 1.0f;
+float* x1804 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1805 = (float*)myMalloc(1 * sizeof(float));;
+x1805[0] = 0.0f;
+float* x1807 = (float*)myMalloc(1 * sizeof(float));;
+x1807[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5440,15 +5571,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1804, in_desc, x1799, filt_desc, x1004,
+    x1807, in_desc, x1802, filt_desc, x1004,
     conv_desc, algo, ws_data, ws_size,
-    x1802, out_desc, x1801));
+    x1805, out_desc, x1804));
 };
-float* x1807 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1808 = (float*)myMalloc(1 * sizeof(float));;
-x1808[0] = 0.0f;
-float* x1810 = (float*)myMalloc(1 * sizeof(float));;
-x1810[0] = 1.0f;
+float* x1810 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1811 = (float*)myMalloc(1 * sizeof(float));;
+x1811[0] = 0.0f;
+float* x1813 = (float*)myMalloc(1 * sizeof(float));;
+x1813[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5471,14 +5602,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1810, x1810, in_desc, x1801, out_desc, x1807, sbmv_desc, x479,
+    x1813, x1813, in_desc, x1804, out_desc, x1810, sbmv_desc, x479,
     x665, x815, x947, 1.0E-5));
 };
-float* x1813 = (float*)myMalloc(1 * sizeof(float));;
-x1813[0] = 0.0f;
-float* x1815 = (float*)myMalloc(1 * sizeof(float));;
-x1815[0] = 1.0f;
-float* x1817 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1816 = (float*)myMalloc(1 * sizeof(float));;
+x1816[0] = 0.0f;
+float* x1818 = (float*)myMalloc(1 * sizeof(float));;
+x1818[0] = 1.0f;
+float* x1820 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5495,13 +5626,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1815, x_desc, x1807, x1813, x_desc, x1817));
+    x1818, x_desc, x1810, x1816, x_desc, x1820));
 };
-float* x1819 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1820 = (float*)myMalloc(1 * sizeof(float));;
-x1820[0] = 0.0f;
-float* x1822 = (float*)myMalloc(1 * sizeof(float));;
-x1822[0] = 1.0f;
+float* x1822 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1823 = (float*)myMalloc(1 * sizeof(float));;
+x1823[0] = 0.0f;
+float* x1825 = (float*)myMalloc(1 * sizeof(float));;
+x1825[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5544,44 +5675,44 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1822, in_desc, x1817, filt_desc, x524,
+    x1825, in_desc, x1820, filt_desc, x524,
     conv_desc, algo, ws_data, ws_size,
-    x1820, out_desc, x1819));
+    x1823, out_desc, x1822));
 };
-float* x1825 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1826 = (float*)myMalloc(1 * sizeof(float));;
-x1826[0] = 0.0f;
-float* x1828 = (float*)myMalloc(1 * sizeof(float));;
-x1828[0] = 1.0f;
-
-{
-cudnnTensorDescriptor_t in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, 4, 4));
-
-cudnnTensorDescriptor_t out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, 4, 4));
-
-cudnnTensorDescriptor_t sbmv_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    1, 1024, 1, 1));
-
-CUDNN_CALL(cudnnBatchNormalizationForwardInference(
-    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1828, x1828, in_desc, x1819, out_desc, x1825, sbmv_desc, x971,
-    x695, x950, x740, 1.0E-5));
-};
+float* x1828 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1829 = (float*)myMalloc(1 * sizeof(float));;
+x1829[0] = 0.0f;
 float* x1831 = (float*)myMalloc(1 * sizeof(float));;
 x1831[0] = 1.0f;
-float* x1833 = (float*)myMalloc(1 * sizeof(float));;
-x1833[0] = 1.0f;
+
+{
+cudnnTensorDescriptor_t in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, 4, 4));
+
+cudnnTensorDescriptor_t out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, 4, 4));
+
+cudnnTensorDescriptor_t sbmv_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    1, 1024, 1, 1));
+
+CUDNN_CALL(cudnnBatchNormalizationForwardInference(
+    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
+    x1831, x1831, in_desc, x1822, out_desc, x1828, sbmv_desc, x971,
+    x695, x950, x740, 1.0E-5));
+};
+float* x1834 = (float*)myMalloc(1 * sizeof(float));;
+x1834[0] = 1.0f;
+float* x1836 = (float*)myMalloc(1 * sizeof(float));;
+x1836[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -5597,13 +5728,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, 4, 4));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1831, bias_desc, x1781, x1833, out_desc, x1825));
+    cudnnHandle, x1834, bias_desc, x1784, x1836, out_desc, x1828));
 };
-float* x1836 = (float*)myMalloc(1 * sizeof(float));;
-x1836[0] = 0.0f;
-float* x1838 = (float*)myMalloc(1 * sizeof(float));;
-x1838[0] = 1.0f;
-float* x1840 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1839 = (float*)myMalloc(1 * sizeof(float));;
+x1839[0] = 0.0f;
+float* x1841 = (float*)myMalloc(1 * sizeof(float));;
+x1841[0] = 1.0f;
+float* x1843 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5620,13 +5751,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1838, x_desc, x1825, x1836, x_desc, x1840));
+    x1841, x_desc, x1828, x1839, x_desc, x1843));
 };
-float* x1842 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1843 = (float*)myMalloc(1 * sizeof(float));;
-x1843[0] = 0.0f;
-float* x1845 = (float*)myMalloc(1 * sizeof(float));;
-x1845[0] = 1.0f;
+float* x1845 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1846 = (float*)myMalloc(1 * sizeof(float));;
+x1846[0] = 0.0f;
+float* x1848 = (float*)myMalloc(1 * sizeof(float));;
+x1848[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5669,15 +5800,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1845, in_desc, x1840, filt_desc, x323,
+    x1848, in_desc, x1843, filt_desc, x323,
     conv_desc, algo, ws_data, ws_size,
-    x1843, out_desc, x1842));
+    x1846, out_desc, x1845));
 };
-float* x1848 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1849 = (float*)myMalloc(1 * sizeof(float));;
-x1849[0] = 0.0f;
-float* x1851 = (float*)myMalloc(1 * sizeof(float));;
-x1851[0] = 1.0f;
+float* x1851 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1852 = (float*)myMalloc(1 * sizeof(float));;
+x1852[0] = 0.0f;
+float* x1854 = (float*)myMalloc(1 * sizeof(float));;
+x1854[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5700,14 +5831,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1851, x1851, in_desc, x1842, out_desc, x1848, sbmv_desc, x488,
+    x1854, x1854, in_desc, x1845, out_desc, x1851, sbmv_desc, x488,
     x812, x1019, x464, 1.0E-5));
 };
-float* x1854 = (float*)myMalloc(1 * sizeof(float));;
-x1854[0] = 0.0f;
-float* x1856 = (float*)myMalloc(1 * sizeof(float));;
-x1856[0] = 1.0f;
-float* x1858 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1857 = (float*)myMalloc(1 * sizeof(float));;
+x1857[0] = 0.0f;
+float* x1859 = (float*)myMalloc(1 * sizeof(float));;
+x1859[0] = 1.0f;
+float* x1861 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5724,13 +5855,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1856, x_desc, x1848, x1854, x_desc, x1858));
+    x1859, x_desc, x1851, x1857, x_desc, x1861));
 };
-float* x1860 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1861 = (float*)myMalloc(1 * sizeof(float));;
-x1861[0] = 0.0f;
-float* x1863 = (float*)myMalloc(1 * sizeof(float));;
-x1863[0] = 1.0f;
+float* x1863 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1864 = (float*)myMalloc(1 * sizeof(float));;
+x1864[0] = 0.0f;
+float* x1866 = (float*)myMalloc(1 * sizeof(float));;
+x1866[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5773,15 +5904,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1863, in_desc, x1858, filt_desc, x1043,
+    x1866, in_desc, x1861, filt_desc, x1043,
     conv_desc, algo, ws_data, ws_size,
-    x1861, out_desc, x1860));
+    x1864, out_desc, x1863));
 };
-float* x1866 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1867 = (float*)myMalloc(1 * sizeof(float));;
-x1867[0] = 0.0f;
-float* x1869 = (float*)myMalloc(1 * sizeof(float));;
-x1869[0] = 1.0f;
+float* x1869 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1870 = (float*)myMalloc(1 * sizeof(float));;
+x1870[0] = 0.0f;
+float* x1872 = (float*)myMalloc(1 * sizeof(float));;
+x1872[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5804,14 +5935,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1869, x1869, in_desc, x1860, out_desc, x1866, sbmv_desc, x761,
+    x1872, x1872, in_desc, x1863, out_desc, x1869, sbmv_desc, x761,
     x584, x1007, x569, 1.0E-5));
 };
-float* x1872 = (float*)myMalloc(1 * sizeof(float));;
-x1872[0] = 0.0f;
-float* x1874 = (float*)myMalloc(1 * sizeof(float));;
-x1874[0] = 1.0f;
-float* x1876 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1875 = (float*)myMalloc(1 * sizeof(float));;
+x1875[0] = 0.0f;
+float* x1877 = (float*)myMalloc(1 * sizeof(float));;
+x1877[0] = 1.0f;
+float* x1879 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5828,13 +5959,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1874, x_desc, x1866, x1872, x_desc, x1876));
+    x1877, x_desc, x1869, x1875, x_desc, x1879));
 };
-float* x1878 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1879 = (float*)myMalloc(1 * sizeof(float));;
-x1879[0] = 0.0f;
-float* x1881 = (float*)myMalloc(1 * sizeof(float));;
-x1881[0] = 1.0f;
+float* x1881 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1882 = (float*)myMalloc(1 * sizeof(float));;
+x1882[0] = 0.0f;
+float* x1884 = (float*)myMalloc(1 * sizeof(float));;
+x1884[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5877,15 +6008,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1881, in_desc, x1876, filt_desc, x920,
+    x1884, in_desc, x1879, filt_desc, x920,
     conv_desc, algo, ws_data, ws_size,
-    x1879, out_desc, x1878));
+    x1882, out_desc, x1881));
 };
-float* x1884 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1885 = (float*)myMalloc(1 * sizeof(float));;
-x1885[0] = 0.0f;
-float* x1887 = (float*)myMalloc(1 * sizeof(float));;
-x1887[0] = 1.0f;
+float* x1887 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1888 = (float*)myMalloc(1 * sizeof(float));;
+x1888[0] = 0.0f;
+float* x1890 = (float*)myMalloc(1 * sizeof(float));;
+x1890[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -5908,13 +6039,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1887, x1887, in_desc, x1878, out_desc, x1884, sbmv_desc, x434,
+    x1890, x1890, in_desc, x1881, out_desc, x1887, sbmv_desc, x434,
     x617, x884, x1073, 1.0E-5));
 };
-float* x1890 = (float*)myMalloc(1 * sizeof(float));;
-x1890[0] = 1.0f;
-float* x1892 = (float*)myMalloc(1 * sizeof(float));;
-x1892[0] = 1.0f;
+float* x1893 = (float*)myMalloc(1 * sizeof(float));;
+x1893[0] = 1.0f;
+float* x1895 = (float*)myMalloc(1 * sizeof(float));;
+x1895[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -5930,13 +6061,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, 4, 4));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1890, bias_desc, x1840, x1892, out_desc, x1884));
+    cudnnHandle, x1893, bias_desc, x1843, x1895, out_desc, x1887));
 };
-float* x1895 = (float*)myMalloc(1 * sizeof(float));;
-x1895[0] = 0.0f;
-float* x1897 = (float*)myMalloc(1 * sizeof(float));;
-x1897[0] = 1.0f;
-float* x1899 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1898 = (float*)myMalloc(1 * sizeof(float));;
+x1898[0] = 0.0f;
+float* x1900 = (float*)myMalloc(1 * sizeof(float));;
+x1900[0] = 1.0f;
+float* x1902 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -5953,13 +6084,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1897, x_desc, x1884, x1895, x_desc, x1899));
+    x1900, x_desc, x1887, x1898, x_desc, x1902));
 };
-float* x1901 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1902 = (float*)myMalloc(1 * sizeof(float));;
-x1902[0] = 0.0f;
-float* x1904 = (float*)myMalloc(1 * sizeof(float));;
-x1904[0] = 1.0f;
+float* x1904 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1905 = (float*)myMalloc(1 * sizeof(float));;
+x1905[0] = 0.0f;
+float* x1907 = (float*)myMalloc(1 * sizeof(float));;
+x1907[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6002,15 +6133,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1904, in_desc, x1899, filt_desc, x710,
+    x1907, in_desc, x1902, filt_desc, x710,
     conv_desc, algo, ws_data, ws_size,
-    x1902, out_desc, x1901));
+    x1905, out_desc, x1904));
 };
-float* x1907 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1908 = (float*)myMalloc(1 * sizeof(float));;
-x1908[0] = 0.0f;
-float* x1910 = (float*)myMalloc(1 * sizeof(float));;
-x1910[0] = 1.0f;
+float* x1910 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1911 = (float*)myMalloc(1 * sizeof(float));;
+x1911[0] = 0.0f;
+float* x1913 = (float*)myMalloc(1 * sizeof(float));;
+x1913[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6033,14 +6164,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1910, x1910, in_desc, x1901, out_desc, x1907, sbmv_desc, x512,
+    x1913, x1913, in_desc, x1904, out_desc, x1910, sbmv_desc, x512,
     x1016, x497, x785, 1.0E-5));
 };
-float* x1913 = (float*)myMalloc(1 * sizeof(float));;
-x1913[0] = 0.0f;
-float* x1915 = (float*)myMalloc(1 * sizeof(float));;
-x1915[0] = 1.0f;
-float* x1917 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1916 = (float*)myMalloc(1 * sizeof(float));;
+x1916[0] = 0.0f;
+float* x1918 = (float*)myMalloc(1 * sizeof(float));;
+x1918[0] = 1.0f;
+float* x1920 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -6057,13 +6188,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1915, x_desc, x1907, x1913, x_desc, x1917));
+    x1918, x_desc, x1910, x1916, x_desc, x1920));
 };
-float* x1919 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1920 = (float*)myMalloc(1 * sizeof(float));;
-x1920[0] = 0.0f;
-float* x1922 = (float*)myMalloc(1 * sizeof(float));;
-x1922[0] = 1.0f;
+float* x1922 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1923 = (float*)myMalloc(1 * sizeof(float));;
+x1923[0] = 0.0f;
+float* x1925 = (float*)myMalloc(1 * sizeof(float));;
+x1925[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6106,15 +6237,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1922, in_desc, x1917, filt_desc, x935,
+    x1925, in_desc, x1920, filt_desc, x935,
     conv_desc, algo, ws_data, ws_size,
-    x1920, out_desc, x1919));
+    x1923, out_desc, x1922));
 };
-float* x1925 = (float*)myGpuMalloc(262144 * sizeof(float));
-float* x1926 = (float*)myMalloc(1 * sizeof(float));;
-x1926[0] = 0.0f;
-float* x1928 = (float*)myMalloc(1 * sizeof(float));;
-x1928[0] = 1.0f;
+float* x1928 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1929 = (float*)myMalloc(1 * sizeof(float));;
+x1929[0] = 0.0f;
+float* x1931 = (float*)myMalloc(1 * sizeof(float));;
+x1931[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6137,14 +6268,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1928, x1928, in_desc, x1919, out_desc, x1925, sbmv_desc, x680,
+    x1931, x1931, in_desc, x1922, out_desc, x1928, sbmv_desc, x680,
     x824, x467, x977, 1.0E-5));
 };
-float* x1931 = (float*)myMalloc(1 * sizeof(float));;
-x1931[0] = 0.0f;
-float* x1933 = (float*)myMalloc(1 * sizeof(float));;
-x1933[0] = 1.0f;
-float* x1935 = (float*)myGpuMalloc(262144 * sizeof(float));
+float* x1934 = (float*)myMalloc(1 * sizeof(float));;
+x1934[0] = 0.0f;
+float* x1936 = (float*)myMalloc(1 * sizeof(float));;
+x1936[0] = 1.0f;
+float* x1938 = (float*)myGpuMalloc(262144 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -6161,13 +6292,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1933, x_desc, x1925, x1931, x_desc, x1935));
+    x1936, x_desc, x1928, x1934, x_desc, x1938));
 };
-float* x1937 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1938 = (float*)myMalloc(1 * sizeof(float));;
-x1938[0] = 0.0f;
-float* x1940 = (float*)myMalloc(1 * sizeof(float));;
-x1940[0] = 1.0f;
+float* x1940 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1941 = (float*)myMalloc(1 * sizeof(float));;
+x1941[0] = 0.0f;
+float* x1943 = (float*)myMalloc(1 * sizeof(float));;
+x1943[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6210,15 +6341,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1940, in_desc, x1935, filt_desc, x548,
+    x1943, in_desc, x1938, filt_desc, x548,
     conv_desc, algo, ws_data, ws_size,
-    x1938, out_desc, x1937));
+    x1941, out_desc, x1940));
 };
-float* x1943 = (float*)myGpuMalloc(1048576 * sizeof(float));
-float* x1944 = (float*)myMalloc(1 * sizeof(float));;
-x1944[0] = 0.0f;
-float* x1946 = (float*)myMalloc(1 * sizeof(float));;
-x1946[0] = 1.0f;
+float* x1946 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1947 = (float*)myMalloc(1 * sizeof(float));;
+x1947[0] = 0.0f;
+float* x1949 = (float*)myMalloc(1 * sizeof(float));;
+x1949[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6241,13 +6372,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1946, x1946, in_desc, x1937, out_desc, x1943, sbmv_desc, x1001,
+    x1949, x1949, in_desc, x1940, out_desc, x1946, sbmv_desc, x1001,
     x536, x623, x806, 1.0E-5));
 };
-float* x1949 = (float*)myMalloc(1 * sizeof(float));;
-x1949[0] = 1.0f;
-float* x1951 = (float*)myMalloc(1 * sizeof(float));;
-x1951[0] = 1.0f;
+float* x1952 = (float*)myMalloc(1 * sizeof(float));;
+x1952[0] = 1.0f;
+float* x1954 = (float*)myMalloc(1 * sizeof(float));;
+x1954[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -6263,13 +6394,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, 4, 4));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x1949, bias_desc, x1899, x1951, out_desc, x1943));
+    cudnnHandle, x1952, bias_desc, x1902, x1954, out_desc, x1946));
 };
-float* x1954 = (float*)myMalloc(1 * sizeof(float));;
-x1954[0] = 0.0f;
-float* x1956 = (float*)myMalloc(1 * sizeof(float));;
-x1956[0] = 1.0f;
-float* x1958 = (float*)myGpuMalloc(1048576 * sizeof(float));
+float* x1957 = (float*)myMalloc(1 * sizeof(float));;
+x1957[0] = 0.0f;
+float* x1959 = (float*)myMalloc(1 * sizeof(float));;
+x1959[0] = 1.0f;
+float* x1961 = (float*)myGpuMalloc(1048576 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -6286,13 +6417,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1956, x_desc, x1943, x1954, x_desc, x1958));
+    x1959, x_desc, x1946, x1957, x_desc, x1961));
 };
-float* x1960 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1961 = (float*)myMalloc(1 * sizeof(float));;
-x1961[0] = 0.0f;
-float* x1963 = (float*)myMalloc(1 * sizeof(float));;
-x1963[0] = 1.0f;
+float* x1963 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1964 = (float*)myMalloc(1 * sizeof(float));;
+x1964[0] = 0.0f;
+float* x1966 = (float*)myMalloc(1 * sizeof(float));;
+x1966[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6335,15 +6466,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1963, in_desc, x1958, filt_desc, x674,
+    x1966, in_desc, x1961, filt_desc, x674,
     conv_desc, algo, ws_data, ws_size,
-    x1961, out_desc, x1960));
+    x1964, out_desc, x1963));
 };
-float* x1966 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1967 = (float*)myMalloc(1 * sizeof(float));;
-x1967[0] = 0.0f;
-float* x1969 = (float*)myMalloc(1 * sizeof(float));;
-x1969[0] = 1.0f;
+float* x1969 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1970 = (float*)myMalloc(1 * sizeof(float));;
+x1970[0] = 0.0f;
+float* x1972 = (float*)myMalloc(1 * sizeof(float));;
+x1972[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6366,14 +6497,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1969, x1969, in_desc, x1960, out_desc, x1966, sbmv_desc, x860,
+    x1972, x1972, in_desc, x1963, out_desc, x1969, sbmv_desc, x860,
     x929, x458, x620, 1.0E-5));
 };
-float* x1972 = (float*)myMalloc(1 * sizeof(float));;
-x1972[0] = 0.0f;
-float* x1974 = (float*)myMalloc(1 * sizeof(float));;
-x1974[0] = 1.0f;
-float* x1976 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x1975 = (float*)myMalloc(1 * sizeof(float));;
+x1975[0] = 0.0f;
+float* x1977 = (float*)myMalloc(1 * sizeof(float));;
+x1977[0] = 1.0f;
+float* x1979 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -6390,13 +6521,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1974, x_desc, x1966, x1972, x_desc, x1976));
+    x1977, x_desc, x1969, x1975, x_desc, x1979));
 };
-float* x1978 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x1979 = (float*)myMalloc(1 * sizeof(float));;
-x1979[0] = 0.0f;
-float* x1981 = (float*)myMalloc(1 * sizeof(float));;
-x1981[0] = 1.0f;
+float* x1981 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x1982 = (float*)myMalloc(1 * sizeof(float));;
+x1982[0] = 0.0f;
+float* x1984 = (float*)myMalloc(1 * sizeof(float));;
+x1984[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6439,15 +6570,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1981, in_desc, x1976, filt_desc, x359,
+    x1984, in_desc, x1979, filt_desc, x359,
     conv_desc, algo, ws_data, ws_size,
-    x1979, out_desc, x1978));
+    x1982, out_desc, x1981));
 };
-float* x1984 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x1985 = (float*)myMalloc(1 * sizeof(float));;
-x1985[0] = 0.0f;
-float* x1987 = (float*)myMalloc(1 * sizeof(float));;
-x1987[0] = 1.0f;
+float* x1987 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x1988 = (float*)myMalloc(1 * sizeof(float));;
+x1988[0] = 0.0f;
+float* x1990 = (float*)myMalloc(1 * sizeof(float));;
+x1990[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6470,14 +6601,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x1987, x1987, in_desc, x1978, out_desc, x1984, sbmv_desc, x872,
+    x1990, x1990, in_desc, x1981, out_desc, x1987, sbmv_desc, x872,
     x734, x596, x407, 1.0E-5));
 };
-float* x1990 = (float*)myMalloc(1 * sizeof(float));;
-x1990[0] = 0.0f;
-float* x1992 = (float*)myMalloc(1 * sizeof(float));;
-x1992[0] = 1.0f;
-float* x1994 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x1993 = (float*)myMalloc(1 * sizeof(float));;
+x1993[0] = 0.0f;
+float* x1995 = (float*)myMalloc(1 * sizeof(float));;
+x1995[0] = 1.0f;
+float* x1997 = (float*)myGpuMalloc(131072 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -6494,13 +6625,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x1992, x_desc, x1984, x1990, x_desc, x1994));
+    x1995, x_desc, x1987, x1993, x_desc, x1997));
 };
-float* x1996 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x1997 = (float*)myMalloc(1 * sizeof(float));;
-x1997[0] = 0.0f;
-float* x1999 = (float*)myMalloc(1 * sizeof(float));;
-x1999[0] = 1.0f;
+float* x1999 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2000 = (float*)myMalloc(1 * sizeof(float));;
+x2000[0] = 0.0f;
+float* x2002 = (float*)myMalloc(1 * sizeof(float));;
+x2002[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6543,15 +6674,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x1999, in_desc, x1994, filt_desc, x893,
+    x2002, in_desc, x1997, filt_desc, x893,
     conv_desc, algo, ws_data, ws_size,
-    x1997, out_desc, x1996));
+    x2000, out_desc, x1999));
 };
-float* x2002 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x2003 = (float*)myMalloc(1 * sizeof(float));;
-x2003[0] = 0.0f;
-float* x2005 = (float*)myMalloc(1 * sizeof(float));;
-x2005[0] = 1.0f;
+float* x2005 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2006 = (float*)myMalloc(1 * sizeof(float));;
+x2006[0] = 0.0f;
+float* x2008 = (float*)myMalloc(1 * sizeof(float));;
+x2008[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6574,14 +6705,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x2005, x2005, in_desc, x1996, out_desc, x2002, sbmv_desc, x974,
+    x2008, x2008, in_desc, x1999, out_desc, x2005, sbmv_desc, x974,
     x443, x602, x836, 1.0E-5));
 };
-float* x2008 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x2009 = (float*)myMalloc(1 * sizeof(float));;
-x2009[0] = 0.0f;
-float* x2011 = (float*)myMalloc(1 * sizeof(float));;
-x2011[0] = 1.0f;
+float* x2011 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2012 = (float*)myMalloc(1 * sizeof(float));;
+x2012[0] = 0.0f;
+float* x2014 = (float*)myMalloc(1 * sizeof(float));;
+x2014[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6624,44 +6755,44 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x2011, in_desc, x1958, filt_desc, x899,
+    x2014, in_desc, x1961, filt_desc, x899,
     conv_desc, algo, ws_data, ws_size,
-    x2009, out_desc, x2008));
+    x2012, out_desc, x2011));
 };
-float* x2014 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x2015 = (float*)myMalloc(1 * sizeof(float));;
-x2015[0] = 0.0f;
-float* x2017 = (float*)myMalloc(1 * sizeof(float));;
-x2017[0] = 1.0f;
-
-{
-cudnnTensorDescriptor_t in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 2048, 2, 2));
-
-cudnnTensorDescriptor_t out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 2048, 2, 2));
-
-cudnnTensorDescriptor_t sbmv_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    1, 2048, 1, 1));
-
-CUDNN_CALL(cudnnBatchNormalizationForwardInference(
-    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x2017, x2017, in_desc, x2008, out_desc, x2014, sbmv_desc, x776,
-    x578, x449, x632, 1.0E-5));
-};
+float* x2017 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2018 = (float*)myMalloc(1 * sizeof(float));;
+x2018[0] = 0.0f;
 float* x2020 = (float*)myMalloc(1 * sizeof(float));;
 x2020[0] = 1.0f;
-float* x2022 = (float*)myMalloc(1 * sizeof(float));;
-x2022[0] = 1.0f;
+
+{
+cudnnTensorDescriptor_t in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 2048, 2, 2));
+
+cudnnTensorDescriptor_t out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 2048, 2, 2));
+
+cudnnTensorDescriptor_t sbmv_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    1, 2048, 1, 1));
+
+CUDNN_CALL(cudnnBatchNormalizationForwardInference(
+    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
+    x2020, x2020, in_desc, x2011, out_desc, x2017, sbmv_desc, x776,
+    x578, x449, x632, 1.0E-5));
+};
+float* x2023 = (float*)myMalloc(1 * sizeof(float));;
+x2023[0] = 1.0f;
+float* x2025 = (float*)myMalloc(1 * sizeof(float));;
+x2025[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -6677,13 +6808,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, 2, 2));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x2020, bias_desc, x2014, x2022, out_desc, x2002));
+    cudnnHandle, x2023, bias_desc, x2017, x2025, out_desc, x2005));
 };
-float* x2025 = (float*)myMalloc(1 * sizeof(float));;
-x2025[0] = 0.0f;
-float* x2027 = (float*)myMalloc(1 * sizeof(float));;
-x2027[0] = 1.0f;
-float* x2029 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2028 = (float*)myMalloc(1 * sizeof(float));;
+x2028[0] = 0.0f;
+float* x2030 = (float*)myMalloc(1 * sizeof(float));;
+x2030[0] = 1.0f;
+float* x2032 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -6700,13 +6831,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x2027, x_desc, x2002, x2025, x_desc, x2029));
+    x2030, x_desc, x2005, x2028, x_desc, x2032));
 };
-float* x2031 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x2032 = (float*)myMalloc(1 * sizeof(float));;
-x2032[0] = 0.0f;
-float* x2034 = (float*)myMalloc(1 * sizeof(float));;
-x2034[0] = 1.0f;
+float* x2034 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2035 = (float*)myMalloc(1 * sizeof(float));;
+x2035[0] = 0.0f;
+float* x2037 = (float*)myMalloc(1 * sizeof(float));;
+x2037[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6749,15 +6880,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x2034, in_desc, x2029, filt_desc, x902,
+    x2037, in_desc, x2032, filt_desc, x902,
     conv_desc, algo, ws_data, ws_size,
-    x2032, out_desc, x2031));
+    x2035, out_desc, x2034));
 };
-float* x2037 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x2038 = (float*)myMalloc(1 * sizeof(float));;
-x2038[0] = 0.0f;
-float* x2040 = (float*)myMalloc(1 * sizeof(float));;
-x2040[0] = 1.0f;
+float* x2040 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2041 = (float*)myMalloc(1 * sizeof(float));;
+x2041[0] = 0.0f;
+float* x2043 = (float*)myMalloc(1 * sizeof(float));;
+x2043[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6780,14 +6911,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x2040, x2040, in_desc, x2031, out_desc, x2037, sbmv_desc, x395,
+    x2043, x2043, in_desc, x2034, out_desc, x2040, sbmv_desc, x395,
     x668, x719, x452, 1.0E-5));
 };
-float* x2043 = (float*)myMalloc(1 * sizeof(float));;
-x2043[0] = 0.0f;
-float* x2045 = (float*)myMalloc(1 * sizeof(float));;
-x2045[0] = 1.0f;
-float* x2047 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2046 = (float*)myMalloc(1 * sizeof(float));;
+x2046[0] = 0.0f;
+float* x2048 = (float*)myMalloc(1 * sizeof(float));;
+x2048[0] = 1.0f;
+float* x2050 = (float*)myGpuMalloc(131072 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -6804,13 +6935,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x2045, x_desc, x2037, x2043, x_desc, x2047));
+    x2048, x_desc, x2040, x2046, x_desc, x2050));
 };
-float* x2049 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x2050 = (float*)myMalloc(1 * sizeof(float));;
-x2050[0] = 0.0f;
-float* x2052 = (float*)myMalloc(1 * sizeof(float));;
-x2052[0] = 1.0f;
+float* x2052 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2053 = (float*)myMalloc(1 * sizeof(float));;
+x2053[0] = 0.0f;
+float* x2055 = (float*)myMalloc(1 * sizeof(float));;
+x2055[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6853,15 +6984,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x2052, in_desc, x2047, filt_desc, x722,
+    x2055, in_desc, x2050, filt_desc, x722,
     conv_desc, algo, ws_data, ws_size,
-    x2050, out_desc, x2049));
+    x2053, out_desc, x2052));
 };
-float* x2055 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x2056 = (float*)myMalloc(1 * sizeof(float));;
-x2056[0] = 0.0f;
-float* x2058 = (float*)myMalloc(1 * sizeof(float));;
-x2058[0] = 1.0f;
+float* x2058 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2059 = (float*)myMalloc(1 * sizeof(float));;
+x2059[0] = 0.0f;
+float* x2061 = (float*)myMalloc(1 * sizeof(float));;
+x2061[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6884,14 +7015,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x2058, x2058, in_desc, x2049, out_desc, x2055, sbmv_desc, x737,
+    x2061, x2061, in_desc, x2052, out_desc, x2058, sbmv_desc, x737,
     x455, x671, x842, 1.0E-5));
 };
-float* x2061 = (float*)myMalloc(1 * sizeof(float));;
-x2061[0] = 0.0f;
-float* x2063 = (float*)myMalloc(1 * sizeof(float));;
-x2063[0] = 1.0f;
-float* x2065 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2064 = (float*)myMalloc(1 * sizeof(float));;
+x2064[0] = 0.0f;
+float* x2066 = (float*)myMalloc(1 * sizeof(float));;
+x2066[0] = 1.0f;
+float* x2068 = (float*)myGpuMalloc(131072 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -6908,13 +7039,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x2063, x_desc, x2055, x2061, x_desc, x2065));
+    x2066, x_desc, x2058, x2064, x_desc, x2068));
 };
-float* x2067 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x2068 = (float*)myMalloc(1 * sizeof(float));;
-x2068[0] = 0.0f;
-float* x2070 = (float*)myMalloc(1 * sizeof(float));;
-x2070[0] = 1.0f;
+float* x2070 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2071 = (float*)myMalloc(1 * sizeof(float));;
+x2071[0] = 0.0f;
+float* x2073 = (float*)myMalloc(1 * sizeof(float));;
+x2073[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6957,15 +7088,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x2070, in_desc, x2065, filt_desc, x398,
+    x2073, in_desc, x2068, filt_desc, x398,
     conv_desc, algo, ws_data, ws_size,
-    x2068, out_desc, x2067));
+    x2071, out_desc, x2070));
 };
-float* x2073 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x2074 = (float*)myMalloc(1 * sizeof(float));;
-x2074[0] = 0.0f;
-float* x2076 = (float*)myMalloc(1 * sizeof(float));;
-x2076[0] = 1.0f;
+float* x2076 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2077 = (float*)myMalloc(1 * sizeof(float));;
+x2077[0] = 0.0f;
+float* x2079 = (float*)myMalloc(1 * sizeof(float));;
+x2079[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -6988,13 +7119,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x2076, x2076, in_desc, x2067, out_desc, x2073, sbmv_desc, x539,
+    x2079, x2079, in_desc, x2070, out_desc, x2076, sbmv_desc, x539,
     x689, x461, x992, 1.0E-5));
 };
-float* x2079 = (float*)myMalloc(1 * sizeof(float));;
-x2079[0] = 1.0f;
-float* x2081 = (float*)myMalloc(1 * sizeof(float));;
-x2081[0] = 1.0f;
+float* x2082 = (float*)myMalloc(1 * sizeof(float));;
+x2082[0] = 1.0f;
+float* x2084 = (float*)myMalloc(1 * sizeof(float));;
+x2084[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -7010,13 +7141,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, 2, 2));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x2079, bias_desc, x2029, x2081, out_desc, x2073));
+    cudnnHandle, x2082, bias_desc, x2032, x2084, out_desc, x2076));
 };
-float* x2084 = (float*)myMalloc(1 * sizeof(float));;
-x2084[0] = 0.0f;
-float* x2086 = (float*)myMalloc(1 * sizeof(float));;
-x2086[0] = 1.0f;
-float* x2088 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2087 = (float*)myMalloc(1 * sizeof(float));;
+x2087[0] = 0.0f;
+float* x2089 = (float*)myMalloc(1 * sizeof(float));;
+x2089[0] = 1.0f;
+float* x2091 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -7033,13 +7164,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x2086, x_desc, x2073, x2084, x_desc, x2088));
+    x2089, x_desc, x2076, x2087, x_desc, x2091));
 };
-float* x2090 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x2091 = (float*)myMalloc(1 * sizeof(float));;
-x2091[0] = 0.0f;
-float* x2093 = (float*)myMalloc(1 * sizeof(float));;
-x2093[0] = 1.0f;
+float* x2093 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2094 = (float*)myMalloc(1 * sizeof(float));;
+x2094[0] = 0.0f;
+float* x2096 = (float*)myMalloc(1 * sizeof(float));;
+x2096[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -7082,15 +7213,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x2093, in_desc, x2088, filt_desc, x1052,
+    x2096, in_desc, x2091, filt_desc, x1052,
     conv_desc, algo, ws_data, ws_size,
-    x2091, out_desc, x2090));
+    x2094, out_desc, x2093));
 };
-float* x2096 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x2097 = (float*)myMalloc(1 * sizeof(float));;
-x2097[0] = 0.0f;
-float* x2099 = (float*)myMalloc(1 * sizeof(float));;
-x2099[0] = 1.0f;
+float* x2099 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2100 = (float*)myMalloc(1 * sizeof(float));;
+x2100[0] = 0.0f;
+float* x2102 = (float*)myMalloc(1 * sizeof(float));;
+x2102[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -7113,14 +7244,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x2099, x2099, in_desc, x2090, out_desc, x2096, sbmv_desc, x302,
+    x2102, x2102, in_desc, x2093, out_desc, x2099, sbmv_desc, x302,
     x491, x896, x1022, 1.0E-5));
 };
-float* x2102 = (float*)myMalloc(1 * sizeof(float));;
-x2102[0] = 0.0f;
-float* x2104 = (float*)myMalloc(1 * sizeof(float));;
-x2104[0] = 1.0f;
-float* x2106 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2105 = (float*)myMalloc(1 * sizeof(float));;
+x2105[0] = 0.0f;
+float* x2107 = (float*)myMalloc(1 * sizeof(float));;
+x2107[0] = 1.0f;
+float* x2109 = (float*)myGpuMalloc(131072 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -7137,13 +7268,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x2104, x_desc, x2096, x2102, x_desc, x2106));
+    x2107, x_desc, x2099, x2105, x_desc, x2109));
 };
-float* x2108 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x2109 = (float*)myMalloc(1 * sizeof(float));;
-x2109[0] = 0.0f;
-float* x2111 = (float*)myMalloc(1 * sizeof(float));;
-x2111[0] = 1.0f;
+float* x2111 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2112 = (float*)myMalloc(1 * sizeof(float));;
+x2112[0] = 0.0f;
+float* x2114 = (float*)myMalloc(1 * sizeof(float));;
+x2114[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -7186,15 +7317,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x2111, in_desc, x2106, filt_desc, x341,
+    x2114, in_desc, x2109, filt_desc, x341,
     conv_desc, algo, ws_data, ws_size,
-    x2109, out_desc, x2108));
+    x2112, out_desc, x2111));
 };
-float* x2114 = (float*)myGpuMalloc(131072 * sizeof(float));
-float* x2115 = (float*)myMalloc(1 * sizeof(float));;
-x2115[0] = 0.0f;
-float* x2117 = (float*)myMalloc(1 * sizeof(float));;
-x2117[0] = 1.0f;
+float* x2117 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2118 = (float*)myMalloc(1 * sizeof(float));;
+x2118[0] = 0.0f;
+float* x2120 = (float*)myMalloc(1 * sizeof(float));;
+x2120[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -7217,14 +7348,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x2117, x2117, in_desc, x2108, out_desc, x2114, sbmv_desc, x839,
+    x2120, x2120, in_desc, x2111, out_desc, x2117, sbmv_desc, x839,
     x764, x293, x863, 1.0E-5));
 };
-float* x2120 = (float*)myMalloc(1 * sizeof(float));;
-x2120[0] = 0.0f;
-float* x2122 = (float*)myMalloc(1 * sizeof(float));;
-x2122[0] = 1.0f;
-float* x2124 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2123 = (float*)myMalloc(1 * sizeof(float));;
+x2123[0] = 0.0f;
+float* x2125 = (float*)myMalloc(1 * sizeof(float));;
+x2125[0] = 1.0f;
+float* x2127 = (float*)myGpuMalloc(131072 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -7241,13 +7372,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x2122, x_desc, x2114, x2120, x_desc, x2124));
+    x2125, x_desc, x2117, x2123, x_desc, x2127));
 };
-float* x2126 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x2127 = (float*)myMalloc(1 * sizeof(float));;
-x2127[0] = 0.0f;
-float* x2129 = (float*)myMalloc(1 * sizeof(float));;
-x2129[0] = 1.0f;
+float* x2129 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2130 = (float*)myMalloc(1 * sizeof(float));;
+x2130[0] = 0.0f;
+float* x2132 = (float*)myMalloc(1 * sizeof(float));;
+x2132[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -7290,15 +7421,15 @@ void *ws_data = myGpuMalloc(ws_size);
 // Execute convolution.
 CUDNN_CALL(cudnnConvolutionForward(
     cudnnHandle,
-    x2129, in_desc, x2124, filt_desc, x356,
+    x2132, in_desc, x2127, filt_desc, x356,
     conv_desc, algo, ws_data, ws_size,
-    x2127, out_desc, x2126));
+    x2130, out_desc, x2129));
 };
-float* x2132 = (float*)myGpuMalloc(524288 * sizeof(float));
-float* x2133 = (float*)myMalloc(1 * sizeof(float));;
-x2133[0] = 0.0f;
-float* x2135 = (float*)myMalloc(1 * sizeof(float));;
-x2135[0] = 1.0f;
+float* x2135 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2136 = (float*)myMalloc(1 * sizeof(float));;
+x2136[0] = 0.0f;
+float* x2138 = (float*)myMalloc(1 * sizeof(float));;
+x2138[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -7321,13 +7452,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationForwardInference(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x2135, x2135, in_desc, x2126, out_desc, x2132, sbmv_desc, x566,
+    x2138, x2138, in_desc, x2129, out_desc, x2135, sbmv_desc, x566,
     x800, x1037, x626, 1.0E-5));
 };
-float* x2138 = (float*)myMalloc(1 * sizeof(float));;
-x2138[0] = 1.0f;
-float* x2140 = (float*)myMalloc(1 * sizeof(float));;
-x2140[0] = 1.0f;
+float* x2141 = (float*)myMalloc(1 * sizeof(float));;
+x2141[0] = 1.0f;
+float* x2143 = (float*)myMalloc(1 * sizeof(float));;
+x2143[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -7343,13 +7474,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, 2, 2));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x2138, bias_desc, x2088, x2140, out_desc, x2132));
+    cudnnHandle, x2141, bias_desc, x2091, x2143, out_desc, x2135));
 };
-float* x2143 = (float*)myMalloc(1 * sizeof(float));;
-x2143[0] = 0.0f;
-float* x2145 = (float*)myMalloc(1 * sizeof(float));;
-x2145[0] = 1.0f;
-float* x2147 = (float*)myGpuMalloc(524288 * sizeof(float));
+float* x2146 = (float*)myMalloc(1 * sizeof(float));;
+x2146[0] = 0.0f;
+float* x2148 = (float*)myMalloc(1 * sizeof(float));;
+x2148[0] = 1.0f;
+float* x2150 = (float*)myGpuMalloc(524288 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -7366,13 +7497,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationForward(
     cudnnHandle, act_desc,
-    x2145, x_desc, x2132, x2143, x_desc, x2147));
+    x2148, x_desc, x2135, x2146, x_desc, x2150));
 };
-float* x2149 = (float*)myMalloc(1 * sizeof(float));;
-x2149[0] = 0.0f;
-float* x2151 = (float*)myMalloc(1 * sizeof(float));;
-x2151[0] = 1.0f;
-float* x2153 = (float*)myGpuMalloc(131072 * sizeof(float));
+float* x2152 = (float*)myMalloc(1 * sizeof(float));;
+x2152[0] = 0.0f;
+float* x2154 = (float*)myMalloc(1 * sizeof(float));;
+x2154[0] = 1.0f;
+float* x2156 = (float*)myGpuMalloc(131072 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -7397,20 +7528,20 @@ CUDNN_CALL(cudnnSetPooling2dDescriptor(
 CUDNN_CALL(cudnnPoolingForward(
     cudnnHandle, 
     poolingDesc, 
-    x2151, in_desc, x2147, x2149, out_desc, x2153));
+    x2154, in_desc, x2150, x2152, out_desc, x2156));
 };
-// resize to WrappedArray(64, -1)
-// gemm: ArrayBuffer(64, 2048), Vector(10, 2048)
-float* x2157 = (float*)myGpuMalloc(640 * sizeof(float));
-float* x2158 = (float*)myMalloc(1 * sizeof(float));;
-x2158[0] = 0.0f;
-float* x2160 = (float*)myMalloc(1 * sizeof(float));;
-x2160[0] = 1.0f;
-CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, 10,64,2048,x2160,x938,2048,x2153,2048,x2158,x2157,10));
+// resize to WrappedArray(64, 2048)
+// gemm: WrappedArray(64, 2048), Vector(10, 2048)
+float* x2160 = (float*)myGpuMalloc(640 * sizeof(float));
+float* x2161 = (float*)myMalloc(1 * sizeof(float));;
+x2161[0] = 0.0f;
 float* x2163 = (float*)myMalloc(1 * sizeof(float));;
 x2163[0] = 1.0f;
-float* x2165 = (float*)myMalloc(1 * sizeof(float));;
-x2165[0] = 1.0f;
+CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, 10,64,2048,x2163,x938,2048,x2156,2048,x2161,x2160,10));
+float* x2166 = (float*)myMalloc(1 * sizeof(float));;
+x2166[0] = 1.0f;
+float* x2168 = (float*)myMalloc(1 * sizeof(float));;
+x2168[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -7426,33 +7557,33 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 10, 1, 1));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x2163, bias_desc, x401, x2165, out_desc, x2157));
+    cudnnHandle, x2166, bias_desc, x401, x2168, out_desc, x2160));
 };
 // Tensor 'toCPU' invocation.
-float* x2169 = (float*)myMalloc(640 * sizeof(float));;
-CUDA_CALL(cudaMemcpy(x2169, x2157, 640 * sizeof(float), cudaMemcpyDeviceToHost));
+float* x2172 = (float*)myMalloc(640 * sizeof(float));;
+CUDA_CALL(cudaMemcpy(x2172, x2160, 640 * sizeof(float), cudaMemcpyDeviceToHost));
 printf("output (size 64 x 10)\n");
-float x2172 = 0.0f;
-for(int x2174=0; x2174 < 640; x2174++) {
-float x2175 = x2172;
-float x2176 = x2169[x2174];
-float x2177 = fabs(x2176);
-float x2178 = fabs(x2175);
-bool x2179 = x2177 > x2178;
-float x2180;
-if (x2179) {
-x2180 = x2176;
+float x2175 = 0.0f;
+for(int x2177=0; x2177 < 640; x2177++) {
+float x2178 = x2175;
+float x2179 = x2172[x2177];
+float x2180 = fabs(x2179);
+float x2181 = fabs(x2178);
+bool x2182 = x2180 > x2181;
+float x2183;
+if (x2182) {
+x2183 = x2179;
 } else {
-x2180 = x2175;
+x2183 = x2178;
 }
-x2172 = x2180;
+x2175 = x2183;
 
 }
-float x2184 = x2172;
-printf("Max Abs: %.5f || ",x2184);
-for(int x2186=0; x2186 < 10; x2186++) {
-float x2187 = x2169[x2186];
-printf("%.5f ",x2187);
+float x2187 = x2175;
+printf("Max Abs: %.5f || ",x2187);
+for(int x2189=0; x2189 < 10; x2189++) {
+float x2190 = x2172[x2189];
+printf("%.5f ",x2190);
 
 }
 printf("\n");

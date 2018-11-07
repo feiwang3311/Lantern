@@ -67,7 +67,7 @@ echo "Plot: plot squeezenet result"
 cd ..
 cp pytorch/result_PyTorch result_PyTorch.txt
 cp lantern/result_Lantern result_Lantern.txt
-cp tensorflow2/result_TensorFlow result_TensorFlow.txt
+cp tensorflow/result_TensorFlow result_TensorFlow.txt
 python3 ../plot.py ResNet50 result_Lantern.txt result_PyTorch.txt result_TensorFlow.txt
 exit 1
 
