@@ -580,8 +580,7 @@ class TestCudnn extends LanternFunSuite {
         System.out.println(rnn.parameters)
         System.out.println(rnn.parameters.size)
         val expectedParameterCount = numLayers * numDirections * 4
-        assert(rnn.parameters.size == expectedParameterCount,
-               "Expected $expectedParameterCount parameters, got ${rnn.parameters.size}")
+        assert(rnn.parameters.size == expectedParameterCount)
 
         def lossFun(input: TensorR) = {
           rnn(input, Some(h0), Some(c0))
@@ -593,23 +592,70 @@ class TestCudnn extends LanternFunSuite {
         dInput.toCPU().print()
 
         for (layer <- (0 until numLayers): Range) {
-          printf("w_ih[%d]\\n", layer)
+          printf("w_ih[%d].grad\\n", layer)
           rnn.w_ih(layer).d.toCPU().print()
-          printf("w_hh[%d]\\n", layer)
+          printf("w_hh[%d].grad\\n", layer)
           rnn.w_hh(layer).d.toCPU().print()
-          printf("b_ih[%d]\\n", layer)
+          printf("b_ih[%d].grad\\n", layer)
           rnn.b_ih(layer).d.toCPU().print()
-          printf("b_hh[%d]\\n", layer)
+          printf("b_hh[%d].grad\\n", layer)
           rnn.b_hh(layer).d.toCPU().print()
 
-          printf("w_ih_reverse[%d]\\n", layer)
+          printf("w_ih_reverse[%d].grad\\n", layer)
           rnn.w_ih_reverse(layer).d.toCPU().print()
-          printf("w_hh_reverse[%d]\\n", layer)
+          printf("w_hh_reverse[%d].grad\\n", layer)
           rnn.w_hh_reverse(layer).d.toCPU().print()
-          printf("b_ih_reverse[%d]\\n", layer)
+          printf("b_ih_reverse[%d].grad\\n", layer)
           rnn.b_ih_reverse(layer).d.toCPU().print()
-          printf("b_hh_reverse[%d]\\n", layer)
+          printf("b_hh_reverse[%d].grad\\n", layer)
           rnn.b_hh_reverse(layer).d.toCPU().print()
+        }
+      }
+    }
+    runTest(lstmModule)
+  }
+
+  testGPU("lstm-opt") {
+    val lstmModule = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-lstm-opt"
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        Tensor.randseed(42)
+        val inputSize = 2
+        val hiddenSize = 2
+        val numLayers = 2
+        val seqLength = 2
+        val batchSize = 2
+        val bidirectional = true
+        val numDirections = if (bidirectional) 2 else 1
+
+        val input = Tensor.ones(seqLength, batchSize, inputSize)
+        val rnn = LSTM(inputSize, hiddenSize, numLayers, bidirectional = bidirectional)
+        val opt = SGD(rnn, learning_rate = 0.1f)
+
+        // Test parameter registration.
+        System.out.println(rnn.parameters)
+        System.out.println(rnn.parameters.size)
+        val expectedParameterCount = numLayers * numDirections * 4
+        assert(rnn.parameters.size == expectedParameterCount)
+
+        def lossFun(input: TensorR) = {
+          rnn(input)
+        }
+        val dInput = gradR(lossFun)(input)
+
+        // Print w_ih parameters before SGD step.
+        for (layer <- (0 until numLayers): Range) {
+          printf("w_ih[%d]\\n", layer)
+          rnn.w_ih(layer).x.toCPU().print()
+        }
+
+        opt.step()
+
+        // Print w_ih parameters after SGD step.
+        for (layer <- (0 until numLayers): Range) {
+          printf("w_ih[%d]\\n", layer)
+          rnn.w_ih(layer).x.toCPU().print()
         }
       }
     }
