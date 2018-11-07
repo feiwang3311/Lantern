@@ -1,5 +1,5 @@
 package lantern
-package PLDI18App
+package PLDI19App
 
 import scala.util.continuations._
 import scala.util.continuations
@@ -13,8 +13,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
 import scala.math._
 
-import java.io.PrintWriter;
-import java.io.File;
+import java.io.PrintWriter
+import java.io.File
 
 object TestNet {
 

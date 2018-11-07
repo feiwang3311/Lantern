@@ -12,8 +12,8 @@ import scala.virtualization.lms._
 import scala.collection.mutable.ArrayBuffer
 import scala.math._
 
-import java.io.PrintWriter;
-import java.io.File;
+import java.io.PrintWriter
+import java.io.File
 
 object SentimentTreeLSTM {
 
