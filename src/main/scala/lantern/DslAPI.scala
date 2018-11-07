@@ -490,6 +490,12 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  for (int i = tid; i < size; i += stride) data[i] = value;
       |}
       |
+      |__global__ void arrayFill_greg(float* data, float value, int size) {
+      |  int stride = gridDim.x * blockDim.x;
+      |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+      |  for (int i = tid; i < size; i += stride) data[i] = value;
+      |}
+      |
       |__global__ void nllLoss(float *x, int x_stride, float *y, int* target) {
       |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
       |  int offset = tid * x_stride + target[tid];
@@ -537,7 +543,7 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |//  return offset + linearIndex * outputStride[0];
       |}
       |
-      |// dimSize: size on concat dimension. Only for Dim of rank 4
+      |// TODO: Only for Dim of rank 4, and only for 2 inputs, and only for concat at dim = 1
       |__global__ void concat2D_1D_greg(float* in1, int dimSize1, int nElement1,
       |                                 float* in2, int dimSize2, int nElement2,
       |                                 float* out, int concatDim,
@@ -558,7 +564,8 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |    tid += stride;
       |  }
       |}
-      |// dimSize: size on concat dimension. Only for Dim of rank 4
+      |
+      |// TODO: Only for Dim of rank 4, and only for 2 inputs, and only for concat at dim = 1
       |__global__ void concat2D_1D_greg_grad(float* in1, int dimSize1, int nElement1,
       |                                      float* in2, int dimSize2, int nElement2,
       |                                      float* out, int concatDim,
@@ -579,6 +586,7 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |    tid += stride;
       |  }
       |}
+      |
       |__global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  if (tid >= sizeLow) return;
