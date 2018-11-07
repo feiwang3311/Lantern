@@ -43,18 +43,34 @@ cp pytorch/result_PyTorch result_PyTorch.txt
 cp lantern/result_Lantern result_Lantern.txt
 cp tensorflow2/result_TensorFlow result_TensorFlow.txt
 python3 ../plot.py SqueezeNet result_Lantern.txt result_PyTorch.txt result_TensorFlow.txt
-exit 1
 
-cd ..
-cd resnet50
+echo "Exp: run ResNet50 models"
+cd ../resnet50
 cd pytorch
+echo "Note: if you haven't generate onnx model from the PyTorch implementation, do it now by uncommenting the command below."
+echo "Note: without the onnx model, you cannot generate Lantern code. You need to generate Lantern code too."
 # python3 train.py --generate_onnx ../resnet50.onnx
+echo "Exp: run PyTorch training with GPU"
 python3 train.py --use_gpu=True
+echo "Exp: run PyTorch inference with GPU"
 python3 train.py --use_gpu=True --inference=True --write_to=result_PyTorch_inference_GPU
+echo "Exp: run PyTorch interence with CPU"
 python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
-
-
+cd ../lantern
+echo "Exp: run Lantern training with GPU"
+nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
+./LanternOnnxTrainingCu	result_Lantern
+cd ../tensorflow
+echo "Exp: run TensorFlow training with GPU"
+python3 train.py
+echo "Plot: plot squeezenet result"
+cd ..
+cp pytorch/result_PyTorch result_PyTorch.txt
+cp lantern/result_Lantern result_Lantern.txt
+cp tensorflow2/result_TensorFlow result_TensorFlow.txt
+python3 ../plot.py ResNet50 result_Lantern.txt result_PyTorch.txt result_TensorFlow.txt
 exit 1
+
 
 export OPENBLAS_NUM_THREADS=1
 
