@@ -375,6 +375,10 @@ trait TensorDsl extends DslOps with Diff {
     def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor])
     def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit
 
+    def batchNorm1DInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor
+    def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor])
+    def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit
+
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
@@ -1378,6 +1382,10 @@ trait TensorDsl extends DslOps with Diff {
       ???
     }
 
+    override def batchNorm1DInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = ???
+    override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = ???
+    override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = ???
+
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")
@@ -1690,9 +1698,14 @@ trait TensorDsl extends DslOps with Diff {
     def batchNormInference(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor =
       backend.batchNormInference(this, scale, bias, runningMean, runningVar)
 
-    @virtualize
     def batchNormTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) =
       backend.batchNormTraining(this, scale, bias, runningMean, runningVar)
+
+    def batchNorm1DInference(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor =
+      backend.batchNorm1DInference(this, scale, bias, runningMean, runningVar)
+
+    def batchNorm1DTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) =
+      backend.batchNorm1DTraining(this, scale, bias, runningMean, runningVar)
 
     // NOTE: this function has nothing to do with Batch Normalization. Sorry for the confusing name
     @virtualize
@@ -2589,6 +2602,13 @@ trait TensorDsl extends DslOps with Diff {
         val (y, saveMean, saveInvVariance) = x.batchNormTraining(scale.x, bias.x, runningMean, runningVar)
         val ty = TensorR(y); k(ty);
         backend.batchNorm_grad(this, ty, scale, bias, saveMean, saveInvVariance)
+      }
+
+    def batchNorm1D(scale: TensorR, bias: TensorR, runningMean: Tensor, runningVar: Tensor): TensorR @diff =
+      shift { (k: TensorR => Unit) =>
+        val (y, saveMean, saveInvVariance) = x.batchNorm1DTraining(scale.x, bias.x, runningMean, runningVar)
+        val ty = TensorR(y); k(ty);
+        backend.batchNorm1D_grad(this, ty, scale, bias, saveMean, saveInvVariance)
       }
 
     def batchNormAv(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -3591,6 +3611,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = ???
     override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = ???
 
+    override def batchNorm1DInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = ???
+    override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = ???
+    override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = ???
+
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
@@ -4416,6 +4440,127 @@ trait TensorDslCudnn extends TensorDslCublas {
                                 saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = {
       (saveMean, saveInvVariance) match {
         case (Some(saveMean), Some(saveInvVariance)) => cudnnBatchNormalizationBackward(input, res, scale, bias, saveMean, saveInvVariance)
+        case _ => ???
+      }
+    }
+
+    def cudnnBatchNormalization1DForwardInference(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
+                                                  runningMean: Tensor, runningVar: Tensor,
+                                                  momentum: Double = 0.1, epsilon: Double = 1e-5): Unit = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, 1, 1));
+          |
+          |cudnnTensorDescriptor_t sbmv_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    1, ${bias.shape(0)}, 1, 1));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnBatchNormalizationForwardInference(\n" +
+          "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+         // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+          "    ", one, ", ", one, ", in_desc, ", x.data, ", in_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
+          "    ", bias.data, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, "));\n" +
+          "}"): _*)
+    }
+
+    def cudnnBatchNormalization1DForwardTraining(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
+                                               runningMean: Tensor, runningVar: Tensor, saveMean: Tensor, saveInvVariance: Tensor,
+                                               momentum: Double = 0.1, epsilon: Double = 1e-5): Unit = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${x.shape(0)}, ${x.shape(1)}, 1, 1));
+          |
+          |cudnnTensorDescriptor_t sbmv_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    1, ${bias.shape(0)}, 1, 1));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnBatchNormalizationForwardTraining(\n" +
+          "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+          // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+          "    ", one, ", ", zero, ", in_desc, ", x.data, ", in_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
+          "    ", bias.data, ", ", momentum, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, ",\n" +
+          "    ", saveMean.data, ", ", saveInvVariance.data, "));\n" +
+          "}"): _*)
+    }
+
+    def cudnnBatchNormalization1DBackward(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
+                                        saveMean: Tensor, saveInvVariance: Tensor,
+                                        momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    ${input.x.shape(0)}, ${input.x.shape(1)}, 1, 1));
+          |
+          |cudnnTensorDescriptor_t sbmv_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    1, ${bias.x.shape(0)}, 1, 1));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
+          "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+          // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+          "    ", one, ", ", one, ", ", one, ", ", one, ", in_desc, ", input.x.data, ",\n" +
+          "    in_desc, ", res.d.data, ", in_desc, ", input.d.data, ", sbmv_desc, ", scale.x.data, ",\n" +
+          "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n" +
+          "}"): _*)
+    }
+
+    override def batchNorm1DInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = {
+      assert(x.rank == 2, s"batchNorm1D only applies to inputs of 2D matrix, got ${x.shape}")
+      assert(scale.rank == 1 && scale.shape(0) == x.shape(1), s"scale should be rank 1 and have the same size as input dim 1, got ${scale.shape} and ${x.shape}")
+      assert(bias.rank == 1 && bias.shape(0) == x.shape(1), s"bias should be rank 1 and have the same size as input dim 1, got ${bias.shape} and ${x.shape}")
+      assert(runningMean.rank == 1 && runningMean.shape(0) == x.shape(1), s"runningMean should be rank 1 and have the same size as input dim 1, got ${runningMean.shape} and ${x.shape}")
+      assert(runningVar.rank == 1 && runningVar.shape(0) == x.shape(1), s"runningVar should be rank 1 and have the same size as input dim 1, got ${runningVar.shape} and ${x.shape}")
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      cudnnBatchNormalization1DForwardInference(x, res, scale, bias, runningMean, runningVar)
+      res
+    }
+    override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = {
+      assert(x.rank == 2, s"batchNorm1D only applies to inputs of 2D matrix, got ${x.shape}")
+      assert(scale.rank == 1 && scale.shape(0) == x.shape(1), s"scale should be rank 1 and have the same size as input dim 1, got ${scale.shape} and ${x.shape}")
+      assert(bias.rank == 1 && bias.shape(0) == x.shape(1), s"bias should be rank 1 and have the same size as input dim 1, got ${bias.shape} and ${x.shape}")
+      assert(runningMean.rank == 1 && runningMean.shape(0) == x.shape(1), s"runningMean should be rank 1 and have the same size as input dim 1, got ${runningMean.shape} and ${x.shape}")
+      assert(runningVar.rank == 1 && runningVar.shape(0) == x.shape(1), s"runningVar should be rank 1 and have the same size as input dim 1, got ${runningVar.shape} and ${x.shape}")
+      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      val saveMean = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
+      val saveInvVariance = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
+      cudnnBatchNormalization1DForwardTraining(x, res, scale, bias, runningMean, runningVar, saveMean, saveInvVariance)
+      (res, Some(saveMean), Some(saveInvVariance))
+    }
+    override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = {
+      (saveMean, saveInvVariance) match {
+        case (Some(saveMean), Some(saveInvVariance)) => cudnnBatchNormalization1DBackward(input, res, scale, bias, saveMean, saveInvVariance)
         case _ => ???
       }
     }

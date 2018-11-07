@@ -34,19 +34,28 @@ object DeepSpeech {
 
       val batchSize = 20
 
+      case class BatchNorm1D(dimSize: Int, name: String = "batch_norm_1d") extends Module {
+        val scale: TensorR = TensorR(Tensor.ones(dimSize))
+        val bias: TensorR = TensorR(Tensor.zeros(dimSize))
+        val runningMean: Tensor = Tensor.zeros(dimSize)
+        val runningVar: Tensor = Tensor.zeros(dimSize)
+        def apply(in: TensorR): TensorR @diff = {
+          assert(in.x.rank == 2 && in.x.shape(1) == dimSize, s"BatchNorm1D input should be rank2, with shape 1 same as dimSize, got ${in.x.shape} : ${dimSize}")
+          in.batchNorm1D(scale, bias, runningMean, runningVar)
+        }
+      }
+
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L80
       case class BatchRNN(val name: String = "batch_rnn",
                           inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = LstmMode,
                           bidirectional: Boolean = false, useBatchNorm: Boolean = true) extends Module {
         val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
-        // TODO: Implement `BatchNorm1d` module.
-        val batchNorm: Option[Module] = if (useBatchNorm) None else None
+        val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
         def apply(input: TensorR): TensorR @diff = {
           val in1 = batchNorm match {
             case None => input
-            // TODO: Fill in with real `batchNorm` apply method.
-            case Some(batchNorm) => input
+            case Some(batchNorm) => batchNorm(input)
           }
           val output = rnn(in1)
           // Reshape if bidirectional?
