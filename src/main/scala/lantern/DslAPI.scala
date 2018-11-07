@@ -484,6 +484,11 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
       |  data[tid] = value;
       |}
+      |__global__ void arrayFill_greg(float* data, float value, int size) {
+      |  int stride = gridDim.x * blockDim.x;
+      |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+      |  for (int i = tid; i < size; i += stride) data[i] = value;
+      |}
       |
       |__global__ void nllLoss(float *x, int x_stride, float *y, int* target) {
       |  int tid = threadIdx.x + blockIdx.x * blockDim.x;

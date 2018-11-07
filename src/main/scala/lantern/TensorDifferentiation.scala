@@ -3174,7 +3174,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       // TODO: Consider different grid/block parameters.
-      unchecked[Unit](s"arrayFill<<<${x.scalarCount}, 1>>>(", x.data, ", ", value, ")")
+      val size = x.scalarCount
+      val nGrid = size / 512 / 10 + 1
+      unchecked[Unit](s"arrayFill_greg<<<${nGrid}, 512>>>(", x.data, ", ", value, ", ", size, ")")
+      // unchecked[Unit](s"arrayFill<<<${x.scalarCount}, 1>>>(", x.data, ", ", value, ")")
     }
 
     // TODO: Implement random initialization using cuRAND API.
@@ -3706,17 +3709,11 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val sizeHigh = dim0
       val sizeDim1 = tensors(0).shape(1)
       val sizeDim2 = tensors(1).shape(1)
-      val outSize = NewArray[Int](4); 
-      outSize(0) = dim0; outSize(1) = dim1; outSize(2) = dim2; outSize(3) = dim3;
-      val outStride = NewArray[Int](4);
-      outStride(0) = resTensor.shape.strides(0);
-      outStride(1) = resTensor.shape.strides(1); 
-      outStride(2) = resTensor.shape.strides(2); 
-      outStride(3) = resTensor.shape.strides(3); 
 
+      val nGrid = tensors(0).scalarCount / 512 / 5 + 1
       unchecked[Unit](
         "{\n",
-        "dim3 grid(400, 2);\n",
+        s"dim3 grid(${nGrid}, 2);\n",
         "concat2D_1D_greg<<<grid, 512>>>(", tensors(0).data, ", ", sizeDim1, ", ", tensors(0).scalarCount, ", ",
         tensors(1).data, ", ", sizeDim2, ", ", tensors(1).scalarCount, ", ",
         res, ", ", 1, ", ", 
@@ -3746,9 +3743,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val sizeDim1 = tensorRs(0).x.shape(1)
       val sizeDim2 = tensorRs(1).x.shape(1)
       
+      val nGrid = tensorRs(0).x.scalarCount / 512 / 5 + 1
       unchecked[Unit](
         "{\n",
-        "dim3 grid(400, 2);\n",
+        s"dim3 grid(${nGrid}, 2);\n",
         "concat2D_1D_greg_grad<<<grid, 512>>>(", tensorRs(0).d.data, ", ", sizeDim1, ", ", tensorRs(0).d.scalarCount, ", ",
         tensorRs(1).d.data, ", ", sizeDim2, ", ", tensorRs(1).d.scalarCount, ", ",
         output.d.data, ", ", 1, ", ", 
