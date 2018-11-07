@@ -553,7 +553,27 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |    tid += stride;
       |  }
       |}
-      |
+      |// dimSize: size on concat dimension. Only for Dim of rank 4
+      |__global__ void concat2D_1D_greg_grad(float* in1, int dimSize1, int nElement1,
+      |                                      float* in2, int dimSize2, int nElement2,
+      |                                      float* out, int concatDim,
+      |                                      int outSize0, int outSize1, int outSize2, int outSize3,
+      |                                      int outStride0, int outStride1, int outStride2, int outStride3) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
+      |  if (tid >= nElement) return;
+      |  float* data = blockIdx.y == 0 ? in1 : in2;
+      |  int offset = blockIdx.y == 0 ? 0 : dimSize1;
+      |  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
+      |  int dataOffset = offset * outStride1;
+      |  int stride = gridDim.x * blockDim.x;
+      |  while (tid < nElement) {
+      |    int elementOffset = compute(outSize0, outSize1, outSize2, outSize3,
+      |                                outStride0, outStride1, outStride2, outStride3, dimSize, concatDim, tid);
+      |    data[tid] += out[dataOffset + elementOffset];
+      |    tid += stride;
+      |  }
+      |}
       |__global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  if (tid >= sizeLow) return;

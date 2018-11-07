@@ -3716,7 +3716,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
       unchecked[Unit](
         "{\n",
-        "dim3 grid(65535, 2);\n",
+        "dim3 grid(400, 2);\n",
         "concat2D_1D_greg<<<grid, 512>>>(", tensors(0).data, ", ", sizeDim1, ", ", tensors(0).scalarCount, ", ",
         tensors(1).data, ", ", sizeDim2, ", ", tensors(1).scalarCount, ", ",
         res, ", ", 1, ", ", 
@@ -3745,14 +3745,24 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val sizeHigh = dim0
       val sizeDim1 = tensorRs(0).x.shape(1)
       val sizeDim2 = tensorRs(1).x.shape(1)
-
-      // concatenate with user-define kernel function (1D grid 3D block)
+      
       unchecked[Unit](
         "{\n",
-        "dim3 grid(", (sizeLow+511) / 512, ", ",  sizeHigh * 2, ");\n",
-        "concat2D_1D_loop_grad<<<grid, 512>>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ",
-        sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
+        "dim3 grid(400, 2);\n",
+        "concat2D_1D_greg_grad<<<grid, 512>>>(", tensorRs(0).d.data, ", ", sizeDim1, ", ", tensorRs(0).d.scalarCount, ", ",
+        tensorRs(1).d.data, ", ", sizeDim2, ", ", tensorRs(1).d.scalarCount, ", ",
+        output.d.data, ", ", 1, ", ", 
+        dim0, ", ", dim1, ", ", dim2, ", ", dim3, ", ",
+        output.d.shape.strides(0), ", ", output.d.shape.strides(1), ", ", output.d.shape.strides(2), ", ", output.d.shape.strides(3), ");\n",
         "}")
+
+      // concatenate with user-define kernel function (1D grid 3D block)
+      // unchecked[Unit](
+      //   "{\n",
+      //   "dim3 grid(", (sizeLow+511) / 512, ", ",  sizeHigh * 2, ");\n",
+      //   "concat2D_1D_loop_grad<<<grid, 512>>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ",
+      //   sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
+      //   "}")
     }
 
     override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
