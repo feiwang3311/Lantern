@@ -497,6 +497,63 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  xGrad[offset] += -1 * yGrad[tid];
       |}
       |
+      |//following - https://github.com/torch/cutorch/blob/master/lib/THC/THCTensorMath.cuh#L49
+      |static inline __device__ int compute(int outputSize0, int outputSize1, int outputSize2, int outputSize3,
+      |                                     int outputStride0, int outputStride1, int outputStride2, int outputStride3,
+      |                                     const int dimSize, const int concatDim, int linearIndex) {
+      |  int offset = 0;
+      |  int curDimSize = 3 == concatDim ? dimSize : outputSize3;
+      |  int nextDimIndex = linearIndex / curDimSize;
+      |  int curDimIndex = linearIndex - curDimSize * nextDimIndex;
+      |  int curDimOffset = curDimIndex * outputStride3;
+      |  offset += curDimOffset;
+      |  linearIndex = nextDimIndex;
+      |  curDimSize = 2 == concatDim ? dimSize : outputSize2;
+      |  nextDimIndex = linearIndex / curDimSize;
+      |  curDimIndex = linearIndex - curDimSize * nextDimIndex;
+      |  curDimOffset = curDimIndex * outputStride2;
+      |  offset += curDimOffset;
+      |  linearIndex = nextDimIndex;
+      |  curDimSize = 1 == concatDim ? dimSize : outputSize1;
+      |  nextDimIndex = linearIndex / curDimSize;
+      |  curDimIndex = linearIndex - curDimSize * nextDimIndex;
+      |  curDimOffset = curDimIndex * outputStride1;
+      |  offset += curDimOffset;
+      |  linearIndex = nextDimIndex;
+      |  return offset + linearIndex * outputStride0;
+      |//  for (int i = 3; i >= 1; i--) {
+      |//    int curDimSize = i == concatDim ? dimSize : outputSize[i];
+      |//    int nextDimIndex = linearIndex / curDimSize;
+      |//    int curDimIndex = linearIndex - curDimSize * nextDimIndex;
+      |//    int curDimOffset = curDimIndex * outputStride[i];
+      |//    offset += curDimOffset;
+      |//    linearIndex = nextDimIndex;
+      |//  }
+      |//  return offset + linearIndex * outputStride[0];
+      |}
+      |
+      |// dimSize: size on concat dimension. Only for Dim of rank 4
+      |__global__ void concat2D_1D_greg(float* in1, int dimSize1, int nElement1,
+      |                                 float* in2, int dimSize2, int nElement2,
+      |                                 float* out, int concatDim,
+      |                                 int outSize0, int outSize1, int outSize2, int outSize3,
+      |                                 int outStride0, int outStride1, int outStride2, int outStride3) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
+      |  if (tid >= nElement) return;
+      |  float* data = blockIdx.y == 0 ? in1 : in2;
+      |  int offset = blockIdx.y == 0 ? 0 : dimSize1;
+      |  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
+      |  int dataOffset = offset * outStride1;
+      |  int stride = gridDim.x * blockDim.x;
+      |  while (tid < nElement) {
+      |    int elementOffset = compute(outSize0, outSize1, outSize2, outSize3,
+      |                                outStride0, outStride1, outStride2, outStride3, dimSize, concatDim, tid);
+      |    out[dataOffset + elementOffset] = data[tid];
+      |    tid += stride;
+      |  }
+      |}
+      |
       |__global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  if (tid >= sizeLow) return;
