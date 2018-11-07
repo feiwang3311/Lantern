@@ -6,28 +6,29 @@ import argparse
 import inputs
 import time
 import numpy as np
+import tensorflow as tf
 import onnx
 from onnx_tf.backend import prepare
 
 
 def train(args):
   startTime = time.time()
+  start = startTime
   model = onnx.load('../squeezenetCifar10.onnx')
   tf_rep = prepare(model)
-
+  tf_rep.graph.as_default()
   # TODO set tensorflow to use 1 thread ???
   # TODO: how to control using GPU or not using GPU?? it seems that using GPU is the default for TensorFlow
   batch = inputs.Batch(args.input_file, args.batch_size)
 
   def train_epoch(epoch):
     graph_input = tf_rep.tensor_dict[tf_rep.inputs[0]]
-    graph_output = tf_rep.tensor_dict[tf_rep.ouputs[0]]
+    graph_output = tf_rep.tensor_dict[tf_rep.outputs[0]]
     x = graph_input
-    y = tf.placeholder(tf.int32, shape = (args.batch_size))
     logits = graph_output
+    y = tf.placeholder(tf.int32, shape = (args.batch_size))
     with tf.name_scope('loss'):
-      cross_entropy = tf.losses.sparse_softmax_cross_entropy(
-        labels=y, logits=logits)
+      cross_entropy = tf.losses.sparse_softmax_cross_entropy(labels=y, logits=logits)
       cross_entropy = tf.reduce_mean(cross_entropy)
     with tf.name_scope('optimizer'):
       train_step = tf.train.GradientDescentOptimizer(args.lr).minimize(cross_entropy)
