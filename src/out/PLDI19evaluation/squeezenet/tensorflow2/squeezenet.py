@@ -119,7 +119,7 @@ class Squeezenet_CIFAR(object):
 #            with arg_scope(_arg_scope(is_training,
 #                                      self._weight_decay,
 #                                      self._batch_norm_decay)):
-             with arg_scope([conv2d, avg_pool2d, max_pool2d, batch_norm],
+             with arg_scope([conv2d, avg_pool2d, max_pool2d],
                                       data_format='NCHW'):
                  return self._squeezenet(x)
 

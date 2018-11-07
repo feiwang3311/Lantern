@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import argparse
 import inputs
-import squeezenet
+import resnet50
 import time
 import tensorflow as tf
 
@@ -12,7 +12,7 @@ def train(args):
   startTime = time.time()
   x = tf.placeholder(tf.float32, shape = (args.batch_size, 3, 32, 32))
   y = tf.placeholder(tf.int32, shape = (args.batch_size))
-  logits = squeezenet.Squeezenet_CIFAR(args).build(x, is_training = True)
+  logits = resnet50.resnet50Cifar10(x)
   with tf.name_scope('loss'):
     cross_entropy = tf.losses.sparse_softmax_cross_entropy(
       labels=y, logits=logits)
@@ -23,10 +23,10 @@ def train(args):
 
   batch = inputs.Batch(args.input_file, args.batch_size)
 
+  loopStart = time.time()
+  loss_save = []
   with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
-    loopStart = time.time()
-    loss_save = []
     for epoch in range(args.epochs):
       train_accuracy = 0.0
       start = time.time() * 1000
