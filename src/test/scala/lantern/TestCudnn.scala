@@ -13,7 +13,7 @@ class TestCudnn extends LanternFunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = Tensor.fromData(Seq(2,3,2), -1,2,-3,4,-5,6, -7,8,-9,10,-11,12)
         val output = input.sum(1)
-        val grad = gradR(x => x.sum(1).relu())(input)
+        val grad = gradR(x => x.sum(1).relu(false))(input)
         generateRawComment("check")
         backend = BackendCPU()
         val expect = Tensor.fromData(Seq(2, 2), -9, 12, -27, 30)
