@@ -494,7 +494,7 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
       |  int stride = gridDim.x * blockDim.x;
       |  for (int i = tid; i < size; i += stride) {
-      |    out[i] = in[i] < min_val ? min_val : (in[i] > max_val ? max_val : in[i])
+      |    out[i] = in[i] < min_val ? min_val : (in[i] > max_val ? max_val : in[i]);
       |  }
       |}
       |
