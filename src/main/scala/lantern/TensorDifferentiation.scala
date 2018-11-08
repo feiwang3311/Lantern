@@ -5323,7 +5323,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       size_t                          workSpaceSizeInBytes,
       const void                     *reserveSpace,
       size_t                          reserveSpaceSizeInBytes)
-       */
+      */
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnRNNBackwardWeights
@@ -5426,22 +5426,22 @@ trait TensorDslCudnn extends TensorDslCublas {
           "}"): _*)
       /*
       cudnnStatus_t cudnnRNNBackwardWeights(
-    cudnnHandle_t                   handle,
-    const cudnnRNNDescriptor_t      rnnDesc,
-    const int                       seqLength,
-    const cudnnTensorDescriptor_t  *xDesc,
-    const void                     *x,
-    const cudnnTensorDescriptor_t   hxDesc,
-    const void                     *hx,
-    const cudnnTensorDescriptor_t  *yDesc,
-    const void                     *y,
-    const void                     *workspace,
-    size_t                          workSpaceSizeInBytes,
-    const cudnnFilterDescriptor_t   dwDesc,
-    void                           *dw,
-    const void                     *reserveSpace,
-    size_t                          reserveSpaceSizeInBytes)
-       */
+      cudnnHandle_t                   handle,
+      const cudnnRNNDescriptor_t      rnnDesc,
+      const int                       seqLength,
+      const cudnnTensorDescriptor_t  *xDesc,
+      const void                     *x,
+      const cudnnTensorDescriptor_t   hxDesc,
+      const void                     *hx,
+      const cudnnTensorDescriptor_t  *yDesc,
+      const void                     *y,
+      const void                     *workspace,
+      size_t                          workSpaceSizeInBytes,
+      const cudnnFilterDescriptor_t   dwDesc,
+      void                           *dw,
+      const void                     *reserveSpace,
+      size_t                          reserveSpaceSizeInBytes)
+      */
     }
 
     def cudnnRNNBackward(mode: RnnMode,
@@ -5455,6 +5455,64 @@ trait TensorDslCudnn extends TensorDslCublas {
       cudnnRNNBackwardData(mode, input, hx, cx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
       // TODO: Need to update `BackwardWeights` to accumulate gradients.
       cudnnRNNBackwardWeights(mode, input, hx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
+    }
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnCTCLoss
+    def cudnnCTCLoss(probs: Tensor, labels: Rep[Array[Int]],
+                     inputLengths: Rep[Array[Int]], targetLengths: Rep[Array[Int]]): (Tensor, Tensor) = {
+      assert(probs.rank == 3, "Probability tensor should have rank 3: [inputLength, batchSize, alphabetSize]")
+      val inputLength = probs.shape(0)
+      val batchSize = probs.shape(1)
+      val alphabetSize = probs.shape(2)
+      // Note: `inputLengths` and `targetLengths` should have length equal to `batchSize`.
+      // Note: `cudnnGetCTCLossWorkspaceSize` requires that `inputLengths` has length less than 256.
+      assert(batchSize <= 256, s"'cudnnGetCTCLossWorkspaceSize' requires batch size less than 256, got $batchSize")
+
+      val costs = Tensor(mallocArray[Float](batchSize), batchSize)
+      val grad = Tensor(mallocArray[Float](probs.scalarCount), probs.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t probs_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&probs_desc));
+          |int probs_dims[] = {$inputLength, $batchSize, $alphabetSize};
+          |int probs_strides[] = {probs_dims[1] * probs_dims[2], probs_dims[2], 1};
+          |CUDNN_CALL(cudnnSetTensorNdDescriptor(
+          |    probs_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, probs_dims, probs_strides));
+          |
+          |cudnnTensorDescriptor_t grad_desc = probs_desc;
+          |
+          |cudnnCTCLossDescriptor_t ctc_desc;
+          |CUDNN_CALL(cudnnCreateCTCLossDescriptor(&ctc_desc));
+          |CUDNN_CALL(cudnnSetCTCLossDescriptor(ctc_desc, CUDNN_DATA_FLOAT));
+          |""".stripMargin) ++
+        Seq(
+          "size_t wsSize;\n" +
+          "CUDNN_CALL(cudnnGetCTCLossWorkspaceSize(\n" +
+          "    cudnnHandle, probs_desc, grad_desc, ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
+          "    CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, &wsSize));\n" +
+          "void *ws = myGpuMalloc(wsSize);\n\n" +
+          "CUDNN_CALL(cudnnCTCLoss(\n" +
+          "    cudnnHandle, probs_desc, ", probs.data, ", ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
+          "    ", costs.data, ", grad_desc, ", grad.data, ", CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, ws, wsSize));\n" +
+          "}"): _*)
+      (costs, grad)
+      /*
+      cudnnStatus_t cudnnCTCLoss(
+      cudnnHandle_t                        handle,
+      const   cudnnTensorDescriptor_t      probsDesc,
+      const   void                        *probs,
+      const   int                         *labels,
+      const   int                         *labelLengths,
+      const   int                         *inputLengths,
+      void                                *costs,
+      const   cudnnTensorDescriptor_t      gradientsDesc,
+      const   void                        *gradients,
+      cudnnCTCLossAlgo_t                   algo,
+      const   cudnnCTCLossDescriptor_t     ctcLossDesc,
+      void                                *workspace,
+      size_t                              *workSpaceSizeInBytes)
+      */
     }
   }
 
