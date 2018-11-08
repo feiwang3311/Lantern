@@ -90,8 +90,9 @@ object DeepSpeech {
           val padding = TensorR(Tensor.zeros((context +: input.x.shape.drop(1)): _*))
           val x = input.concat(0, padding)
           val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1))
-          val xc = xs.head.concat(0, xs.tail).permute(0, 2, 3, 1) ???
-          mul(x, weight).sum(dim=3)
+          x
+          // val xc = xs.head.concat(0, xs.tail).permute(0, 2, 3, 1) ???
+          // mul(x, weight).sum(dim=3)
         }
       }
 

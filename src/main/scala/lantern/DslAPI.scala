@@ -1101,4 +1101,14 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCu
 abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] with TensorDslCudnn with NNModuleCudnn { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
+
+  override val codegen = new DslGenCudnn {
+    val IR: self.type = self
+
+    override def templateRawCode: String = {
+      System.out.println(s"next is $next")
+      System.out.println(s"concatMap is of size ${concatMap.size}")
+      super.templateRawCode + (concatMap.values mkString("\n\n"))
+    }
+  }
 }
