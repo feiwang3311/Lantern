@@ -58,7 +58,9 @@ object DeepSpeech {
             case Some(batchNorm) => batchNorm(input)
           }
           val output = rnn(in1)
-          if (bidirectional) { ??? // sum on one dimension
+          if (bidirectional) {
+            val timeD = output.x.shape(0); val batchD = output.x.shape(1)
+            output.resize(timeD, batchD, 2, -1).sum(2)
           } else output
         }
       }

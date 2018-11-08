@@ -383,7 +383,7 @@ trait TensorDsl extends DslOps with Diff {
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
     // Activation functions.
-    def relu(x: Tensor): Tensor
+    def relu(x: Tensor, inPlace: Boolean = false): Tensor
     def tanh(x: Tensor): Tensor
     def sigmoid(x: Tensor): Tensor
     def exp(x: Tensor): Tensor
@@ -391,7 +391,7 @@ trait TensorDsl extends DslOps with Diff {
     def sqrt(x: Tensor): Tensor
     def square(x: Tensor): Tensor
 
-    def relu_grad(input: TensorR, res: TensorR): Unit
+    def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
     def exp_grad(input: TensorR, res: TensorR): Unit
@@ -1065,8 +1065,8 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    override def relu(x: Tensor): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
+    override def relu(x: Tensor, inPlace: Boolean = false): Tensor = {
+      val res = if (inPlace) x.data else mallocArray[Float](x.scalarCount)
       for (i <- 0 until x.scalarCount: Rep[Range]) {
         if (x.data(i) < 0.0f)
           res(i) = 0.0f
@@ -1077,9 +1077,13 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    override def relu_grad(input: TensorR, res: TensorR): Unit = {
+    override def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit = {
       for (i <- 0 until input.x.scalarCount: Rep[Range]) {
-        input.d.data(i) = if (input.x.data(i) < 0.0f) 0.0f else res.d.data(i)
+        if (inPlace) {
+          if (input.x.data(i) < 0.0f) input.d.data(i) = 0.0f
+        } else {
+          input.d.data(i) += if (input.x.data(i) < 0.0f) 0.0f else res.d.data(i)
+        }
       }
     }
 
@@ -1722,7 +1726,7 @@ trait TensorDsl extends DslOps with Diff {
     def sqrt() = backend.sqrt(this)
     def square() = backend.square(this)
 
-    def relu() = backend.relu(this)
+    def relu(inPlace: Boolean = false) = backend.relu(this, inPlace)
     def tanh() = backend.tanh(this)
     def sigmoid() = backend.sigmoid(this)
 
@@ -2589,9 +2593,14 @@ trait TensorDsl extends DslOps with Diff {
       backend.square_grad(this, y)
     }
 
-    def relu(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(this.x.relu()); k(y)
-      backend.relu_grad(this, y)
+    def relu(inPlace: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>
+      if (inPlace) {
+        this.x.relu(inPlace); k(this)
+        backend.relu_grad(this, this, inPlace)
+      } else {
+        val y = TensorR(this.x.relu(inPlace)); k(y)
+        backend.relu_grad(this, y, inPlace)
+      }
     }
 
     def tanh(): TensorR @diff = shift { (k : TensorR => Unit) =>
@@ -3643,10 +3652,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
-    override def relu(x: Tensor): Tensor = ???
+    override def relu(x: Tensor, inPlace: Boolean = false): Tensor = ???
     override def tanh(x: Tensor): Tensor = ???
     override def sigmoid(x: Tensor): Tensor = ???
-    override def relu_grad(input: TensorR, res: TensorR): Unit = ???
+    override def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit = ???
     override def tanh_grad(input: TensorR, res: TensorR): Unit = ???
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
 
@@ -4678,11 +4687,11 @@ trait TensorDslCudnn extends TensorDslCublas {
           "}")
     }
 
-    def cudnnActivationForward(x: Tensor, activation: Activation.Value): Tensor = {
+    def cudnnActivationForward(x: Tensor, activation: Activation.Value, inPlace: Boolean = false): Tensor = {
       val xShape = x.shape.padTo(4, 1) //activation functions only support tensors of rank 4
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
-      val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
+      val res = if (inPlace) x else Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
       unchecked[Unit](
         Seq(s"""
           |{
@@ -4708,14 +4717,13 @@ trait TensorDslCudnn extends TensorDslCublas {
       res
     }
 
-    def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value): Unit = {
+    def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value, inPlace: Boolean = false): Unit = {
       val inputXShape = input.x.shape.padTo(4, 1) // activation functions only support tensors of rank 4
       assert(input.x.shape == res.x.shape,
-        "Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
+        s"Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
       assert(input.d.shape == res.d.shape,
         s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
       val one = NewArray[Float](1); one(0) = 1
-      val inputGrad = Tensor(mallocArray[Float](input.d.scalarCount), input.d.shape: _*)
       unchecked[Unit](
         Seq(s"""
           |{
@@ -4741,11 +4749,11 @@ trait TensorDslCudnn extends TensorDslCublas {
       )
     }
 
-    override def relu(x: Tensor): Tensor = {
-      cudnnActivationForward(x, Activation.Relu)
+    override def relu(x: Tensor, inPlace: Boolean = False): Tensor = {
+      cudnnActivationForward(x, Activation.Relu, inPlace)
     }
-    override def relu_grad(input: TensorR, res: TensorR): Unit = {
-      cudnnActivationBackward(input, res, Activation.Relu)
+    override def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = False): Unit = {
+      cudnnActivationBackward(input, res, Activation.Relu, inPlace)
     }
 
     override def tanh(x: Tensor): Tensor = {
