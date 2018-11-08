@@ -1617,7 +1617,9 @@ trait TensorDsl extends DslOps with Diff {
     assert(scalarCount != 0, "Tensor cannot have scalar count 0")
 
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
-    // def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i + 1) +: shape.tail)
+    // TODO (Fei Wang): mind the semantics here!!! it is a slice, not (dim0, dim1) selection!!! Maybe fix with better coding style??
+    // i inclued, j excluded
+    def apply(i: Int, j: Int): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i) +: shape.tail)
 
     // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
     // OR, should we depend this function on other function such as map?
@@ -2435,6 +2437,7 @@ trait TensorDsl extends DslOps with Diff {
     var isInput: Boolean = false // true if it is an input (no need to compute gradient)
 
     def apply(i: Rep[Int]) = new TensorR(x(i), d(i))
+    def apply(i: Int, j: Int) = new TensorR(x(i, j), d(i, j))
 
     def clip_grad(bound: Float) = {
       d.clipAt(bound)
@@ -3134,6 +3137,9 @@ trait TensorDsl extends DslOps with Diff {
 
 trait TensorDslCublas extends TensorDsl with GPUOps {
 
+  val concatMap = new scala.collection.mutable.HashMap[Int,String]()
+  var next: Int = 0
+
   def getCudaMallocAddr(): Rep[Long] = {
     unchecked[Long]("(long)gpuMallocAddr")
   }
@@ -3816,6 +3822,26 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val sizeHigh = dim0
       val sizeDim1 = tensors(0).shape(1)
       val sizeDim2 = tensors(1).shape(1)
+
+      // concatMap(next) = s"""
+      // |__global__ void concat2D_1D_grad$next(float* in1, int dimSize1, int nElement1,
+      // |                                      float* in2, int dimSize2, int nElement2,
+      // |                                      float* out, int concatDim) {
+      // |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      // |  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
+      // |  if (tid >= nElement) return;
+      // |  float* data = blockIdx.y == 0 ? in1 : in2;
+      // |  int offset = blockIdx.y == 0 ? 0 : dimSize1;
+      // |  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
+      // |  int dataOffset = offset * outStride1;
+      // |  int stride = gridDim.x * blockDim.x;
+      // |  while (tid < nElement) {
+      // |    int elementOffset = 1;
+      // |    data[tid] += out[dataOffset + elementOffset];
+      // |    tid += stride;
+      // |  }
+      // |}""".stripMargin
+      // next = next + 1
 
       val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
       unchecked[Unit](

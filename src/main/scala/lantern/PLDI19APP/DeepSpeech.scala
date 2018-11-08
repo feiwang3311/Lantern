@@ -60,11 +60,11 @@ object DeepSpeech {
           val output = rnn(in1)
           val timeD = output.x.shape(0)
           val batchD = output.x.shape(1)
-          // if (bidirectional) {
-            output.resize(timeD, batchD, 2, -1).sum(2)
-          // } else {
-            // output.resize(timeD, batchD, -1)
-          // }
+          // TODO (Fei Wang) implementation using if else has compilation error
+          (bidirectional) match {
+            case true => output.resize(timeD, batchD, 2, -1).sum(2)
+            case false => output
+          }
         }
       }
 
@@ -83,8 +83,16 @@ object DeepSpeech {
       // TODO: Implement.
       case class Lookahead(val name: String = "lookahead", numFeatures: Int, context: Int) extends Module {
         assert(context >= 1, "Context size must be at least 1")
+        val weight = Tensor.rand(Seq(numFeatures, context + 1), scala.math.sqrt(context + 1).toFloat)
 
-        def apply(input: TensorR): TensorR @diff = ???
+        // TODO (Fei Wang): this could be optimized by a user-defined kernel?
+        def apply(input: TensorR): TensorR @diff = {
+          val padding = TensorR(Tensor.zeros((context +: input.x.shape.drop(1)): _*))
+          val x = input.concat(0, padding)
+          val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1))
+          val xc = xs.head.concat(0, xs.tail).permute(0, 2, 3, 1) ???
+          mul(x, weight).sum(dim=3)
+        }
       }
 
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L145

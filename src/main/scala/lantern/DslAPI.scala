@@ -25,17 +25,6 @@ trait DslOps extends PrimitiveOps with NumericOpsExtra with BooleanOps
 
   // added by Fei
   def mutableStaticData[T:Manifest](x: T): Rep[T]
-  // add for fun with 6 or more parameters
-  // def fun[A1:Manifest,A2:Manifest,A3:Manifest,A4:Manifest,A5:Manifest,A6:Manifest,B:Manifest](f: (Rep[A1], Rep[A2], Rep[A3], Rep[A4], Rep[A5], Rep[A6]) => Rep[B]): Rep[((A1,A2,A3,A4,A5,A6))=>B] =
-  //   fun((t: Rep[(A1,A2,A3,A4,A5,A6)]) => f(tuple6_get1(t), tuple6_get2(t), tuple6_get3(t), tuple6_get4(t), tuple6_get5(t), tuple6_get6(t)))
-  // // def fun[A1:Manifest,A2:Manifest,A3:Manifest,A4:Manifest,A5:Manifest,A6:Manifest,A7:Manifest,B:Manifest](f: (Rep[A1], Rep[A2], Rep[A3], Rep[A4], Rep[A5], Rep[A6], Rep[A7]) => Rep[B]): Rep[((A1,A2,A3,A4,A5,A6,A7))=>B] =
-  // //   fun((t: Rep[(A1,A2,A3,A4,A5,A6,A7)]) => f(tuple7_get1(t), tuple7_get2(t), tuple7_get3(t), tuple7_get4(t), tuple7_get5(t), tuple7_get6(t), tuple7_get7(t)))
-  // class LambdaOps6[A1:Manifest,A2:Manifest,A3:Manifest,A4:Manifest,A5:Manifest,A6:Manifest,B:Manifest](f: Rep[((A1,A2,A3,A4,A5,A6)) => B]) {
-  //   def apply(x1: Rep[A1], x2: Rep[A2], x3: Rep[A3], x4: Rep[A4], x5: Rep[A5], x6: Rep[A6]) = doApply(f,(x1, x2, x3, x4, x5, x6))
-  //   def apply(x: Rep[(A1,A2,A3,A4,A5,A6)]): Rep[B] = doApply(f,x)
-  // }
-  // implicit def toLambdaOps6[A1:Manifest,A2:Manifest,A3:Manifest,A4:Manifest,A5:Manifest,A6:Manifest,B:Manifest](fun: Rep[((A1,A2,A3,A4,A5,A6)) => B]) =
-  //   new LambdaOps6(fun)
 }
 
 trait DslExp extends DslOps
@@ -126,24 +115,6 @@ trait DslExp extends DslOps
       case _ => reflectEffect(Apply(f, x1), Simple() andAlso x1_effects)
     }
   }
-
-  // add for fun with 6 or more parameters
-  // override def unbox[A:Manifest](x : Exp[A])(implicit pos: SourceContext) : Exp[A] = {
-  //   val mA = implicitly[Manifest[A]]
-  //   x match {
-  //     case _ if tupledManifestOf(mA, 6) =>
-  //       x match { case t : Rep[(a1,a2,a3,a4,a5,a6)] =>
-  //         UnboxedTuple[A](List(
-  //           tuple6_get1(t)(mA.typeArguments(0).asInstanceOf[Manifest[a1]], pos),
-  //           tuple6_get2(t)(mA.typeArguments(1).asInstanceOf[Manifest[a2]], pos),
-  //           tuple6_get3(t)(mA.typeArguments(2).asInstanceOf[Manifest[a2]], pos),
-  //           tuple6_get4(t)(mA.typeArguments(3).asInstanceOf[Manifest[a2]], pos),
-  //           tuple6_get5(t)(mA.typeArguments(4).asInstanceOf[Manifest[a2]], pos),
-  //           tuple6_get6(t)(mA.typeArguments(5).asInstanceOf[Manifest[a2]], pos)))
-  //       }
-  //     case _ => super.unbox(x)
-  //   }
-  // }
 }
 
 trait DslGPUExp extends DslExp with GPUOpsExp
@@ -542,6 +513,7 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |    in[i] += out[outOff];
       |  }
       |}
+      |
       |
       |//following - https://github.com/torch/cutorch/blob/master/lib/THC/THCTensorMath.cuh#L49
       |static inline __device__ int compute(int outputSize0, int outputSize1, int outputSize2, int outputSize3,
