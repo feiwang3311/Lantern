@@ -38,9 +38,9 @@ object SqueezeNet {
         val conve1 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(1, 1))
         val conve2 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(3, 3), pad = 1)
         def apply(in: TensorR): TensorR @diff = {
-          val step_squeeze = convs1(in).relu()
-          val step_expand1 = conve1(step_squeeze).relu()
-          val step_expand2 = conve2(step_squeeze).relu()
+          val step_squeeze = convs1(in).relu(false)
+          val step_expand1 = conve1(step_squeeze).relu(false)
+          val step_expand2 = conve2(step_squeeze).relu(false)
           val res = step_expand1.concat(dim = 1, step_expand2)
           res
         }
@@ -64,7 +64,7 @@ object SqueezeNet {
         def apply(in: TensorR): TensorR @diff = {
           // in.x.printHead(10, "forward, input")
           // conv1.kernel.x.printHead(10, "conv1 weight")
-          val step0 = conv1(in).relu().maxPoolBK(kernels = Seq(2, 2), strides = Seq(2, 2), None)
+          val step0 = conv1(in).relu(false).maxPoolBK(kernels = Seq(2, 2), strides = Seq(2, 2), None)
           // step0.x.printHead(10, "forward, after conv1")
           val step1 = fire1(step0)
           // val fire1_squeeze = fire1_convs1(step0).relu()
@@ -170,9 +170,9 @@ object SqueezeNet {
         val conve1 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(1, 1))
         val conve2 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(3, 3), pad = 1)
         def apply(in: TensorR): TensorR @diff = {
-          val step_squeeze = convs1(in).relu()
-          val step_expand1 = conve1(step_squeeze).relu()
-          val step_expand2 = conve2(step_squeeze).relu()
+          val step_squeeze = convs1(in).relu(false)
+          val step_expand1 = conve1(step_squeeze).relu(false)
+          val step_expand2 = conve2(step_squeeze).relu(false)
           val res = step_expand1.concat(dim = 1, step_expand2)
           res
         }
@@ -191,7 +191,7 @@ object SqueezeNet {
         val conv2 = Conv2D(inChannel = 512, outChannel = num_classes, kernelSize = Seq(1, 1))
 
         def apply(in: TensorR): TensorR @diff = {
-          val step0 = conv1(in).relu().maxPoolBK(kernels = Seq(2, 2), strides = Seq(2, 2), None)
+          val step0 = conv1(in).relu(false).maxPoolBK(kernels = Seq(2, 2), strides = Seq(2, 2), None)
           step0.x.toCPU().printHead(10, "forward, step0")
           val step1 = fire1(step0)
           step1.x.toCPU().printHead(10, "forward, step1")

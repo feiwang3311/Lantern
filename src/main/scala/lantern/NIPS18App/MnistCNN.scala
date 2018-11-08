@@ -39,10 +39,11 @@ object MnistCNN {
         val linear2 = Linear1D(inSize = 50, outSize = 10)
 
         def apply(in: TensorR): TensorR @diff = {
-          val step0 = conv1(in)
-          val step1 = step0.relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
-          val step2 = conv2(step1).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
-          val step3 = linear1(step2.resize(-1, 320)).dropout(0.5f)
+          val step0: TensorR @diff = conv1(in)
+          val step1: TensorR @diff = step0.relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
+          val step2: TensorR @diff = conv2(step1)
+          val step25: TensorR @diff = step2.relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
+          val step3: TensorR @diff = linear1(step25.resize(-1, 320)).dropout(0.5f)
           linear2(step3)
         }
       }
@@ -132,7 +133,7 @@ object MnistCNN {
         def apply(in: TensorR): TensorR @diff = {
           val step0 = conv1(in)
           val step1 = step0.relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None)
-          val step2 = conv2(step1).relu().maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None).resize(-1, 320)
+          val step2 = conv2(step1).relu(false).maxPoolBK(kernels = Seq(2,2), strides = Seq(2,2), None).resize(-1, 320)
           val step3 = linear1(step2).dropout(0.5f)
           linear2(step3)
         }

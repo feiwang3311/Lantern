@@ -386,6 +386,7 @@ trait TensorDsl extends DslOps with Diff {
     def relu(x: Tensor, inPlace: Boolean = false): Tensor
     def tanh(x: Tensor): Tensor
     def sigmoid(x: Tensor): Tensor
+    def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor
     def exp(x: Tensor): Tensor
     def log(x: Tensor): Tensor
     def sqrt(x: Tensor): Tensor
@@ -394,6 +395,7 @@ trait TensorDsl extends DslOps with Diff {
     def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
+    def hardTanh_grad(input: TensorR, res: TensorR, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Unit
     def exp_grad(input: TensorR, res: TensorR): Unit
     def log_grad(input: TensorR, res: TensorR): Unit
     def sqrt_grad(input: TensorR, res: TensorR): Unit
@@ -1082,7 +1084,28 @@ trait TensorDsl extends DslOps with Diff {
         if (inPlace) {
           if (input.x.data(i) < 0.0f) input.d.data(i) = 0.0f
         } else {
-          input.d.data(i) += if (input.x.data(i) < 0.0f) 0.0f else res.d.data(i)
+          input.d.data(i) += (if (input.x.data(i) < 0.0f) 0.0f else res.d.data(i))
+        }
+      }
+    }
+
+    @virtualize
+    override def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor = {
+      val res = if (inPlace) x.data else mallocArray[Float](x.scalarCount)
+      for (i <- 0 until x.scalarCount: Rep[Range]) {
+        if (x.data(i) < min_val) res(i) = min_val
+        if (x.data(i) > max_val) res(i) = max_val
+      }
+      Tensor(res, x.shape.seq: _*)
+    }
+
+    @virtualize
+    override def hardTanh_grad(input: TensorR, res: TensorR, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Unit = {
+      for (i <- 0 until input.x.scalarCount: Rep[Range]) {
+        if (inPlace) {
+          if (input.x.data(i) < min_val || input.x.data(i) > max_val) input.d.data(i) = 0.0f
+        } else {
+          input.d.data(i) += (if (input.x.data(i) < min_val || input.x.data(i) > max_val) 0.0f else res.d.data(i))
         }
       }
     }
@@ -1729,6 +1752,7 @@ trait TensorDsl extends DslOps with Diff {
     def relu(inPlace: Boolean = false) = backend.relu(this, inPlace)
     def tanh() = backend.tanh(this)
     def sigmoid() = backend.sigmoid(this)
+    def hardTanh(min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace : Boolean = false) = backend.hardTanh(this, min_val, max_val, inPlace)
 
     // NOTE: sum all elements
     // TODO (Fei Wang): prefer to have a general reduce function, and depend sum() to that function
@@ -2600,6 +2624,16 @@ trait TensorDsl extends DslOps with Diff {
       } else {
         val y = TensorR(this.x.relu(inPlace)); k(y)
         backend.relu_grad(this, y, inPlace)
+      }
+    }
+
+    def hardTanh(min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace : Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>
+      if (inPlace) {
+        this.x.hardTanh(min_val, max_val, inPlace); k(this)
+        backend.hardTanh_grad(this, this, min_val, max_val, inPlace)
+      } else {
+        val y = TensorR(this.x.hardTanh(min_val, max_val, inPlace)); k(y)
+        backend.hardTanh_grad(this, y, min_val, max_val, inPlace)
       }
     }
 
@@ -3663,6 +3697,19 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def logSoftmax(x: Tensor): Tensor = ???
     override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
     override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = ???
+
+    override def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor = {
+      val size = x.scalarCount
+      val res = if (inPlace) x.data else mallocArray[Float](size)
+      val nGrid = 28
+      unchecked[Unit](s"hardTanh<<<${nGrid}, 512>>>(", x.data, ", ", res, ", ", min_val, ", ", max_val, ", ", inPlace, ")")
+      Tensor(res, x.shape.seq: _*)
+    }
+    override def hardTanh_grad(input: TensorR, res: TensorR, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Unit = {
+      val size = input.x.scalarCount
+      val nGrid = 28
+      unchecked[Unit](s"hardTanh_grad<<<${nGrid}, 512>>>(", input.x.data, ", ", input.d.data, ", ", res.d.data, ", ", min_val, ", ", max_val, ", ", size, ", ", inPlace, ")")
+    }
 
     override def exp(x: Tensor) = elementwiseOpNoBroadcast(x, ElementWiseNoBroadCastOpt.Exp)
     override def exp_grad(x: TensorR, y: TensorR): Unit = elementwiseOpNoBroadcastGrad(x, y, ElementWiseNoBroadCastOpt.ExpGrad)
@@ -4749,10 +4796,10 @@ trait TensorDslCudnn extends TensorDslCublas {
       )
     }
 
-    override def relu(x: Tensor, inPlace: Boolean = False): Tensor = {
+    override def relu(x: Tensor, inPlace: Boolean = false): Tensor = {
       cudnnActivationForward(x, Activation.Relu, inPlace)
     }
-    override def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = False): Unit = {
+    override def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit = {
       cudnnActivationBackward(input, res, Activation.Relu, inPlace)
     }
 

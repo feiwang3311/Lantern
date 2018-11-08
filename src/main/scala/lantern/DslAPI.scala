@@ -490,6 +490,26 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  for (int i = tid; i < size; i += stride) data[i] = value;
       |}
       |
+      |__global__ void hardTanh(float* in, float* out, float min_val, float max_val, int size) {
+      |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (int i = tid; i < size; i += stride) {
+      |    out[i] = in[i] < min_val ? min_val : (in[i] > max_val ? max_val : in[i])
+      |  }
+      |}
+      |
+      |__global__ void hardTanh_grad(float* in_x, float* in_d, float* out_d, float min_val, float max_val, int size, bool inplace) {
+      |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (int i = tid; i < size; i += stride) {
+      |    if (inplace) {
+      |      if (in_x[i] < min_val || in_x[i] > max_val) in_d[i] = 0;
+      |    } else {
+      |      if (in_x[i] >= min_val && in_x[i] <= max_val) in_d[i] += out_d[i];
+      |    }
+      |  }
+      |}
+      |
       |__global__ void nllLoss(float *x, int x_stride, float *y, int* target) {
       |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
       |  int offset = tid * x_stride + target[tid];
