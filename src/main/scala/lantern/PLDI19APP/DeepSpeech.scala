@@ -58,9 +58,8 @@ object DeepSpeech {
             case Some(batchNorm) => batchNorm(input)
           }
           val output = rnn(in1)
-          // Reshape if bidirectional?
-          // Comment from PyTorch model: "(TxNxH*2) -> (TxNxH) by sum"
-          output
+          if (bidirectional) { ??? // sum on one dimension
+          } else output
         }
       }
 

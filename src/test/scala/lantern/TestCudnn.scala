@@ -5,6 +5,26 @@ import org.scala_lang.virtualized.SourceContext
 
 class TestCudnn extends LanternFunSuite {
 
+  testGPU("sumDim") {
+    val sumDim = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-sum-dim"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(2,3,2), -1,2,-3,4,-5,6, -7,8,-9,10,-11,12)
+        val output = input.sum(1)
+        val grad = gradR(x => x.sum(1).relu())(input)
+        generateRawComment("check")
+        backend = BackendCPU()
+        val expect = Tensor.fromData(Seq(2, 2), -9, 12, -27, 30)
+        val expectGrad = Tensor.fromData(Seq(2, 3, 2), 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1)
+        Tensor.assertEqual(expect, output.toCPU(), "expect and output are")
+        Tensor.assertEqual(expectGrad, grad.toCPU(), "expect and output are")
+      }
+    }
+    runTest(sumDim)
+  }
+
   testGPU("conv2D-forward") {
     val conv2D = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-conv2d"

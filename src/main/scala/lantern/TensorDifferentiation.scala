@@ -416,6 +416,10 @@ trait TensorDsl extends DslOps with Diff {
     def mean(x: Tensor): Tensor
     def mean_grad(input: TensorR, res: TensorR): Unit
 
+    // Reduction on one dimension
+    def sum(x: Tensor, dim: Int): Tensor
+    def sum_grad(input: TensorR, output: TensorR, dim: Int): Unit
+
     // concatenate and split
     def concat(dim: Int, tensors: Seq[Tensor]): Tensor
     def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit
@@ -1442,6 +1446,64 @@ trait TensorDsl extends DslOps with Diff {
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       += (input.d, res.d / input.x.scalarCount)  // TODO (Fei Wang): optimize
     }
+    // @virtualize
+    // override def sum(x: Tensor, dim: Int): Tensor = {
+    //   assert(dim >= 0 && dim < x.rank, s"dimension to reduce must be in rank, got ${dim} from ${x.shape}")
+    //   val resDim = x.shape.take(dim) ++ x.shape.drop(dim + 1)
+    //   val res = mallocArray[Float](resDim.product)
+    //   val resTensor = Tensor(res, resDim: _*)
+    //   def reduce(in: Tensor, out: Tensor, curDim: Int) = {
+    //     if (curDim < dim) {
+    //       for (i <- DataLoop(x.shape(curDim))) reduce(in(i), out(i), curDim + 1)
+    //     } else if (curDim == dim) {
+    //       for (i <- DataLoop(x.shape(curDim))) reduce(in(i), out, curDim + 1)
+    //     } else if (curDim < x.rank - 1) {
+    //       for (i <- DataLoop(x.shape(curDim))) reduce(in(i), out(i), curDim + 1)
+    //     } else {
+    //       for (i <- DataLoop(x.shape(curDim))) out.data(i) += in.data(i)
+    //     }
+    //   }
+    // }
+    override def sum(input: Tensor, dim: Int) = {
+      assert(dim >= 0 && dim < input.rank, "dim should be within range of this.nbDims")
+      val higherDims = input.shape.take(dim)
+      val higherDimsSquashed = higherDims.product
+      val resDims = higherDims ++ input.shape.drop(dim + 1)
+      val res = Tensor.zeros(resDims: _*)
+
+      // looping over the dims higher than dim, squashed
+      for (high <- DataLoop(higherDimsSquashed)) {
+        // looping over the dimension to be summed
+        val offres = var_new(high * (if (dim == 0) res.scalarCount else res.shape.strides(dim - 1)))
+        val offthis = var_new(high * (if (dim == 0) input.scalarCount else input.shape.strides(dim - 1)))
+        for (sum <- DataLoop(input.shape(dim))) {
+          // looping over the dims lower than dim
+          for (low <- DataLoop(input.shape.strides(dim))) {
+            res.data(offres + low) += input.data(offthis + low)
+          }
+          offthis += input.shape.strides(dim)
+        }
+      }
+      res
+    }
+    override def sum_grad(input: TensorR, output: TensorR, dim: Int): Unit = {
+      val higherDims = input.x.shape.take(dim)
+      val higherDimsSquashed = higherDims.product
+      val resDims = higherDims ++ input.x.shape.drop(dim + 1)
+      // looping over the dims higher than dim, squashed
+      for (high <- DataLoop(higherDimsSquashed)) {
+        // looping over the dimension to be summed
+        val offres = var_new(high * (if (dim == 0) output.x.scalarCount else output.x.shape.strides(dim - 1)))
+        val offthis = var_new(high * (if (dim == 0) input.x.scalarCount else input.x.shape.strides(dim - 1)))
+        for (sum <- DataLoop(input.x.shape(dim))) {
+          // looping over the dims lower than dim
+          for (low <- DataLoop(input.x.shape.strides(dim))) {
+            input.d.data(offthis + low) += output.d.data(offres + low)
+          }
+          offthis += input.x.shape.strides(dim)
+        }
+      }
+    }
 
     override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
       // prepare result tensor
@@ -1670,28 +1732,7 @@ trait TensorDsl extends DslOps with Diff {
 
     // sum over one dimension
     // TODO (Fei Wang): prefer to have a general reduce over given dimension function, and depend sum(dim) to that function
-    def sum(dim: Int) = {
-      assert(dim >= 0 && dim < this.rank, "dim should be within range of this.nbDims")
-      val higherDims = this.shape.take(dim)
-      val higherDimsSquashed = higherDims.product
-      val resDims = higherDims ++ this.shape.drop(dim + 1)
-      val res = Tensor.zeros(resDims: _*)
-
-      // looping over the dims higher than dim, squashed
-      for (high <- DataLoop(higherDimsSquashed)) {
-        // looping over the dimension to be summed
-        val offres = var_new(high * (if (dim == 0) res.scalarCount else res.shape.strides(dim - 1)))
-        val offthis = var_new(high * (if (dim == 0) this.scalarCount else this.shape.strides(dim - 1)))
-        for (sum <- DataLoop(this.shape(dim))) {
-          // looping over the dims lower than dim
-          for (low <- DataLoop(this.shape.strides(dim))) {
-            res.data(offres + low) += this.data(offthis + low)
-          }
-          offthis += this.shape.strides(dim)
-        }
-      }
-      res
-    }
+    def sum(dim: Int) = backend.sum(this, dim)
 
     def mean() = backend.mean(this)
 
@@ -2577,24 +2618,8 @@ trait TensorDsl extends DslOps with Diff {
 
     def sum(dim: Int): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.sum(dim)); k(y)
-
-      // back-propagate
-      val higherDims = this.x.shape.take(dim)
-      val higherDimsSquashed = higherDims.product
-      val resDims = higherDims ++ this.x.shape.drop(dim + 1)
-      // looping over the dims higher than dim, squashed
-      for (high <- DataLoop(higherDimsSquashed)) {
-        // looping over the dimension to be summed
-        val offres = var_new(high * (if (dim == 0) y.x.scalarCount else y.x.shape.strides(dim - 1)))
-        val offthis = var_new(high * (if (dim == 0) this.x.scalarCount else this.x.shape.strides(dim - 1)))
-        for (sum <- DataLoop(this.x.shape(dim))) {
-          // looping over the dims lower than dim
-          for (low <- DataLoop(this.x.shape.strides(dim))) {
-            this.d.data(offthis + low) += y.d.data(offres + low)
-          }
-          offthis += this.x.shape.strides(dim)
-        }
-      }
+      // backprop
+      backend.sum_grad(this, y, dim)
     }
 
     def batchNorm(scale: TensorR, bias: TensorR, runningMean: Tensor, runningVar: Tensor): TensorR @diff =
@@ -3716,6 +3741,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def sum_grad(input: TensorR, res: TensorR): Unit = ???
     override def mean(x: Tensor): Tensor = ???
     override def mean_grad(input: TensorR, res: TensorR): Unit = ???
+    override def sum(x: Tensor, dim: Int): Tensor = ???
+    override def sum_grad(input: TensorR, res: TensorR, dim: Int): Unit = ???
 
     override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
       assert(dim == 1, "TODO (Fei Wang): only support dim = 1 so far")
@@ -3893,12 +3920,17 @@ trait TensorDslCudnn extends TensorDslCublas {
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
     // Note: this function performs in-place addition for `res`.
     def cudnnAddBiasTensor(bias: Tensor, res: Tensor, scale: Float = 1.0f): Unit = {
-      val (biasShape, resShape) = if (bias.shape == res.shape) {
+      val (biasShape, resShape): (Seq[Int], Seq[Int]) = if (bias.shape == res.shape) {
         (bias.shape.padTo(4, 1), res.shape.padTo(4, 1))
       } else {
-        assert(bias.rank == 1, "if not equal shape, bias must be rank 1")
-        // assert(res.rank >= 2, "if not equal shape, res must be rank 2 or more")
-        (Seq(1, bias.shape(0), 1, 1), res.shape.padTo(4, 1))
+        if (bias.rank == 4 && res.rank == 4) {
+          assert((bias.shape zip res.shape).forall{case (a, b) => a == 1 || a == b}, s"bias shape should be equal to res or be 1, got bias: ${bias.shape}, res: ${res.shape}")
+          (bias.shape, res.shape)
+        } else {
+          assert(bias.rank == 1 && res.rank >= 2, "if not equal shape, bias must be rank 1, and res must be rank 2 or more")
+          // TODO (Fei Wang): Need more thinking. Is it safe to assume that bias is on dim 1??
+          (Seq(1, bias.shape(0), 1, 1), res.shape.padTo(4, 1))
+        }
       }
       val scaled = NewArray[Float](1); scaled(0) = scale
       val one = NewArray[Float](1); one(0) = 1
@@ -4887,7 +4919,9 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for sum op")
-      cudnnAddBiasTensor(res.d, input.d)
+      assert(res.d.shape == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
+      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, 1): _*))
     }
 
     override def mean(x: Tensor): Tensor = {
@@ -4898,7 +4932,30 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for mean op")
-      cudnnAddBiasTensor(res.d, input.d, scale = 1.0f / input.x.scalarCount)
+      assert(res.d.shape == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
+      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, 1): _*), scale = 1.0f / input.x.scalarCount)
+    }
+
+    override def sum(x: Tensor, dim: Int): Tensor = {
+      assert(dim >= 0 && dim < x.rank, s"dim should be in range, got ${dim} from ${x.shape}")
+      val xx = x.resize(x.shape.padTo(4, 1): _*)
+      val indices = dim +: ((x.rank until xx.rank): Range).toSeq
+      cudnnReduceTensor(xx, ReductionOp.Add, indices)
+    }
+    override def sum_grad(input: TensorR, output: TensorR, dim: Int): Unit = {
+      // TODO: (Fei Wang) there are limitations in cudnnAddBiasTensor (dim 0 must be 1). So we need user-defined kernel for this!!
+      assert(input.x.rank == output.x.rank + 1, s"input should be 1 rank higher than the output, got ${input.x.shape}, ${output.x.shape}")
+      val inputShape = input.x.shape.padTo(4, 1)
+      val outputStride = output.x.shape.strides.padTo(3, 1)
+      generateRawComment("backprop for sum on dim op")
+      unchecked[Unit](
+        "sum_grad<<<28, 512>>>(", input.d.data, ", ", inputShape(0), ", ", inputShape(1), ", ", inputShape(2), ", ", inputShape(3), ", ", input.x.scalarCount, ", ",
+        output.d.data, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ");\n")
+      // val outShape = output.x.shape.take(dim) ++ (1 +: output.x.shape.drop(dim))
+      // assert((outShape zip input.x.shape).forall{case (a, b) => a == b || a == 1}, s"not proper shape for sum by dim, input: ${input.x.shape}, output: ${output.x.shape}")
+      // // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
+      // cudnnAddBiasTensor(output.d.resize(outShape.padTo(4, 1): _*), input.d.resize(input.x.shape.padTo(4, 1): _*))
     }
 
     def cudnnRNNForwardHelper(mode: RnnMode,
