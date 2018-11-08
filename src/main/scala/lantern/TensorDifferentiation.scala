@@ -4074,7 +4074,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    cudnnHandle,
           |    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
           |    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-          |
+          |// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -4130,7 +4130,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    cudnnHandle,
           |    in_desc, grad_out_desc, conv_desc, grad_filt_desc,
           |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-          |
+          |algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(

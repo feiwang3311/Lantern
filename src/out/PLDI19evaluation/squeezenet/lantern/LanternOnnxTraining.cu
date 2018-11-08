@@ -3615,7 +3615,7 @@ CUDNN_CALL(cudnnReduceTensor(
 // resize to WrappedArray(1)
 float* x887 = (float*)myGpuMalloc(1 * sizeof(float));
 arrayFill_greg<<<1, 512>>>(x887, 1.0f, 1);
-// backend is lantern.TensorDslCudnn$BackendCudnn@2245f9ff
+// backend is lantern.TensorDslCudnn$BackendCudnn@459eb54a
 CUDA_CALL(cudaMemcpy(x334, x880, 1 * sizeof(float), cudaMemcpyDeviceToHost));
 // 'mean' gradient
 // backprop for mean op
@@ -3692,7 +3692,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -3739,7 +3739,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -3833,7 +3833,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -3880,7 +3880,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -3970,7 +3970,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -4017,7 +4017,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -4107,7 +4107,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -4154,7 +4154,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -4278,7 +4278,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -4325,7 +4325,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -4415,7 +4415,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -4462,7 +4462,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -4552,7 +4552,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -4599,7 +4599,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -4693,7 +4693,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -4740,7 +4740,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -4830,7 +4830,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -4877,7 +4877,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -4967,7 +4967,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -5014,7 +5014,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -5108,7 +5108,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -5155,7 +5155,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -5245,7 +5245,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -5292,7 +5292,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -5382,7 +5382,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -5429,7 +5429,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -5523,7 +5523,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -5570,7 +5570,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -5660,7 +5660,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -5707,7 +5707,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -5797,7 +5797,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -5844,7 +5844,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -5968,7 +5968,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -6015,7 +6015,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -6105,7 +6105,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -6152,7 +6152,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -6242,7 +6242,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -6289,7 +6289,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -6383,7 +6383,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -6430,7 +6430,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -6520,7 +6520,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -6567,7 +6567,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -6657,7 +6657,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -6704,7 +6704,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -6798,7 +6798,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -6845,7 +6845,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -6935,7 +6935,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -6982,7 +6982,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -7072,7 +7072,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
     cudnnHandle,
     filt_desc, grad_out_desc, conv_desc, grad_in_desc,
     CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
@@ -7119,7 +7119,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -7239,7 +7239,7 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-
+algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
