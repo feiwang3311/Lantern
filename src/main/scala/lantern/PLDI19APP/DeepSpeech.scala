@@ -58,40 +58,6 @@ object DeepSpeech {
         }
       }
 
-      // case class MaskConv(seq_module: Module) extends Module {
-      //   def apply(x: TensorR, lengths: Array[Int]) = {
-      //     // x: input of size B, C, D, T
-      //     // lengths: the actual length of each sequence in the batch
-      //     val xx = seq_module(x)
-      //     val mask = Tensor.zeros(x.shape: _*)
-      //     lengths zipWithIndex foreach { case (length, index) =>
-      //       if (mask(i).shape(2) - length > 0) ??? mask[i].narrow(2, length, mask[i].size(2) - length).fill_(1)
-      //           x = x.masked_fill(mask, 0)
-      //       return x, lengths
-      //     }
-      //   }
-      // }
-
-      // mask(input, lengths) //:param x: The input of size BxCxDxT :param lengths: The actual length of each sequence in the batch
-
-      // def forward(self, x, lengths):
-      //   """
-      //   :param x: The input of size BxCxDxT
-      //   :param lengths: The actual length of each sequence in the batch
-      //   :return: Masked output from the module
-      //   """
-      //   for module in self.seq_module:
-      //       x = module(x)
-      //       mask = torch.ByteTensor(x.size()).fill_(0)
-      //       if x.is_cuda:
-      //           mask = mask.cuda()
-      //       for i, length in enumerate(lengths):
-      //           length = length.item()
-      //           if (mask[i].size(2) - length) > 0:
-      //               mask[i].narrow(2, length, mask[i].size(2) - length).fill_(1)
-      //       x = x.masked_fill(mask, 0)
-      //   return x, lengths
-
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L80
       case class BatchRNN(val name: String = "batch_rnn",
                           inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = LstmMode,
@@ -99,7 +65,8 @@ object DeepSpeech {
         val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
-        def apply(input: TensorR): TensorR @diff = {
+        def apply(input: TensorR, outputLengths: Rep[Array[Int]]): TensorR @diff = {
+          // TODO: do we not use outputLengths?
           val in1 = batchNorm match {
             case None => input
             case Some(batchNorm) => batchNorm(input)
@@ -116,7 +83,6 @@ object DeepSpeech {
       }
 
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L105
-      // TODO: Implement.
       case class Lookahead(val name: String = "lookahead", numFeatures: Int, context: Int) extends Module {
         assert(context >= 1, "Context size must be at least 1")
         val weight = TensorR(Tensor.rand(Seq(numFeatures, context + 1), scala.math.sqrt(context + 1).toFloat))
@@ -126,6 +92,7 @@ object DeepSpeech {
           val padding = TensorR(Tensor.zeros((context +: input.x.shape.drop(1)): _*))
           val x = input.concat(0, padding)
           val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1))
+          // TODO: this permute function can be implemented by cuDNN cudnnTransformTensor method
           val xc = xs.head.concat(0, xs.tail: _*).permute(0, 2, 3, 1)
           (x mul_sub weight).sum(3)
         }
@@ -149,9 +116,12 @@ object DeepSpeech {
           val bn1 = BatchNorm2D(32)
           val conv2 = Conv2D(32, 32, Seq(21, 11), stride = Seq(2, 1), pad = Seq(10, 5))
           val bn2 = BatchNorm2D(32)
-          def apply(in: TensorR): TensorR @diff = {
-            val step1 = bn1(conv1(in)).hardTanh(0, 20, inPlace = true)
-            bn2(conv2(step1)).hardTanh(0, 20, inPlace = true)
+          def apply(in: TensorR, lengths: Rep[Array[Int]]): TensorR @diff = {
+            // NOTE: This function assume that the lengths array is already on GPU
+            val step1 = conv1(in).mask4D(lengths)
+            val step2 = bn1(step1).mask4D(lengths).hardTanh(0, 20, inPlace = true)
+            val step3 = conv2(step2).mask4D(lengths)
+            bn2(step3).hardTanh(0, 20, inPlace = true)
           }
         }
 
@@ -164,13 +134,13 @@ object DeepSpeech {
           tmp
         }
 
-        val rnns = ArrayBuffer[Module]()
+        val rnns = ArrayBuffer[BatchRNN]()
         rnns += BatchRNN(s"batch_rnn0", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
-        for (layer <- (0 until numLayers - 1): Range) {
-          rnns += BatchRNN(s"batch_rnn${layer + 1}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
+        for (layer <- (1 until numLayers): Range) {
+          rnns += BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
         }
 
-        val lookahead: Option[Module] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
+        val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
 
         val fc = new Module {
           val name: String = "fully_connected"
@@ -180,43 +150,8 @@ object DeepSpeech {
             linear(bn(in))
           }
         }
-        // val inferenceSoftmax: Module = ???
 
-        // class InferenceBatchSoftmax(nn.Module):
-        //   def forward(self, input_):
-        //     if not self.training:
-        //       return F.softmax(input_, dim=-1)
-        //     else:
-        //       return input_
-
-        // TODO: Implement.
-        def apply(input: TensorR, lengths: Array[Int]): TensorR @diff = {
-          val outputLengths = getSeqLens(lengths)
-          val x = conv(input)
-          x
-        }
-            // def forward(self, x, lengths):
-            //   lengths = lengths.cpu().int()
-            //   output_lengths = self.get_seq_lens(lengths)
-            //   x, _ = self.conv(x, output_lengths)
-
-            //   sizes = x.size()
-            //   x = x.view(sizes[0], sizes[1] * sizes[2], sizes[3])  # Collapse feature dimension
-            //   x = x.transpose(1, 2).transpose(0, 1).contiguous()  # TxNxH
-
-            //   for rnn in self.rnns:
-            //       x = rnn(x, output_lengths)
-
-            //   if not self._bidirectional:  # no need for lookahead layer in bidirectional
-            //       x = self.lookahead(x)
-
-            //   x = self.fc(x)
-            //   x = x.transpose(0, 1)
-            //   # identity in training mode, softmax in eval mode
-            //   x = self.inference_softmax(x)
-            //   return x, output_lengths
-
-        def getSeqLens(lengths: Array[Int]) = {
+        def getSeqLens(lengths: Rep[Array[Int]]) = {
           conv.modules.foldLeft(lengths) { case(ls, (_, m)) =>
             if (m.isInstanceOf[Conv2D]) {
               val mm = m.asInstanceOf[Conv2D]
@@ -225,6 +160,35 @@ object DeepSpeech {
           }
         }
 
+        // TODO: Implement.
+        def apply(input: TensorR, lengths: Rep[Array[Int]]): TensorR @diff = {
+          // input is B * C * D * T
+          val outputLengths = getSeqLens(lengths)
+          val outputLengthsGPU = outputLengths.toGPU(input.x.shape(0))
+          val step1 = conv(input, outputLengthsGPU)
+          val step2 = step1.resize(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
+          val step3 = step2.permute(2, 0, 1) // step3 is T * B * H
+          val step4 = rnns(0)(step3, outputLengthsGPU)
+
+          // TODO: need help sovling the compilation error here
+          // val steps = ArrayBuffer[TensorR](step3)
+          // var layer = 0
+          // while (layer < numLayers) {
+          //   steps.append(rnns(layer).apply(steps(layer), outputLengthsGPU))
+          //   layer += 1
+          // }
+          // recursive function didn't work due to comilation error regarding cpsMinus
+          // def rec(rnns: ArrayBuffer[BatchRNN], in: TensorR): TensorR @diff = if (rnns.isEmpty) in else rec(rnns.tail, rnns.head(in, outputLengthsGPU))
+          // val step4 = rec(rnns, step3)
+          // val step4 = rnns.foldLeft(step3){case (in, rnn) => rnn(in, outputLengthsGPU)}  // compilation error (fold doesn't handle cps types)
+          val step5 = bidirectional match {
+            case true => step4
+            case false => lookahead.get.apply(step4)
+          }
+          // TODO igore eval_mode (which needs a softmax layer) for now
+          val step6 = fc(step5).trans()
+          step6
+        }
       }
 
       val net = DeepSpeech()
