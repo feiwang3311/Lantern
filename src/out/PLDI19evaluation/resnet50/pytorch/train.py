@@ -7,6 +7,7 @@ import inputs
 import resnet50
 import time
 import torch
+import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -16,6 +17,8 @@ import torch.onnx
 
 def train(args):
   startTime = time.time()
+  cudnn.benchmark = True
+  cudnn.deterministic = True
   torch.set_num_threads(1)
   torch.manual_seed(args.seed)
 

@@ -797,7 +797,7 @@ trait ONNXLib extends TensorDsl {
           } else if (node.isInstanceOf[reluNode]) {
             val reluNode(input, output) = node
             val in = twoMaps(input)
-            val out = in.relu()
+            val out = in.relu(true)
             intermediate_map_tensorR.update(output, out)
           } else if (node.isInstanceOf[maxpoolNode]) {
             val maxpoolNode(input, output, atts) = node
