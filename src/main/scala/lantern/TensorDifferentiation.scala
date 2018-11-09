@@ -390,6 +390,9 @@ trait TensorDsl extends DslOps with Diff {
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
+    // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
+    def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor
+
     // Activation functions.
     def relu(x: Tensor, inPlace: Boolean = false): Tensor
     def tanh(x: Tensor): Tensor
@@ -1081,6 +1084,22 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
+    override def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor = {
+      // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
+      assert (input.rank == 4, s"input of mask function must be 4D, got ${input.shape}")
+      for (i <- DataLoop(input.shape(0))) {
+        for (j <- DataLoop(input.shape(1))) {
+          for (k <- DataLoop(input.shape(2))) {
+            for (t <- DataLoop(input.shape(3))) {
+              if (t >= lengths(i)) input.data(i * input.shape.strides(0) + j * input.shape.strides(1) + k * input.shape.strides(2) + t) = 0
+            }
+          }
+        }
+      }
+      input
+    }
+
+    @virtualize
     override def relu(x: Tensor, inPlace: Boolean = false): Tensor = {
       val res = if (inPlace) x.data else mallocArray[Float](x.scalarCount)
       for (i <- 0 until x.scalarCount: Rep[Range]) {
@@ -1767,6 +1786,8 @@ trait TensorDsl extends DslOps with Diff {
     def log() = backend.log(this)
     def sqrt() = backend.sqrt(this)
     def square() = backend.square(this)
+
+    def mask4D(lengths: Rep[Array[Int]]): Tensor = backend.mask4D(this, lengths)
 
     def relu(inPlace: Boolean = false) = backend.relu(this, inPlace)
     def tanh() = backend.tanh(this)
@@ -2649,6 +2670,12 @@ trait TensorDsl extends DslOps with Diff {
       backend.square_grad(this, y)
     }
 
+    def mask4D(lengths: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+      x.mask4D(lengths); k(this)
+      generateRawComment("backprop for mask4D, not sure if gradient should be masked as well?")
+      // this.d.mask4D(lengths)
+    }
+
     def relu(inPlace: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>
       if (inPlace) {
         this.x.relu(inPlace); k(this)
@@ -3172,6 +3199,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
   val permuteGradKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
   val mulSubKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
   val mulSubGradKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
+  val mask4dKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
   var next: Int = 0
 
   def getCudaMallocAddr(): Rep[Long] = {
@@ -3791,6 +3819,35 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
+
+    override def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor = {
+      // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
+      // Note: We assume that lengths is passed to GPU already, at the beginning of each epoch
+      assert(input.rank == 4, s"mask4D only deals with inputs of 4D, got ${input.shape}")
+      if (!mask4dKernelMap.contains(input.shape)) {
+        mask4dKernelMap(input.shape) = (s"""
+         |__global__ void mask4D${next}(float* in, int* mask) {
+         |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+         |  int stride = gridDim.x * blockDim.x;
+         |  int xstrides[] = {${input.shape.strides.mkString(", ")}};
+         |  int xindex[] = {0, 0, 0, 0};  // this line may not be necessary
+         |  for (; tid < ${input.scalarCount}; tid += stride) {
+         |    int linearIndex = tid;
+         |    for (int i = 0; i < ${input.rank}; i++) {
+         |      xindex[i] = linearIndex / xstrides[i];
+         |      linearIndex = linearIndex - xstrides[i] * xindex[i];
+         |    }
+         |    if (xindex[3] >= mask[xindex[0]]) in[tid] = 0;
+         |  }
+         |}
+        """.stripMargin, s"mask4D${next}")
+        next = next + 1
+      }
+      val kernelFuncName: String = mask4dKernelMap(input.shape)._2
+      val nGrid = 28
+      unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", input.data, ", ", lengths, ")")
+      input
+    }
 
     override def relu(x: Tensor, inPlace: Boolean = false): Tensor = ???
     override def tanh(x: Tensor): Tensor = ???

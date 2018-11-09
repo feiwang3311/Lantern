@@ -46,4 +46,35 @@ class ModuleTest extends FunSuite {
     }
     test1.eval("a")
   }
+
+  test("module") {
+    val test = new DslDriverC[String, Unit] with NNModule {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+
+        case class Linear(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
+          val weight = TensorR(Tensor.zeros(outSize, inSize))
+          val bias = TensorR(Tensor.zeros(outSize))
+          def apply(in: TensorR): TensorR @diff = weight.dot(in) + bias
+        }
+
+        val testModule = new Module {
+          val name = "test"
+          val bias = TensorR(Tensor.zeros(4))
+          val module = Linear(6, 4)
+          def apply(in: TensorR): TensorR@diff = {
+            val temp = module(in)
+            temp plusBias bias
+          }
+        }
+
+        testModule.registerParameters(testModule.name + "/")
+        testModule.forEachNamedParameter{ case(name, (tr, _)) => System.out.println(s"$name: $tr") }
+        val x = Tensor.zeros(6)
+        gradR(x => testModule(x))(x)
+        ()
+      }
+    }
+    test.eval("a")
+  }
 }

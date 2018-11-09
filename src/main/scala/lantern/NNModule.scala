@@ -91,11 +91,11 @@ trait NNModule extends TensorDsl {
     }
   }
 
-  case class Linear1D(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
+  case class Linear1D(val inSize: Int, val outSize: Int, val bias: Boolean = true, val name: String = "linear1d") extends Module {
     val scale: Float = 1.0f / sqrt(inSize).toFloat
     val weight = TensorR(Tensor.rand(Seq(inSize, outSize), scale))
-    val bias = TensorR(Tensor.zeros(outSize))
-    def apply(in: TensorR): TensorR @diff = in.dot(weight) plusBias bias
+    val biasOp = if (bias) Some(TensorR(Tensor.zeros(outSize))) else None
+    def apply(in: TensorR): TensorR @diff = if (bias) in.dot(weight) plusBias biasOp.get else in.dot(weight)
   }
 
   case class Linear1D2(val inSize1: Int, val inSize2: Int, val outSize: Int, val name: String = "Linear1d2") extends Module {
@@ -113,7 +113,7 @@ trait NNModule extends TensorDsl {
   // xaiver_uniform [-bound, bound] where bound = sqrt(6/(fan_in + fan_out))
 
   case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val pad: Seq[Int] = Seq(0, 0),
-    val useBias: Boolean = true, val name: String = "conv2d") extends Module {
+    val dilation: Seq[Int] = Seq(1, 1), val useBias: Boolean = true, val name: String = "conv2d") extends Module {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
     // xaiver_uniform initialization

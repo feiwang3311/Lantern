@@ -1100,7 +1100,7 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCu
 
     override def templateRawCode: String = {
       super.templateRawCode +
-      (concatMap.values mkString("\n\n")) +
+      (concatMap.values mkString("\n\n")) + (mask4dKernelMap.values map(_._1) mkString("\n\n")) +
       (permuteKernelMap.values map(_._1) mkString("\n\n")) + (permuteGradKernelMap.values map(_._1) mkString("\n\n")) +
       (mulSubKernelMap.values map(_._1) mkString("\n\n")) + (mulSubGradKernelMap.values map(_._1) mkString("\n\n"))
     }
@@ -1116,7 +1116,7 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCud
 
     override def templateRawCode: String = {
       super.templateRawCode +
-      (concatMap.values mkString("\n\n")) +
+      (concatMap.values mkString("\n\n")) + (mask4dKernelMap.values map(_._1) mkString("\n\n")) +
       (permuteKernelMap.values map(_._1) mkString("\n\n")) + (permuteGradKernelMap.values map(_._1) mkString("\n\n")) +
       (mulSubKernelMap.values map(_._1) mkString("\n\n")) + (mulSubGradKernelMap.values map(_._1) mkString("\n\n"))
     }
