@@ -44,6 +44,18 @@ object DeepSpeech {
           in.batchNorm1D(scale, bias, runningMean, runningVar)
         }
       }
+      case class BatchNorm2D(num_features: Int, eps: Float =1e-05f, momentum: Float =0.1f, affine: Boolean = true,
+        track_running_stats: Boolean = true, name: String = "batch_norm_2d") extends Module {
+        assert(affine && track_running_stats, "TODO: not yet handling them to be false")
+        val scale: TensorR = TensorR(Tensor.ones(num_features))
+        val bias: TensorR = TensorR(Tensor.zeros(num_features))
+        val runningMean: Tensor = Tensor.zeros(num_features)
+        val runningVar: Tensor = Tensor.zeros(num_features)
+        def apply(in: TensorR): TensorR @diff = {
+          assert(in.x.rank == 4 && in.x.shape(1) == num_features, s"BatchNorm2D input should be rank 2, with shape 1 same as num_features, got ${in.x.shape} : ${num_features}")
+          in.batchNorm(scale, bias, runningMean, runningVar)
+        }
+      }
 
       // case class MaskConv(seq_module: Module) extends Module {
       //   def apply(x: TensorR, lengths: Array[Int]) = {
@@ -103,9 +115,16 @@ object DeepSpeech {
       //     steps.foldLeft(in){case (t, m) => m(t)}
       //   }
       // }
-      // case class MySeq(val name: String = "my_seq") extends Module {
-      //   val conv1 = Conv2D(1, 32, Seq(41, 11), stride = Seq(2, 2), )
-      // }
+      case class MySeq(val name: String = "my_seq") extends Module {
+        val conv1 = Conv2D(1, 32, Seq(41, 11), stride = Seq(2, 2), pad = Seq(20, 5))
+        val bn1 = BatchNorm2D(32)
+        val conv2 = Conv2D(32, 32, Seq(21, 11), stride = Seq(2, 1), pad = Seq(10, 5))
+        val bn2 = BatchNorm2D(32)
+        def apply(in: TensorR): TensorR @diff = {
+          val step1 = bn1(conv1(in)).hardTanh(0, 20, inPlace = true)
+          bn2(conv2(step1)).hardTanh(0, 20, inPlace = true)
+        }
+      }
 
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L145
       case class DeepSpeech(val name: String = "deepspeech",
@@ -119,16 +138,7 @@ object DeepSpeech {
 
         val numClasses = labels.length
 
-        // TODO: In the PyTorch model, `conv` is a sequence of conv2d/batchnorm2d/hardtanh layers.
-        val conv: Module = ???
-
-       // self.conv = MaskConv(nn.Sequential(
-       //    nn.Conv2d(1, 32, kernel_size=(41, 11), stride=(2, 2), padding=(20, 5)),
-       //    nn.BatchNorm2d(32),
-       //    nn.Hardtanh(0, 20, inplace=True),
-       //    nn.Conv2d(32, 32, kernel_size=(21, 11), stride=(2, 1), padding=(10, 5)),
-       //    nn.BatchNorm2d(32),
-       //    nn.Hardtanh(0, 20, inplace=True)))
+        val conv: Module = MySeq()
 
         val rnnInputSize: Int = {
           var tmp: Int = (floor((sampleRate * windowSize) / 2) + 1).toInt

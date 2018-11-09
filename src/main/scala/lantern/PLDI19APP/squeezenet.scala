@@ -36,7 +36,7 @@ object SqueezeNet {
       case class FireModule(val name: String = "squeezenet_fire", val inChannel: Int, val squeezeDepth: Int, val expandDepth: Int) extends Module {
         val convs1 = Conv2D(inChannel = inChannel, outChannel = squeezeDepth, kernelSize = Seq(1, 1))
         val conve1 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(1, 1))
-        val conve2 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(3, 3), pad = 1)
+        val conve2 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(3, 3), pad = Seq(1, 1))
         def apply(in: TensorR): TensorR @diff = {
           val step_squeeze = convs1(in).relu(false)
           val step_expand1 = conve1(step_squeeze).relu(false)
@@ -47,7 +47,7 @@ object SqueezeNet {
       }
 
       case class SqueezeNetCifar10(val name: String = "squeezenet_cifar10", val num_classes: Int) extends Module {
-        val conv1 = Conv2D(inChannel = 3, outChannel = 96, kernelSize = Seq(3, 3), pad = 1)
+        val conv1 = Conv2D(inChannel = 3, outChannel = 96, kernelSize = Seq(3, 3), pad = Seq(1, 1))
         val fire1 = FireModule(inChannel = 96, squeezeDepth = 16, expandDepth = 64)
         // val fire1_convs1 = Conv2D(inChannel = 96, outChannel = 16, kernelSize = Seq(1, 1))
         // val fire1_conve1 = Conv2D(inChannel = 16, outChannel = 64, kernelSize = Seq(1, 1))
@@ -168,7 +168,7 @@ object SqueezeNet {
       case class FireModule(val name: String = "squeezenet_fire", val inChannel: Int, val squeezeDepth: Int, val expandDepth: Int) extends Module {
         val convs1 = Conv2D(inChannel = inChannel, outChannel = squeezeDepth, kernelSize = Seq(1, 1))
         val conve1 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(1, 1))
-        val conve2 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(3, 3), pad = 1)
+        val conve2 = Conv2D(inChannel = squeezeDepth, outChannel = expandDepth, kernelSize = Seq(3, 3), pad = Seq(1, 1))
         def apply(in: TensorR): TensorR @diff = {
           val step_squeeze = convs1(in).relu(false)
           val step_expand1 = conve1(step_squeeze).relu(false)
@@ -179,7 +179,7 @@ object SqueezeNet {
       }
 
       case class SqueezeNetCifar10(val name: String = "squeezenet_cifar10", val num_classes: Int) extends Module {
-        val conv1 = Conv2D(inChannel = 3, outChannel = 96, kernelSize = Seq(3, 3), pad = 1)
+        val conv1 = Conv2D(inChannel = 3, outChannel = 96, kernelSize = Seq(3, 3), pad = Seq(1, 1))
         val fire1 = FireModule(inChannel = 96, squeezeDepth = 16, expandDepth = 64)
         val fire2 = FireModule(inChannel = 128, squeezeDepth = 16, expandDepth = 64)
         val fire3 = FireModule(inChannel = 128, squeezeDepth = 32, expandDepth = 128)

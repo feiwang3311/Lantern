@@ -917,7 +917,7 @@ trait TensorDsl extends DslOps with Diff {
 
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = {
       val ((dH:Int) :: (dW:Int) :: Nil) = strides.take(2).toList
-      val ((padH:Int) :: (_:Int) :: (padW:Int) :: (_:Int) :: Nil) = pads.take(4).toList
+      val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else if (pads.size == 4) (pads(0), pads(2)) else ???}
       val nOutputPlane = kernel.shape(0)
       val kH = kernel.shape(2)
       val kW = kernel.shape(3)
@@ -2784,7 +2784,6 @@ trait TensorDsl extends DslOps with Diff {
     def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
       assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
       assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
-      assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
       val (output, finputOption) = bias match {
         case Some(bias) => backend.conv2D_batch(x, kernel.x, Some(bias.x), strides, pads)
         case None =>       backend.conv2D_batch(x, kernel.x, None, strides, pads)
@@ -2792,9 +2791,11 @@ trait TensorDsl extends DslOps with Diff {
       val y = TensorR(output); k(y)
 
       generateRawComment("conv2D back-propagate")
+      val paddings = if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else {if (pads.size == 1) (pads(0), pads(0)) else ???}}
+      val stridess = if (strides.size == 2) (strides(0), strides(1)) else ???
       finputOption match {
-        case None => backend.conv2D_batch_grad(this, None, kernel, y, bias, (pads.head, pads.head), (strides.head, strides.last), dilations = (1, 1))
-        case Some(finput) => backend.conv2D_batch_grad(this, Some(TensorR(finput)), kernel, y, bias, (pads.head, pads.head), (strides.head, strides.last), dilations = (1, 1))
+        case None => backend.conv2D_batch_grad(this, None, kernel, y, bias, paddings, stridess, dilations = (1, 1))
+        case Some(finput) => backend.conv2D_batch_grad(this, Some(TensorR(finput)), kernel, y, bias, paddings, stridess, dilations = (1, 1))
       }
     }
 
@@ -4403,24 +4404,21 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
 
       assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
-      assert(pads.size == 4, "Pads should have length 4: [padTop, padBottom, padLeft, padRight]")
+      val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else ???}}
       val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
-      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
       assert(strideRow >= 1, "Row stride must be at least 1")
       assert(strideCol >= 1, "Column stride must be at least 1")
-      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "All paddings must be equal (for now)")
 
       assert(kernel.shape(1) == input.shape(1), s"In-channel count mismatch: input.shape[1] ${input.shape(1)} should match kernel.shape[1] ${kernel.shape(1)}")
-      assert(input.shape(2) + 2 * padUp >= kernel.shape(2) && input.shape(3) + 2 * padUp >= kernel.shape(3),
-        s"Image too small for conv: input is ${input.shape}, kernel is ${kernel.shape}")
+      assert(input.shape(2) + 2 * padH >= kernel.shape(2) && input.shape(3) + 2 * padW >= kernel.shape(3))
 
       // Execute `cudnnConvolutionForward`.
-      val resWidth = convSize(input.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
-      val resHeight = convSize(input.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
+      val resWidth = convSize(input.shape(2) + padH * 2, kernel.shape(2), strideRow)
+      val resHeight = convSize(input.shape(3) + padW * 2, kernel.shape(3), strideCol)
       val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
       val resData = mallocArray[Float](resShape.product)
       val res = Tensor(resData, resShape: _*)
-      cudnnConvolutionForward(input, kernel, res, padding = (padUp, padLeft), strides = (strideCol, strideRow), dilations = (1, 1))
+      cudnnConvolutionForward(input, kernel, res, padding = (padH, padW), strides = (strideRow, strideCol), dilations = (1, 1))
 
       // If bias is defined, execute `cudnnAddBiasTensor`.
       bias match {
@@ -4441,13 +4439,6 @@ trait TensorDslCudnn extends TensorDslCublas {
         case Some(bias) =>
           cudnnConvolutionBackwardBias(bias.d, res.d)
       }
-      // input.x.toCPU().printHead(10, "forward, input of conv")
-      // input.d.toCPU().printHead(10, "backprop, input of conv")
-      // filter.x.toCPU().printHead(10, "forward, filter of conv")
-      // filter.d.toCPU().printHead(10, "backprop, filter of conv")
-      // res.x.toCPU().printHead(10, "forward, res of conv")
-      // res.d.toCPU().printHead(10, "backprop, res of conv")
-      // error("")
     }
 
     def Pool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]], mode: PoolModes.Value, nanOpt: NanOpt.Value): Tensor = {
@@ -5134,7 +5125,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for sum op")
-      assert(res.d.shape == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      assert(res.d.shape.dims == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
       cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, 1): _*))
     }
@@ -5147,7 +5138,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for mean op")
-      assert(res.d.shape == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      assert(res.d.shape.dims == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
       cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, 1): _*), scale = 1.0f / input.x.scalarCount)
     }
