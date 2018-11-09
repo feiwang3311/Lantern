@@ -45,6 +45,20 @@ object DeepSpeech {
         }
       }
 
+      // case class MaskConv(seq_module: Module) extends Module {
+      //   def apply(x: TensorR, lengths: Array[Int]) = {
+      //     // x: input of size B, C, D, T
+      //     // lengths: the actual length of each sequence in the batch
+      //     val xx = seq_module(x)
+      //     val mask = Tensor.zeros(x.shape: _*)
+      //     lengths zipWithIndex foreach { case (length, index) =>
+      //       if (mask(i).shape(2) - length > 0) ??? mask[i].narrow(2, length, mask[i].size(2) - length).fill_(1)
+      //           x = x.masked_fill(mask, 0)
+      //       return x, lengths
+      //     }
+      //   }
+      // }
+
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L80
       case class BatchRNN(val name: String = "batch_rnn",
                           inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = LstmMode,
@@ -68,33 +82,30 @@ object DeepSpeech {
         }
       }
 
-      // Reference: https://pytorch.org/docs/stable/nn.html#torch.nn.Hardtanh
-      // TODO: Implement. Likely requires a custom kernel.
-      case class Hardtanh(val name: String = "hardtanh") extends Module {
-
-        // Apply elementwise hardtanh function.
-        // hardtanh(x) = 1  if x > 1
-        // hardtanh(x) = -1 if x < -1
-        // hardtanh(x) = x  otherwise
-        def apply(input: TensorR): TensorR @diff = ???
-      }
-
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L105
       // TODO: Implement.
       case class Lookahead(val name: String = "lookahead", numFeatures: Int, context: Int) extends Module {
         assert(context >= 1, "Context size must be at least 1")
-        val weight = Tensor.rand(Seq(numFeatures, context + 1), scala.math.sqrt(context + 1).toFloat)
+        val weight = TensorR(Tensor.rand(Seq(numFeatures, context + 1), scala.math.sqrt(context + 1).toFloat))
 
         // TODO (Fei Wang): this could be optimized by a user-defined kernel?
         def apply(input: TensorR): TensorR @diff = {
           val padding = TensorR(Tensor.zeros((context +: input.x.shape.drop(1)): _*))
           val x = input.concat(0, padding)
           val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1))
-          x
-          // val xc = xs.head.concat(0, xs.tail).permute(0, 2, 3, 1) ???
-          // mul(x, weight).sum(dim=3)
+          val xc = xs.head.concat(0, xs.tail: _*).permute(0, 2, 3, 1)
+          (x mul_sub weight).sum(3)
         }
       }
+
+      // case class Sequential(steps: Module*) extends Module {
+      //   def apply(in: TensorR): TensorR @diff = {
+      //     steps.foldLeft(in){case (t, m) => m(t)}
+      //   }
+      // }
+      // case class MySeq(val name: String = "my_seq") extends Module {
+      //   val conv1 = Conv2D(1, 32, Seq(41, 11), stride = Seq(2, 2), )
+      // }
 
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L145
       case class DeepSpeech(val name: String = "deepspeech",
@@ -110,6 +121,14 @@ object DeepSpeech {
 
         // TODO: In the PyTorch model, `conv` is a sequence of conv2d/batchnorm2d/hardtanh layers.
         val conv: Module = ???
+
+       // self.conv = MaskConv(nn.Sequential(
+       //    nn.Conv2d(1, 32, kernel_size=(41, 11), stride=(2, 2), padding=(20, 5)),
+       //    nn.BatchNorm2d(32),
+       //    nn.Hardtanh(0, 20, inplace=True),
+       //    nn.Conv2d(32, 32, kernel_size=(21, 11), stride=(2, 1), padding=(10, 5)),
+       //    nn.BatchNorm2d(32),
+       //    nn.Hardtanh(0, 20, inplace=True)))
 
         val rnnInputSize: Int = {
           var tmp: Int = (floor((sampleRate * windowSize) / 2) + 1).toInt

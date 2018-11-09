@@ -514,7 +514,6 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
-      |
       |//following - https://github.com/torch/cutorch/blob/master/lib/THC/THCTensorMath.cuh#L49
       |static inline __device__ int compute(int outputSize0, int outputSize1, int outputSize2, int outputSize3,
       |                                     int outputStride0, int outputStride1, int outputStride2, int outputStride3,
@@ -1096,6 +1095,16 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B]
 abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCublas[A, B] with LanternDriver[A, B] with TensorDslCublas with NNModuleCublas { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
+  override val codegen = new DslGenCudnn {
+    val IR: self.type = self
+
+    override def templateRawCode: String = {
+      super.templateRawCode +
+      (concatMap.values mkString("\n\n")) +
+      (permuteKernelMap.values map(_._1) mkString("\n\n")) + (permuteGradKernelMap.values map(_._1) mkString("\n\n")) +
+      (mulSubKernelMap.values map(_._1) mkString("\n\n")) + (mulSubGradKernelMap.values map(_._1) mkString("\n\n"))
+    }
+  }
 }
 
 abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] with TensorDslCudnn with NNModuleCudnn { self =>
@@ -1106,9 +1115,10 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCud
     val IR: self.type = self
 
     override def templateRawCode: String = {
-      System.out.println(s"next is $next")
-      System.out.println(s"concatMap is of size ${concatMap.size}")
-      super.templateRawCode + (concatMap.values mkString("\n\n"))
+      super.templateRawCode +
+      (concatMap.values mkString("\n\n")) +
+      (permuteKernelMap.values map(_._1) mkString("\n\n")) + (permuteGradKernelMap.values map(_._1) mkString("\n\n")) +
+      (mulSubKernelMap.values map(_._1) mkString("\n\n")) + (mulSubGradKernelMap.values map(_._1) mkString("\n\n"))
     }
   }
 }

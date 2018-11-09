@@ -5,6 +5,55 @@ import org.scala_lang.virtualized.SourceContext
 
 class TestCudnn extends LanternFunSuite {
 
+  testGPU("mul_sub") {
+    val mul_sub = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-mulsub"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x1 = Tensor.fromData(Seq(2, 3, 2), 1,2,3,4,5,6,7,8,9,10,11,12)
+        val x2 = Tensor.fromData(Seq(3, 2), 1,2,3,4,5,6)
+        val result = x1.mul_sub(x2)
+        val x1R = TensorR(x1)
+        val x2R = TensorR(x2)
+        gradR(x => x1R.mul_sub(x2R))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 3, 2), 1,4,9,16,25,36,7,16,27,40,55,72)
+        val expectedGrad1 = Tensor.fromData(Seq(2, 3, 2), 1,2,3,4,5,6,1,2,3,4,5,6)
+        val expectedGrad2 = Tensor.fromData(Seq(3, 2), 8,10,12,14,16,18)
+        Tensor.assertEqual(expected, result.toCPU())
+        Tensor.assertEqual(expectedGrad1, x1R.d.toCPU())
+        Tensor.assertEqual(expectedGrad2, x2R.d.toCPU())
+      }
+    }
+    runTest(mul_sub)
+  }
+
+  testGPU("permute") {
+    val permute = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-permute"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fromData(Seq(2, 2, 3), -1,2,-3,-4,5,6,-7,8,-9,-10,11,-12)
+        val result1 = x.permute(0, 2, 1)
+        val result2 = x.permute(1, 0, 2)
+        val grad1 = gradR(x => x.permute(0, 2, 1).relu(false))(x)
+        val grad2 = gradR(x => x.permute(1, 0, 2).relu(true))(x)
+
+        backend = BackendCPU()
+        val expected1 = Tensor.fromData(Seq(2, 3, 2), -1,-4,2,5,-3,6, -7,-10,8,11,-9,-12)
+        val expected2 = Tensor.fromData(Seq(2, 2, 3), -1,2,-3,  -7,8,-9, -4,5,6, -10,11,-12)
+        val expectedGrad1 = Tensor.fromData(Seq(2, 2, 3), 0,1,0,0,1,1, 0,1,0, 0,1,0)
+        val expectedGrad2 = Tensor.fromData(Seq(2, 2, 3), 0,1,0,0,1,1, 0,1,0, 0,1,0)
+        Tensor.assertEqual(expected1, result1.toCPU())
+        Tensor.assertEqual(expected2, result2.toCPU())
+        Tensor.assertEqual(expectedGrad1, grad1.toCPU())
+        Tensor.assertEqual(expectedGrad2, grad2.toCPU())
+      }
+    }
+    runTest(permute)
+  }
+
   testGPU("sumDim") {
     val sumDim = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-sum-dim"
