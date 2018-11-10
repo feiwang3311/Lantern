@@ -168,19 +168,10 @@ object DeepSpeech {
           val step1 = conv(input, outputLengthsGPU)
           val step2 = step1.resize(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * H
-          val step4 = rnns(0)(step3, outputLengthsGPU)
 
-          // TODO: need help sovling the compilation error here
-          // val steps = ArrayBuffer[TensorR](step3)
-          // var layer = 0
-          // while (layer < numLayers) {
-          //   steps.append(rnns(layer).apply(steps(layer), outputLengthsGPU))
-          //   layer += 1
-          // }
-          // recursive function didn't work due to comilation error regarding cpsMinus
-          // def rec(rnns: ArrayBuffer[BatchRNN], in: TensorR): TensorR @diff = if (rnns.isEmpty) in else rec(rnns.tail, rnns.head(in, outputLengthsGPU))
-          // val step4 = rec(rnns, step3)
-          // val step4 = rnns.foldLeft(step3){case (in, rnn) => rnn(in, outputLengthsGPU)}  // compilation error (fold doesn't handle cps types)
+          def rec(rnns: ArrayBuffer[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
+          val step4 = rec(rnns, step3)
+
           val step5 = bidirectional match {
             case true => step4
             case false => lookahead.get.apply(step4)
