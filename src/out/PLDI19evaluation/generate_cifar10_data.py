@@ -115,7 +115,7 @@ def main(data_dir):
     except OSError:
       pass
     # Convert to tf.train.Example and write the to TFRecords.
-    # convert_to_tfrecord(input_files, output_file)
+    convert_to_tfrecord(input_files, output_file)
   print('Done!')
 
 

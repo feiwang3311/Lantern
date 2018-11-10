@@ -9,6 +9,7 @@ import time
 import tensorflow as tf
 
 def train(args):
+  print("run tensorflow squeezenet")
   startTime = time.time()
   x = tf.placeholder(tf.float32, shape = (args.batch_size, 3, 32, 32))
   y = tf.placeholder(tf.int32, shape = (args.batch_size))
@@ -23,7 +24,9 @@ def train(args):
 
   batch = inputs.Batch(args.input_file, args.batch_size)
 
-  with tf.Session() as sess:
+  config = tf.ConfigProto()
+  config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
+  with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
     loopStart = time.time()
     loss_save = []

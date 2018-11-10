@@ -23,10 +23,12 @@ def train(args):
 
   batch = inputs.Batch(args.input_file, args.batch_size)
 
-  loopStart = time.time()
   loss_save = []
-  with tf.Session() as sess:
+  config = tf.ConfigProto()
+  config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
+  with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
+    loopStart = time.time()
     for epoch in range(args.epochs):
       train_accuracy = 0.0
       start = time.time() * 1000
@@ -37,9 +39,8 @@ def train(args):
         if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:
           print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))
       stop = time.time() * 1000
-      print('Training completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/60000))
       average_loss = train_accuracy / (60000 / args.batch_size)
-      print('average loss is %s' % average_loss)
+      print('Training completed in {}ms ({}ms/image), average loss {}'.format(int(stop - start), (stop - start)/60000, average_loss))
       loss_save.append(average_loss)
 
   loopEnd = time.time()

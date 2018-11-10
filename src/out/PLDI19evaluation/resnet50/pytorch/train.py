@@ -70,7 +70,7 @@ def train(args):
     else:
       loss_save.append(train_epoch(epoch))
     stop = time.time()
-    print('Training completed in {} sec ({} sec/image)'.format(int(stop - start), (stop - start)/60000))
+    print('Training completed in {} sec ({} sec/image)'.format((stop - start), (stop - start)/60000))
   loopEnd = time.time()
 
   prepareTime = loopStart - startTime

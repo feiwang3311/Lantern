@@ -659,7 +659,7 @@ float x40 = x39 / 1000000.0f;
 printf("Data reading in %lf sec\n",x40);
 // Tensor 'toGPU' invocation.
 float* x98 = (float*)myGpuMalloc(32768 * sizeof(float));
-int32_t x42 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
+int32_t x42 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
 int32_t x43 = fsize(x42);
 float* x44 = (float*)mmap(0, x43, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x42, 0);
 float* x45 = x44+526720;

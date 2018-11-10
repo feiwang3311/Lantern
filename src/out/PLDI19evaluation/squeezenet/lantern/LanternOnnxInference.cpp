@@ -130,7 +130,7 @@ printf("Data reading in %lf sec\n",x38);
 int64_t x95 = (long)mallocAddr;
 // inferencing loop starts here
 int32_t x103 = x10 / 64;
-int32_t x40 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
+int32_t x40 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
 int32_t x41 = fsize(x40);
 float* x42 = (float*)mmap(0, x41, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x40, 0);
 float* x85 = x42+2592;

@@ -117,6 +117,26 @@ __global__ void arrayFill_greg(float* data, float value, int size) {
   for (int i = tid; i < size; i += stride) data[i] = value;
 }
 
+__global__ void hardTanh(float* in, float* out, float min_val, float max_val, int size) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (int i = tid; i < size; i += stride) {
+    out[i] = in[i] < min_val ? min_val : (in[i] > max_val ? max_val : in[i]);
+  }
+}
+
+__global__ void hardTanh_grad(float* in_x, float* in_d, float* out_d, float min_val, float max_val, int size, bool inplace) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (int i = tid; i < size; i += stride) {
+    if (inplace) {
+      if (in_x[i] < min_val || in_x[i] > max_val) in_d[i] = 0;
+    } else {
+      if (in_x[i] >= min_val && in_x[i] <= max_val) in_d[i] += out_d[i];
+    }
+  }
+}
+
 __global__ void nllLoss(float *x, int x_stride, float *y, int* target) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   int offset = tid * x_stride + target[tid];
@@ -127,6 +147,27 @@ __global__ void nllLoss_grad(int x_stride, float *yGrad, int* target, float* xGr
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   int offset = tid * x_stride + target[tid];
   xGrad[offset] += -1 * yGrad[tid];
+}
+
+ // only for 4D tensor in and 3D tensor out
+__global__ void sum_grad(float* in, int inSize0, int inSize1, int inSize2, int inSize3, int nElement,
+                         float* out, int outStride0, int outStride1, int outStride2, int dim) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = gridDim.x * blockDim.x;
+  for (int i = tid; i < nElement; i += stride) {
+    int inOff2 = i / inSize3;
+    int inDim3 = i - inOff2 * inSize3;
+    int inOff1 = inOff2 / inSize2;
+    int inDim2 = inOff2 - inOff1 * inSize2;
+    int inDim0 = inOff1 / inSize1;
+    int inDim1 = inOff1 - inDim0 * inSize1;
+    int outOff = 0;
+    if (dim == 0) outOff = inDim1 * outStride0 + inDim2 * outStride1 + inDim3 * outStride2;
+    if (dim == 1) outOff = inDim0 * outStride0 + inDim2 * outStride1 + inDim3 * outStride2;
+    if (dim == 2) outOff = inDim0 * outStride0 + inDim1 * outStride1 + inDim3 * outStride2;
+    if (dim == 3) outOff = inDim0 * outStride0 + inDim1 * outStride1 + inDim2 * outStride2;
+    in[i] += out[outOff];
+  }
 }
 
 //following - https://github.com/torch/cutorch/blob/master/lib/THC/THCTensorMath.cuh#L49
