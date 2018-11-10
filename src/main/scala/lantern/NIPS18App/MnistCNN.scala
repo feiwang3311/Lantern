@@ -51,7 +51,7 @@ object MnistCNN {
       val opt = SGD(net, learning_rate = 0.0005f, gradClip = 1000.0f)
 
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (batchIndex: TensorR) =>
-        val res = net(input).logSoftmaxB().nllLossB(target)
+        val res = net(input).logSoftmaxB(1).nllLossB(target)
         res.sum()
       }
 
@@ -142,7 +142,7 @@ object MnistCNN {
       val opt = SGD(net, learning_rate = 0.0005f, gradClip = 1000.0f)
 
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (batchIndex: TensorR) =>
-        val res = net(input).logSoftmaxB().nllLossB(target)
+        val res = net(input).logSoftmaxB(1).nllLossB(target)
         res.sum()
       }
 

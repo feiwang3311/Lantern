@@ -76,7 +76,7 @@ object Resnet50Onnx {
       val model = readONNX(root_dir + model_file)
       val (func, parameters) = model.training_func(model.initializer_map_tensor)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
-        val res = func(input).logSoftmaxB().nllLossB(target)
+        val res = func(input).logSoftmaxB(1).nllLossB(target)
         res.mean()
       }
 
@@ -147,7 +147,7 @@ object Resnet50Onnx {
       val initMap = model.initializer_map_tensor.map{case (name, tr) => (name, tr.toGPU())}
       val (func, parameters) = model.training_func(initMap)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
-        val res = func(input).logSoftmaxB().nllLossB(target)
+        val res = func(input).logSoftmaxB(1).nllLossB(target)
         res.mean()
       }
 
