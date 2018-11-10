@@ -65,7 +65,7 @@ cp lantern/result_Lantern result_Lantern.txt
 cp tensorflow/result_TensorFlow result_TensorFlow.txt
 python3 ../plot.py ResNet50 result_Lantern.txt result_PyTorch.txt result_TensorFlow.txt
 
-echo "Exp: run ResNet50 models"
+echo "Exp: run TreeLSTM models"
 cd ../treelstm
 cd lantern
 nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternTraining.cu -o LanternTrainingCu -lcublas -lcudnn
@@ -80,6 +80,7 @@ source fold-env/bin/activate result_TensorFold20
 # pip3 install --upgrade pip wheel
 # pip3 install --upgrade tensorflow-gpu==1.0.0  # this version of tensorflow works with cuda 8.
 # pip install https://storage.googleapis.com/tensorflow_fold/tensorflow_fold-0.0.1-py3-none-linux_x86_64.whl
+python3 TreeLSTMTensorFlow.py result_TensorFold20
 deactivate
 cd ../dynet
 exit 1
