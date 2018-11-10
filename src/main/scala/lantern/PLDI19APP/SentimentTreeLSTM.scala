@@ -324,7 +324,7 @@ object SentimentTreeLSTM {
       val cudaAddr = getCudaMallocAddr()
       val loopStart = get_time()
 
-      val epoc_start_time = loopStart
+      var epoc_start_time = loopStart
       for (epoc <- (0 until epocN): Rep[Range]) {
         var average_loss = 0.0f
         for (n <- (0 until tree_number): Rep[Range]) {
