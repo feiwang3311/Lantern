@@ -112,6 +112,8 @@ def run(filename):
   epocNum = 6
   loopStart = time.time()
   loss_save = []
+  time_save = []
+  epoch_start_time = loopStart
   for epoc in range(epocNum):
     total_loss = 0
     for batch_n in range(int(tree_data_size // batch)):
@@ -124,21 +126,28 @@ def run(filename):
         total_loss += batch_loss.value()
         batch_loss.backward()
         trainer.update()
+    epoch_end_time = time.time()
+    time_save.append(epoch_end_time - epoch_start_time)
+    epoch_start_time = epoch_end_time
     loss_save.append(total_loss / tree_data_size)
-    print("epoc {}, average_loss {}".format(epoc, total_loss / tree_data_size))
+    print("epoc {}, average_loss {}, time spent {}".format(epoc, total_loss / tree_data_size, time_save[epoc]))
 
   loopEnd = time.time()
-  print('looptime is %s ' % (loopEnd - loopStart))
+  print('average looptime is %s ' % ((loopEnd - loopStart) / epocNum))
 
   prepareTime = loopStart - startTime
   loopTime = loopEnd - loopStart
   timePerEpoch = loopTime / epocNum
 
+  time_save.sort()
+  median_time = time_save[int(epocNum / 2)]
+  print('median looptime is %s ' % ((loopEnd - loopStart) / epocNum))
+
   with open(filename, "w") as f:
     f.write("unit: " + "1 epoch\n")
     for loss in loss_save:
       f.write(str(loss) + "\n")
-    f.write("run time: " + str(prepareTime) + " " + str(timePerEpoch) + "\n")
+    f.write("run time: " + str(prepareTime) + " " + str(median_time) + "\n")
 
   # --dynet-autobatch 1 --dynet-mem 2048
 
