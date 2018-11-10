@@ -319,11 +319,16 @@ def run(write_to, batch_size_setting):
   #print('prepare time %s ' % (loopTime - startTime))
 
   loss_save = []
+  time_save = []
+  epoch_start_time = loopTime
   for epoch, shuffled in enumerate(td.epochs(train_set, EPOCHS), 1):
     train_loss = train_epoch(shuffled)
     av_loss = train_loss / trainSIZE
-    temp_time = time.time()
-    print('train loss is %s at time %s' % (av_loss, temp_time - loopTime))
+    epoch_end_time = time.time()
+    epoch_time = epoch_end_time - epoch_start_time
+    time_save.append(epoch_time)
+    epoch_start_time = epoch_end_time
+    print('train loss is %s at time %s' % (av_loss, epoch_time))
     loss_save.append(av_loss)
     #accuracy = dev_eval(epoch, train_loss)
     #if accuracy > best_accuracy:
@@ -337,11 +342,15 @@ def run(write_to, batch_size_setting):
   loopTime = loopEndTime - loopTime
   timePerEpoch = loopTime / EPOCHS
 
+  # use median time instead
+  time_save.sort()
+  median_time = time_save[int(EPOCHS / 2)]
+
   with open(write_to, "w") as f:
     f.write("unit: " + "1 epoch\n")
     for loss in loss_save:
       f.write(str(loss) + "\n")
-    f.write("run time: " + str(prepareTime) + " " + str(timePerEpoch) + "\n")
+    f.write("run time: " + str(prepareTime) + " " + str(median_time) + "\n")
 
 
   #saver.restore(sess, checkpoint_path)
