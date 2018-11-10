@@ -67,22 +67,36 @@ python3 ../plot.py ResNet50 result_Lantern.txt result_PyTorch.txt result_TensorF
 
 echo "Exp: run TreeLSTM models"
 cd ../treelstm
+echo "Exp: run Lantern training with GPU"
 cd lantern
 nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternTraining.cu -o LanternTrainingCu -lcublas -lcudnn
 ./LanternTrainingCu result_Lantern
+echo "Exp: run PyTorch training with GPU"
 cd ../pytorch
 python3 treeLSTM.py --use_gpu=True
+echo "Exp: run TensorFold training with GPU"
 cd ../tensorflow
 echo "Note: tensorFold only works with tensorflow 1.0. We need to set up python virtual env for it"
 echo "Note: if you have not set up the virtual env for tensorfold, uncomment the following lines to set up venv"
 # python3 -m venv fold-env
-source fold-env/bin/activate result_TensorFold20
+source fold-env/bin/activate
 # pip3 install --upgrade pip wheel
 # pip3 install --upgrade tensorflow-gpu==1.0.0  # this version of tensorflow works with cuda 8.
 # pip install https://storage.googleapis.com/tensorflow_fold/tensorflow_fold-0.0.1-py3-none-linux_x86_64.whl
 python3 TreeLSTMTensorFlow.py result_TensorFold20
 deactivate
 cd ../dynet
+echo "Exp: run Dynet training (without autobatching) with GPU"
+python3 treelstmDynet.py result_DyNetNB --dynet-gpus 1
+echo "Exp: run Dynet training (with autobatching) with GPU"
+python3 treelstmDynet.py result_DyNetB --dynet-gpus 1 --dynet-autobatch 1
+cp lantern/result_Lantern result_Lantern.txt
+cp pytorch/result_PyTorch result_PyTorch.txt
+cp tensorflow/result_TensorFold20 result_TensorFold20.txt
+cp dynet/result_DyNetNB result_DyNetNB.txt
+cp dynet/result_DyNetB result_DyNetB.txt
+python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_DyNetNB.txt result_DyNetB.txt
+
 exit 1
 
 export OPENBLAS_NUM_THREADS=1
