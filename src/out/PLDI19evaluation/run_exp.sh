@@ -34,14 +34,14 @@ cd ../lantern
 echo "Exp: run Lantern training with GPU"
 nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
 ./LanternOnnxTrainingCu	result_Lantern
-cd ../tensorflow2
+cd ../tensorflow
 echo "Exp: run TensorFlow training with GPU"
 python3 train.py
 echo "Plot: plot squeezenet result"
 cd ..
 cp pytorch/result_PyTorch result_PyTorch.txt
 cp lantern/result_Lantern result_Lantern.txt
-cp tensorflow2/result_TensorFlow result_TensorFlow.txt
+cp tensorflow/result_TensorFlow result_TensorFlow.txt
 python3 ../plot.py SqueezeNet result_Lantern.txt result_PyTorch.txt result_TensorFlow.txt
 
 echo "Exp: run ResNet50 models"

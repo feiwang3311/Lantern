@@ -242,6 +242,7 @@ object SqueezeNetOnnx {
       val loopTime = totalTime - prepareTime
       val timePerEpoc = loopTime / nbEpoch
 
+      // get median time of epochs
       unchecked[Unit]("sort(", time_save, ", ", time_save, " + ", nbEpoch, ")")
       val median_time =  time_save(nbEpoch / 2)
 

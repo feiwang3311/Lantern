@@ -7,6 +7,7 @@ import inputs
 import squeezenet
 import time
 import tensorflow as tf
+import statistics
 
 def train(args):
   print("run tensorflow squeezenet")
@@ -42,17 +43,18 @@ def train(args):
           print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))
       stop = time.time()
       time_save.append(stop - start)
-      print('Training completed in {} sec ({} sec/image)'.format((stop - start), (stop - start)/60000))
       average_loss = train_accuracy / (60000 / args.batch_size)
-      print('average loss is %s' % average_loss)
+      print('Training completed in {}ms ({}ms/image), with average loss {}'.format((stop - start), (stop - start)/60000, average_loss))
       loss_save.append(average_loss)
 
   loopEnd = time.time()
   prepareTime = loopStart - startTime
   loopTime = loopEnd - loopStart
   timePerEpoch = loopTime / args.epochs
+
   time_save.sort()
   median_time = time_save[int (args.epochs / 2)]
+
   with open(args.write_to, "w") as f:
     f.write("unit: " + "1 epoch\n")
     for loss in loss_save:
