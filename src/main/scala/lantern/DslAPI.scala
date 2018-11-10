@@ -319,7 +319,7 @@ trait DslGenBase extends CGenNumericOpsExtra
   def templateHeaders: Seq[String] = Seq(
     "<assert.h>", "<err.h>", "<errno.h>", "<fcntl.h>", "<functional>",
     "<math.h>", "<memory>", "<random>", "<stdint.h>", "<stdio.h>",
-    "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>", "<cblas.h>")
+    "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>", "<cblas.h>", "<algorithm>")
 
   // Raw code, to be included in the code template at file scope, before the main function.
   def templateRawCode: String = ""

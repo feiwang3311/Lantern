@@ -30,17 +30,19 @@ def train(args):
     sess.run(tf.global_variables_initializer())
     loopStart = time.time()
     loss_save = []
+    time_save = []
     for epoch in range(args.epochs):
       train_accuracy = 0.0
-      start = time.time() * 1000
+      start = time.time()
       for i in range(batch.total_size // batch.batch_size):
         (input_x, input_y) = batch.batch()
         _, loss = sess.run([train_step, cross_entropy], feed_dict={x: input_x, y: input_y})
         train_accuracy += loss
         if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:
           print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))
-      stop = time.time() * 1000
-      print('Training completed in {}ms ({}ms/image)'.format(int(stop - start), (stop - start)/60000))
+      stop = time.time()
+      time_save.append(stop - start)
+      print('Training completed in {} sec ({} sec/image)'.format((stop - start), (stop - start)/60000))
       average_loss = train_accuracy / (60000 / args.batch_size)
       print('average loss is %s' % average_loss)
       loss_save.append(average_loss)
@@ -49,12 +51,13 @@ def train(args):
   prepareTime = loopStart - startTime
   loopTime = loopEnd - loopStart
   timePerEpoch = loopTime / args.epochs
-
+  time_save.sort()
+  median_time = time_save[int (args.epochs / 2)]
   with open(args.write_to, "w") as f:
     f.write("unit: " + "1 epoch\n")
     for loss in loss_save:
       f.write(str(loss) + "\n")
-    f.write("run time: " + str(prepareTime) + " " + str(timePerEpoch) + "\n")
+    f.write("run time: " + str(prepareTime) + " " + str(median_time) + "\n")
 
 if __name__ == '__main__':
   # Training settings

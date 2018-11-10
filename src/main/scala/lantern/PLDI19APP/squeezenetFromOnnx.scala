@@ -200,6 +200,7 @@ object SqueezeNetOnnx {
       // Training
       val nbEpoch = 4
       val loss_save = NewArray[Double](nbEpoch)
+      val time_save = NewArray[Double](nbEpoch)
 
       val addr = getMallocAddr() // remember current allocation pointer here
       val addrCuda = getCudaMallocAddr()
@@ -232,6 +233,7 @@ object SqueezeNetOnnx {
           resetCudaMallocAddr(addrCuda)
         }
         val delta = trainTimer.getElapsedTime
+        time_save(epoch) = delta / 1000000L
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
         loss_save(epoch) = trainLoss / train.length
       }
@@ -240,12 +242,15 @@ object SqueezeNetOnnx {
       val loopTime = totalTime - prepareTime
       val timePerEpoc = loopTime / nbEpoch
 
+      unchecked[Unit]("sort(", time_save, ", ", time_save, " + ", nbEpoch, ")")
+      val median_time =  time_save(nbEpoch / 2)
+
       val fp2 = openf(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp2, "%lf\\n", loss_save(i))
       }
-      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, median_time)
       closef(fp2)
     }
   }
