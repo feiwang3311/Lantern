@@ -69,7 +69,10 @@ object DeepSpeech {
           // TODO: do we not use outputLengths?
           val in1 = batchNorm match {
             case None => input
-            case Some(batchNorm) => batchNorm(input)
+            case Some(batchNorm) =>
+              val input2D = input.resize(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
+              val inputBN = batchNorm(input2D)
+              inputBN.resize(input.x.shape(0), input.x.shape(1), input.x.shape(2))
           }
           val output = rnn(in1)
           val timeD = output.x.shape(0)

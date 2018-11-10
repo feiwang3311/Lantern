@@ -1888,7 +1888,10 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def softmax_batch(dim: Int = 1) = backend.softmax(this, dim)
+    def softmax_batch(dim: Int = 1) = {
+      if (dim < 0) backend.softmax(this, this.rank + dim)
+      else backend.softmax(this, dim)
+    }
 
     // deprecated (older version that only works for 1D case), should remove
     @virtualize
@@ -1902,7 +1905,10 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // batched log softmax
-    def logSoftmaxB(dim: Int = 1) = backend.logSoftmax(this, dim)
+    def logSoftmaxB(dim: Int = 1) = {
+      if (dim < 0) backend.logSoftmax(this, dim + this.rank)
+      else backend.logSoftmax(this, dim)
+    }
 
     // deprecated (older version that only works for 1D case), should remove
     @virtualize
@@ -2757,8 +2763,9 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def softmax_batch(dim: Int = 1): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.softmax_batch(dim)); k(y)
-      backend.softmax_grad(this, y, dim)
+      val adjust_dim = if (dim < 0) this.x.rank + dim else dim
+      val y = TensorR(x.softmax_batch(adjust_dim)); k(y)
+      backend.softmax_grad(this, y, adjust_dim)
     }
 
     // deprecated (older version that only works with 1D data), should remove
@@ -2769,8 +2776,9 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def logSoftmaxB(dim: Int = 1): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.logSoftmaxB(dim)); k(y)
-      backend.logSoftmax_grad(this, y, dim)
+      val adjust_dim = if (dim < 0) this.x.rank + dim else dim
+      val y = TensorR(x.logSoftmaxB(adjust_dim)); k(y)
+      backend.logSoftmax_grad(this, y, adjust_dim)
     }
 
     def resize(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
