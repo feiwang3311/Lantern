@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <cblas.h>
+#include <algorithm>
 
 using namespace std;
 #ifndef MAP_FILE

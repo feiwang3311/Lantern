@@ -14,6 +14,7 @@ import torch.optim as optim
 from torch.autograd import Variable
 import numpy as np
 import torch.onnx
+import statistics
 
 def train(args):
   startTime = time.time()
@@ -63,6 +64,7 @@ def train(args):
 
   loopStart = time.time()
   loss_save = []
+  time_save = []
   for epoch in range(args.epochs):
     start = time.time()
     if args.inference:
@@ -70,6 +72,7 @@ def train(args):
     else:
       loss_save.append(train_epoch(epoch))
     stop = time.time()
+    time_save.append(stop - start)
     print('Training completed in {} sec ({} sec/image)'.format((stop - start), (stop - start)/60000))
   loopEnd = time.time()
 
@@ -77,11 +80,13 @@ def train(args):
   loopTime = loopEnd - loopStart
   timePerEpoch = loopTime / args.epochs
 
+  median_time = statistics.median(time_save)
+
   with open(args.write_to, "w") as f:
     f.write("unit: " + "1 epoch\n")
     for loss in loss_save:
       f.write("{}\n".format(loss))
-    f.write("run time: " + str(prepareTime) + " " + str(timePerEpoch) + "\n")
+    f.write("run time: " + str(prepareTime) + " " + str(median_time) + "\n")
 
 
 if __name__ == '__main__':

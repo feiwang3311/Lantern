@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <cblas.h>
+#include <algorithm>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
