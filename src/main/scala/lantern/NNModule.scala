@@ -138,7 +138,7 @@ trait NNModule extends TensorDsl {
   }
 
   abstract class RnnCell extends Module {
-    def init(batchSize: Int): ArrayBuffer[TensorR]
+    def init(batchSize: Rep[Int]): ArrayBuffer[TensorR]
     def apply(ins: ArrayBuffer[TensorR]): ArrayBuffer[TensorR] @diff
   }
 
@@ -152,7 +152,7 @@ trait NNModule extends TensorDsl {
       val hidden = inLinear(in, lastHidden).tanh()
       ArrayBuffer(outLinear(hidden), hidden)
     }
-    def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)))
+    def init(batchSize: Rep[Int]) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)))
   }
 
   case class LSTMCell(val inputSize: Int, val hiddenSize: Int, val outputSize: Int, val name: String = "lstm_cell") extends RnnCell {
@@ -178,7 +178,7 @@ trait NNModule extends TensorDsl {
       val h = o * c.tanh()
       ArrayBuffer(outLinear(h), h, c)
     }
-    def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)), TensorR(Tensor.zeros(batchSize, hiddenSize)))
+    def init(batchSize: Rep[Int]) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)), TensorR(Tensor.zeros(batchSize, hiddenSize)))
   }
 
   // case class DynamicRNN(val cell: RnnCell, val name: String = "dynamic_rnn_unroll") extends Module {

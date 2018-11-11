@@ -142,10 +142,7 @@ object SentimentTreeLSTM {
 
             val hidden = o_gate * cell.tanh()
             val pred1 = (tWhy.dot(hidden) + tby)
-            // val pred1 = (tWhy.dot(hidden) + tby).exp()
-            val loss = pred1.logSoftmax().nllLoss(scores(i))
-            // val pred2 = pred1 / pred1.sum()
-            // val loss = lossl + lossr - (pred2 dot targ1).log()
+            val loss = pred1.resize(1, pred1.x.shape(0)).logSoftmaxB(1).nllLossB(slice(scores, i))
 
             val out = ArrayBuffer[TensorR]()
             out.append(loss)
@@ -161,11 +158,8 @@ object SentimentTreeLSTM {
             val cell = i_gate * u_value + fl_gate * celll + fr_gate * cellr
 
             val hidden = o_gate * cell.tanh()
-            // val pred1 = (tWhy.dot(hidden) + tby).exp()
             val pred1 = (tWhy.dot(hidden) + tby)
-            val loss = lossl + lossr + pred1.logSoftmax().nllLoss(scores(i))
-            // val pred2 = pred1 / pred1.sum()
-            // val loss = lossl + lossr - (pred2 dot targ1).log()
+            val loss = lossl + lossr + pred1.resize(1, pred1.x.shape(0)).logSoftmaxB(1).nllLossB(slice(scores, i))
 
             val out = ArrayBuffer[TensorR]()
             out.append(loss)

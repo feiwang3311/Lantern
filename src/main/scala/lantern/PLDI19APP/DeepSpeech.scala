@@ -90,9 +90,9 @@ object DeepSpeech {
 
         // TODO (Fei Wang): this could be optimized by a user-defined kernel?
         def apply(input: TensorR): TensorR @diff = {
-          val padding = TensorR(Tensor.zeros((context +: input.x.shape.drop(1)): _*))
+          val padding = TensorR(Tensor.zeros((unit(context) +: input.x.shape.drop(1)): _*))
           val x = input.concat(0, padding)
-          val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1))
+          val xs = (0 until input.x.shape(0)) map (i => x(i, i + context + 1))
           // TODO: this permute function can be implemented by cuDNN cudnnTransformTensor method
           val xc = xs.head.concat(0, xs.tail: _*).permute(0, 2, 3, 1)
           (x mul_sub weight).sum(3)

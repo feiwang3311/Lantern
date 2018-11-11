@@ -113,7 +113,7 @@ object SentimentTreeLSTM {
         val by  = TensorR(Tensor.zeros(outSize))
         def apply(in: TensorR, score: Rep[Array[Int]]) = {
           val pred1 = Why.dot(in) plusBias by
-          val loss = pred1.logSoftmax().nllLossB(score)
+          val loss = pred1.resize(1, pred1.x.shape(0)).logSoftmaxB(1).nllLossB(score)
           loss
         }
       }
@@ -286,7 +286,7 @@ object SentimentTreeLSTM {
         val by  = TensorR(Tensor.zeros(outSize))
         def apply(in: TensorR, score: Rep[Array[Int]]) = {
           val pred1 = Why.dot(in) plusBias by
-          val loss = pred1.logSoftmax().nllLossB(score)
+          val loss = pred1.resize(1, pred1.x.shape(0)).logSoftmaxB(1).nllLossB(score)
           loss
         }
       }

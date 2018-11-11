@@ -61,6 +61,12 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   implicit def Seq2SeqRep(x: Seq[Int]) = x map (unit(_))
+  case class SeqRBOps[T](s: Seq[T]) {
+    def forall(f: T => Rep[Boolean]): Rep[Boolean] = s.foldLeft(unit(true)){case (l, r) => l && f(r)}
+    @virtualize
+    def count(f: T => Rep[Boolean]): Rep[Int] = s.foldLeft(unit(0)){case (l, r) => if (f(r)) (l+1) else l}
+  }
+  implicit def SeqRB2SeqRBOps[T](s: Seq[T]) = SeqRBOps(s)
 
   object Dataset {
     class DataLoader(name: String, train: Boolean, mean: Float, std: Float, dims: Seq[Int]) {
@@ -189,7 +195,6 @@ trait TensorDsl extends DslOps with Diff {
         targets(batch) = slice(dataInt, next(sumTargetSize))
       }
     }
-
   }
 
   def convSize(size: Rep[Int], kernelSize: Rep[Int], strideSize: Int, pad: Int = 0) = (size + 2 * pad - kernelSize)/strideSize + 1
@@ -234,6 +239,10 @@ trait TensorDsl extends DslOps with Diff {
 
     lazy val product1: Rep[Int] = dims.foldLeft(unit(1)){case (l, r) => l * r}
     lazy val sum1: Rep[Int] = dims.foldLeft(unit(0)){case (l, r) => l + r}
+    @virtualize
+    def filterProduct(f: (Rep[Int] => Rep[Boolean])): Rep[Int] = dims.foldLeft(unit(1)){case (l, r) => if (f(r)) (l * r) else l}
+    @virtualize
+    def filterSum(f: (Rep[Int] => Rep[Boolean])): Rep[Int] = dims.foldLeft(unit(0)){case (l, r) => if (f(r)) (l + r) else l}
   }
 
   implicit def Dimensions2Seq(x: Dimensions) = x.dims
@@ -501,13 +510,13 @@ trait TensorDsl extends DslOps with Diff {
     override def cleanup() {}
     override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = NewArray[T](length)
 
-    override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit = {
+    override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Rep[Int]): Unit = {
       for (i <- DataLoop(length)) dest(i) = src(i)
     }
 
-    override def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor = new Tensor(array, dims)
+    override def arrayToTensor(array: Rep[Array[Float]], dims: Rep[Int]*): Tensor = new Tensor(array, dims)
 
-    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor = {
+    override def makeTensor(dims: Seq[Rep[Int]], scalars: Float*): Tensor = {
       Tensor(Array(scalars.map(unit(_)): _*), dims: _*)
     }
 
@@ -1557,24 +1566,6 @@ trait TensorDsl extends DslOps with Diff {
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       += (input.d, res.d / input.x.scalarCount)  // TODO (Fei Wang): optimize
     }
-    // @virtualize
-    // override def sum(x: Tensor, dim: Int): Tensor = {
-    //   assert(dim >= 0 && dim < x.rank, s"dimension to reduce must be in rank, got ${dim} from ${x.shape}")
-    //   val resDim = x.shape.take(dim) ++ x.shape.drop(dim + 1)
-    //   val res = mallocArray[Float](resDim.product)
-    //   val resTensor = Tensor(res, resDim: _*)
-    //   def reduce(in: Tensor, out: Tensor, curDim: Int) = {
-    //     if (curDim < dim) {
-    //       for (i <- DataLoop(x.shape(curDim))) reduce(in(i), out(i), curDim + 1)
-    //     } else if (curDim == dim) {
-    //       for (i <- DataLoop(x.shape(curDim))) reduce(in(i), out, curDim + 1)
-    //     } else if (curDim < x.rank - 1) {
-    //       for (i <- DataLoop(x.shape(curDim))) reduce(in(i), out(i), curDim + 1)
-    //     } else {
-    //       for (i <- DataLoop(x.shape(curDim))) out.data(i) += in.data(i)
-    //     }
-    //   }
-    // }
     override def sum(input: Tensor, dim: Int) = {
       assert(dim >= 0 && dim < input.rank, "dim should be within range of this.nbDims")
       val higherDims = input.shape.take(dim)
@@ -1976,14 +1967,22 @@ trait TensorDsl extends DslOps with Diff {
     //   backend.nllLoss(this.resize(1, this.shape(0)), targets)
     // }
 
-    def resize(dims: Int*) = {
-      generateRawComment(s"resize to $dims")
-      val new_dims: Seq[Rep[Int]] = if (dims.forall(_ > 0)) dims.map(unit(_)) else {
-        assert(dims.filter(_ < 0) == Seq(-1), s"there should be at most one -1 in the resize dims, got $dims")
-        dims.map(unit(_)).updated(dims.indexOf(-1, 0), this.scalarCount / dims.filter(_ > 0).product)
-      }
-      assert(new_dims.product1 == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
+    // def resize(dims: Int*) = {
+    //   generateRawComment(s"resize to $dims")
+    //   val new_dims: Seq[Rep[Int]] = if (dims.forall(_ > 0)) dims.map(unit(_)) else {
+    //     assert(dims.filter(_ < 0) == Seq(-1), s"there should be at most one -1 in the resize dims, got $dims")
+    //     dims.map(unit(_)).updated(dims.indexOf(-1, 0), this.scalarCount / dims.filter(_ > 0).product)
+    //   }
+    //   assert(new_dims.product1 == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
 
+    //   Tensor(this.data, new_dims : _*)
+    // }
+
+    @virtualize
+    def resize(dims: Rep[Int]*) = {
+      assert(SeqRBOps(dims).count(_ < 0) <= 1, s"at most one negative dimension in resize.")
+      val new_dims: Seq[Rep[Int]] = dims.map(x => if (x > 0) x else this.scalarCount / dims.filterProduct(_ > 0))
+      assert(new_dims.product1 == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
       Tensor(this.data, new_dims : _*)
     }
 
@@ -2825,7 +2824,7 @@ trait TensorDsl extends DslOps with Diff {
       backend.logSoftmax_grad(this, y, adjust_dim)
     }
 
-    def resize(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
+    def resize(dims: Rep[Int]*): TensorR @diff = shift { (k: TensorR => Unit) =>
       k(new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*)))
     }
 
@@ -3361,13 +3360,13 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = NewGPUArray[T](length)
 
-    override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Int): Unit =
+    override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Rep[Int]): Unit =
       gpu_array_copy_device_to_device(src, dest, length)
 
-    override def arrayToTensor(array: Rep[Array[Float]], dims: Int*): Tensor = new Tensor(array, dims)
+    override def arrayToTensor(array: Rep[Array[Float]], dims: Rep[Int]*): Tensor = new Tensor(array, dims)
       // BackendCPU().arrayToTensor(array, dims: _*).toGPU()
 
-    override def makeTensor(dims: Seq[Int], scalars: Float*): Tensor =
+    override def makeTensor(dims: Seq[Rep[Int]], scalars: Float*): Tensor =
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()
 
     // TOOO: Compare performance with GPU allocation + `fillInPlace`.
@@ -3947,55 +3946,50 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val SquareGrad = Value("SQUARE_GRAD")
     }
 
-    @virtualize
-    def experiment(input: Tensor): Int = {
-      val b: Rep[Boolean] = input.scalarCount <= 100
-      __ifThenElse (b, {1}, {2})
-      // if (b) {1} else {2}
-    }
-
-    def elementwiseOpNoBroadcast(input: Tensor, op: ElementWiseNoBroadCastOpt.Value, inplace: Boolean = false): Tensor = {
-      val b: Rep[Boolean] = (input.scalarCount <= 512 * 65535)
-      __ifThenElse( b, {
-        val numBlocks = (input.scalarCount + 511) / 512
-        val res = if (inplace) input.data else mallocArray[Float](input.scalarCount)
-        op match {
-          case ElementWiseNoBroadCastOpt.Log =>
-            unchecked[Unit](s"elementwise_1D_1D_log<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
-          case ElementWiseNoBroadCastOpt.Exp =>
-            unchecked[Unit](s"elementwise_1D_1D_exp<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
-          case ElementWiseNoBroadCastOpt.Sqrt =>
-            unchecked[Unit](s"elementwise_1D_1D_sqrt<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
-          case ElementWiseNoBroadCastOpt.Square =>
-            unchecked[Unit](s"elementwise_1D_1D_square<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
-          case _ => ???
-        }
-        Tensor(res, input.shape: _*)
-      } , {
-        assert(false, s"not implemented for tensors larger than 1D grid * 1D block, got ${input.shape}")
-        ???
-      })
+    def elementwiseOpNoBroadcast(input: Tensor, op: ElementWiseNoBroadCastOpt.Value, inplace: Boolean = false): Tensor = { ???
+      // TODO (Fei Wang): use fixed numBlocks 28 for this function
+      // val b: Rep[Boolean] = (input.scalarCount <= 512 * 65535)
+      // __ifThenElse( b, {
+      //   val numBlocks = (input.scalarCount + 511) / 512
+      //   val res = if (inplace) input.data else mallocArray[Float](input.scalarCount)
+      //   op match {
+      //     case ElementWiseNoBroadCastOpt.Log =>
+      //       unchecked[Unit](s"elementwise_1D_1D_log<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
+      //     case ElementWiseNoBroadCastOpt.Exp =>
+      //       unchecked[Unit](s"elementwise_1D_1D_exp<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
+      //     case ElementWiseNoBroadCastOpt.Sqrt =>
+      //       unchecked[Unit](s"elementwise_1D_1D_sqrt<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
+      //     case ElementWiseNoBroadCastOpt.Square =>
+      //       unchecked[Unit](s"elementwise_1D_1D_square<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
+      //     case _ => ???
+      //   }
+      //   Tensor(res, input.shape: _*)
+      // } , {
+      //   assert(false, s"not implemented for tensors larger than 1D grid * 1D block, got ${input.shape}")
+      //   ???
+      // })
     }
 
     @virtualize
-    def elementwiseOpNoBroadcastGrad(input: TensorR, output: TensorR, op: ElementWiseNoBroadCastOpt.Value): Unit = {
-      if (input.x.scalarCount <= 512 * 65535) {
-        val numBlocks = (input.x.scalarCount + 511) / 512
-        op match {
-          case ElementWiseNoBroadCastOpt.LogGrad =>
-            unchecked[Unit](s"elementwise_1D_1D_log_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
-          case ElementWiseNoBroadCastOpt.ExpGrad =>
-            unchecked[Unit](s"elementwise_1D_1D_exp_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
-          case ElementWiseNoBroadCastOpt.SqrtGrad =>
-            unchecked[Unit](s"elementwise_1D_1D_sqrt_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
-          case ElementWiseNoBroadCastOpt.SquareGrad =>
-            unchecked[Unit](s"elementwise_1D_1D_square_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
-          case _ => ???
-        }
-      } else {
-        assert(false, s"not implemented for tensors larger than 1D grid * 1D block, got ${input.x.shape}")
-        ???
-      }
+    def elementwiseOpNoBroadcastGrad(input: TensorR, output: TensorR, op: ElementWiseNoBroadCastOpt.Value): Unit = { ???
+      // TODO (Fei Wang): use fixed numBlocks 28 for this function
+      // if (input.x.scalarCount <= 512 * 65535) {
+      //   val numBlocks = (input.x.scalarCount + 511) / 512
+      //   op match {
+      //     case ElementWiseNoBroadCastOpt.LogGrad =>
+      //       unchecked[Unit](s"elementwise_1D_1D_log_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
+      //     case ElementWiseNoBroadCastOpt.ExpGrad =>
+      //       unchecked[Unit](s"elementwise_1D_1D_exp_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
+      //     case ElementWiseNoBroadCastOpt.SqrtGrad =>
+      //       unchecked[Unit](s"elementwise_1D_1D_sqrt_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
+      //     case ElementWiseNoBroadCastOpt.SquareGrad =>
+      //       unchecked[Unit](s"elementwise_1D_1D_square_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
+      //     case _ => ???
+      //   }
+      // } else {
+      //   assert(false, s"not implemented for tensors larger than 1D grid * 1D block, got ${input.x.shape}")
+      //   ???
+      // }
     }
 
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
@@ -4229,17 +4223,17 @@ trait TensorDslCudnn extends TensorDslCublas {
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
     // Note: this function performs in-place addition for `res`.
     @virtualize
-    def cudnnAddBiasTensor(bias: Tensor, res: Tensor, scale: Float = 1.0f): Unit = {
-      val (biasShape, resShape): (Seq[Int], Seq[Int]) = if (bias.shape == res.shape) {
-        (bias.shape.padTo(4, 1), res.shape.padTo(4, unit(1)))
+    def cudnnAddBiasTensor(bias: Tensor, res: Tensor, scale: Rep[Float] = 1.0f): Unit = {
+      val (biasShape, resShape): (Seq[Rep[Int]], Seq[Rep[Int]]) = if (bias.shape == res.shape) {
+        (bias.shape.padTo(4, unit(1)), res.shape.padTo(4, unit(1)))
       } else {
         if (bias.rank == 4 && res.rank == 4) {
-          assert((bias.shape zip res.shape).forall{case (a, b) => a == 1 || a == b}, s"bias shape should be equal to res or be 1, got bias: ${bias.shape}, res: ${res.shape}")
+          assert(SeqRBOps(bias.shape zip res.shape).forall{case (a, b) => a == 1 || a == b}, s"bias shape should be equal to res or be 1, got bias: ${bias.shape}, res: ${res.shape}")
           (bias.shape, res.shape)
         } else {
           assert(bias.rank == 1 && res.rank >= 2, "if not equal shape, bias must be rank 1, and res must be rank 2 or more")
           // TODO (Fei Wang): Need more thinking. Is it safe to assume that bias is on dim 1??
-          (Seq(1, bias.shape(0), 1, 1), res.shape.padTo(4, 1))
+          (Seq(1, bias.shape(0), 1, 1), res.shape.padTo(4, unit(1)))
         }
       }
       val scaled = NewArray[Float](1); scaled(0) = scale
@@ -4344,7 +4338,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias
     // This is effectively the gradient of `cudnnAddBiasTensor`.
     def cudnnConvolutionBackwardBias(biasGrad: Tensor, resGrad: Tensor): Unit = {
-      val biasShape: Seq[Int] =
+      val biasShape: Seq[Rep[Int]] =
         if (biasGrad.rank == 1) Seq(1, biasGrad.shape(0), 1, 1)
         else if (biasGrad.rank == 4) biasGrad.shape
         else { assert(false, s"Bias gradient is neither rank 1 or rank 4, got ${biasGrad.shape}"); ???}
@@ -4513,7 +4507,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resWidth = convSize(input.shape(2) + padH * 2, kernel.shape(2), strideRow)
       val resHeight = convSize(input.shape(3) + padW * 2, kernel.shape(3), strideCol)
       val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
-      val resData = mallocArray[Float](resShape.product)
+      val resData = mallocArray[Float](resShape.product1)
       val res = Tensor(resData, resShape: _*)
       cudnnConvolutionForward(input, kernel, res, padding = (padH, padW), strides = (strideRow, strideCol), dilations = (1, 1))
 
@@ -5115,7 +5109,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     def softmaxHelper(x: Tensor, dim: Int, mode: SoftmaxMode.Value): Tensor = {
       assert(dim >= 0 && dim < x.rank, s"dim should be in range of input rank, got ${x.shape}, ${dim}")
-      val tmpIn = x.resize(x.shape.take(dim).product, x.shape(dim), x.shape.drop(dim+1).product, 1)
+      val tmpIn = x.resize(x.shape.take(dim).product1, x.shape(dim), x.shape.drop(dim+1).product1, 1)
       val tmpOut = cudnnSoftmaxForward(tmpIn, mode)
       val res = tmpOut.resize(x.shape: _*)
       res
@@ -5126,10 +5120,10 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     def softmaxBackwardHelper(input: TensorR, res: TensorR, dim: Int, mode: SoftmaxMode.Value): Unit = {
       assert(dim >= 0 && dim < input.x.rank, s"dim should be in range of input rank, got ${input.x.shape}, ${dim}")
-      val tmpIn = new TensorR(input.x.resize(input.x.shape.take(dim).product, input.x.shape(dim), input.x.shape.drop(dim+1).product, 1),
-                              input.d.resize(input.x.shape.take(dim).product, input.x.shape(dim), input.x.shape.drop(dim+1).product, 1))
-      val tmpOut = new TensorR(res.x.resize(res.x.shape.take(dim).product, res.x.shape(dim), res.x.shape.drop(dim+1).product, 1),
-                               res.d.resize(res.x.shape.take(dim).product, res.x.shape(dim), res.x.shape.drop(dim+1).product, 1))
+      val tmpIn = new TensorR(input.x.resize(input.x.shape.take(dim).product1, input.x.shape(dim), input.x.shape.drop(dim+1).product1, 1),
+                              input.d.resize(input.x.shape.take(dim).product1, input.x.shape(dim), input.x.shape.drop(dim+1).product1, 1))
+      val tmpOut = new TensorR(res.x.resize(res.x.shape.take(dim).product1, res.x.shape(dim), res.x.shape.drop(dim+1).product1, 1),
+                               res.d.resize(res.x.shape.take(dim).product1, res.x.shape(dim), res.x.shape.drop(dim+1).product1, 1))
       cudnnSoftmaxBackward(tmpIn, tmpOut, mode)
     }
 
@@ -5143,12 +5137,12 @@ trait TensorDslCudnn extends TensorDslCublas {
     // `cudnnReduceTensor` supports tensors up to dimension 8.
     def cudnnReduceTensor(x: Tensor, op: ReductionOp.Value, indices: Seq[Int], flatten: Boolean = true, toTensor: Option[Rep[Array[Float]]] = None, clear: Boolean = true): Tensor = {
       assert(indices.forall(i => x.shape.indices.contains(i)), s"Indices out of bounds: $indices, tensor shape is ${x.shape}")
-      val xShape = x.shape.padTo(4, 1)
-      val unflatShape = xShape.zipWithIndex.map { case (dim, i) =>
-        if (indices.contains(i)) 1 else dim
+      val xShape: Seq[Rep[Int]] = x.shape.padTo(4, unit(1))
+      val unflatShape: Seq[Rep[Int]] = xShape.zipWithIndex.map { case (dim, i) =>
+        if (indices.contains(i)) unit(1) else dim
       }
       val res = toTensor match {
-        case None => Tensor(mallocArray[Float](unflatShape.product), unflatShape: _*)
+        case None => Tensor(mallocArray[Float](unflatShape.product1), unflatShape: _*)
         case Some(array) => Tensor(array, unflatShape: _*)
       }
       val zero = NewArray[Float](1); zero(0) = 0
@@ -5188,8 +5182,8 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    ", one, ", x_desc, ", x.data, ", ", (if (clear) zero else one), ", out_desc, ", res.data, "));\n" +
           "}"): _*
       )
-      val resShape = x.shape.zipWithIndex.flatMap { case (dim, i) =>
-        if (indices.contains(i)) if (flatten) None else Some(1) else Some(dim)
+      val resShape: Seq[Rep[Int]] = x.shape.zipWithIndex.flatMap { case (dim, i) =>
+        if (indices.contains(i)) if (flatten) None else Some(unit(1)) else Some(dim)
       }
 
       // TODO: Remove if expression when rank-0 tensor support is fixed.
@@ -5198,7 +5192,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def sum(x: Tensor): Tensor = {
-      val xx = x.resize(x.shape.padTo(4, 1): _*)
+      val xx = x.resize(x.shape.padTo(4, unit(1)): _*)
       val res = cudnnReduceTensor(xx, ReductionOp.Add, xx.shape.indices)
       res.resize(1)
     }
@@ -5207,11 +5201,11 @@ trait TensorDslCudnn extends TensorDslCublas {
       generateRawComment("backprop for sum op")
       assert(res.d.shape.dims == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
-      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, 1): _*))
+      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, unit(1)): _*))
     }
 
     override def mean(x: Tensor): Tensor = {
-      val xx = x.resize(x.shape.padTo(4, 1): _*)
+      val xx = x.resize(x.shape.padTo(4, unit(1)): _*)
       val res = cudnnReduceTensor(xx, ReductionOp.Avg, xx.shape.indices)
       res.resize(1)
     }
@@ -5220,12 +5214,12 @@ trait TensorDslCudnn extends TensorDslCublas {
       generateRawComment("backprop for mean op")
       assert(res.d.shape.dims == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
-      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, 1): _*), scale = 1.0f / input.x.scalarCount)
+      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, unit(1)): _*), scale = 1.0f / input.x.scalarCount)
     }
 
     override def sum(x: Tensor, dim: Int): Tensor = {
       assert(dim >= 0 && dim < x.rank, s"dim should be in range, got ${dim} from ${x.shape}")
-      val xx = x.resize(x.shape.padTo(4, 1): _*)
+      val xx = x.resize(x.shape.padTo(4, unit(1)): _*)
       val indices = dim +: ((x.rank until xx.rank): Range).toSeq
       cudnnReduceTensor(xx, ReductionOp.Add, indices)
     }
@@ -5274,8 +5268,8 @@ trait TensorDslCudnn extends TensorDslCublas {
       val inputSize = x.shape(2)
       val numDirections = if (bidirectional) 2 else 1
 
-      val resShape = Seq(seqLength, batchSize, hiddenSize * numDirections)
-      val res = Tensor(mallocArray[Float](resShape.product), resShape: _*)
+      val resShape: Seq[Rep[Int]] = Seq(seqLength, batchSize, hiddenSize * numDirections)
+      val res = Tensor(mallocArray[Float](resShape.product1), resShape: _*)
 
       val reserveSpace = unchecked[Array[Float]]("(float*)NULL")
       val reserveSpaceSize = unchecked[Int]("0")
