@@ -138,30 +138,56 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    class DataLoaderTest(name_x: String, name_y: String, dims: Seq[Int]) {
+    // 这个是数据的格式
+    // 每个数据文件开头是两个Int，分别是batch_size和num_batches
+    // 然后是每个batch的数据。每个batch开头是两个Int，分别是frequency_size和max_length
+    // 然后是四个Tensor，类型写在上面的图里了
+    // inputs_percentage 是padding以后非padding数据的比例，targets里每一个target都是英语字符对应的Int
+    @virtualize
+    class DeepSpeechDataLoader(name: String, train: Boolean) {
 
-      val fd = open(name_x)
+      // open file
+      val fd = open(name)
       val len = filelen(fd)
-      val data = mmap[Float](fd, len)
-      val dLength = (len/4L).toInt
 
-      val tfd = open(name_y)
-      val tlen = filelen(tfd)
-      val target = mmap[Int](tfd, tlen)
-      val length = tlen/4
+      // mmap data
+      val data = mmap[Char](fd, len)
+      val dataInt: Rep[Array[Int]] = unchecked[Array[Int]]("(int32_t *)", data)
+      val dataFloat: Rep[Array[Float]] = unchecked[Array[Float]]("(float *)", data)
 
-      @virtualize
-      def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
-        var off = var_new(0)
-        for (batchIndex <- 0 until (length / batchSize): Rep[Range]) {
-          val dataPtr = slice(data, off)
-          val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
-          val targets = slice(target, batchIndex * batchSize)
-          f(batchIndex, t, targets)
-          off += t.scalarCount
-        }
+      // helper offset value
+      var offset: Rep[Int] = (0)
+      def next(size: Rep[Int] = 1): Rep[Int] = {val temp = offset; offset += size; temp}
+
+      // get batchSize and numBatches
+      val batchSize: Rep[Int] = dataInt(next())  // batchSize is 32, and numBatches is 891
+      val numBatches: Rep[Int] = dataInt(next())
+
+      // get array to store information for each batch
+      val freqSizes: Rep[Array[Int]] = NewArray[Int](numBatches)
+      val maxLengths: Rep[Array[Int]] = NewArray[Int](numBatches)
+      // get array of arrays to store the pointers to data
+      val inputs: Rep[Array[Array[Float]]] = NewArray[Array[Float]](numBatches)
+      val percents: Rep[Array[Array[Float]]] = NewArray[Array[Float]](numBatches)
+      val targetSizes: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
+      val targets: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
+
+      for (batch <- (0 until numBatches)) {
+        // First, get frequency_size and max_length
+        freqSizes(batch) = dataInt(next())  // freqSize is 161, and maxLength is 229
+        maxLengths(batch) = dataInt(next())
+        // then the sound tensor of float [batchSize * 1 * freqSize * maxLength]
+        inputs(batch) = slice(dataFloat, next(batchSize * freqSizes(batch) * maxLengths(batch)))
+        // then the percentage tensor of float [batchSize] (percentage of padding for each sound)
+        percents(batch) = slice(dataFloat, next(batchSize))
+        // then the targetSize tensor of Int[batchSize]
+        targetSizes(batch) = slice(dataInt, next(batchSize))
+        val sumTargetSize: Rep[Int] = unchecked[Int]("accumulate(", targetSizes(batch), ", ", targetSizes(batch), " + ", batchSize, ", 0)")
+        // then the targets tensor of Int[sum(targetSize)]
+        targets(batch) = slice(dataInt, next(sumTargetSize))
       }
     }
+
   }
 
   def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
