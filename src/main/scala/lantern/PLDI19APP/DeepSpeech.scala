@@ -134,10 +134,9 @@ object DeepSpeech {
           tmp
         }
 
-        val rnns = ArrayBuffer[BatchRNN]()
-        rnns += BatchRNN(s"batch_rnn0", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
-        for (layer <- (1 until numLayers): Range) {
-          rnns += BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
+        val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
+          if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
+          else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
         }
 
         val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
@@ -170,7 +169,9 @@ object DeepSpeech {
           val step2 = step1.resize(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
 
-          def rec(rnns: ArrayBuffer[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
+          // def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
+          // this maybe better for code generation
+          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
           val step4 = rec(rnns, step3)
 
           val step5 = bidirectional match {

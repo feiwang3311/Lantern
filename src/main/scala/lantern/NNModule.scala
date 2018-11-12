@@ -58,36 +58,49 @@ trait NNModule extends TensorDsl {
       }
 
       val allFields = this.getClass.getDeclaredFields
+      // this part may take more than needed. For instance, all Option or ArrayBuffer type are included due to type erasure
       val subParameters = allFields.filter { f =>
         classOf[Option[TensorR]].isAssignableFrom(f.getType) ||
         classOf[TensorR].isAssignableFrom(f.getType) ||
-        classOf[ArrayBuffer[TensorR]].isAssignableFrom(f.getType)
+        classOf[Seq[TensorR]].isAssignableFrom(f.getType)
       }
       val subModules = allFields.filter { f =>
-        classOf[Module].isAssignableFrom(f.getType) && oops[Boolean](f) { _.get(this) != this }
+        classOf[Module].isAssignableFrom(f.getType) && oops[Boolean](f) { _.get(this) != this } ||
+        classOf[Option[Module]].isAssignableFrom(f.getType) ||
+        classOf[Seq[Module]].isAssignableFrom(f.getType)
       }
 
       subParameters.foreach { field => oops[Unit](field) { x =>
         val field = x.get(this)
         val name = x.getName
-        val fullName = s"$nameScope$name"
+        val fullName = s"${nameScope}${name}"
         field match {
           case t: TensorR => parameters.update(fullName, (t, None))
-          // FIXME: Type argument `TensorR` is eliminated by type erasure.
-          case arr: ArrayBuffer[TensorR] =>
-            arr.zipWithIndex.foreach { case (t, i) =>
-              val name = s"$fullName$i"
+          case arr@((a: TensorR) +: rest) =>
+            arr.asInstanceOf[Seq[TensorR]].zipWithIndex.foreach { case (t, i) =>
+              val name = s"${fullName}_index_$i"
               parameters.update(name, (t, None))
             }
           case Some(t: TensorR) => parameters.update(fullName, (t, None))
-          case None => ()
+          case _ => ()
         }
       }}
       subModules.foreach { field => oops[Unit](field) { x =>
-        val module = x.get(this).asInstanceOf[Module]
-        modules.update(s"$nameScope${x.getName}", module)
-        module.registerParameters(s"$nameScope${x.getName}/")
+        val field = x.get(this)
+        val name = x.getName
+        val fullName = s"${nameScope}${name}"
+        field match {
+          case t: Module => modules.update(fullName, t)
+          case arr@((a: Module) +: rest) =>
+            arr.asInstanceOf[Seq[Module]].zipWithIndex.foreach { case (t, i) =>
+              val name = s"${fullName}_index_$i"
+              modules.update(name, t)
+            }
+          case Some(t: Module) => modules.update(fullName, t)
+          case _ => ()
+        }
       }}
+      modules.foreach {case (name, module) => module.registerParameters(s"${name}/")}
     }
   }
 
@@ -291,7 +304,8 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     // Initialize parameter buffer.
     // cuDNN requires that all parameters are stored in a contiguous buffer.
     // NOTE: Choose different initialization strategy?
-    lazy val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
+    // TODO (Fei Wang): For now we are resigtering this big TensorR, not the pieces of weights and biases. (Better to fix later)
+    lazy val parameterBuffer = TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f))
 
     def getParameterSize(): Int = {
       val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections

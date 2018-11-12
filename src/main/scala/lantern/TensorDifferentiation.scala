@@ -3005,6 +3005,11 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   @virtualize
+  def If(c: Boolean)(a: => TensorR @diff)(b: => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+    if (c) RST(k(a)) else RST(k(b))
+  }
+
+  @virtualize
   def IFm(c: Rep[Boolean])(a: => ArrayBuffer[TensorR] @diff)(b: => ArrayBuffer[TensorR] @diff): ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
     val k1 = FUNm(k)
     if (c) RST(k1(a)) else RST(k1(b))
