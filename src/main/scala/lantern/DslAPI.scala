@@ -451,10 +451,6 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  data[index] = value;
       |}
       |
-      |__global__ void arrayFill(float *data, float value) {
-      |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-      |  data[tid] = value;
-      |}
       |__global__ void arrayFill_greg(float* data, float value, int size) {
       |  int stride = gridDim.x * blockDim.x;
       |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -593,71 +589,10 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
-      |__global__ void concat2D_1D_loop(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
-      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid >= sizeLow) return;
-      |  if (blockIdx.y < sizeHigh) { // the first input
-      |    int index_out = tid + blockIdx.y * sizeLow * (sizeDim1 + sizeDim2);
-      |    int index_in1 = tid + blockIdx.y * sizeLow * sizeDim1;
-      |    for (int i = 0; i < sizeDim1; i++) {
-      |      out[index_out] = in1[index_in1];
-      |      index_out += sizeLow; index_in1 += sizeLow;
-      |    }
-      |  } else { // the second input
-      |    int index_out = tid + (blockIdx.y - sizeHigh) * sizeLow * (sizeDim1 + sizeDim2) + sizeLow * sizeDim1;
-      |    int index_in2 = tid + (blockIdx.y - sizeHigh) * sizeLow * sizeDim2;
-      |    for (int i = 0; i < sizeDim2; i++) {
-      |      out[index_out] = in2[index_in2];
-      |      index_out += sizeLow; index_in2 += sizeLow;
-      |    }
-      |  }
-      |}
-      |
-      |__global__ void concat2D_1D_loop_grad(float* in1, float* in2, float* out, int sizeLow, int sizeHigh, int sizeDim1, int sizeDim2) {
-      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid >= sizeLow) return;
-      |  if (blockIdx.y < sizeHigh) { // the first input
-      |    int index_out = tid + blockIdx.y * sizeLow * (sizeDim1 + sizeDim2);
-      |    int index_in1 = tid + blockIdx.y * sizeLow * sizeDim1;
-      |    for (int i = 0; i < sizeDim1; i++) {
-      |      in1[index_in1] += out[index_out];
-      |      index_out += sizeLow; index_in1 += sizeLow;
-      |    }
-      |  } else { // the second input
-      |    int index_out = tid + (blockIdx.y - sizeHigh) * sizeLow * (sizeDim1 + sizeDim2) + sizeLow * sizeDim1;
-      |    int index_in2 = tid + (blockIdx.y - sizeHigh) * sizeLow * sizeDim2;
-      |    for (int i = 0; i < sizeDim2; i++) {
-      |      in2[index_in2] += out[index_out];
-      |      index_out += sizeLow; index_in2 += sizeLow;
-      |    }
-      |  }
-      |}
-      |
-      |__global__ void concat2D_1D(float* in1, float* in2, float* out, int dim2, int bound) {
-      |  int tid = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (blockIdx.x < bound * dim2) {
-      |    int subid = blockIdx.y * bound * dim2 * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
-      |    out[tid] = in1[subid];
-      |  } else {
-      |    int subid = blockIdx.y * (gridDim.x - bound * dim2) * blockDim.x + (blockIdx.x - bound * dim2) * blockDim.x + threadIdx.x;
-      |    out[tid] = in2[subid];
-      |  }
-      |}
-      |
-      |__global__ void concat2D_1D_grad(float* in1, float* in2, float* out, int dim2, int bound) {
-      |  int tid = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (blockIdx.x < bound * dim2) {
-      |    int subid = blockIdx.y * bound * dim2 * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
-      |    in1[subid] += out[tid];
-      |  } else {
-      |    int subid = blockIdx.y * (gridDim.x - bound * dim2) * blockDim.x + (blockIdx.x - bound * dim2) * blockDim.x + threadIdx.x;
-      |    in2[subid] += out[tid];
-      |  }
-      |}
-      |
       |__global__ void adagrad_update_1D_1D(float* x, float* d, float* m, float clip, float lr, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) {
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride) {
       |    if (d[tid] > clip) d[tid] = clip;
       |    if (d[tid] < -clip) d[tid] = -clip;
       |    m[tid] += d[tid] * d[tid];
@@ -668,63 +603,91 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |
       |__global__ void elementwise_1D_1D_mul(float* in1, float* in2, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] = in1[tid] * in2[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in1[tid] * in2[tid];
       |}
       |
       |__global__ void elementwise_1D_1D_mul_mutate(float* in1, float* in2, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] += in1[tid] * in2[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] += in1[tid] * in2[tid];
       |}
       |
       |__global__ void elementwise_1D_1D_add(float* in1, float* in2, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] = in1[tid] + in2[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in1[tid] + in2[tid];
       |}
       |
       |__global__ void elementwise_1D_1D_minus(float* in1, float* in2, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] = in1[tid] - in2[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in1[tid] - in2[tid];
       |}
       |
       |__global__ void elementwise_1D_1D_div(float* in1, float* in2, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] = in1[tid] / in2[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in1[tid] / in2[tid];
       |}
       |
       |__global__ void elementwise_1D_1D_exp(float* in, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] = exp(in[tid]);
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = exp(in[tid]);
       |}
       |__global__ void elementwise_1D_1D_log(float* in, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] = log(in[tid]);
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = log(in[tid]);
       |}
       |__global__ void elementwise_1D_1D_sqrt(float* in, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] = sqrt(in[tid]);
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = sqrt(in[tid]);
       |}
       |
       |__global__ void elementwise_1D_1D_square(float* in, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) out[tid] = in[tid] * in[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in[tid] * in[tid];
       |}
       |
       |__global__ void elementwise_1D_1D_exp_grad(float* in_x, float* in_d, float* out_x, float * out_d, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) in_d[tid] += out_d[tid] * out_x[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) in_d[tid] += out_d[tid] * out_x[tid];
       |}
+      |
       |__global__ void elementwise_1D_1D_log_grad(float* in_x, float* in_d, float* out_x, float * out_d, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) in_d[tid] += out_d[tid] / in_x[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) in_d[tid] += out_d[tid] / in_x[tid];
       |}
+      |
       |__global__ void elementwise_1D_1D_sqrt_grad(float* in_x, float* in_d, float* out_x, float * out_d, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) in_d[tid] += out_d[tid] / out_x[tid] / 2;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) in_d[tid] += out_d[tid] / out_x[tid] / 2;
       |}
       |
       |__global__ void elementwise_1D_1D_square_grad(float* in_x, float* in_d, float* out_x, float * out_d, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      |  if (tid < size) in_d[tid] += out_d[tid] * 2 * in_x[tid];
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) in_d[tid] += out_d[tid] * 2 * in_x[tid];
       |}
       |
       |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/THC/THCIntegerDivider.cuh

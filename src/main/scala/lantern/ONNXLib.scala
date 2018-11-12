@@ -539,7 +539,7 @@ trait ONNXLib extends TensorDsl {
     // read the nodes and build the function for inference
     def inference_func(initializer_map_tensor: Map[String, Tensor]): (Tensor => Tensor) = { x: Tensor =>
     // lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
-      assert(x.dimensions == x_dims, "input tensor is not of the correct dimensions")
+      Tensor.assertShapeEqual(x.shape, Dimensions(x_dims))
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
       val intermediate_map_tensor: MMap[String, Tensor] = MMap()
@@ -770,7 +770,7 @@ trait ONNXLib extends TensorDsl {
       val initializer_map_tensorR: Map[String, TensorR] = initializer_map_tensor.map { case(name, tensor) => (name -> TensorR(tensor))}
       val func = { x: TensorR =>
         // lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
-        assert(x.x.dimensions == x_dims, "input tensor is not of the correct dimensions")
+        Tensor.assertShapeEqual(x.x.shape, Dimensions(x_dims), "input tensor is not of the correct dimensions")
 
         // generate Tensors (or TensorRs) of intermediate steps and inputs
         val intermediate_map_tensorR: MMap[String, TensorR] = MMap()

@@ -204,7 +204,7 @@ trait TensorDsl extends DslOps with Diff {
 
   @virtualize
   def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = {
-    if(!cond) { printf(msg, args : _*); exit() }
+    if(!cond) { printf(msg, args : _*); error("") }
   }
 
   def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
@@ -235,7 +235,8 @@ trait TensorDsl extends DslOps with Diff {
       case (dim, seq@(t +: q)) => (dim * t) +: seq
     }
 
-    override def toString = dims mkString " x "
+    // override def toString = dims mkString " x "
+    override def toString = dims.foldLeft(""){case (l, r) => l + " x " + r.toString}
 
     lazy val product1: Rep[Int] = dims.foldLeft(unit(1)){case (l, r) => l * r}
     lazy val sum1: Rep[Int] = dims.foldLeft(unit(0)){case (l, r) => l + r}
@@ -571,7 +572,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
-      assert(x.shape(0) == y.shape(0))
+      assertC(x.shape(0) == y.shape(0), "vector vector dot not the same %d %d", x.shape(0), y.shape(0))
       val value = var_new(0.0f)
       for (i <- DataLoop(x.shape.last)) {
         value += x.data(i) * y.data(i)
@@ -582,7 +583,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
-      assert(x.shape(1) == y.shape(0))
+      assertC(x.shape(1) == y.shape(0), "matrix vector dot dim1 of x (%d) is not the same with dim0 of y (%d)", x.shape(1), y.shape(0))
       val dim1 = x.shape(0)
       val dim2 = x.shape(1)
       val res = mallocArray[Float](dim1)
@@ -594,7 +595,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = {
-      assert(x.shape(1) == y.shape(0))
+      assertC(x.shape(1) == y.shape(0), "matrix matrix dot dim1 of x (%d) is not the same with dim0 of y (%d)", x.shape(1), y.shape(0))
       val dim1 = x.shape(0)
       val dim2 = x.shape(1)
       val dim3 = y.shape(1)
@@ -639,8 +640,10 @@ trait TensorDsl extends DslOps with Diff {
     @virtualize
     def elementWiseOpWithBroadCast(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
-        case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
+        // this check is not longer valid because dimBroadcast never returns None
+        // case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) => {
+          assertC(SeqRBOps(resShape).forall(_ > 0), "broadcasting dim not match %s %s", x.shape.toString, y.shape.toString)
           val resData = mallocArray[Float](resShape.scalarCount)
           val res = new Tensor(resData, resShape)
 
@@ -670,6 +673,7 @@ trait TensorDsl extends DslOps with Diff {
           inplace(0, 0, 0, 0)
           res
         }
+        case _ => ???
       }
     }
 
@@ -2265,16 +2269,15 @@ trait TensorDsl extends DslOps with Diff {
     def dropout(prob: Float = 0.5f) =
       backend.dropout(this, prob)
 
-    // TODO make concat backend-dependent, and implement backendGPU concat and concat_grad (split)
     @virtualize
     def concat(dim: Int, others: Tensor*) = {
       assert(others.size >= 1, "there should be at least one tensor in others")
       assert(dim >= 0 && dim < this.rank, "dim should be within range of this.nbDims")
       assert(others.forall(x => x.rank == this.rank), "all tensors should have the same number of dimensions")
-      assert(others.forall(x => (0 until this.rank: Range).forall(i =>  i == dim || x.shape(i) == this.shape(i))),
-        "all dimensions except the concatenation dimension should be the same")
+      assertC(SeqRBOps(others).forall{t=> SeqRBOps(0 until this.rank: Range).forall{i => t.shape(i) == this.shape(i) || i == dim}},
+              "all dimensions except the concatenation dimension should be the same")
 
-      // call backend-specific function for this.
+      generateRawComment("back prop for concat")
       backend.concat(dim: Int, this +: others)
     }
 
@@ -2393,23 +2396,24 @@ trait TensorDsl extends DslOps with Diff {
       (a.shape == b.shape) || a.isScalar || b.isScalar
     }
 
+    @virtualize
     def dimBroadcast(a: Seq[Rep[Int]], b: Seq[Rep[Int]]): Option[(Dimensions, Dimensions, Dimensions)] = {
       def bc(a: Seq[Rep[Int]], b: Seq[Rep[Int]], trail: List[Rep[Int]]): List[Rep[Int]] = {
         if (a.size == 0) b.toList ++ trail
         else if (b.size == 0) a.toList ++ trail
-        else if (a.last == 1) bc(a.init, b.init, b.last :: trail)
-        else if (b.last == 1) bc(a.init, b.init, a.last :: trail)
+        else if (a.last == unit(1)) bc(a.init, b.init, b.last :: trail)
+        else if (b.last == unit(1)) bc(a.init, b.init, a.last :: trail)
         else if (a.last == b.last) bc(a.init, b.init, a.last :: trail)
-        else List(-1) // indicate dim not Compatible by broadcast
+        else List(-7) // indicate dim not Compatible by broadcast
       }
       val res: List[Rep[Int]] = bc(a, b, List())
-      if (res == List(-1)) None
-      else {
+      // if (res == List(-7)) None
+      // else {
         // add dimensions of 1 to tensors with smaller rank
-        if (a.size > b.size) Some((Dimensions(a), Dimensions(Seq.fill(a.size - b.size)(unit(1)) ++ b), Dimensions(res)))
-        else if (a.size < b.size) Some((Dimensions(Seq.fill(b.size - a.size)(unit(1)) ++ a), Dimensions(b), Dimensions(res)))
-        else Some((Dimensions(a), Dimensions(b), Dimensions(res)))
-      }
+      if (a.size > b.size) Some((Dimensions(a), Dimensions(Seq.fill(a.size - b.size)(unit(1)) ++ b), Dimensions(res)))
+      else if (a.size < b.size) Some((Dimensions(Seq.fill(b.size - a.size)(unit(1)) ++ a), Dimensions(b), Dimensions(res)))
+      else Some((Dimensions(a), Dimensions(b), Dimensions(res)))
+      // }
     }
 
     def randseed(seed: Int) = unchecked[Unit]("srand(", seed, ")")
@@ -2500,9 +2504,15 @@ trait TensorDsl extends DslOps with Diff {
     def fromData(dims: Seq[Int], scalars: Float*): Tensor = backend.makeTensor(dims, scalars: _*)
 
     @virtualize
+    def assertShapeEqual(a: Dimensions, b: Dimensions, errorPrefix: String = "") = {
+      assert(a.dims.size == b.dims.size, s"$errorPrefix: tensors are not of the same rank, got ${a.dims.size} and ${b.dims.size}")
+      assertC(SeqRBOps(a.dims zip b.dims).forall{case (a, b) => a == b}, "$errorPrefix: tensor shapes are not equal %s, %s\\n", a.toString, b.toString)
+    }
+
+    @virtualize
     def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.000001f) = {
       val errorPrefix = if (mark.nonEmpty) s"ERROR ($mark)" else "ERROR"
-      assert(a.shape == b.shape, s"$errorPrefix: tensor shapes are not equal, ${a.shape.seq} != ${b.shape.seq}\\n")
+      assertShapeEqual(a.shape, b.shape)
 
       val i = var_new(0)
       while (i < a.scalarCount && { val diff = a.data(i) - b.data(i); diff > -tal && diff < tal }) {
@@ -3219,10 +3229,10 @@ trait TensorDsl extends DslOps with Diff {
     val result = Tensor(res, 1)
     reset {
       val y = f(x1)
-      assert(y.x.scalarCount == 1, s"Loss function must return a Tensor of size 1, got ${y.x.scalarCount}")
+      generateRawComment("make sure the size of loss is 1")
+      assertC(y.x.scalarCount == unit(1), "Loss function must return a Tensor of size 1, got %d\\n", y.x.scalarCount)
       y.d.setAsOne()
       generateRawComment(s"backend is $backend")
-      // result.copy_data(y.x)
       if (backend.isInstanceOf[BackendCPU]) BackendCPU().copyFloatArray(res, y.x.data, 1)
       else unchecked[Unit]("CUDA_CALL(cudaMemcpy(", res, ", ", y.x.data, ", ", 1, " * sizeof(float), cudaMemcpyDeviceToHost))")
       ()
@@ -3379,9 +3389,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       // TODO: Consider different grid/block parameters.
       val size = x.scalarCount
-      val nGrid = size / 512 / 10 + 1
+      val nGrid = 28 // size / 512 / 10 + 1
       unchecked[Unit](s"arrayFill_greg<<<${nGrid}, 512>>>(", x.data, ", ", value, ", ", size, ")")
-      // unchecked[Unit](s"arrayFill<<<${x.scalarCount}, 1>>>(", x.data, ", ", value, ")")
     }
 
     // TODO: Implement random initialization using cuRAND API.
@@ -3562,8 +3571,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Tensor = {
       // TODO (Fei Wang): bandit solution, since the broadcasted solution is buggy now, and we don't need broadcast for now, let's have a same-shape special case
       if (x.shape == y.shape) {
-        val gridDimX = (x.scalarCount + 511) / 512
-        assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
+        val gridDimX = 28 // (x.scalarCount + 511) / 512
+        // assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
 
         val resData = mallocArray[Float](x.scalarCount)
         val res = Tensor(resData, x.shape: _*)
@@ -3612,8 +3621,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
       // x.d += y.x * output.d; y.d += x.x * output.d
       assert (x.x.shape == y.x.shape && y.x.shape == output.x.shape, s"only applicable to same-shape element wise mul")
-      val gridDimX = (x.x.scalarCount + 511) / 512
-      assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
+      val gridDimX = 28 //(x.x.scalarCount + 511) / 512
+      // assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
       unchecked[Unit](s"elementwise_1D_1D_mul_mutate<<<${gridDimX}, 512>>>(", y.x.data, ", ", output.d.data, ", ", x.d.data, ", ", x.x.scalarCount, ")")
       unchecked[Unit](s"elementwise_1D_1D_mul_mutate<<<${gridDimX}, 512>>>(", x.x.data, ", ", output.d.data, ", ", y.d.data, ", ", x.x.scalarCount, ")")
     }
@@ -3630,8 +3639,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def mul_sub(in1: Tensor, in2: Tensor): Tensor = ???
     override def mul_sub_grad(in1: TensorR, in2: TensorR, res: TensorR): Unit = ???
 
-    override def plusBias(main: Tensor, bias: Tensor): Tensor = { ??? }
-    override def plusBias_grad(main: TensorR, bias: TensorR): Unit = { ??? }
+    override def plusBias(main: Tensor, bias: Tensor): Tensor = ???
+    override def plusBias_grad(main: TensorR, bias: TensorR): Unit = ???
 
     override def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean, beta: Float, output: Tensor): Unit = {
       val alpha1 = NewArray[Float](1); alpha1(0) = alpha
@@ -3685,68 +3694,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       this.geam(x.d, false, 1.0f, y.d, true, 1.0f, x.d)
     }
 
-    override def permute(x: Tensor, dims: Int*): Tensor = { ???
-      // assert(dims.sorted == ((0 until x.rank): Range), s"permutation dimensions should be within ranks, got ${x.shape}, ${dims}")
-      // val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(i => x.shape(i)): _*)
-
-      // if (!permuteKernelMap.contains(x.shape ++ dims)) {
-      //   permuteKernelMap(x.shape ++ dims) = (s"""
-      //    |__global__ void permute${next}(float * in, float * out) {
-      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      //    |  int stride = gridDim.x * blockDim.x;
-      //    |  int xstrides[] = {${x.shape.strides.mkString(", ")}};
-      //    |  int ystrides[] = {${resTensor.shape.strides.mkString(", ")}};
-      //    |  int dims[] = {${dims.mkString(", ")}};
-      //    |  int xindex[] = {0, 0, 0, 0};  // this line may be uncessary too
-      //    |  for (; tid < ${x.scalarCount}; tid += stride) {
-      //    |    int linearIndex = tid;
-      //    |    int yIndex = 0;
-      //    |    for (int i = 0; i < ${x.rank}; ++i) {
-      //    |       xindex[i] = linearIndex / xstrides[i];
-      //    |       linearIndex = linearIndex - xstrides[i] * xindex[i];
-      //    |       yIndex += xindex[i] * ystrides[dims[i]];
-      //    |    }
-      //    |    out[yIndex] = in[tid];
-      //    |  }
-      //    |}
-      //   """.stripMargin, s"permute${next}")
-      //   next = next + 1
-      // }
-      // val kernelFuncName: String = permuteKernelMap(x.shape ++ dims)._2
-      // val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
-      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", x.data, ", ", resTensor.data, ")")
-      // resTensor
-    }
-
-    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = { ???
-      // assert(dims.sorted == ((0 until x.x.rank): Range), s"permutation dimensions should be within ranks, got ${x.x.shape}, ${dims}")
-      // if (!permuteGradKernelMap.contains(x.x.shape ++ dims)) {
-      //   permuteGradKernelMap(x.x.shape ++ dims) = (s"""
-      //    |__global__ void permute_grad${next}(float * in, float * out) {
-      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      //    |  int stride = gridDim.x * blockDim.x;
-      //    |  int xstrides[] = {${x.x.shape.strides.mkString(", ")}};
-      //    |  int ystrides[] = {${y.x.shape.strides.mkString(", ")}};
-      //    |  int dims[] = {${dims.mkString(", ")}};
-      //    |  int xindex[] = {0, 0, 0, 0};  // this line may be uncessary too
-      //    |  for (; tid < ${x.x.scalarCount}; tid += stride) {
-      //    |    int linearIndex = tid;
-      //    |    int yIndex = 0;
-      //    |    for (int i = 0; i < ${x.x.rank}; ++i) {
-      //    |       xindex[i] = linearIndex / xstrides[i];
-      //    |       linearIndex = linearIndex - xstrides[i] * xindex[i];
-      //    |       yIndex += xindex[i] * ystrides[dims[i]];
-      //    |    }
-      //    |    in[tid] += out[yIndex];
-      //    |  }
-      //    |}
-      //   """.stripMargin, s"permute_grad${next}")
-      //   next = next + 1
-      // }
-      // val kernelFuncName: String = permuteGradKernelMap(x.x.shape ++ dims)._2
-      // val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
-      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", x.d.data, ", ", y.d.data, ")")
-    }
+    override def permute(x: Tensor, dims: Int*): Tensor = ???
+    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = ???
 
     override def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor = {
       (transX, transY) match {
@@ -3946,50 +3895,37 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val SquareGrad = Value("SQUARE_GRAD")
     }
 
-    def elementwiseOpNoBroadcast(input: Tensor, op: ElementWiseNoBroadCastOpt.Value, inplace: Boolean = false): Tensor = { ???
-      // TODO (Fei Wang): use fixed numBlocks 28 for this function
-      // val b: Rep[Boolean] = (input.scalarCount <= 512 * 65535)
-      // __ifThenElse( b, {
-      //   val numBlocks = (input.scalarCount + 511) / 512
-      //   val res = if (inplace) input.data else mallocArray[Float](input.scalarCount)
-      //   op match {
-      //     case ElementWiseNoBroadCastOpt.Log =>
-      //       unchecked[Unit](s"elementwise_1D_1D_log<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
-      //     case ElementWiseNoBroadCastOpt.Exp =>
-      //       unchecked[Unit](s"elementwise_1D_1D_exp<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
-      //     case ElementWiseNoBroadCastOpt.Sqrt =>
-      //       unchecked[Unit](s"elementwise_1D_1D_sqrt<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
-      //     case ElementWiseNoBroadCastOpt.Square =>
-      //       unchecked[Unit](s"elementwise_1D_1D_square<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ");\n")
-      //     case _ => ???
-      //   }
-      //   Tensor(res, input.shape: _*)
-      // } , {
-      //   assert(false, s"not implemented for tensors larger than 1D grid * 1D block, got ${input.shape}")
-      //   ???
-      // })
+    def elementwiseOpNoBroadcast(input: Tensor, op: ElementWiseNoBroadCastOpt.Value, inplace: Boolean = false): Tensor = {
+      val numBlocks = 28 // (input.scalarCount + 511) / 512
+      val res = if (inplace) input.data else mallocArray[Float](input.scalarCount)
+      op match {
+        case ElementWiseNoBroadCastOpt.Log =>
+          unchecked[Unit](s"elementwise_1D_1D_log<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.Exp =>
+          unchecked[Unit](s"elementwise_1D_1D_exp<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.Sqrt =>
+          unchecked[Unit](s"elementwise_1D_1D_sqrt<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.Square =>
+          unchecked[Unit](s"elementwise_1D_1D_square<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
+        case _ => ???
+      }
+      Tensor(res, input.shape: _*)
     }
 
     @virtualize
-    def elementwiseOpNoBroadcastGrad(input: TensorR, output: TensorR, op: ElementWiseNoBroadCastOpt.Value): Unit = { ???
-      // TODO (Fei Wang): use fixed numBlocks 28 for this function
-      // if (input.x.scalarCount <= 512 * 65535) {
-      //   val numBlocks = (input.x.scalarCount + 511) / 512
-      //   op match {
-      //     case ElementWiseNoBroadCastOpt.LogGrad =>
-      //       unchecked[Unit](s"elementwise_1D_1D_log_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
-      //     case ElementWiseNoBroadCastOpt.ExpGrad =>
-      //       unchecked[Unit](s"elementwise_1D_1D_exp_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
-      //     case ElementWiseNoBroadCastOpt.SqrtGrad =>
-      //       unchecked[Unit](s"elementwise_1D_1D_sqrt_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
-      //     case ElementWiseNoBroadCastOpt.SquareGrad =>
-      //       unchecked[Unit](s"elementwise_1D_1D_square_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ");\n")
-      //     case _ => ???
-      //   }
-      // } else {
-      //   assert(false, s"not implemented for tensors larger than 1D grid * 1D block, got ${input.x.shape}")
-      //   ???
-      // }
+    def elementwiseOpNoBroadcastGrad(input: TensorR, output: TensorR, op: ElementWiseNoBroadCastOpt.Value): Unit = {
+      val numBlocks = 28 // (input.x.scalarCount + 511) / 512
+      op match {
+        case ElementWiseNoBroadCastOpt.LogGrad =>
+          unchecked[Unit](s"elementwise_1D_1D_log_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.ExpGrad =>
+          unchecked[Unit](s"elementwise_1D_1D_exp_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.SqrtGrad =>
+          unchecked[Unit](s"elementwise_1D_1D_sqrt_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.SquareGrad =>
+          unchecked[Unit](s"elementwise_1D_1D_square_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
+        case _ => ???
+      }
     }
 
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
@@ -3997,16 +3933,12 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
       val batchSize = x.shape(0)
       val res = Tensor(mallocArray[Float](batchSize), batchSize)
-      unchecked[Unit](
-        s"nllLoss<<<${batchSize}, 1>>>(", x.data, ",", x.shape.strides(0), ",",
-        res.data, ",", target, ")")
+      unchecked[Unit]("nllLoss<<<", batchSize, ", 1>>>(", x.data, ", ", x.shape.strides(0), ", ", res.data, ", ", target, ")")
       res
     }
 
     override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
-      unchecked[Unit](
-        s"nllLoss_grad<<<${input.d.shape(0)}, 1>>>(", input.d.shape.strides(0), ",",
-        res.d.data, ",", target, ",", input.d.data, ")")
+      unchecked[Unit]("nllLoss_grad<<<", input.d.shape(0), ", 1>>>(", input.d.shape.strides(0), ", ", res.d.data, ", ", target, ", ", input.d.data, ")")
     }
 
     override def sum(x: Tensor): Tensor = ???
@@ -4074,9 +4006,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
     override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
       assert(descent, s"TODO: only handle gradient descent (not ascent) so far")
-      assert(tr.x.shape == t.shape, s"tensor and momentum should have the same shape, got ${tr.x.shape} and ${t.shape}")
-      val gridDimX = (t.scalarCount + 511) / 512
-      assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
+      // assert(tr.x.shape == t.shape, s"tensor and momentum should have the same shape, got ${tr.x.shape} and ${t.shape}")
+      val gridDimX = 28 // (t.scalarCount + 511) / 512
+      // assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
       unchecked[Unit](s"adagrad_update_1D_1D<<<${gridDimX}, 512>>>(", tr.x.data, ", ", tr.d.data, ", ", t.data, ", ", gradClip, ", ", learning_rate, ", ", t.scalarCount, ")")
     }
   }
@@ -4220,6 +4152,94 @@ trait TensorDslCudnn extends TensorDslCublas {
       // cudnnReduceTensor(temp, ReductionOp.Add, (0 until (in1.x.rank - in2.x.rank)), true, Some(in2.d.data), false)
     }
 
+    override def permute(x: Tensor, dims: Int*): Tensor = { ???
+      // if (dims == Seq(0, 2, 3, 1))
+      // val one = NewArray[Float](1); one(0) = 1
+      // val zero = NewArray[Float](0); zero(0) = 0
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t in_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
+      //     |
+      //     |cudnnTensorDescriptor_t out_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    ${resShape(0)}, ${resShape(1)}, ${resShape(2)}, ${resShape(3)}));
+      //     |
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnAddTensor(\n" +
+      //     "    cudnnHandle, ", scaled, ", bias_desc, ", bias.data, ", ", one, ", out_desc, ", res.data, "));\n" +
+      //     "}"): _*
+      // )
+      // assert(dims.sorted == ((0 until x.rank): Range), s"permutation dimensions should be within ranks, got ${x.shape}, ${dims}")
+      // val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(i => x.shape(i)): _*)
+
+      // if (!permuteKernelMap.contains(x.shape ++ dims)) {
+      //   permuteKernelMap(x.shape ++ dims) = (s"""
+      //    |__global__ void permute${next}(float * in, float * out) {
+      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      //    |  int stride = gridDim.x * blockDim.x;
+      //    |  int xstrides[] = {${x.shape.strides.mkString(", ")}};
+      //    |  int ystrides[] = {${resTensor.shape.strides.mkString(", ")}};
+      //    |  int dims[] = {${dims.mkString(", ")}};
+      //    |  int xindex[] = {0, 0, 0, 0};  // this line may be uncessary too
+      //    |  for (; tid < ${x.scalarCount}; tid += stride) {
+      //    |    int linearIndex = tid;
+      //    |    int yIndex = 0;
+      //    |    for (int i = 0; i < ${x.rank}; ++i) {
+      //    |       xindex[i] = linearIndex / xstrides[i];
+      //    |       linearIndex = linearIndex - xstrides[i] * xindex[i];
+      //    |       yIndex += xindex[i] * ystrides[dims[i]];
+      //    |    }
+      //    |    out[yIndex] = in[tid];
+      //    |  }
+      //    |}
+      //   """.stripMargin, s"permute${next}")
+      //   next = next + 1
+      // }
+      // val kernelFuncName: String = permuteKernelMap(x.shape ++ dims)._2
+      // val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
+      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", x.data, ", ", resTensor.data, ")")
+      // resTensor
+    }
+
+    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = { ???
+      // assert(dims.sorted == ((0 until x.x.rank): Range), s"permutation dimensions should be within ranks, got ${x.x.shape}, ${dims}")
+      // if (!permuteGradKernelMap.contains(x.x.shape ++ dims)) {
+      //   permuteGradKernelMap(x.x.shape ++ dims) = (s"""
+      //    |__global__ void permute_grad${next}(float * in, float * out) {
+      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      //    |  int stride = gridDim.x * blockDim.x;
+      //    |  int xstrides[] = {${x.x.shape.strides.mkString(", ")}};
+      //    |  int ystrides[] = {${y.x.shape.strides.mkString(", ")}};
+      //    |  int dims[] = {${dims.mkString(", ")}};
+      //    |  int xindex[] = {0, 0, 0, 0};  // this line may be uncessary too
+      //    |  for (; tid < ${x.x.scalarCount}; tid += stride) {
+      //    |    int linearIndex = tid;
+      //    |    int yIndex = 0;
+      //    |    for (int i = 0; i < ${x.x.rank}; ++i) {
+      //    |       xindex[i] = linearIndex / xstrides[i];
+      //    |       linearIndex = linearIndex - xstrides[i] * xindex[i];
+      //    |       yIndex += xindex[i] * ystrides[dims[i]];
+      //    |    }
+      //    |    in[tid] += out[yIndex];
+      //    |  }
+      //    |}
+      //   """.stripMargin, s"permute_grad${next}")
+      //   next = next + 1
+      // }
+      // val kernelFuncName: String = permuteGradKernelMap(x.x.shape ++ dims)._2
+      // val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
+      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", x.d.data, ", ", y.d.data, ")")
+    }
+
+
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
     // Note: this function performs in-place addition for `res`.
     @virtualize
@@ -4239,19 +4259,19 @@ trait TensorDslCudnn extends TensorDslCublas {
       val scaled = NewArray[Float](1); scaled(0) = scale
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
-        Seq(s"""
+        Seq("""
           |{
           |cudnnTensorDescriptor_t bias_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&bias_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
+          |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${resShape(0)}, ${resShape(1)}, ${resShape(2)}, ${resShape(3)}));
+          |    """.stripMargin, resShape(0), ", ", resShape(1), ", ", resShape(2), ", ", resShape(3), """));
           |
           |""".stripMargin) ++
         Seq(
@@ -4269,25 +4289,25 @@ trait TensorDslCudnn extends TensorDslCublas {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
-        Seq(s"""
+        Seq("""
           |{
           |cudnnTensorDescriptor_t in_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ",  input.shape(3), """));
           |
           |cudnnFilterDescriptor_t filt_desc;
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
           |CUDNN_CALL(cudnnSetFilter4dDescriptor(
           |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-          |    ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
+          |    """.stripMargin, filter.shape(0), ", ", filter.shape(1), ", ", filter.shape(2), ", ", filter.shape(3), """));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), s"""));
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
@@ -4347,19 +4367,19 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resGradShape = resGrad.shape.padTo(4, 1)
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
-        Seq(s"""
+        Seq("""
           |{
           |cudnnTensorDescriptor_t grad_bias_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_bias_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    grad_bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
+          |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
           |
           |cudnnTensorDescriptor_t grad_out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${resGradShape(0)}, ${resGradShape(1)}, ${resGradShape(2)}, ${resGradShape(3)}));
+          |    """.stripMargin, resGradShape(0), ", ", resGradShape(1), ", ", resGradShape(2), ", ", resGradShape(3), """));
           |
           |""".stripMargin) ++
         Seq(
@@ -4383,19 +4403,19 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
           |CUDNN_CALL(cudnnSetFilter4dDescriptor(
           |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-          |    ${filter.shape(0)}, ${filter.shape(1)}, ${filter.shape(2)}, ${filter.shape(3)}));
+          |    """.stripMargin, filter.shape(0), ", ", filter.shape(1), ", ", filter.shape(2), ", ", filter.shape(3), """));
           |
           |cudnnTensorDescriptor_t grad_in_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${inputGrad.shape(0)}, ${inputGrad.shape(1)}, ${inputGrad.shape(2)}, ${inputGrad.shape(3)}));
+          |    """.stripMargin, inputGrad.shape(0), ", ", inputGrad.shape(1), ", ", inputGrad.shape(2), ", ", inputGrad.shape(3), """));
           |
           |cudnnTensorDescriptor_t grad_out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |    """.stripMargin, resGrad.shape(0), ", ", resGrad.shape(1), ", ", resGrad.shape(2), ", ", resGrad.shape(3), s"""));
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
@@ -4430,7 +4450,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardFilter
     def cudnnConvolutionBackwardFilter(filterGrad: Tensor, input: Tensor, resGrad: Tensor,
                                        padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
-      assert(resGrad.rank == 4, "Convolution result gradient must have rank 4")
+      assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -4439,19 +4459,19 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
           |CUDNN_CALL(cudnnSetFilter4dDescriptor(
           |    grad_filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-          |    ${filterGrad.shape(0)}, ${filterGrad.shape(1)}, ${filterGrad.shape(2)}, ${filterGrad.shape(3)}));
+          |    """.stripMargin, filterGrad.shape(0), ", ", filterGrad.shape(1), ", ", filterGrad.shape(2), ", ", filterGrad.shape(3), """));
           |
           |cudnnTensorDescriptor_t grad_out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${resGrad.shape(0)}, ${resGrad.shape(1)}, ${resGrad.shape(2)}, ${resGrad.shape(3)}));
+          |    """.stripMargin, resGrad.shape(0), ", ", resGrad.shape(1), ", ", resGrad.shape(2), ", ", resGrad.shape(3), """));
           |
           |cudnnTensorDescriptor_t in_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), s"""));
           |
           |cudnnConvolutionDescriptor_t conv_desc;
           |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
@@ -4553,13 +4573,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.shape(0)}, ${input.shape(1)}, ${input.shape(2)}, ${input.shape(3)}));
+          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), """));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${output.shape(0)}, ${output.shape(1)}, ${output.shape(2)}, ${output.shape(3)}));
+          |    """.stripMargin, output.shape(0), ", ", output.shape(1), ", ", output.shape(2), ", ", output.shape(3), s"""));
           |
           |cudnnPoolingDescriptor_t poolingDesc;
           |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
@@ -4596,13 +4616,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${output.x.shape(0)}, ${output.x.shape(1)}, ${output.x.shape(2)}, ${output.x.shape(3)}));
+          |    """.stripMargin, output.x.shape(0), ", ", output.x.shape(1), ", ", output.x.shape(2), ", ", output.x.shape(3), s"""));
           |
           |cudnnPoolingDescriptor_t poolingDesc;
           |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
@@ -4647,19 +4667,19 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), """));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), """));
           |
           |cudnnTensorDescriptor_t sbmv_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
+          |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
           |
           |""".stripMargin) ++
         Seq(
@@ -4685,19 +4705,19 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), """));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), """));
           |
           |cudnnTensorDescriptor_t sbmv_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
+          |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
           |
           |""".stripMargin) ++
         Seq(
@@ -4723,19 +4743,19 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${res.x.shape(0)}, ${res.x.shape(1)}, ${res.x.shape(2)}, ${res.x.shape(3)}));
+          |    """.stripMargin, res.x.shape(0), ", ", res.x.shape(1), ", ", res.x.shape(2), ", ", res.x.shape(3), """));
           |
           |cudnnTensorDescriptor_t sbmv_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
+          |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
           |
           |""".stripMargin) ++
         Seq(
@@ -4782,13 +4802,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${x.shape(0)}, ${x.shape(1)}, 1, 1));
+          |    """.stripMargin, x.shape(0), ", ", x.shape(1), """, 1, 1));
           |
           |cudnnTensorDescriptor_t sbmv_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    1, ${bias.shape(0)}, 1, 1));
+          |    1, """.stripMargin, bias.shape(0), """, 1, 1));
           |
           |""".stripMargin) ++
         Seq(
@@ -4812,13 +4832,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${x.shape(0)}, ${x.shape(1)}, 1, 1));
+          |    """.stripMargin, x.shape(0), ", ", x.shape(1), """, 1, 1));
           |
           |cudnnTensorDescriptor_t sbmv_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    1, ${bias.shape(0)}, 1, 1));
+          |    1, """.stripMargin, bias.shape(0), """, 1, 1));
           |
           |""".stripMargin) ++
         Seq(
@@ -4843,13 +4863,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.x.shape(0)}, ${input.x.shape(1)}, 1, 1));
+          |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), """, 1, 1));
           |
           |cudnnTensorDescriptor_t sbmv_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    1, ${bias.x.shape(0)}, 1, 1));
+          |    1, """.stripMargin, bias.x.shape(0), """, 1, 1));
           |
           |""".stripMargin) ++
         Seq(
@@ -4895,7 +4915,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       val output = Tensor.zeros_like(input)
       val reserveSpace: Rep[Array[Float]] = unchecked[Array[Float]]("(float*)NULL")
       val sizeInBytes: Rep[Int] = unchecked[Int]("0")
-      val padShape = input.shape.padTo(4, 1) // pad the dimension to 4D
+      val padShape = input.shape.padTo(4, unit(1)) // pad the dimension to 4D
       unchecked[Unit](
         s"""
           |{
@@ -4903,7 +4923,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${padShape(0)}, ${padShape(1)}, ${padShape(2)}, ${padShape(3)}));
+          |    """.stripMargin, padShape(0), ", ", padShape(1), ", ", padShape(2), ", ", padShape(3), s"""));
           |
           |size_t stateSizeInBytes;
           |CUDNN_CALL(cudnnDropoutGetStatesSize(
@@ -4937,7 +4957,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
-      val padShape = input.x.shape.padTo(4, 1) // pad the dimension to 4D
+      val padShape = input.x.shape.padTo(4, unit(1)) // pad the dimension to 4D
       unchecked[Unit](
         s"""
           |{
@@ -4945,7 +4965,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${padShape(0)}, ${padShape(1)}, ${padShape(2)}, ${padShape(3)}));
+          |    """.stripMargin, padShape(0), ", ", padShape(1), ", ", padShape(2), ", ", padShape(3), s"""));
           |
           |size_t stateSizeInBytes;
           |CUDNN_CALL(cudnnDropoutGetStatesSize(
@@ -4973,7 +4993,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     def cudnnActivationForward(x: Tensor, activation: Activation.Value, inPlace: Boolean = false): Tensor = {
-      val xShape = x.shape.padTo(4, 1) //activation functions only support tensors of rank 4
+      val xShape = x.shape.padTo(4, unit(1)) //activation functions only support tensors of rank 4
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       val res = if (inPlace) x else Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
@@ -4984,7 +5004,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${xShape(0)}, ${xShape(1)}, ${xShape(2)}, ${xShape(3)}));
+          |    """.stripMargin, xShape(0), ", ", xShape(1), ", ", xShape(2), ", ", xShape(3), s"""));
           |
           |cudnnActivationDescriptor_t act_desc;
           |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
@@ -5003,11 +5023,9 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value, inPlace: Boolean = false): Unit = {
-      val inputXShape = input.x.shape.padTo(4, 1) // activation functions only support tensors of rank 4
-      assert(input.x.shape == res.x.shape,
-        s"Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
-      assert(input.d.shape == res.d.shape,
-        s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
+      val inputXShape = input.x.shape.padTo(4, unit(1)) // activation functions only support tensors of rank 4
+      Tensor.assertShapeEqual(input.x.shape, res.x.shape)
+      Tensor.assertShapeEqual(input.d.shape, res.d.shape)
       val one = NewArray[Float](1); one(0) = 1
       val zero = NewArray[Float](1); zero(0) = 0
       unchecked[Unit](
@@ -5017,7 +5035,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${inputXShape(0)}, ${inputXShape(1)}, ${inputXShape(2)}, ${inputXShape(3)}));
+          |    """.stripMargin, inputXShape(0), ", ", inputXShape(1), ", ", inputXShape(2), ", ", inputXShape(3), s"""));
           |
           |cudnnActivationDescriptor_t act_desc;
           |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
@@ -5068,7 +5086,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), """));
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnSoftmaxForward(\n" +
@@ -5084,10 +5102,8 @@ trait TensorDslCudnn extends TensorDslCublas {
       // NOTE: shape assertions are relaxed.
       // Assume that {input/result * forward/backward} values all have the same shape.
       // The shape of the input forward value is used in the generated code.
-      assert(input.x.shape == res.x.shape,
-        s"Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
-      assert(input.d.shape == res.d.shape,
-        s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
+      Tensor.assertShapeEqual(input.x.shape, res.x.shape)
+      Tensor.assertShapeEqual(input.d.shape, res.d.shape)
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -5096,7 +5112,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${input.x.shape(0)}, ${input.x.shape(1)}, ${input.x.shape(2)}, ${input.x.shape(3)}));
+          |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnSoftmaxBackward(\n" +
@@ -5154,13 +5170,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${xShape(0)}, ${xShape(1)}, ${xShape(2)}, ${xShape(3)}));
+          |    """.stripMargin, xShape(0), ", ", xShape(1), ", ", xShape(2), ", ", xShape(3), """));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${res.shape(0)}, ${res.shape(1)}, ${res.shape(2)}, ${res.shape(3)}));
+          |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), s"""));
           |
           |cudnnReduceTensorDescriptor_t reduce_desc;
           |CUDNN_CALL(cudnnCreateReduceTensorDescriptor(&reduce_desc));
@@ -5232,10 +5248,6 @@ trait TensorDslCudnn extends TensorDslCublas {
       unchecked[Unit](
         "sum_grad<<<28, 512>>>(", input.d.data, ", ", inputShape(0), ", ", inputShape(1), ", ", inputShape(2), ", ", inputShape(3), ", ", input.x.scalarCount, ", ",
         output.d.data, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ");\n")
-      // val outShape = output.x.shape.take(dim) ++ (1 +: output.x.shape.drop(dim))
-      // assert((outShape zip input.x.shape).forall{case (a, b) => a == b || a == 1}, s"not proper shape for sum by dim, input: ${input.x.shape}, output: ${output.x.shape}")
-      // // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
-      // cudnnAddBiasTensor(output.d.resize(outShape.padTo(4, 1): _*), input.d.resize(input.x.shape.padTo(4, 1): _*))
     }
 
     def cudnnRNNForwardHelper(mode: RnnMode,
@@ -5294,14 +5306,16 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
           |
-          |cudnnTensorDescriptor_t x_descs[$seqLength];
+          |int32_t seqLength = """.stripMargin, seqLength, s""";
+          |
+          |cudnnTensorDescriptor_t x_descs[seqLength];
           |cudnnTensorDescriptor_t x_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |int x_dims[] = {$batchSize, $inputSize, 1};
+          |int x_dims[] = {""".stripMargin, batchSize, ", ", inputSize, s""", 1};
           |int x_strides[] = {x_dims[1] * x_dims[2], x_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    x_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, x_dims, x_strides));
-          |for (int i = 0; i < $seqLength; i++) {
+          |for (int i = 0; i < seqLength; i++) {
           |  x_descs[i] = x_desc;
           |}
           |
@@ -5310,7 +5324,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |// The third dimension must match the hiddenSize argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
           |cudnnTensorDescriptor_t hx_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&hx_desc));
-          |int hx_dims[] = {${numLayers * numDirections}, $batchSize, $hiddenSize};
+          |int hx_dims[] = {${numLayers * numDirections}, """.stripMargin, batchSize, s""", $hiddenSize};
           |int hx_strides[] = {hx_dims[1] * hx_dims[2], hx_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    hx_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, hx_dims, hx_strides));
@@ -5320,7 +5334,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t paramsSize;
           |CUDNN_CALL(cudnnGetRNNParamsSize(
           |    cudnnHandle, rnn_desc, x_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
-          |assert(paramsSize / sizeof(float) == ${w.scalarCount} && "Expected parameter size mismatch");
+          |assert(paramsSize / sizeof(float) == """.stripMargin, w.scalarCount, s""" && "Expected parameter size mismatch");
           |
           |cudnnFilterDescriptor_t w_desc;
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&w_desc));
@@ -5328,14 +5342,14 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetFilterNdDescriptor(
           |    w_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, /*nbDims*/ 3, w_dims));
           |
-          |cudnnTensorDescriptor_t y_descs[$seqLength];
+          |cudnnTensorDescriptor_t y_descs[seqLength];
           |cudnnTensorDescriptor_t y_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc));
           |int y_dims[] = {$batchSize, ${hiddenSize * numDirections}, 1};
           |int y_strides[] = {y_dims[1] * y_dims[2], y_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    y_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, y_dims, y_strides));
-          |for (int i = 0; i < $seqLength; i++) {
+          |for (int i = 0; i < seqLength; i++) {
           |  y_descs[i] = y_desc;
           |}
           |
@@ -5344,7 +5358,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |
           |size_t workspaceSize;
           |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
-          |    cudnnHandle, rnn_desc, $seqLength, x_descs, &workspaceSize));
+          |    cudnnHandle, rnn_desc, seqLength, x_descs, &workspaceSize));
           |void* workspace = myGpuMalloc(workspaceSize);
           |""".stripMargin) ++
 
@@ -5354,14 +5368,14 @@ trait TensorDslCudnn extends TensorDslCublas {
             |// Reserve space used by `ForwardTraining` function.
             |size_t reserveSize;
             |CUDNN_CALL(cudnnGetRNNTrainingReserveSize(
-            |    cudnnHandle, rnn_desc, $seqLength, x_descs, &reserveSize));
+            |    cudnnHandle, rnn_desc, seqLength, x_descs, &reserveSize));
             |void* reserveSpace = myGpuMalloc(reserveSize);
             |""".stripMargin,
             reserveSpace, " = (float*)reserveSpace;\n",
             reserveSpaceSize, " = (int)reserveSize;\n") ++
           Seq(
             "CUDNN_CALL(cudnnRNNForwardTraining(\n" +
-            s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", x.data, ",\n" +
+            s"    cudnnHandle, rnn_desc, seqLength, x_descs, ", x.data, ",\n" +
             "    hx_desc,", hxData, ", cx_desc,", cxData, ", w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
             "    hy_desc,", hyData, ", cy_desc, NULL, workspace, workspaceSize, reserveSpace, reserveSize));\n")
 
@@ -5369,7 +5383,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         else
           Seq(
             "CUDNN_CALL(cudnnRNNForwardInference(\n" +
-            s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", x.data, ",\n" +
+            s"    cudnnHandle, rnn_desc, seqLength, x_descs, ", x.data, ",\n" +
             "    hx_desc,", hxData, ", cx_desc,", cxData, ", w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
             "    hy_desc,", hyData, ", cy_desc, NULL, workspace, workspaceSize));\n")
         ) ++
@@ -5454,14 +5468,18 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
           |
-          |cudnnTensorDescriptor_t dx_descs[$seqLength];
+          |int32_t seqLength = """.stripMargin, seqLength, s""";
+          |int32_t batchSize = """.stripMargin, batchSize, s""";
+          |int32_t inputSize = """.stripMargin, inputSize, s""";
+          |
+          |cudnnTensorDescriptor_t dx_descs[seqLength];
           |cudnnTensorDescriptor_t dx_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&dx_desc));
-          |int x_dims[] = {$batchSize, $inputSize, 1};
+          |int x_dims[] = {batchSize, inputSize, 1};
           |int x_strides[] = {x_dims[1] * x_dims[2], x_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    dx_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, x_dims, x_strides));
-          |for (int i = 0; i < $seqLength; i++) {
+          |for (int i = 0; i < seqLength; i++) {
           |  dx_descs[i] = dx_desc;
           |}
           |
@@ -5470,7 +5488,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |// The third dimension must match the hiddenSize argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
           |cudnnTensorDescriptor_t hx_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&hx_desc));
-          |int hx_dims[] = {${numLayers * numDirections}, $batchSize, $hiddenSize};
+          |int hx_dims[] = {${numLayers * numDirections}, batchSize, $hiddenSize};
           |int hx_strides[] = {hx_dims[1] * hx_dims[2], hx_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    hx_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, hx_dims, hx_strides));
@@ -5480,7 +5498,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t paramsSize;
           |CUDNN_CALL(cudnnGetRNNParamsSize(
           |    cudnnHandle, rnn_desc, dx_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
-          |assert(paramsSize / sizeof(float) == ${w.x.scalarCount} && "Expected parameter size mismatch");
+          |assert(paramsSize / sizeof(float) == """.stripMargin, w.x.scalarCount, s""" && "Expected parameter size mismatch");
           |
           |cudnnFilterDescriptor_t w_desc;
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&w_desc));
@@ -5488,14 +5506,14 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetFilterNdDescriptor(
           |    w_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, /*nbDims*/ 3, w_dims));
           |
-          |cudnnTensorDescriptor_t y_descs[$seqLength];
+          |cudnnTensorDescriptor_t y_descs[seqLength];
           |cudnnTensorDescriptor_t y_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc));
-          |int y_dims[] = {$batchSize, ${hiddenSize * numDirections}, 1};
+          |int y_dims[] = {batchSize, ${hiddenSize * numDirections}, 1};
           |int y_strides[] = {y_dims[1] * y_dims[2], y_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    y_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, y_dims, y_strides));
-          |for (int i = 0; i < $seqLength; i++) {
+          |for (int i = 0; i < seqLength; i++) {
           |  y_descs[i] = y_desc;
           |}
           |
@@ -5509,12 +5527,12 @@ trait TensorDslCudnn extends TensorDslCublas {
           |
           |size_t workspaceSize;
           |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
-          |    cudnnHandle, rnn_desc, $seqLength, dx_descs, &workspaceSize));
+          |    cudnnHandle, rnn_desc, seqLength, dx_descs, &workspaceSize));
           |void* workspace = myGpuMalloc(workspaceSize);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnRNNBackwardData(\n" +
-          s"    cudnnHandle, rnn_desc, $seqLength, y_descs, ", output.x.data, ", y_descs, ", output.d.data, ",\n" +
+          s"    cudnnHandle, rnn_desc, seqLength, y_descs, ", output.x.data, ", y_descs, ", output.d.data, ",\n" +
           "    dhy_desc, NULL, dcy_desc, NULL, w_desc, ", w.x.data, ", hx_desc, ", hxData, ",\n" +
           "    cx_desc, ", cxData, ", dx_descs, ", input.d.data, ", dhx_desc, NULL, dcx_desc, NULL,\n" +
           "    workspace, workspaceSize, ", reserve, ", ", reserveSize, "));\n" +
@@ -5564,14 +5582,18 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
           |
-          |cudnnTensorDescriptor_t x_descs[$seqLength];
+          |int32_t seqLength = """.stripMargin, seqLength, s""";
+          |int32_t batchSize = """.stripMargin, batchSize, s""";
+          |int32_t inputSize = """.stripMargin, inputSize, s""";
+          |
+          |cudnnTensorDescriptor_t x_descs[seqLength];
           |cudnnTensorDescriptor_t x_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |int x_dims[] = {$batchSize, $inputSize, 1};
+          |int x_dims[] = {batchSize, inputSize, 1};
           |int x_strides[] = {x_dims[1] * x_dims[2], x_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    x_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, x_dims, x_strides));
-          |for (int i = 0; i < $seqLength; i++) {
+          |for (int i = 0; i < seqLength; i++) {
           |  x_descs[i] = x_desc;
           |}
           |
@@ -5580,7 +5602,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |// The third dimension must match the hiddenSize argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
           |cudnnTensorDescriptor_t hx_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&hx_desc));
-          |int hx_dims[] = {${numLayers * numDirections}, $batchSize, $hiddenSize};
+          |int hx_dims[] = {${numLayers * numDirections}, batchSize, $hiddenSize};
           |int hx_strides[] = {hx_dims[1] * hx_dims[2], hx_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    hx_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, hx_dims, hx_strides));
@@ -5589,7 +5611,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnGetRNNParamsSize(
           |    cudnnHandle, rnn_desc, x_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
           |printf("paramsSize: %zu\\n", paramsSize / sizeof(float));
-          |assert(paramsSize / sizeof(float) == ${w.d.scalarCount} && "Expected parameter size mismatch");
+          |assert(paramsSize / sizeof(float) == """.stripMargin, w.d.scalarCount, s""" && "Expected parameter size mismatch");
           |
           |cudnnFilterDescriptor_t dw_desc;
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&dw_desc));
@@ -5597,25 +5619,25 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnSetFilterNdDescriptor(
           |    dw_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, /*nbDims*/ 3, w_dims));
           |
-          |cudnnTensorDescriptor_t y_descs[$seqLength];
+          |cudnnTensorDescriptor_t y_descs[seqLength];
           |cudnnTensorDescriptor_t y_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc));
-          |int y_dims[] = {$batchSize, ${hiddenSize * numDirections}, 1};
+          |int y_dims[] = {batchSize, ${hiddenSize * numDirections}, 1};
           |int y_strides[] = {y_dims[1] * y_dims[2], y_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    y_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, y_dims, y_strides));
-          |for (int i = 0; i < $seqLength; i++) {
+          |for (int i = 0; i < seqLength; i++) {
           |  y_descs[i] = y_desc;
           |}
           |
           |size_t workspaceSize;
           |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
-          |    cudnnHandle, rnn_desc, $seqLength, x_descs, &workspaceSize));
+          |    cudnnHandle, rnn_desc, seqLength, x_descs, &workspaceSize));
           |void* workspace = myGpuMalloc(workspaceSize);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnRNNBackwardWeights(\n" +
-          s"    cudnnHandle, rnn_desc, $seqLength, x_descs, ", input.x.data, ", hx_desc, ", hxData, ",\n" +
+          s"    cudnnHandle, rnn_desc, seqLength, x_descs, ", input.x.data, ", hx_desc, ", hxData, ",\n" +
           "    y_descs, ", output.x.data, ", workspace, workspaceSize,\n" +
           "    dw_desc, ", w.d.data, ", ", reserve, ", ", reserveSize, "));\n" +
           "}"): _*)
@@ -5643,7 +5665,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       val alphabetSize = probs.shape(2)
       // Note: `inputLengths` and `targetLengths` should have length equal to `batchSize`.
       // Note: `cudnnGetCTCLossWorkspaceSize` requires that the batchSize (i.e. size of targetLengths) is NO greater than 256.
-      assert(batchSize <= 256, s"'cudnnGetCTCLossWorkspaceSize' requires batch size less than 256, got $batchSize")
+      assertC(batchSize <= 256, "'cudnnGetCTCLossWorkspaceSize' requires batch size less than 256, got %d\\n", batchSize)
 
       val costs = Tensor(mallocArray[Float](batchSize), batchSize)
       val grad = Tensor(mallocArray[Float](probs.scalarCount), probs.shape: _*)
@@ -5652,7 +5674,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |{
           |cudnnTensorDescriptor_t probs_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&probs_desc));
-          |int probs_dims[] = {$inputLength, $batchSize, $alphabetSize};
+          |int probs_dims[] = {""".stripMargin, inputLength, ", ", batchSize, ", ", alphabetSize, s"""};
           |int probs_strides[] = {probs_dims[1] * probs_dims[2], probs_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    probs_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, probs_dims, probs_strides));
