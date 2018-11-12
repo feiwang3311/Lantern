@@ -3656,7 +3656,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
             n, ",", m, ",", alpha1, ",",
             x.data, ",", n, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
         case (false, true) =>
-          assert(x.rank == 2 && y.rank == 2 && x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0), "bad assert here")
+          assert(x.rank == 2 && y.rank == 2 && x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0), "is this assertion correct in terms of types?")
           val m = x.shape(0)
           val n = x.shape(1)
           unchecked[Unit](
@@ -5239,7 +5239,11 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for mean op")
+<<<<<<< HEAD
       assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
+=======
+      assert(res.d.shape.dims == Seq(unit(1)), s"result of mean reduce should be scalar, got ${res.d.shape}")
+>>>>>>> minor
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
       cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, unit(1)): _*), scale = 1.0f / input.x.scalarCount)
     }
