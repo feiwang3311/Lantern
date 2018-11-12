@@ -2807,9 +2807,11 @@ trait TensorDsl extends DslOps with Diff {
       backend.logSoftmax_grad(this, y, adjust_dim)
     }
 
-    def resize(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
-      k(new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*)))
-    }
+    // def resize(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
+    //   k(new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*)))
+    // }
+
+    def resize(dims: Int*): TensorR = new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*))
 
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert (this.x.rank == 2, s"nllLossB() function only takes tensor of rank 2, got ${this.x.shape}")

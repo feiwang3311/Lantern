@@ -92,7 +92,7 @@ object DeepSpeech {
         def apply(input: TensorR): TensorR @diff = {
           val padding = TensorR(Tensor.zeros((context +: input.x.shape.drop(1)): _*))
           val x = input.concat(0, padding)
-          val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1).resize(1, context+1, input.x.shape(1), input.x.shape(2)))
+          val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1).resize(1, context + 1, input.x.shape(1), input.x.shape(2)))
           // TODO: this permute function can be implemented by cuDNN cudnnTransformTensor method
           val xc = xs.head.concat(0, xs.tail: _*).permute(0, 2, 3, 1)
           (x mul_sub weight).sum(3)
