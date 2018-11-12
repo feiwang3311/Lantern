@@ -492,6 +492,10 @@ trait TensorDsl extends DslOps with Diff {
     def concat(dim: Int, tensors: Seq[Tensor]): Tensor
     def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit
 
+    // repeat on the first dimension
+    def repeat0(in: Tensor, context: Int): Tensor
+    def repeat0_grad(in: TensorR, out: TensorR, context: Int): Unit
+
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -1659,6 +1663,9 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    override def repeat0(in: Tensor, context: Int): Tensor = ???
+    override def repeat0_grad(in: TensorR, out: TensorR, context: Int): Unit = ???
+
     @virtualize
     override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
       tr.d.changeTo { i =>
@@ -2280,6 +2287,8 @@ trait TensorDsl extends DslOps with Diff {
       generateRawComment("back prop for concat")
       backend.concat(dim: Int, this +: others)
     }
+
+    def repeat0(context: Int): Tensor = backend.repeat0(this, context)
 
     @virtualize
     def global_ave_batch() = {
@@ -2918,6 +2927,12 @@ trait TensorDsl extends DslOps with Diff {
 
       // back propagate
       backend.concat_grad(dim, this +: others, ty)
+    }
+
+    def repeat0(context: Int): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(this.x.repeat0(context)); k(y)
+      generateRawComment("back prop for repeat0")
+      backend.repeat0_grad(this, y, context)
     }
 
     @virtualize
@@ -3820,33 +3835,15 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
-    override def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor = { ???
-      // // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
-      // // Note: We assume that lengths is passed to GPU already, at the beginning of each epoch
-      // assert(input.rank == 4, s"mask4D only deals with inputs of 4D, got ${input.shape}")
-      // if (!mask4dKernelMap.contains(input.shape)) {
-      //   mask4dKernelMap(input.shape) = (s"""
-      //    |__global__ void mask4D${next}(float* in, int* mask) {
-      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      //    |  int stride = gridDim.x * blockDim.x;
-      //    |  int xstrides[] = {${input.shape.strides.mkString(", ")}};
-      //    |  int xindex[] = {0, 0, 0, 0};  // this line may not be necessary
-      //    |  for (; tid < ${input.scalarCount}; tid += stride) {
-      //    |    int linearIndex = tid;
-      //    |    for (int i = 0; i < ${input.rank}; i++) {
-      //    |      xindex[i] = linearIndex / xstrides[i];
-      //    |      linearIndex = linearIndex - xstrides[i] * xindex[i];
-      //    |    }
-      //    |    if (xindex[3] >= mask[xindex[0]]) in[tid] = 0;
-      //    |  }
-      //    |}
-      //   """.stripMargin, s"mask4D${next}")
-      //   next = next + 1
-      // }
-      // val kernelFuncName: String = mask4dKernelMap(input.shape)._2
-      // val nGrid = 28
-      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", input.data, ", ", lengths, ")")
-      // input
+    override def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor = {
+      // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
+      // Note: We assume that lengths is passed to GPU already, at the beginning of each epoch
+      assert(input.rank == 4, s"mask4D only deals with inputs of 4D, got ${input.rank}")
+      val nGrid = 28
+      // unchecked[Unit]("{\n__device__ int dims[4] = {", input.shape.strides(0), ", ", input.shape.strides(1), ", ", input.shape.strides(2), ", ", input.shape.strides(3), "}")
+      unchecked[Unit](s"mask4D<<<${nGrid}, 512>>>(", input.data, ", ", lengths, ", ", input.shape.strides(0), ", ", input.shape.strides(1), ", ",
+                                                     input.shape.strides(2), ", ", input.shape.strides(3), ", ", input.scalarCount, ")")
+      input
     }
 
     override def relu(x: Tensor, inPlace: Boolean = false): Tensor = ???
@@ -4006,6 +4003,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         "}")
     }
 
+    override def repeat0(in: Tensor, context: Int): Tensor = ???
+    override def repeat0_grad(in: TensorR, out: TensorR, context: Int): Unit = ???
+
     override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
       assert(descent, s"TODO: only handle gradient descent (not ascent) so far")
       // assert(tr.x.shape == t.shape, s"tensor and momentum should have the same shape, got ${tr.x.shape} and ${t.shape}")
@@ -4109,138 +4109,124 @@ trait TensorDslCudnn extends TensorDslCublas {
       generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
     }
 
-    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = { ???
-      // assert(in1.rank > in2.rank && in1.shape.takeRight(in2.rank) == in2.shape.toList, s"mul_sub: in2 shape must match the lower part of in1, got ${in1.shape}, ${in2.shape}")
-      // val resTensor = Tensor(mallocArray[Float](in1.scalarCount), in1.shape: _*)
-      // if (!mulSubKernelMap.contains(Seq(in1.rank, in2.rank) ++ in1.shape)) {
-      //   mulSubKernelMap(Seq(in1.rank, in2.rank) ++ in1.shape) = (s"""
-      //    |__global__ void mul_sub${next}(float* in1, float* in2, float* out) {
-      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      //    |  int stride = gridDim.x * blockDim.x;
-      //    |  for (; tid < ${in1.scalarCount}; tid += stride) {
-      //    |    out[tid] = in1[tid] * in2[tid % ${in2.scalarCount}];
-      //    |  }
-      //    |}
-      //   """.stripMargin, s"mul_sub${next}")
-      //   next = next + 1
-      // }
-      // val kernelFuncName: String = mulSubKernelMap(Seq(in1.rank, in2.rank) ++ in1.shape)._2
-      // val nGrid = 28
-      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resTensor.data, ")")
-      // resTensor
-    }
-    override def mul_sub_grad(in1: TensorR, in2: TensorR, res: TensorR): Unit = { ???
-      // assert(in1.x.rank > in2.x.rank && in1.x.shape.takeRight(in2.x.rank) == in2.x.shape.toList, s"mul_sub_grad: in2 shape must match the lower part of in1, got ${in1.x.shape}, ${in2.x.shape}")
-      // val temp = Tensor(mallocArray[Float](in1.d.shape.product), in1.d.shape: _*)
-      // if (!mulSubGradKernelMap.contains(Seq(in1.x.rank, in2.x.rank) ++ in1.x.shape)) {
-      //   mulSubGradKernelMap(Seq(in1.x.rank, in2.x.rank) ++ in1.x.shape) = (s"""
-      //    |__global__ void mul_sub_grad${next}(float* in1_x, float* in1_d, float* in2_x, float* in2_d, float* out) {
-      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      //    |  int stride = gridDim.x * blockDim.x;
-      //    |  for (; tid < ${in1.x.scalarCount}; tid += stride) {
-      //    |    int index = tid % ${in2.x.scalarCount};
-      //    |    in1_d[tid] += out[tid] * in2_x[index];
-      //    |    // in2_d[index] += in1_x[tid] * out[tid];
-      //    |    in2_d[tid] = in1_x[tid] * out[tid];  // this is the temp array, need to be reduced!
-      //    |  }
-      //    |}
-      //   """.stripMargin, s"mul_sub_grad${next}")
-      //   next = next + 1
-      // }
-      // val kernelFuncName: String = mulSubGradKernelMap(Seq(in1.x.rank, in2.x.rank) ++ in1.x.shape)._2
-      // val nGrid = 28
-      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", in1.x.data, ", ", in1.d.data, ", ", in2.x.data, ", ", temp.data, ", ", res.d.data, ")")
-      // // then reduce temp and add into in2.d
-      // cudnnReduceTensor(temp, ReductionOp.Add, (0 until (in1.x.rank - in2.x.rank)), true, Some(in2.d.data), false)
+    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = {
+      assert(in1.rank > in2.rank && in1.shape.takeRight(in2.rank) == in2.shape.toList, s"mul_sub: in2 shape must match the lower part of in1, got ${in1.shape}, ${in2.shape}")
+      val resTensor = Tensor(mallocArray[Float](in1.scalarCount), in1.shape: _*)
+      val nGrid = 28
+      unchecked[Unit](s"mul_sub<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resTensor.data, ", ", in1.scalarCount, ", ", in2.scalarCount, ")")
+      resTensor
     }
 
-    override def permute(x: Tensor, dims: Int*): Tensor = { ???
-      // if (dims == Seq(0, 2, 3, 1))
-      // val one = NewArray[Float](1); one(0) = 1
-      // val zero = NewArray[Float](0); zero(0) = 0
-      // unchecked[Unit](
-      //   Seq(s"""
-      //     |{
-      //     |cudnnTensorDescriptor_t in_desc;
-      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-      //     |    bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-      //     |    ${biasShape(0)}, ${biasShape(1)}, ${biasShape(2)}, ${biasShape(3)}));
-      //     |
-      //     |cudnnTensorDescriptor_t out_desc;
-      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-      //     |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-      //     |    ${resShape(0)}, ${resShape(1)}, ${resShape(2)}, ${resShape(3)}));
-      //     |
-      //     |""".stripMargin) ++
-      //   Seq(
-      //     "CUDNN_CALL(cudnnAddTensor(\n" +
-      //     "    cudnnHandle, ", scaled, ", bias_desc, ", bias.data, ", ", one, ", out_desc, ", res.data, "));\n" +
-      //     "}"): _*
-      // )
-      // assert(dims.sorted == ((0 until x.rank): Range), s"permutation dimensions should be within ranks, got ${x.shape}, ${dims}")
-      // val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(i => x.shape(i)): _*)
-
-      // if (!permuteKernelMap.contains(x.shape ++ dims)) {
-      //   permuteKernelMap(x.shape ++ dims) = (s"""
-      //    |__global__ void permute${next}(float * in, float * out) {
-      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      //    |  int stride = gridDim.x * blockDim.x;
-      //    |  int xstrides[] = {${x.shape.strides.mkString(", ")}};
-      //    |  int ystrides[] = {${resTensor.shape.strides.mkString(", ")}};
-      //    |  int dims[] = {${dims.mkString(", ")}};
-      //    |  int xindex[] = {0, 0, 0, 0};  // this line may be uncessary too
-      //    |  for (; tid < ${x.scalarCount}; tid += stride) {
-      //    |    int linearIndex = tid;
-      //    |    int yIndex = 0;
-      //    |    for (int i = 0; i < ${x.rank}; ++i) {
-      //    |       xindex[i] = linearIndex / xstrides[i];
-      //    |       linearIndex = linearIndex - xstrides[i] * xindex[i];
-      //    |       yIndex += xindex[i] * ystrides[dims[i]];
-      //    |    }
-      //    |    out[yIndex] = in[tid];
-      //    |  }
-      //    |}
-      //   """.stripMargin, s"permute${next}")
-      //   next = next + 1
-      // }
-      // val kernelFuncName: String = permuteKernelMap(x.shape ++ dims)._2
-      // val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
-      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", x.data, ", ", resTensor.data, ")")
-      // resTensor
+    override def mul_sub_grad(in1: TensorR, in2: TensorR, res: TensorR): Unit = {
+      assert(in1.x.rank > in2.x.rank && in1.x.shape.takeRight(in2.x.rank) == in2.x.shape.toList, s"mul_sub_grad: in2 shape must match the lower part of in1, got ${in1.x.shape}, ${in2.x.shape}")
+      val temp = Tensor(mallocArray[Float](in1.d.scalarCount), in1.d.shape: _*)
+      val nGrid = 28
+      unchecked[Unit](s"mul_sub_grad<<<${nGrid}, 512>>>(", in1.x.data, ", ", in1.d.data, ", ", in2.x.data, ", ", temp.data, ", ",
+                                                           res.d.data, ", ", in1.d.scalarCount, ", ", in2.d.scalarCount, ")")
+      // then reduce temp and add into in2.d
+      cudnnReduceTensor(temp, ReductionOp.Add, (0 until (in1.x.rank - in2.x.rank)), true, Some(in2.d.data), false)
     }
 
-    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = { ???
-      // assert(dims.sorted == ((0 until x.x.rank): Range), s"permutation dimensions should be within ranks, got ${x.x.shape}, ${dims}")
-      // if (!permuteGradKernelMap.contains(x.x.shape ++ dims)) {
-      //   permuteGradKernelMap(x.x.shape ++ dims) = (s"""
-      //    |__global__ void permute_grad${next}(float * in, float * out) {
-      //    |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      //    |  int stride = gridDim.x * blockDim.x;
-      //    |  int xstrides[] = {${x.x.shape.strides.mkString(", ")}};
-      //    |  int ystrides[] = {${y.x.shape.strides.mkString(", ")}};
-      //    |  int dims[] = {${dims.mkString(", ")}};
-      //    |  int xindex[] = {0, 0, 0, 0};  // this line may be uncessary too
-      //    |  for (; tid < ${x.x.scalarCount}; tid += stride) {
-      //    |    int linearIndex = tid;
-      //    |    int yIndex = 0;
-      //    |    for (int i = 0; i < ${x.x.rank}; ++i) {
-      //    |       xindex[i] = linearIndex / xstrides[i];
-      //    |       linearIndex = linearIndex - xstrides[i] * xindex[i];
-      //    |       yIndex += xindex[i] * ystrides[dims[i]];
-      //    |    }
-      //    |    in[tid] += out[yIndex];
-      //    |  }
-      //    |}
-      //   """.stripMargin, s"permute_grad${next}")
-      //   next = next + 1
-      // }
-      // val kernelFuncName: String = permuteGradKernelMap(x.x.shape ++ dims)._2
-      // val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
-      // unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", x.d.data, ", ", y.d.data, ")")
+    override def repeat0(in: Tensor, context: Int): Tensor = {
+      assert(in.rank <= 3, s"only support input with no more than 3D, got ${in.rank}")
+      val resShape = Seq(in.shape(0) - context, unit(context+1)) ++ in.shape.drop(1)
+      val resTensor = Tensor(mallocArray[Float](resShape.product1), resShape: _*)
+      // call user-defined kernel (which is similar to concat)
+      val nGrid = 28
+      unchecked[Unit](s"repeat0<<<${nGrid}, 512>>>(", in.data, ", ", resTensor.data, ", ", resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ", resTensor.scalarCount, ")")
+      resTensor
     }
 
+    override def repeat0_grad(in: TensorR, out: TensorR, context: Int): Unit = {
+      // use shift and reduce (TODO (Fei Wang) may need to improve with a user-kernel?)
+      val temp = Tensor(mallocArray[Float](out.x.scalarCount), out.x.shape: _*)
+      val nGrid = 28
+      unchecked[Unit](s"shift0<<<${nGrid}, 512>>>(", out.d.data, ", ", temp.data, ", ", out.x.shape(0), ", ", out.x.shape.strides(0), ", ", out.x.shape.strides(1), ", ", out.x.scalarCount, ")")
+      // then reduce temp and add into in.d
+      // TODO (Fei Wang): should not use smallerInD
+      val smallerInD: Tensor = in.d(0, in.x.shape(0) - context)
+      cudnnReduceTensor(temp, ReductionOp.Add, Seq(1), true, Some(smallerInD.data), false)
+      ()
+      // use a while loop (May have race conditions)
+      // for (i <- 0 until out.x.shape(0)) {
+      //   val inSlice = in.d(i, i + context + 1)
+      //   val outSlice = out.d(i)
+      //   val nGrid = 28
+      //   unchecked[Unit](s"elementwise_1D_1D_add<<<${nGrid}, 512>>>(", inSlice.data, ", ", outSlice.data, ", ", inSlice.data, ", ", inSlice.scalarCount, ")")
+    }
+
+    override def permute(x: Tensor, dims: Int*): Tensor = {
+      assert(dims.sorted == ((0 until x.rank): Range), s"permutation dimensions should be within ranks, got rank: ${x.rank}, dims: ${dims}")
+      assert(x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
+      val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(i => x.shape(i)): _*)
+      // pad everything to rank 4
+      val inShape = x.shape.padTo(4, unit(1)); val inStrid = x.shape.strides.padTo(4, unit(1));
+      val dimsPad = dims ++ (dims.size until 4: Range)
+      val outStrid = NewArray[Int](4); val resStrid = resTensor.shape.strides.padTo(4, unit(1));
+      for (i <- 0 until 4: Range) outStrid(dimsPad(i)) = resStrid(i)
+
+      val one = NewArray[Float](1); one(0) = 1
+      val zero = NewArray[Float](0); zero(0) = 0
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
+          |    in_desc, CUDNN_DATA_FLOAT,
+          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
+          |    """.stripMargin, inStrid(0), ", ", inStrid(1), ", ", inStrid(2), ", ", inStrid(3), s"""));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
+          |    out_desc, CUDNN_DATA_FLOAT,
+          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
+          |    """.stripMargin, outStrid(0), ", ", outStrid(1), ", ", outStrid(2), ", ", outStrid(3), s"""));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnTransformTensor(\n" +
+          "    cudnnHandle, ", one, ", in_desc, ", x.data, ", ", zero, ", out_desc, ", resTensor.data, "));\n" +
+          "}"): _*
+      )
+      resTensor
+    }
+
+    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = {
+      assert(dims.sorted == ((0 until x.x.rank): Range), s"permutation dimensions should be within ranks, got rank: ${x.x.rank}, dims: ${dims}")
+      assert(x.x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
+      // pad everything to rank 4
+      val inShape = x.x.shape.padTo(4, unit(1)); val inStrid = x.x.shape.strides.padTo(4, unit(1));
+      val dimsPad = dims ++ (dims.size until 4: Range)
+      val outStrid = NewArray[Int](4); val resStrid = y.x.shape.strides.padTo(4, unit(1));
+      for (i <- 0 until 4: Range) outStrid(dimsPad(i)) = resStrid(i)
+
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t in_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
+          |    in_desc, CUDNN_DATA_FLOAT,
+          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
+          |    """.stripMargin, outStrid(0), ", ", outStrid(1), ", ", outStrid(2), ", ", outStrid(3), s"""));
+          |
+          |cudnnTensorDescriptor_t out_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
+          |    out_desc, CUDNN_DATA_FLOAT,
+          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
+          |    """.stripMargin, inStrid(0), ", ", inStrid(1), ", ", inStrid(2), ", ", inStrid(3), s"""));
+          |
+          |""".stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnTransformTensor(\n" +
+          "    cudnnHandle, ", one, ", in_desc, ", y.d.data, ", ", one, ", out_desc, ", x.d.data, "));\n" +
+          "}"): _*
+      )
+    }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
     // Note: this function performs in-place addition for `res`.
@@ -5239,11 +5225,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for mean op")
-<<<<<<< HEAD
-      assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
-=======
       assert(res.d.shape.dims == Seq(unit(1)), s"result of mean reduce should be scalar, got ${res.d.shape}")
->>>>>>> minor
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
       cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, unit(1)): _*), scale = 1.0f / input.x.scalarCount)
     }

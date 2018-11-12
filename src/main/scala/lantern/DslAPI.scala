@@ -589,6 +589,33 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
+      |__global__ void repeat0(float* in, float* out, int outStride0, int outStride1, int outScalarCount) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < outScalarCount; tid += stride) {
+      |    int linearIndex = tid;
+      |    int outIndex0 = linearIndex / outStride0;
+      |    linearIndex = linearIndex - outIndex0 * outStride0;
+      |    int outIndex1 = linearIndex / outStride1;
+      |    int outIndex2 = linearIndex - outIndex1 * outStride1;
+      |    int inIndex = outIndex2 + (outIndex0 + outIndex1) * outStride1;
+      |    out[tid] = in[inIndex];
+      |  }
+      |}
+      |
+      |__global__ void shift0(float* in, float* out, int inDim0, int inStride0, int inStride1, int inScalarCount) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < inScalarCount; tid += stride) {
+      |    int linearIndex = tid;
+      |    int inIndex0 = linearIndex / inStride0;
+      |    linearIndex = linearIndex - inIndex0 * inStride0;
+      |    int inIndex1 = linearIndex / inStride1;
+      |    if (inIndex0 + inIndex1 >= inDim0) return;
+      |    out[tid + inIndex1 * inStride0] = in[tid];
+      |  }
+      |}
+      |
       |__global__ void adagrad_update_1D_1D(float* x, float* d, float* m, float clip, float lr, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  int stride = gridDim.x * blockDim.x;
@@ -688,6 +715,39 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  int stride = gridDim.x * blockDim.x;
       |  for (; tid < size; tid += stride)
       |    if (tid < size) in_d[tid] += out_d[tid] * 2 * in_x[tid];
+      |}
+      |
+      |__global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int xstrides2, int xstrides3, int scalarCount) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < scalarCount; tid += stride) {
+      |    int linearIndex = tid;
+      |    int xindex0 = linearIndex / xstrides0;
+      |    linearIndex = linearIndex - xstrides0 * xindex0;
+      |    int xindex1 = linearIndex / xstrides1;
+      |    linearIndex = linearIndex - xstrides1 * xindex1;
+      |    int xindex2 = linearIndex / xstrides2;
+      |    int xindex3 = linearIndex - xstrides2 * xindex2;
+      |    if (xindex3 >= mask[xindex0]) in[tid] = 0;
+      |  }
+      |}
+      |
+      |__global__ void mul_sub(float* in1, float* in2, float* out, int in1ScalarCount, int in2ScalarCount) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < in1ScalarCount; tid += stride) {
+      |    out[tid] = in1[tid] * in2[tid % in2ScalarCount];
+      |  }
+      |}
+      |
+      |__global__ void mul_sub_grad(float* in1_x, float* in1_d, float* in2_x, float* in2_d, float* out, int in1ScalarCount, int in2ScalarCount) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < in1ScalarCount; tid += stride) {
+      |    int index = tid % in2ScalarCount;
+      |    in1_d[tid] += out[tid] * in2_x[index];
+      |    in2_d[tid] = in1_x[tid] * out[tid];  // this is the temp array, need to be reduced!
+      |  }
       |}
       |
       |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/THC/THCIntegerDivider.cuh
