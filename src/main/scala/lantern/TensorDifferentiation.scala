@@ -2689,6 +2689,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def gemm(that: TensorR, transX: Boolean, transY: Boolean, alpha: Float): TensorR @diff = shift { (k: TensorR => Unit) =>
+      generateRawComment("foward of gemm")
       val ty = TensorR(x.gemm(that.x, transX, transY, alpha)); k(ty)
       generateRawComment(s"backprop for gemm ${x.shape.seq}, ${that.x.shape.seq}")
       backend.gemm_grad(this, transX, that, transY, alpha, ty)
@@ -3655,7 +3656,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
             n, ",", m, ",", alpha1, ",",
             x.data, ",", n, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
         case (false, true) =>
-          assert(x.rank == 2 && y.rank == 2 && x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0))
+          assert(x.rank == 2 && y.rank == 2 && x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0), "bad assert here")
           val m = x.shape(0)
           val n = x.shape(1)
           unchecked[Unit](
@@ -3690,7 +3691,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     }
 
     override def trans_grad(x: TensorR, y: TensorR): Unit = {
-      assert(x.x.rank == 2 && y.x.rank == 2 && x.x.shape.reverse == y.x.shape)
+      assert(x.x.rank == 2 && y.x.rank == 2, s"rank has to be 2 for trans, got ${x.x.rank} ${y.x.rank}")
+      Tensor.assertShapeEqual(x.x.shape.reverse, y.x.shape)
       this.geam(x.d, false, 1.0f, y.d, true, 1.0f, x.d)
     }
 
@@ -4657,7 +4659,10 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnBatchNormalizationForwardInference(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                 runningMean: Tensor, runningVar: Tensor,
                                                 momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
-      val biasShape = if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1) else {???}
+      val biasShape: Seq[Rep[Int]] =
+        if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1)
+        else if (bias.rank == 4) bias.shape.dims
+        else {System.out.println(s"bias.rank is not 1 or 4 but ${bias.rank}"); ???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -4695,7 +4700,10 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnBatchNormalizationForwardTraining(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                runningMean: Tensor, runningVar: Tensor, saveMean: Tensor, saveInvVariance: Tensor,
                                                momentum: Double = 0.1, epsilon: Double = 1e-5): Unit = {
-      val biasShape = if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1) else {???}
+      val biasShape =
+        if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1)
+        else if (bias.rank == 4) bias.shape.dims
+        else {System.out.println(s"bias rank is not 1 or 4, but ${bias.rank}"); ???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -4733,7 +4741,10 @@ trait TensorDslCudnn extends TensorDslCublas {
     def cudnnBatchNormalizationBackward(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
                                         saveMean: Tensor, saveInvVariance: Tensor,
                                         momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
-      val biasShape = if (bias.x.rank == 1) Seq(1, bias.x.shape(0), 1, 1) else {???}
+      val biasShape =
+        if (bias.x.rank == 1) Seq(1, bias.x.shape(0), 1, 1)
+        else if (bias.x.rank == 4) bias.x.shape.dims
+        else {System.out.println(s"bias rank is not 1 or 4, but ${bias.x.rank}"); ???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -5215,7 +5226,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for sum op")
-      assert(res.d.shape.dims == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
       cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, unit(1)): _*))
     }
@@ -5228,7 +5239,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for mean op")
-      assert(res.d.shape.dims == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
       cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, unit(1)): _*), scale = 1.0f / input.x.scalarCount)
     }
@@ -5307,11 +5318,13 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
           |
           |int32_t seqLength = """.stripMargin, seqLength, s""";
+          |int32_t batchSize = """.stripMargin, batchSize, s""";
+          |int32_t inputSize = """.stripMargin, inputSize, s""";
           |
           |cudnnTensorDescriptor_t x_descs[seqLength];
           |cudnnTensorDescriptor_t x_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |int x_dims[] = {""".stripMargin, batchSize, ", ", inputSize, s""", 1};
+          |int x_dims[] = {batchSize, inputSize, 1};
           |int x_strides[] = {x_dims[1] * x_dims[2], x_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    x_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, x_dims, x_strides));
@@ -5324,7 +5337,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |// The third dimension must match the hiddenSize argument passed to the cudnnSetRNNDescriptor call used to initialize rnnDesc.
           |cudnnTensorDescriptor_t hx_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&hx_desc));
-          |int hx_dims[] = {${numLayers * numDirections}, """.stripMargin, batchSize, s""", $hiddenSize};
+          |int hx_dims[] = {${numLayers * numDirections}, batchSize, $hiddenSize};
           |int hx_strides[] = {hx_dims[1] * hx_dims[2], hx_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    hx_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, hx_dims, hx_strides));
@@ -5345,7 +5358,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |cudnnTensorDescriptor_t y_descs[seqLength];
           |cudnnTensorDescriptor_t y_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc));
-          |int y_dims[] = {$batchSize, ${hiddenSize * numDirections}, 1};
+          |int y_dims[] = {batchSize, ${hiddenSize * numDirections}, 1};
           |int y_strides[] = {y_dims[1] * y_dims[2], y_dims[2], 1};
           |CUDNN_CALL(cudnnSetTensorNdDescriptor(
           |    y_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, y_dims, y_strides));

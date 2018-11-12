@@ -159,7 +159,7 @@ class TestCudnn extends LanternFunSuite {
         val input = Tensor.randinit(Seq(1,1,2,3))
         val result = input.tanh()
         val grad = gradR(x => x.tanh())(input)
-        val expected = Tensor.ones(1) - result * result
+        val expected = Tensor.fill(Seq(1,1,2,3), 1) - result * result
         backend = BackendCPU()
         Tensor.assertEqual(expected.toCPU(), grad.toCPU())
       }
@@ -176,7 +176,7 @@ class TestCudnn extends LanternFunSuite {
         val input = Tensor.randinit(Seq(1,1,2,3))
         val result = input.sigmoid()
         val grad = gradR(x => x.sigmoid())(input)
-        val expected = (Tensor.ones(1) - result) * result
+        val expected = (Tensor.fill(Seq(1,1,2,3),1) - result) * result
         backend = BackendCPU()
         Tensor.assertEqual(expected.toCPU(), grad.toCPU())
       }
@@ -646,8 +646,8 @@ class TestCudnn extends LanternFunSuite {
 
         // Test parameter registration.
         rnn.registerParameters("lstm")
-        System.out.println(rnn.parameters)
-        System.out.println(rnn.parameters.size)
+        // System.out.println(rnn.parameters)
+        // System.out.println(rnn.parameters.size)
         val expectedParameterCount = numLayers * numDirections * 4
         assert(rnn.parameters.size == expectedParameterCount)
 
@@ -703,8 +703,8 @@ class TestCudnn extends LanternFunSuite {
         val opt = SGD(rnn, learning_rate = 0.1f)
 
         // Test parameter registration.
-        System.out.println(rnn.parameters)
-        System.out.println(rnn.parameters.size)
+        // System.out.println(rnn.parameters)
+        // System.out.println(rnn.parameters.size)
         val expectedParameterCount = numLayers * numDirections * 4
         assert(rnn.parameters.size == expectedParameterCount)
 
