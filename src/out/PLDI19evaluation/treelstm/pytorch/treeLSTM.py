@@ -133,7 +133,7 @@ for epoc in range(epocNum):
   for n in range(tree_data_size):
     opt.zero_grad()
     loss = net.forward(scores[n], words[n], lchs[n], rchs[n])
-    total_loss += loss.data[0]
+    total_loss += loss.item()
     loss.backward()
     opt.step()
   epoch_end_time = time.time()
