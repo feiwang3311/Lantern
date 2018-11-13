@@ -292,6 +292,14 @@ trait NNModule extends TensorDsl {
       backend.adagrad_update(tr, t, learning_rate, gradClip, descent)
     }
   }
+
+  case class SGD_Momentum(val module: Module, val learning_rate: Float, val momentum: Float = 0.9f, val gradClip: Float = 400.0f, val nesterov: Boolean = false, val descent: Boolean = true) extends Optim {
+    module.enrichParameter()
+    @virtualize
+    def step_func = { case (tr, Some(t)) =>
+      backend.momentum_update(tr, t, learning_rate, momentum, gradClip, nesterov, descent)
+    }
+  }
 }
 
 // FIXME: Eliminate explicit `backend` definition if possible.

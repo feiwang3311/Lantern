@@ -164,8 +164,8 @@ trait TensorDsl extends DslOps with Diff {
       val dataFloat: Rep[Array[Float]] = unchecked[Array[Float]]("(float *)", data)
 
       // helper offset value
-      var offset: Rep[Int] = (0)
-      def next(size: Rep[Int] = 1): Rep[Int] = {val temp = offset; offset += size; temp}
+      val offset = var_new(0)
+      def next(size: Rep[Int] = 1): Rep[Int] = {offset += size; offset - size}
 
       // get batchSize and numBatches
       val batchSize: Rep[Int] = dataInt(next())  // batchSize is 32, and numBatches is 5
@@ -189,6 +189,7 @@ trait TensorDsl extends DslOps with Diff {
         // First, get frequency_size and max_length
         freqSizes(batch) = dataInt(next())  // freqSize is 161, and maxLength is 229
         maxLengths(batch) = dataInt(next())
+        printf("freqSize and maxlength are %d %d\\n", freqSizes(batch), maxLengths(batch))
         // then the sound tensor of float [batchSize * 1 * freqSize * maxLength]
         inputs(batch) = slice(dataFloat, next(batchSize * freqSizes(batch) * maxLengths(batch)))
         // then the percentage tensor of float [batchSize] (percentage of padding for each sound)
@@ -198,7 +199,7 @@ trait TensorDsl extends DslOps with Diff {
         inputSizes(batch) = NewArray[Int](batchSize)
         val maxLength = maxLengths(batch)
         val percent = percents(batch)
-        for (i <- (0 until batchSize)) inputSizes(batch)(i) = unchecked[Int]("(int)",  maxLength * ( 1 - percent(i) ) )
+        for (i <- (0 until batchSize)) inputSizes(batch)(i) = unchecked[Int]("(int)",  maxLength * percent(i) )
 
         // then the targetSize tensor of Int[batchSize]
         targetSizes(batch) = slice(dataInt, next(batchSize))
@@ -532,6 +533,7 @@ trait TensorDsl extends DslOps with Diff {
     // - Fused multiply add operations?
 
     def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit
+    def momentum_update(tr: TensorR, t: Tensor, learning_rate: Float, momentum: Float, gradClip: Float, nesterov: Boolean, descent: Boolean): Unit
   }
 
   /**
@@ -1708,6 +1710,22 @@ trait TensorDsl extends DslOps with Diff {
           tr.x.data(i) -= learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
         else
           tr.x.data(i) += learning_rate * temp / Math.sqrt(t.data(i) + 1e-8f).toFloat
+        0.0f
+      }
+    }
+
+    @virtualize
+    override def momentum_update(tr: TensorR, t: Tensor, learning_rate: Float, momentum: Float, gradClip: Float, nesterov: Boolean, descent: Boolean): Unit = {
+      tr.d.changeTo { i =>
+        val temp = var_new(tr.d.data(i))
+        if (temp > gradClip) temp = gradClip
+        if (temp < -gradClip) temp = -gradClip
+        t.data(i) *= momentum
+        t.data(i) += temp
+        if (nesterov) { temp += momentum * t.data(i) }
+        else { temp = t.data(i) }
+        if (descent) { tr.x.data(i) -= learning_rate * temp }
+        else { tr.x.data(i) += learning_rate * temp }
         0.0f
       }
     }
@@ -4019,6 +4037,11 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       // assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
       unchecked[Unit](s"adagrad_update_1D_1D<<<${gridDimX}, 512>>>(", tr.x.data, ", ", tr.d.data, ", ", t.data, ", ", gradClip, ", ", learning_rate, ", ", t.scalarCount, ")")
     }
+    override def momentum_update(tr: TensorR, t: Tensor, learning_rate: Float, momentum: Float, gradClip: Float, nesterov: Boolean, descent: Boolean) = {
+      assert(descent, s"TODO: only handle gradient descent (not ascent) so far")
+      val gridDimX = 28
+      unchecked[Unit](s"momentum_update_1D_1D<<<${gridDimX}, 512>>>(", tr.x.data, ", ", tr.d.data, ", ", t.data, ", ", learning_rate, ", ", momentum, ", ", gradClip, ", ", nesterov, ", ", t.scalarCount, ")")
+    }
   }
 
   object BackendCublas {
@@ -5711,7 +5734,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    ", costs.data, ", grad_desc, ", probs.d.data, ", CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, ws, wsSize));\n" +
           "}"): _*)
       // reduce costs to scalar value
-      cudnnReduceTensor(costs, ReductionOp.Add, Seq(0), false)
+      cudnnReduceTensor(costs, ReductionOp.Avg, Seq(0), false)
     }
   }
 

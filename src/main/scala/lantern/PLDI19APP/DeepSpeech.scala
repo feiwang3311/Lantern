@@ -149,19 +149,22 @@ object DeepSpeech {
           val step5 = IF (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }
           generateRawComment("after bidirectional sum") // line 8450
           // TODO igore eval_mode (which needs a softmax layer) for now
-          (fc(step5).permute(1, 0, 2), outputLengthsGPU)  // B * T * num_alphabet
+          (fc(step5), outputLengthsGPU)  // B * T * num_alphabet
         }
       }
 
-      val net = DeepSpeech(labels = "abcdefghigklmnopqrstuvwxyz")
+      val labels = "_'ABCDEFGHIJKLMNOPQRSTUVWXYZ "
+      val net = DeepSpeech(labels = labels)
       net.registerParameters(s"${net.name}/")
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
       val opt = SGD(net, learning_rate = 3e-4f, gradClip = 1000.0f)
+      // val opt = SGD_Momentum(net, learning_rate = 3e-4f, momentum = 0.9f, gradClip = 400.0f, nesterov = true)
 
       def lossFun(input: TensorR, inputLengths: Rep[Array[Int]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val (probs, outputLength) = net(input, inputLengths)
+        val probs1 = probs.softmax_batch(2)
         generateRawComment("before CTC loss")// line 8572
-        val loss = probs.ctcLoss(outputLength.toCPU(input.x.shape(0)), target, targetSize)
+        val loss = probs1.ctcLoss(outputLength.toCPU(input.x.shape(0)), target, targetSize)
         generateRawComment("after CTC loss")// line 8641
         TensorR(loss)
       }
