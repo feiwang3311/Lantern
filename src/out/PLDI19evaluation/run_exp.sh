@@ -92,10 +92,10 @@ echo "Exp: run Dynet training (with autobatching) with GPU"
 python3 treelstmDynet.py result_DyNetB --dynet-gpus 1 --dynet-autobatch 1
 cp lantern/result_Lantern result_Lantern.txt
 cp pytorch/result_PyTorch result_PyTorch.txt
-cp tensorflow/result_TensorFold20 result_TensorFold20.txt
+cp tensorflow/result_TensorFold20 result_TF20.txt
 cp dynet/result_DyNetNB result_DyNetNB.txt
 cp dynet/result_DyNetB result_DyNetB.txt
-python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TensorFold20.txt result_DyNetNB.txt result_DyNetB.txt
+python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TF20.txt result_DyNetNB.txt result_DyNetB.txt
 
 exit 1
 
