@@ -38,7 +38,7 @@ def train(args):
         inputY = Variable(torch.from_numpy(input_y))
       res = model(inputX)
       loss = F.nll_loss(F.log_softmax(res, dim=1), inputY)
-      tloss += loss.data[0]
+      tloss += loss.item()
       loss.backward()
       optimizer.step()
       if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:

@@ -23,8 +23,8 @@ echo "Exp: run PyTorch training with GPU"
 python3 train.py --use_gpu=True
 echo "Exp: run PyTorch inference with GPU"
 python3 train.py --use_gpu=True --inference=True --write_to=result_PyTorch_inference_GPU
-echo "Exp: run PyTorch interence with CPU"
-python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
+# echo "Exp: run PyTorch interence with CPU"
+# python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
 cd ../lantern
 echo "Exp: run Lantern training with GPU"
 nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
