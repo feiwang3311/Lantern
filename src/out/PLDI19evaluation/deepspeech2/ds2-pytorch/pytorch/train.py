@@ -10,7 +10,7 @@ import numpy as np
 
 import torch
 from torch.autograd import Variable
-from warpctc_pytorch import CTCLoss
+# from warpctc_pytorch import CTCLoss
 
 import torch.nn.functional as F
 
@@ -94,7 +94,8 @@ def main():
             print('Directory already exists.')
         else:
             raise
-    criterion = CTCLoss()
+    #cuda = torch.device('cuda')
+    criterion = torch.nn.CTCLoss()#.to(cuda)
 
     with open(params.labels_path) as label_file:
         labels = str(''.join(json.load(label_file)))
