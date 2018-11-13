@@ -65,18 +65,19 @@ object DeepSpeech {
         val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
+        // we don't actually use outputLengths here. The pytorch imp needs it for pack_padded_sequence and pad_packed_sequence
         def apply(input: TensorR, outputLengths: Rep[Array[Int]]): TensorR @diff = {
-          // TODO: do we not use outputLengths?
           val in1 = batchNorm match {
             case None => input
-            case Some(batchNorm) => batchNorm(input)
+            case Some(batchNorm) =>
+              val input2D = input.resize(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
+              val inputBN = batchNorm(input2D)
+              inputBN.resize(input.x.shape(0), input.x.shape(1), input.x.shape(2))
           }
           val output = rnn(in1)
-          val timeD = output.x.shape(0)
-          val batchD = output.x.shape(1)
-          // TODO (Fei Wang) implementation using if else has compilation error
+          // Note (Fei Wang): I can use IF here, but since the boolean value is known at staging time, using match/case will generate only one branch of the code.
           (bidirectional) match {
-            case true => output.resize(timeD, batchD, 2, -1).sum(2)
+            case true => output.resize(output.x.shape(0), output.x.shape(1), 2, -1).sum(2)
             case false => output
           }
         }
@@ -91,7 +92,7 @@ object DeepSpeech {
         def apply(input: TensorR): TensorR @diff = {
           val padding = TensorR(Tensor.zeros((context +: input.x.shape.drop(1)): _*))
           val x = input.concat(0, padding)
-          val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1))
+          val xs = (0 until input.x.shape(0): Range) map (i => x(i, i + context + 1).resize(1, context + 1, input.x.shape(1), input.x.shape(2)))
           // TODO: this permute function can be implemented by cuDNN cudnnTransformTensor method
           val xc = xs.head.concat(0, xs.tail: _*).permute(0, 2, 3, 1)
           (x mul_sub weight).sum(3)
@@ -127,17 +128,15 @@ object DeepSpeech {
 
         val rnnInputSize: Int = {
           var tmp: Int = (floor((sampleRate * windowSize) / 2) + 1).toInt
-          tmp = (floor((sampleRate * windowSize) / 2) + 1).toInt
           tmp = (floor(tmp + 2 * 20 - 41) / 2 + 1).toInt
           tmp = (floor(tmp + 2 * 10 - 21) / 2 + 1).toInt
           tmp *= 32
           tmp
         }
 
-        val rnns = ArrayBuffer[BatchRNN]()
-        rnns += BatchRNN(s"batch_rnn0", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
-        for (layer <- (1 until numLayers): Range) {
-          rnns += BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
+        val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
+          if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
+          else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
         }
 
         val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
@@ -147,7 +146,9 @@ object DeepSpeech {
           val bn = BatchNorm1D(rnnHiddenSize)
           val linear = Linear1D(rnnHiddenSize, numClasses, bias=false)
           def apply(in: TensorR) = {
-            linear(bn(in))
+            val in2D = in.resize(in.x.shape(0) * in.x.shape(1), in.x.shape(2))
+            val out2D = linear(bn(in2D))
+            out2D.resize(in.x.shape(0), in.x.shape(1), in.x.shape(2))
           }
         }
 
@@ -160,25 +161,25 @@ object DeepSpeech {
           }
         }
 
-        // TODO: Implement.
-        def apply(input: TensorR, lengths: Rep[Array[Int]]): TensorR @diff = {
+        def apply(input: TensorR, lengths: Rep[Array[Int]]): (TensorR, Rep[Array[Int]]) @diff = {
           // input is B * C * D * T
           val outputLengths = getSeqLens(lengths)
           val outputLengthsGPU = outputLengths.toGPU(input.x.shape(0))
-          val step1 = conv(input, outputLengthsGPU)
+          val step1 = conv(input, outputLengthsGPU)  // TODO (Fei Wang): this is a potential error for the pytorch implementation
           val step2 = step1.resize(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
-          val step3 = step2.permute(2, 0, 1) // step3 is T * B * H
+          val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
 
-          def rec(rnns: ArrayBuffer[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
+          // def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
+          // this maybe better for code generation
+          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
           val step4 = rec(rnns, step3)
 
           val step5 = bidirectional match {
             case true => step4
-            case false => lookahead.get.apply(step4)
+            case false => lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true)
           }
           // TODO igore eval_mode (which needs a softmax layer) for now
-          val step6 = fc(step5).trans()
-          step6
+          (fc(step5).permute(1, 0, 2), outputLengthsGPU)  // B * T * num_alphabet
         }
       }
 

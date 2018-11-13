@@ -18,6 +18,7 @@ import java.io.PrintStream;
 
 import onnx.onnx_ml;
 import scala.collection.mutable.Map;
+import scala.collection.mutable.ArrayBuffer;
 
 class ModuleTest extends FunSuite {
 
@@ -45,6 +46,58 @@ class ModuleTest extends FunSuite {
       }
     }
     test1.eval("a")
+  }
+
+  test("option") {
+    val test = new DslDriverC[String, Unit] with NNModule {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        case class Linear1(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
+          val weight = TensorR(Tensor.zeros(inSize, outSize))
+          val bias = TensorR(Tensor.zeros(outSize))
+          def apply(in: TensorR): TensorR @diff = in.dot(weight) + bias
+        }
+
+        case class Linear(val inSize: Int, val outSize: Int, bias: Option[TensorR], val name: String = "linear") extends Module {
+          val weight = TensorR(Tensor.zeros(inSize, outSize))
+          val other = Some(1)
+          val other2 = Some(Linear1(47,48))
+          def apply(in:TensorR):TensorR@diff = bias match {
+            case Some(b) => in.dot(weight) + b
+            case None => in.dot(weight)
+          }
+        }
+        val testModule = Linear(3, 4, Some(TensorR(Tensor.zeros(4))))
+        testModule.registerParameters("")
+        testModule.forEachNamedParameter {case (name, (tr, _)) => System.out.println((s"$name: $tr"))}
+      }
+    }
+    test.eval("a")
+  }
+
+  test("seq") {
+    val test = new DslDriverC[String, Unit] with NNModule {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        case class Linear1(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
+          val weight = TensorR(Tensor.zeros(inSize, outSize))
+          val bias = TensorR(Tensor.zeros(outSize))
+          def apply(in: TensorR): TensorR @diff = in.dot(weight) + bias
+        }
+
+        case class Linear(val inSize: Int, val outSize: Int, val name: String = "linear") extends Module {
+          val weight = TensorR(Tensor.zeros(inSize, outSize))
+          val other = Seq(1, 2, 3)
+          val others = Seq(TensorR(Tensor.zeros(3, 4)), TensorR(Tensor.zeros(5,6)))
+          val others1 = Seq(Linear1(3, 4), Linear1(5,6))
+          def apply(in:TensorR):TensorR@diff = in.dot(weight)
+        }
+        val testModule = Linear(3, 4)
+        testModule.registerParameters("")
+        testModule.forEachNamedParameter {case (name, (tr, _)) => System.out.println((s"$name: $tr"))}
+      }
+    }
+    test.eval("a")
   }
 
   test("module") {
