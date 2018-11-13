@@ -115,7 +115,7 @@ object DeepSpeech {
             val shape2 = in.x.shape(2)
             val in2D = in.resize(shape0 * shape1, shape2)
             val out2D = linear(bn(in2D))
-            out2D.resize(shape0, shape1, shape2)
+            out2D.resize(shape0, shape1, numClasses)
           }
         }
 
@@ -132,29 +132,37 @@ object DeepSpeech {
 
         def apply(input: TensorR, lengths: Rep[Array[Int]]): (TensorR, Rep[Array[Int]]) @diff = {
           // input is B * C * D * T
+          generateRawComment("before getting length info") // line 1117
           val outputLengths = getSeqLens(lengths, input.x.shape(0))
           val outputLengthsGPU = outputLengths.toGPU(input.x.shape(0))
+          generateRawComment("after getting length info") // line 1138
           val step1 = conv(input, outputLengthsGPU)  // TODO (Fei Wang): this is a potential error for the pytorch implementation
+          generateRawComment("after conv ops")  // line 1480
           val step2 = step1.resize(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
+          generateRawComment("after resize and permute") // line 1576
 
           def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
           val step4 = rec(rnns, step3)
+          generateRawComment("after RNN layers")// line 8711
 
           val step5 = IF (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }
+          generateRawComment("after bidirectional sum") // line 8450
           // TODO igore eval_mode (which needs a softmax layer) for now
           (fc(step5).permute(1, 0, 2), outputLengthsGPU)  // B * T * num_alphabet
         }
       }
 
-      val net = DeepSpeech()
+      val net = DeepSpeech(labels = "abcdefghigklmnopqrstuvwxyz")
       net.registerParameters(s"${net.name}/")
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
       val opt = SGD(net, learning_rate = 3e-4f, gradClip = 1000.0f)
 
       def lossFun(input: TensorR, inputLengths: Rep[Array[Int]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val (probs, outputLength) = net(input, inputLengths)
+        generateRawComment("before CTC loss")// line 8572
         val loss = probs.ctcLoss(outputLength.toCPU(input.x.shape(0)), target, targetSize)
+        generateRawComment("after CTC loss")// line 8641
         TensorR(loss)
       }
 

@@ -159,8 +159,10 @@ trait NNModule extends TensorDsl {
     val bias: TensorR = TensorR(Tensor.zeros(dimSize))
     val runningMean: Tensor = Tensor.zeros(dimSize)
     val runningVar: Tensor = Tensor.zeros(dimSize)
+    @virtualize
     def apply(in: TensorR): TensorR @diff = {
-      assert(in.x.rank == 2 && in.x.shape(1) == dimSize, s"BatchNorm1D input should be rank2, with shape 1 same as dimSize, got ${in.x.shape} : ${dimSize}")
+      assert(in.x.rank == 2)
+      assert(in.x.shape.dims(1) == unit(dimSize), "BatchNorm1D input should be rank2, with shape 1 same as dimSize, got %d : %d") //, in.x.shape(1), dimSize)
       in.batchNorm1D(scale, bias, runningMean, runningVar)
     }
   }
@@ -173,7 +175,7 @@ trait NNModule extends TensorDsl {
     val runningMean: Tensor = Tensor.zeros(num_features)
     val runningVar: Tensor = Tensor.zeros(num_features)
     def apply(in: TensorR): TensorR @diff = {
-      assert(in.x.rank == 4 && in.x.shape(1) == num_features, s"BatchNorm2D input should be rank 2, with shape 1 same as num_features, got ${in.x.shape} : ${num_features}")
+      assert(in.x.rank == 4 && in.x.shape(1) == unit(num_features), s"BatchNorm2D input should be rank 2, with shape 1 same as num_features, got ${in.x.shape} : ${num_features}")
       in.batchNorm(scale, bias, runningMean, runningVar)
     }
   }

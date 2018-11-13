@@ -228,9 +228,8 @@ trait TensorDsl extends DslOps with Diff {
   @virtualize
   def mmax(a: Rep[Int], b: Rep[Int]) = if (a >= b) a else b
 
-  @virtualize
   def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = {
-    if(!cond) { printf(msg, args : _*); error("") }
+    __ifThenElse((!cond), { printf(msg + "\\n", args : _*); error("") }, {})
   }
 
   def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
@@ -4498,7 +4497,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       )
     }
 
-    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = {
+    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) ={
       // TODO: Dedupe assertions/shape calculations with CPU implementation.
       assert(input.rank == 4, "Input must be 4-D (first dimension is batch size)")
       assert(kernel.rank == 4, "Kernel must be 4-D")
@@ -4568,7 +4567,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), """));
+          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), """) );
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
@@ -4886,9 +4885,11 @@ trait TensorDslCudnn extends TensorDslCublas {
           "}"): _*)
     }
 
+    @virtualize
     override def batchNorm1DInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = {
       assert(x.rank == 2, s"batchNorm1D only applies to inputs of 2D matrix, got ${x.shape}")
-      assert(scale.rank == 1 && scale.shape(0) == x.shape(1), s"scale should be rank 1 and have the same size as input dim 1, got ${scale.shape} and ${x.shape}")
+      assert(scale.rank == 1, s"scale should be rank 1, got ${scale.rank}")
+      assert(scale.shape(0) == x.shape(1), s"scale should have the same size as input dim 1, got ${scale.shape(0)} and ${x.shape(1)}")
       assert(bias.rank == 1 && bias.shape(0) == x.shape(1), s"bias should be rank 1 and have the same size as input dim 1, got ${bias.shape} and ${x.shape}")
       assert(runningMean.rank == 1 && runningMean.shape(0) == x.shape(1), s"runningMean should be rank 1 and have the same size as input dim 1, got ${runningMean.shape} and ${x.shape}")
       assert(runningVar.rank == 1 && runningVar.shape(0) == x.shape(1), s"runningVar should be rank 1 and have the same size as input dim 1, got ${runningVar.shape} and ${x.shape}")
@@ -4896,12 +4897,18 @@ trait TensorDslCudnn extends TensorDslCublas {
       cudnnBatchNormalization1DForwardInference(x, res, scale, bias, runningMean, runningVar)
       res
     }
+
+    @virtualize
     override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = {
       assert(x.rank == 2, s"batchNorm1D only applies to inputs of 2D matrix, got ${x.shape}")
-      assert(scale.rank == 1 && scale.shape(0) == x.shape(1), s"scale should be rank 1 and have the same size as input dim 1, got ${scale.shape} and ${x.shape}")
-      assert(bias.rank == 1 && bias.shape(0) == x.shape(1), s"bias should be rank 1 and have the same size as input dim 1, got ${bias.shape} and ${x.shape}")
-      assert(runningMean.rank == 1 && runningMean.shape(0) == x.shape(1), s"runningMean should be rank 1 and have the same size as input dim 1, got ${runningMean.shape} and ${x.shape}")
-      assert(runningVar.rank == 1 && runningVar.shape(0) == x.shape(1), s"runningVar should be rank 1 and have the same size as input dim 1, got ${runningVar.shape} and ${x.shape}")
+      assert(scale.rank == 1)
+      assert(scale.shape(0) == x.shape(1), s"scale should be rank 1 and have the same size as input dim 1, got ${scale.shape} and ${x.shape}")
+      assert(bias.rank == 1)
+      assert(bias.shape(0) == x.shape(1), s"bias should be rank 1 and have the same size as input dim 1, got ${bias.shape} and ${x.shape}")
+      assert(runningMean.rank == 1)
+      assert(runningMean.shape(0) == x.shape(1), s"runningMean should be rank 1 and have the same size as input dim 1, got ${runningMean.shape} and ${x.shape}")
+      assert(runningVar.rank == 1)
+      assert(runningVar.shape(0) == x.shape(1), s"runningVar should be rank 1 and have the same size as input dim 1, got ${runningVar.shape} and ${x.shape}")
       val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
       val saveMean = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
       val saveInvVariance = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
