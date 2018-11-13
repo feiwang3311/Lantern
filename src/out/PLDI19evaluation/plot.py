@@ -87,14 +87,14 @@ def plot(files, model):
   for i in range(N):
     ps[i].set_facecolor(getColor(labels[i]))
   ax.set_xticks(ind)
-  ax.set_xticklabels(labels, fontsize = 17)
+  ax.set_xticklabels(labels, fontsize = 16)
   ax.tick_params(axis='y', labelsize = 15)
   ax.set_ylim([0, max(loopTimes) * 1.2])
   ax.set_ylabel("seconds", fontsize = 20)
   if step_desc == "1 epoch":
-    ax.set_title("Training Time per Epoch in {}".format(model), fontsize = 20)
+    ax.set_title("{} training time per epoch".format(model), fontsize = 20)
   else:
-    ax.set_title("Training Time of {} in {}".format(step_desc, model), fontsize = 20)
+    ax.set_title("{} training time in {}".format(model, step_desc), fontsize = 20)
   pylab.savefig(save_dir + model + '.png')
 
 if __name__ == "__main__":
