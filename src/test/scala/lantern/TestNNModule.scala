@@ -130,4 +130,29 @@ class ModuleTest extends FunSuite {
     }
     test.eval("a")
   }
+
+  test("stackOverFlow") {
+    val test = new DslDriverC[String, Unit] with NNModule {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+
+        case class TestNested(val name: String = "TestNested") extends Module {
+          val randomName = new Module {
+            val name: String = "fully_connected"
+            val dummy = TensorR(Tensor.zeros(1))
+            def apply(in: TensorR) = {
+              in.resize(in.x.shape(0) * in.x.shape(1), in.x.shape(2))
+              // in.resize(20, 10)
+            }
+          }
+        }
+
+        val module = TestNested()
+        module.registerParameters(module.name + "/")
+        module.forEachNamedParameter{case(name, (tr, _)) => System.out.println(s"$name: $tr")}
+      }
+    }
+    test.eval("a")
+  }
+
 }
