@@ -48,7 +48,7 @@ trait NNModule extends TensorDsl {
       forEachNamedParameter { case (_, (tr, t)) => f(tr, t) }
 
     // Implicit parameter registration system.
-    def registerParameters(nameScope: String): Unit = {
+    def registerParameters(nameScope: String, parent: Option[Module] = None): Unit = {
       def oops[T](field: Field)(read: Field => T) = {
         val acc = field.isAccessible
         field.setAccessible(true)
@@ -57,37 +57,54 @@ trait NNModule extends TensorDsl {
         res
       }
 
-      val allFields = this.getClass.getDeclaredFields
+      val allFields1: Array[java.lang.reflect.Field] = this.getClass.getDeclaredFields
+      val allFields = allFields1.filter { field => oops[Boolean](field) {
+        x => x.get(this) != this && (parent match { case None => true; case Some(p) => x.get(this) != p })
+      }}
+
+      // this part may take more than needed. For instance, all Option or ArrayBuffer type are included due to type erasure
       val subParameters = allFields.filter { f =>
         classOf[Option[TensorR]].isAssignableFrom(f.getType) ||
         classOf[TensorR].isAssignableFrom(f.getType) ||
-        classOf[ArrayBuffer[TensorR]].isAssignableFrom(f.getType)
+        classOf[Seq[TensorR]].isAssignableFrom(f.getType)
       }
       val subModules = allFields.filter { f =>
-        classOf[Module].isAssignableFrom(f.getType) && oops[Boolean](f) { _.get(this) != this }
+        classOf[Module].isAssignableFrom(f.getType) && oops[Boolean](f) { _.get(this) != this } ||
+        classOf[Option[Module]].isAssignableFrom(f.getType) ||
+        classOf[Seq[Module]].isAssignableFrom(f.getType)
       }
 
       subParameters.foreach { field => oops[Unit](field) { x =>
         val field = x.get(this)
         val name = x.getName
-        val fullName = s"$nameScope$name"
+        val fullName = s"${nameScope}${name}"
         field match {
           case t: TensorR => parameters.update(fullName, (t, None))
-          // FIXME: Type argument `TensorR` is eliminated by type erasure.
-          case arr: ArrayBuffer[TensorR] =>
-            arr.zipWithIndex.foreach { case (t, i) =>
-              val name = s"$fullName$i"
+          case arr@((a: TensorR) +: rest) =>
+            arr.asInstanceOf[Seq[TensorR]].zipWithIndex.foreach { case (t, i) =>
+              val name = s"${fullName}_index_$i"
               parameters.update(name, (t, None))
             }
           case Some(t: TensorR) => parameters.update(fullName, (t, None))
-          case None => ()
+          case _ => ()
         }
       }}
       subModules.foreach { field => oops[Unit](field) { x =>
-        val module = x.get(this).asInstanceOf[Module]
-        modules.update(s"$nameScope${x.getName}", module)
-        module.registerParameters(s"$nameScope${x.getName}/")
+        val field = x.get(this)
+        val name = x.getName
+        val fullName = s"${nameScope}${name}"
+        field match {
+          case t: Module => modules.update(fullName, t)
+          case arr@((a: Module) +: rest) =>
+            arr.asInstanceOf[Seq[Module]].zipWithIndex.foreach { case (t, i) =>
+              val name = s"${fullName}_index_$i"
+              modules.update(name, t)
+            }
+          case Some(t: Module) => modules.update(fullName, t)
+          case _ => ()
+        }
       }}
+      modules.foreach {case (name, module) => module.registerParameters(s"${name}/", Some(this))}
     }
   }
 
@@ -135,6 +152,30 @@ trait NNModule extends TensorDsl {
     val kernel = TensorR(Tensor.randnorm(outChannel, inChannel, kernelSize.head, kernelSize.last))
     val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
     def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, pad)
+  }
+
+  case class BatchNorm1D(dimSize: Int, name: String = "batch_norm_1d") extends Module {
+    val scale: TensorR = TensorR(Tensor.ones(dimSize))
+    val bias: TensorR = TensorR(Tensor.zeros(dimSize))
+    val runningMean: Tensor = Tensor.zeros(dimSize)
+    val runningVar: Tensor = Tensor.zeros(dimSize)
+    def apply(in: TensorR): TensorR @diff = {
+      assert(in.x.rank == 2 && in.x.shape(1) == dimSize, s"BatchNorm1D input should be rank2, with shape 1 same as dimSize, got ${in.x.shape} : ${dimSize}")
+      in.batchNorm1D(scale, bias, runningMean, runningVar)
+    }
+  }
+
+  case class BatchNorm2D(num_features: Int, eps: Float =1e-05f, momentum: Float =0.1f, affine: Boolean = true,
+    track_running_stats: Boolean = true, name: String = "batch_norm_2d") extends Module {
+    assert(affine && track_running_stats, "TODO: not yet handling them to be false")
+    val scale: TensorR = TensorR(Tensor.ones(num_features))
+    val bias: TensorR = TensorR(Tensor.zeros(num_features))
+    val runningMean: Tensor = Tensor.zeros(num_features)
+    val runningVar: Tensor = Tensor.zeros(num_features)
+    def apply(in: TensorR): TensorR @diff = {
+      assert(in.x.rank == 4 && in.x.shape(1) == num_features, s"BatchNorm2D input should be rank 2, with shape 1 same as num_features, got ${in.x.shape} : ${num_features}")
+      in.batchNorm(scale, bias, runningMean, runningVar)
+    }
   }
 
   abstract class RnnCell extends Module {
@@ -291,7 +332,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     // Initialize parameter buffer.
     // cuDNN requires that all parameters are stored in a contiguous buffer.
     // NOTE: Choose different initialization strategy?
-    lazy val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
+    lazy val parameterBuffer = (TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
 
     def getParameterSize(): Int = {
       val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections

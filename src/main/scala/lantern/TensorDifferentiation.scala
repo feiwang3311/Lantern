@@ -168,8 +168,10 @@ trait TensorDsl extends DslOps with Diff {
       def next(size: Rep[Int] = 1): Rep[Int] = {val temp = offset; offset += size; temp}
 
       // get batchSize and numBatches
-      val batchSize: Rep[Int] = dataInt(next())  // batchSize is 32, and numBatches is 891
-      val numBatches: Rep[Int] = dataInt(next())
+      val batchSize: Rep[Int] = dataInt(next())  // batchSize is 32, and numBatches is 5
+      val num_Batches: Rep[Int] = dataInt(next())
+      val numBatches = 5
+      val length = batchSize * numBatches
 
       // get array to store information for each batch
       val freqSizes: Rep[Array[Int]] = NewArray[Int](numBatches)
@@ -177,10 +179,13 @@ trait TensorDsl extends DslOps with Diff {
       // get array of arrays to store the pointers to data
       val inputs: Rep[Array[Array[Float]]] = NewArray[Array[Float]](numBatches)
       val percents: Rep[Array[Array[Float]]] = NewArray[Array[Float]](numBatches)
+      val inputSizes: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
+      // val inputs = NewArray[Tensor](numBatches)
+      // val percents = NewArray[Tensor](numBatches)
       val targetSizes: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
       val targets: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
 
-      for (batch <- (0 until numBatches)) {
+      for (batch <- (0 until numBatches: Rep[Range])) {
         // First, get frequency_size and max_length
         freqSizes(batch) = dataInt(next())  // freqSize is 161, and maxLength is 229
         maxLengths(batch) = dataInt(next())
@@ -188,11 +193,32 @@ trait TensorDsl extends DslOps with Diff {
         inputs(batch) = slice(dataFloat, next(batchSize * freqSizes(batch) * maxLengths(batch)))
         // then the percentage tensor of float [batchSize] (percentage of padding for each sound)
         percents(batch) = slice(dataFloat, next(batchSize))
+
+        // change percent data to length data
+        inputSizes(batch) = NewArray[Int](batchSize)
+        val maxLength = maxLengths(batch)
+        val percent = percents(batch)
+        for (i <- (0 until batchSize)) inputSizes(batch)(i) = unchecked[Int]("(int)",  maxLength * ( 1 - percent(i) ) )
+
         // then the targetSize tensor of Int[batchSize]
         targetSizes(batch) = slice(dataInt, next(batchSize))
         val sumTargetSize: Rep[Int] = unchecked[Int]("accumulate(", targetSizes(batch), ", ", targetSizes(batch), " + ", batchSize, ", 0)")
         // then the targets tensor of Int[sum(targetSize)]
         targets(batch) = slice(dataInt, next(sumTargetSize))
+      }
+
+      @virtualize
+      // the lossFun takes a Batch (Tensor), inputLengths, labels, labelLengths (all Rep[Array[Int]])
+      def foreachBatch(f: (Rep[Int], Tensor, Rep[Array[Int]], Rep[Array[Int]], Rep[Array[Int]]) => Unit) = {
+        for (batchIndex <- 0 until numBatches: Rep[Range]) {
+          val maxLength = maxLengths(batchIndex)
+          val freqSize = freqSizes(batchIndex)
+          val input: Tensor = Tensor(inputs(batchIndex), batchSize, 1, freqSize, maxLength)
+          val inputLength: Rep[Array[Int]] = inputSizes(batchIndex)
+          val target: Rep[Array[Int]] = targets(batchIndex)
+          val targetSize: Rep[Array[Int]] = targetSizes(batchIndex)
+          f(batchIndex, input, inputLength, target, targetSize)
+        }
       }
     }
   }
@@ -477,6 +503,9 @@ trait TensorDsl extends DslOps with Diff {
     // Loss functions.
     def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
     def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit
+
+    // CTCLoss
+    def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor
 
     // Reduction operations.
     def sum(x: Tensor): Tensor
@@ -1564,6 +1593,9 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
+    // CTCLoss
+    override def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor = ???
+
     override def sum(x: Tensor): Tensor = {
       Tensor.scalar(x.fold(0.0f)(_ + _))
     }
@@ -1961,33 +1993,10 @@ trait TensorDsl extends DslOps with Diff {
       else backend.logSoftmax(this, dim)
     }
 
-    // // deprecated (older version that only works for 1D case), should remove
-    // @virtualize
-    // def logSoftmax() = {
-    //   assert(this.rank == 1, "TODO: logSoftmax only handles 1d vectors so far")
-    //   backend.logSoftmax(this.resize(1, this.shape(0)), 1)
-    // }
-
     def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
 
-    // // deprecated (older version that only works with 1D case), should remove
-    // @virtualize
-    // def nllLoss(target: Rep[Int]) = {
-    //   assert(this.rank == 1, "Input must be a 1-D tensor")
-    //   val targets = backend.mallocArray[Int](1); targets(0) = target
-    //   backend.nllLoss(this.resize(1, this.shape(0)), targets)
-    // }
-
-    // def resize(dims: Int*) = {
-    //   generateRawComment(s"resize to $dims")
-    //   val new_dims: Seq[Rep[Int]] = if (dims.forall(_ > 0)) dims.map(unit(_)) else {
-    //     assert(dims.filter(_ < 0) == Seq(-1), s"there should be at most one -1 in the resize dims, got $dims")
-    //     dims.map(unit(_)).updated(dims.indexOf(-1, 0), this.scalarCount / dims.filter(_ > 0).product)
-    //   }
-    //   assert(new_dims.product1 == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
-
-    //   Tensor(this.data, new_dims : _*)
-    // }
+    def ctcLoss(inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor =
+      backend.ctcLoss(TensorR(this), inputLengths, labels, labelLengths)
 
     @virtualize
     def resize(dims: Rep[Int]*) = {
@@ -2848,6 +2857,8 @@ trait TensorDsl extends DslOps with Diff {
       k(new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*)))
     }
 
+    // def resize(dims: Rep[Int]*) = new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*))
+
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert (this.x.rank == 2, s"nllLossB() function only takes tensor of rank 2, got ${this.x.shape}")
       val y = TensorR(x.nllLossB(target)); k(y)
@@ -2855,16 +2866,10 @@ trait TensorDsl extends DslOps with Diff {
       backend.nllLoss_grad(this, y, target)
     }
 
-    def resizeHelperNoChecker(t: TensorR, dims: Int*) = new TensorR(t.x.resize(dims: _*), t.d.resize(dims: _*))
+    def ctcLoss(inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor =
+      backend.ctcLoss(this, inputLengths, labels, labelLengths)
 
-    // // deprecated
-    // def nllLoss(target: Rep[Int]): TensorR @diff = shift { (k: TensorR => Unit) =>
-    //   assert (this.x.rank == 1, s"nllLoss() function only takes tensor of rank 1, got ${this.x.shape}")
-    //   val targets = backend.mallocArray[Int](1); targets(0) = target
-    //   val y = TensorR(x.nllLossB(targets)); k(y)  // note that y is now 2D (batchSize = 1, length)
-    //   generateRawComment("nllLoss gradient")
-    //   backend.nllLoss_grad(resizeHelperNoChecker(this, 1, this.x.shape(0)), y, targets)
-    // }
+    def resizeHelperNoChecker(t: TensorR, dims: Int*) = new TensorR(t.x.resize(dims: _*), t.d.resize(dims: _*))
 
     @virtualize
     def averagePoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -3939,6 +3944,8 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
       unchecked[Unit]("nllLoss_grad<<<", input.d.shape(0), ", 1>>>(", input.d.shape.strides(0), ", ", res.d.data, ", ", target, ", ", input.d.data, ")")
     }
+
+    override def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor = ???
 
     override def sum(x: Tensor): Tensor = ???
     override def sum_grad(input: TensorR, res: TensorR): Unit = ???
@@ -5655,19 +5662,21 @@ trait TensorDslCudnn extends TensorDslCublas {
       cudnnRNNBackwardWeights(mode, input, hx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
     }
 
+    override def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor = {
+      cudnnCTCLoss(prob, labels, inputLengths, labelLengths)
+    }
+
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnCTCLoss
-    def cudnnCTCLoss(probs: Tensor, labels: Rep[Array[Int]],
-                     inputLengths: Rep[Array[Int]], targetLengths: Rep[Array[Int]]): (Tensor, Tensor) = {
-      assert(probs.rank == 3, "Probability tensor should have rank 3: [inputLength, batchSize, alphabetSize]")
-      val inputLength = probs.shape(0)
-      val batchSize = probs.shape(1)
-      val alphabetSize = probs.shape(2)
+    def cudnnCTCLoss(probs: TensorR, labels: Rep[Array[Int]], inputLengths: Rep[Array[Int]], targetLengths: Rep[Array[Int]]): Tensor = {
+      assert(probs.x.rank == 3, "Probability tensor should have rank 3: [inputLength, batchSize, alphabetSize]")
+      val inputLength = probs.x.shape(0)
+      val batchSize = probs.x.shape(1)
+      val alphabetSize = probs.x.shape(2)
       // Note: `inputLengths` and `targetLengths` should have length equal to `batchSize`.
       // Note: `cudnnGetCTCLossWorkspaceSize` requires that the batchSize (i.e. size of targetLengths) is NO greater than 256.
       assertC(batchSize <= 256, "'cudnnGetCTCLossWorkspaceSize' requires batch size less than 256, got %d\\n", batchSize)
 
       val costs = Tensor(mallocArray[Float](batchSize), batchSize)
-      val grad = Tensor(mallocArray[Float](probs.scalarCount), probs.shape: _*)
       unchecked[Unit](
         Seq(s"""
           |{
@@ -5691,10 +5700,11 @@ trait TensorDslCudnn extends TensorDslCublas {
           "    CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, &wsSize));\n" +
           "void *ws = myGpuMalloc(wsSize);\n\n" +
           "CUDNN_CALL(cudnnCTCLoss(\n" +
-          "    cudnnHandle, probs_desc, ", probs.data, ", ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
-          "    ", costs.data, ", grad_desc, ", grad.data, ", CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, ws, wsSize));\n" +
+          "    cudnnHandle, probs_desc, ", probs.x.data, ", ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
+          "    ", costs.data, ", grad_desc, ", probs.d.data, ", CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, ws, wsSize));\n" +
           "}"): _*)
-      (costs, grad)
+      // reduce costs to scalar value
+      cudnnReduceTensor(costs, ReductionOp.Add, Seq(0), false)
     }
   }
 

@@ -765,12 +765,11 @@ class TestCudnn extends LanternFunSuite {
 
         // val logProbs = Tensor.ones(inputLength, batchSize, alphabetSize)
         // Note: `probs` should be the result of `logProbs.softmax(dim = 2)`.
-        val probs = Tensor.fill(Seq(inputLength, batchSize, alphabetSize), 0.05f)
+        val probs = TensorR(Tensor.fill(Seq(inputLength, batchSize, alphabetSize), 0.05f))
         val target = Array(Seq.fill(batchSize)(1).map(unit(_)): _*)
         val inputLengths = Array(Seq.fill(batchSize)(inputLength).map(unit(_)): _*)
         val targetLengths = Array(Seq.fill(batchSize)(1).map(unit(_)): _*)
-
-        val (loss, _) = BackendCudnn().cudnnCTCLoss(probs, target, inputLengths, targetLengths)
+        val loss = probs.ctcLoss(inputLengths, target, targetLengths)
 
         backend = BackendCPU()
         loss.toCPU().print()

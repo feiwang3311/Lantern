@@ -19,10 +19,8 @@ import java.io.File
 object DeepSpeech {
 
   val root_dir = "src/out/PLDI19evaluation/"
-  val cpu_file_dir = "deepspeech/lantern/Lantern.cpp"
-  val gpu_file_dir = "deepspeech/lantern/Lantern.cu"
-  // TODO: Specify data directory.
-  val data_dir: String = ???
+  val gpu_file_dir = "deepspeech2/lantern/Lantern.cu"
+  val data_dir: String = "/u/data/u99/wang603/TiarkMlEnv/SampleData/deepspeech_train.bin"
 
   val deepspeechGPU = new LanternDriverCudnn[String, Unit] {
 
@@ -31,32 +29,6 @@ object DeepSpeech {
       Random.srand(Some(42))
       val dataTimer = Timer2()
       dataTimer.startTimer
-
-      val batchSize = 20
-
-      case class BatchNorm1D(dimSize: Int, name: String = "batch_norm_1d") extends Module {
-        val scale: TensorR = TensorR(Tensor.ones(dimSize))
-        val bias: TensorR = TensorR(Tensor.zeros(dimSize))
-        val runningMean: Tensor = Tensor.zeros(dimSize)
-        val runningVar: Tensor = Tensor.zeros(dimSize)
-        def apply(in: TensorR): TensorR @diff = {
-          assert(in.x.rank == 2 && in.x.shape(1) == dimSize, s"BatchNorm1D input should be rank2, with shape 1 same as dimSize, got ${in.x.shape} : ${dimSize}")
-          in.batchNorm1D(scale, bias, runningMean, runningVar)
-        }
-      }
-
-      case class BatchNorm2D(num_features: Int, eps: Float =1e-05f, momentum: Float =0.1f, affine: Boolean = true,
-        track_running_stats: Boolean = true, name: String = "batch_norm_2d") extends Module {
-        assert(affine && track_running_stats, "TODO: not yet handling them to be false")
-        val scale: TensorR = TensorR(Tensor.ones(num_features))
-        val bias: TensorR = TensorR(Tensor.zeros(num_features))
-        val runningMean: Tensor = Tensor.zeros(num_features)
-        val runningVar: Tensor = Tensor.zeros(num_features)
-        def apply(in: TensorR): TensorR @diff = {
-          assert(in.x.rank == 4 && in.x.shape(1) == num_features, s"BatchNorm2D input should be rank 2, with shape 1 same as num_features, got ${in.x.shape} : ${num_features}")
-          in.batchNorm(scale, bias, runningMean, runningVar)
-        }
-      }
 
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L80
       case class BatchRNN(val name: String = "batch_rnn",
@@ -67,19 +39,13 @@ object DeepSpeech {
 
         // we don't actually use outputLengths here. The pytorch imp needs it for pack_padded_sequence and pad_packed_sequence
         def apply(input: TensorR, outputLengths: Rep[Array[Int]]): TensorR @diff = {
-          val in1 = batchNorm match {
-            case None => input
-            case Some(batchNorm) =>
-              val input2D = input.resize(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
-              val inputBN = batchNorm(input2D)
-              inputBN.resize(input.x.shape(0), input.x.shape(1), input.x.shape(2))
-          }
+          val in1 = IF (useBatchNorm) {
+            val input2D = input.resize(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
+            val inputBN = batchNorm.get.apply(input2D)
+            inputBN.resize(input.x.shape(0), input.x.shape(1), input.x.shape(2))
+          } { input }
           val output = rnn(in1)
-          // Note (Fei Wang): I can use IF here, but since the boolean value is known at staging time, using match/case will generate only one branch of the code.
-          (bidirectional) match {
-            case true => output.resize(output.x.shape(0), output.x.shape(1), 2, -1).sum(2)
-            case false => output
-          }
+          IF (bidirectional) {output.resize(output.x.shape(0), output.x.shape(1), 2, -1).sum(2)} {output}
         }
       }
 
@@ -92,11 +58,8 @@ object DeepSpeech {
         def apply(input: TensorR): TensorR @diff = {
           val padding = TensorR(Tensor.zeros((unit(context) +: input.x.shape.drop(1)): _*))
           val x = input.concat(0, padding)
-          val xs = ((0 until 100): Range) map (i => x(i, i + context + 1))
-          // val xs = (0 until input.x.shape(0)) map (i => x(i, i + context + 1))
-          // TODO: this permute function can be implemented by cuDNN cudnnTransformTensor method
-          val xc = xs.head.concat(0, xs.tail: _*).permute(0, 2, 3, 1)
-          (x mul_sub weight).sum(3)
+          val xs = x.repeat0(context).permute(0, 2, 3, 1)
+          (xs mul_sub weight).sum(3)
         }
       }
 
@@ -105,14 +68,14 @@ object DeepSpeech {
                             rnnMode: RnnMode = LstmMode, labels: String = "abc",
                             rnnHiddenSize: Int = 768, numLayers: Int = 5,
                             sampleRate: Int = 16000, windowSize: Float = 0.02f,
-                            bidirectional: Boolean = true, context: Int = 20) extends Module {
+                            bidirectional: Boolean = true, context: Int = 20) extends Module with Serializable {
 
         assert(rnnHiddenSize >= 1, "RNN hidden size must be at least 1")
         assert(numLayers >= 1, "Number of RNN layers must be at least 1")
 
         val numClasses = labels.length
 
-        val conv = new Module {
+        val conv = new Module with Serializable {
           val name = "conv"
           val conv1 = Conv2D(1, 32, Seq(41, 11), stride = Seq(2, 2), pad = Seq(20, 5))
           val bn1 = BatchNorm2D(32)
@@ -135,120 +98,124 @@ object DeepSpeech {
           tmp
         }
 
-        val rnns = ArrayBuffer[BatchRNN]()
-        rnns += BatchRNN(s"batch_rnn0", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
-        for (layer <- (1 until numLayers): Range) {
-          rnns += BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
+        val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
+          if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
+          else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
         }
 
         val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
 
-        val fc = new Module {
+        val fc = new Module with Serializable {
           val name: String = "fully_connected"
           val bn = BatchNorm1D(rnnHiddenSize)
           val linear = Linear1D(rnnHiddenSize, numClasses, bias=false)
-          def apply(in: TensorR) = {
-            val in2D = in.resize(in.x.shape(0) * in.x.shape(1), in.x.shape(2))
+          def apply(in: TensorR): TensorR @diff = {
+            val shape0 = in.x.shape(0)
+            val shape1 = in.x.shape(1)
+            val shape2 = in.x.shape(2)
+            val in2D = in.resize(shape0 * shape1, shape2)
             val out2D = linear(bn(in2D))
-            out2D.resize(in.x.shape(0), in.x.shape(1), in.x.shape(2))
+            out2D.resize(shape0, shape1, shape2)
           }
         }
 
-        def getSeqLens(lengths: Rep[Array[Int]]) = {
+        def getSeqLens(lengths: Rep[Array[Int]], size: Rep[Int]) = {
           conv.modules.foldLeft(lengths) { case(ls, (_, m)) =>
             if (m.isInstanceOf[Conv2D]) {
               val mm = m.asInstanceOf[Conv2D]
-              ls.map(x => (x + 2 * mm.pad(1) - mm.dilation(1) * (mm.kernelSize(1) - 1) - 1) / mm.stride(1) + 1)
-            } else ls
+              val ls_next = NewArray[Int](size)
+              for (i <- 0 until size) ls_next(i) = (ls(i) + 2 * mm.pad(1) - mm.dilation(1) * (mm.kernelSize(1) - 1) - 1) / mm.stride(1) + 1
+              // ls.map(x => (x + 2 * mm.pad(1) - mm.dilation(1) * (mm.kernelSize(1) - 1) - 1) / mm.stride(1) + 1)
+              ls_next } else ls
           }
         }
 
         def apply(input: TensorR, lengths: Rep[Array[Int]]): (TensorR, Rep[Array[Int]]) @diff = {
           // input is B * C * D * T
-          val outputLengths = getSeqLens(lengths)
+          val outputLengths = getSeqLens(lengths, input.x.shape(0))
           val outputLengthsGPU = outputLengths.toGPU(input.x.shape(0))
           val step1 = conv(input, outputLengthsGPU)  // TODO (Fei Wang): this is a potential error for the pytorch implementation
           val step2 = step1.resize(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
 
-          def rec(rnns: ArrayBuffer[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
+          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
           val step4 = rec(rnns, step3)
 
-          val step5 = bidirectional match {
-            case true => step4
-            case false => lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true)
-          }
+          val step5 = IF (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }
           // TODO igore eval_mode (which needs a softmax layer) for now
           (fc(step5).permute(1, 0, 2), outputLengthsGPU)  // B * T * num_alphabet
         }
       }
 
       val net = DeepSpeech()
+      net.registerParameters(s"${net.name}/")
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
       val opt = SGD(net, learning_rate = 3e-4f, gradClip = 1000.0f)
 
-      // def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
-      //   val res = net(input).logSoftmaxB().nllLossB(target)
-      //   res.sum()
-      // }
+      def lossFun(input: TensorR, inputLengths: Rep[Array[Int]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
+        val (probs, outputLength) = net(input, inputLengths)
+        val loss = probs.ctcLoss(outputLength.toCPU(input.x.shape(0)), target, targetSize)
+        TensorR(loss)
+      }
 
-      // // Training
-      // val nbEpoch = 4
+      // Training
+      val nbEpoch = 10
 
-      // // TODO: Replace with real data loader.
-      // val train = new Dataset.DataLoaderTest("dummy_input", "dummy_output", dims = Seq())
+      // TODO: Replace with real data loader.
+      val data = new Dataset.DeepSpeechDataLoader(data_dir, true)
+      val batchSize = data.batchSize
 
-      // val prepareTime = dataTimer.getElapsedTime / 1e6f
-      // printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
+      val prepareTime = dataTimer.getElapsedTime / 1e6f
+      printf("Data reading (all prepare time) in %lf sec\\n", prepareTime)
 
-      // val loss_save = NewArray[Double](nbEpoch)
+      val loss_save = NewArray[Double](nbEpoch)
 
-      // val addr = getMallocAddr() // remember current allocation pointer here
-      // val addrCuda = getCudaMallocAddr()
+      val addr = getMallocAddr()
+      val addrCuda = getCudaMallocAddr()
 
-      // generateRawComment("training loop starts here")
-      // for (epoch <- 0 until nbEpoch: Rep[Range]) {
-      //   val trainTimer = Timer2()
-      //   var imgIdx = var_new(0)
-      //   var trainLoss = var_new(0.0f)
-      //   printf("Start training epoch %d\\n", epoch + 1)
-      //   trainTimer.startTimer
+      generateRawComment("training loop starts here")
+      for (epoch <- 0 until nbEpoch: Rep[Range]) {
+        val trainTimer = Timer2()
+        var imgIdx = var_new(0)
+        var trainLoss = var_new(0.0f)
+        printf("Start training epoch %d\\n", epoch + 1)
+        trainTimer.startTimer
 
-      //   train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
-      //     imgIdx += batchSize
-      //     val inputR = TensorR(input.toGPU(), isInput = true)
-      //     val targetR = target.toGPU(batchSize)
-      //     val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(1))
-      //     trainLoss += loss.data(0)
-      //     opt.perform{case (name, (tr, ot)) => tr.d.toCPU().printHead(5, name)}
-      //     error("stop")
-      //     opt.step()
+        data.foreachBatch { (batchIndex: Rep[Int], input: Tensor, inputLength: Rep[Array[Int]], target: Rep[Array[Int]], targetLength: Rep[Array[Int]]) =>
 
-      //     // selective printing
-      //     if (imgIdx % (train.length / 10) == 0) {
-      //       printf(s"Train epoch %d: [%d/%d (%.0f%%)]\\tAverage Loss: %.6f\\n", epoch, imgIdx, train.length, 100.0 * imgIdx /train.length, trainLoss/imgIdx)
-      //       unchecked[Unit]("fflush(stdout)")
-      //     }
-      //     resetMallocAddr(addr)
-      //     resetCudaMallocAddr(addrCuda)
-      //   }
-      //   val delta = trainTimer.getElapsedTime
-      //   printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
+          imgIdx += batchSize
+          val inputR = TensorR(input.toGPU(), isInput = true)
+          val loss = gradR_loss(lossFun(inputR, inputLength, target, targetLength))(Tensor.zeros(1))
+          trainLoss += loss.data(0)
+          // opt.perform{case (name, (tr, ot)) => tr.d.toCPU().printHead(5, name)}
+          // error("stop")
+          opt.step()
 
-      //   loss_save(epoch) = trainLoss / train.length
-      // }
+          // selective printing
+          if (imgIdx % batchSize == 0) {
+            printf(s"Train epoch %d: [%d/%d (%.0f%%)]\\tAverage Loss: %.6f\\n", epoch, imgIdx, data.length, 100.0 * imgIdx /data.length, trainLoss/imgIdx)
+            unchecked[Unit]("fflush(stdout)")
+          }
+          resetMallocAddr(addr)
+          resetCudaMallocAddr(addrCuda)
+        }
+        val delta = trainTimer.getElapsedTime
+        printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/data.length)
 
-      // val totalTime = dataTimer.getElapsedTime / 1e6f
-      // val loopTime = totalTime - prepareTime
-      // val timePerEpoc = loopTime / nbEpoch
+        loss_save(epoch) = trainLoss / data.length
+      }
 
-      // val fp2 = openf(a, "w")
-      // fprintf(fp2, "unit: %s\\n", "1 epoch")
-      // for (i <- (0 until loss_save.length): Rep[Range]) {
-      //   fprintf(fp2, "%lf\\n", loss_save(i))
-      // }
-      // fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
-      // closef(fp2)
+      val totalTime = dataTimer.getElapsedTime / 1e6f
+      val loopTime = totalTime - prepareTime
+      val timePerEpoc = loopTime / nbEpoch
+
+      val fp2 = openf(a, "w")
+      fprintf(fp2, "unit: %s\\n", "1 epoch")
+      for (i <- (0 until loss_save.length): Rep[Range]) {
+        fprintf(fp2, "%lf\\n", loss_save(i))
+      }
+      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+      closef(fp2)
     }
   }
 

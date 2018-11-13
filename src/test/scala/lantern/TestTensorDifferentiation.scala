@@ -17,6 +17,26 @@ import java.io.File
 
 class AdLMSVectorTest extends LanternFunSuite {
 
+  test("IF") {
+    val IF_Test = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.zeros(3, 4)
+        val grad = gradR(x => IF(1 < 0){
+          generateRawComment("true branch")
+          x + x
+        }{
+          generateRawComment("false branch")
+          x * x
+        })(input)
+        generateRawComment("show gradient")
+      }
+    }
+    // System.out.println(IF_Test.code)
+    IF_Test.eval("abc")
+  }
+
   test("array0") {
     val array0 = new LanternDriverC[String, Unit] {
       override val fileName = currentTestName
