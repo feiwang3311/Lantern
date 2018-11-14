@@ -82,12 +82,13 @@ def main():
             filename = url.split("/")[-1]
             target_filename = os.path.join(split_dir, filename)
             if not os.path.exists(target_filename):
-                wget.download(url, split_dir)
+                pass
+#                wget.download(url, split_dir)
             print("Unpacking {}...".format(filename))
             tar = tarfile.open(target_filename)
             tar.extractall(split_dir)
             tar.close()
-            os.remove(target_filename)
+#            os.remove(target_filename)
             print("Converting flac files to wav and extracting transcripts...")
             assert os.path.exists(extracted_dir), "Archive {} was not properly uncompressed.".format(filename)
             for root, subdirs, files in os.walk(extracted_dir):

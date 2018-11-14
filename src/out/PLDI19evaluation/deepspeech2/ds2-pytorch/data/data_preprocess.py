@@ -19,6 +19,7 @@ import sys
 sys.path.append('../')
 import pytorch.params as params
 import struct
+import pickle
 
 windows = {'hamming': scipy.signal.hamming, 'hann': scipy.signal.hann, 'blackman': scipy.signal.blackman,
            'bartlett': scipy.signal.bartlett}
@@ -495,7 +496,34 @@ def verify_binary_file(filename, data_loader):
                 dtype=torch.int
             )
             assert targets_tensor.equal(ori_targets), "targets not equal"
-    
+
+def write_dataset_to_pickle_file(filename, data_loader):
+    start_iter = 0
+    data_loader_length = min(len(data_loader), 200)
+    data_list = []
+    data_dict = {b'numBatches': data_loader_length-start_iter, b'batchSize': params.batch_size, b'batchedData': data_list}
+
+    for i, (data) in enumerate(data_loader, start=start_iter):
+        if i == data_loader_length:
+            break
+        inputs, targets, input_percentages, target_sizes = data
+
+        data_list.append((
+            inputs[0][0].size(0),
+            inputs[0][0].size(1),
+            inputs.numpy(),
+            input_percentages.numpy(),
+            target_sizes.numpy(),
+            targets.numpy()))
+
+    with open(filename, 'wb') as f:
+        pickle.dump(data_dict, f)
+
+def read_dataset_from_pickle_file(filename):
+    with open(filename, 'rb') as f:
+        data = pickle.load(f)
+        print(data)
+        
 def main():
     WRITE_DATASET = True
     VERIFY_DATASET = True
@@ -513,9 +541,8 @@ def main():
     except:
         pass
 
-#    dataset_name = 'test'
-    for dataset_name in ['train', 'val', 'test']:
-        filename = save_folder + 'deepspeech_{}.bin'.format(dataset_name)
+    for dataset_name in ['val', 'test', 'train']:
+        filename = save_folder + 'deepspeech_{}.pickle'.format(dataset_name)
         manifest = {'train': params.train_manifest, 'val': params.val_manifest, 'test': params.test_manifest}
         manifest_filepath = manifest[dataset_name]
         if manifest_filepath is None:
@@ -530,15 +557,15 @@ def main():
                           window=params.window,
                           noise_dir=params.noise_dir,
                           noise_prob=params.noise_prob,
-                          noise_levels=(params.noise_min, params.noise_max))    
+                          noise_levels=(params.noise_min, params.noise_max))
         dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=manifest_filepath,
                                      labels=labels, normalize=True, augment=params.augment)
         loader = AudioDataLoader(dataset, batch_size=params.batch_size,
                                  num_workers=1, drop_last=True)
 
 
-        write_dataset_to_binary_file(filename, data_loader=loader)
-#    verify_binary_file(filename, data_loader=loader)
+        write_dataset_to_pickle_file(filename, data_loader=loader)
+        read_dataset_from_pickle_file(filename)
 
 if __name__ == '__main__':
     main()
