@@ -69,9 +69,9 @@ object DeepSpeech {
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L145
       case class DeepSpeech(val name: String = "deepspeech",
                             rnnMode: RnnMode = RnnTanhMode, labels: String = "abc",
-                            rnnHiddenSize: Int = 768, numLayers: Int = 5,
+                            rnnHiddenSize: Int = 1024, numLayers: Int = 3,
                             sampleRate: Int = 16000, windowSize: Float = 0.02f,
-                            bidirectional: Boolean = true, context: Int = 20) extends Module with Serializable {
+                            bidirectional: Boolean = false, context: Int = 20) extends Module with Serializable {
 
         assert(rnnHiddenSize >= 1, "RNN hidden size must be at least 1")
         assert(numLayers >= 1, "Number of RNN layers must be at least 1")
