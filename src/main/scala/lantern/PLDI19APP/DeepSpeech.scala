@@ -157,7 +157,7 @@ object DeepSpeech {
       }
 
       val labels = "_'ABCDEFGHIJKLMNOPQRSTUVWXYZ "
-      val net = DeepSpeech(labels = labels, bidirectional = false)
+      val net = DeepSpeech(labels = labels, bidirectional = true)
       net.registerParameters(s"${net.name}/")
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
       val opt = SGD(net, learning_rate = 3e-8f, gradClip = 1000.0f)
@@ -173,7 +173,7 @@ object DeepSpeech {
       }
 
       // Training
-      val nbEpoch = 10
+      val nbEpoch = 4 
 
       // TODO: Replace with real data loader.
       val data = new Dataset.DeepSpeechDataLoader(data_dir, true)

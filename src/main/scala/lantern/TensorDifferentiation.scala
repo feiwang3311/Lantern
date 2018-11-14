@@ -179,7 +179,8 @@ trait TensorDsl extends DslOps with Diff {
 
       // get batchSize and numBatches
       val batchSize = reader.nextInt  // batchSize is 32, and numBatches is 5
-      val numBatches = reader.nextInt
+      val num_Batches = reader.nextInt
+      val numBatches = 200
       val length = batchSize * numBatches
       printf("data size is %d batches, %d batch size\\n", numBatches, batchSize)
 
