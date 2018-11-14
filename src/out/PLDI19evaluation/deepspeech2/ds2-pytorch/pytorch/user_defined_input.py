@@ -21,7 +21,7 @@ class Batch(object):
 
 	def batch(self):
 		# temp is a tupel of (freqSize, maxLength, prob, pencent, label, labelLength)
-		(_, _, inputs, targets, input_percentages, target_sizes) = self.batchedData[self.current_batch]
+		(_, _, inputs, input_percentages, target_sizes, targets) = self.batchedData[self.current_batch]
 		self.current_batch += 1
 		if self.current_batch >= self.numBatches:
 			self.current_batch = 0
