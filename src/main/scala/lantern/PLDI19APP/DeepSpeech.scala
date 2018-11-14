@@ -33,7 +33,7 @@ object DeepSpeech {
 
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L80
       case class BatchRNN(val name: String = "batch_rnn",
-                          inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = LstmMode,
+                          inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = RnnTanhMode,
                           bidirectional: Boolean = false, useBatchNorm: Boolean = true) extends Module {
         val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
@@ -68,7 +68,7 @@ object DeepSpeech {
 
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L145
       case class DeepSpeech(val name: String = "deepspeech",
-                            rnnMode: RnnMode = LstmMode, labels: String = "abc",
+                            rnnMode: RnnMode = RnnTanhMode, labels: String = "abc",
                             rnnHiddenSize: Int = 768, numLayers: Int = 5,
                             sampleRate: Int = 16000, windowSize: Float = 0.02f,
                             bidirectional: Boolean = true, context: Int = 20) extends Module with Serializable {
