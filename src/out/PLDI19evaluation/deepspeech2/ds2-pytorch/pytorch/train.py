@@ -17,14 +17,15 @@ import torch.nn.functional as F
 ### Import Data Utils ###
 sys.path.append('../')
 
-from data.bucketing_sampler import BucketingSampler, SpectrogramDatasetWithLength
-from data.data_loader import AudioDataLoader, SpectrogramDataset
-from decoder import GreedyDecoder
+# from data.bucketing_sampler import BucketingSampler, SpectrogramDatasetWithLength
+# from data.data_loader import AudioDataLoader, SpectrogramDataset
+# from decoder import GreedyDecoder
 from model import DeepSpeech, supported_rnns
+import user_defined_input
 
 import params
 
-from eval_model import  eval_model
+# from eval_model import  eval_model
 
 ###########################################################
 # Comand line arguments, handled by params except seed    #
@@ -99,22 +100,22 @@ def main():
 
     with open(params.labels_path) as label_file:
         labels = str(''.join(json.load(label_file)))
-    audio_conf = dict(sample_rate=params.sample_rate,
-                      window_size=params.window_size,
-                      window_stride=params.window_stride,
-                      window=params.window,
-                      noise_dir=params.noise_dir,
-                      noise_prob=params.noise_prob,
-                      noise_levels=(params.noise_min, params.noise_max))
+    # audio_conf = dict(sample_rate=params.sample_rate,
+    #                   window_size=params.window_size,
+    #                   window_stride=params.window_stride,
+    #                   window=params.window,
+    #                   noise_dir=params.noise_dir,
+    #                   noise_prob=params.noise_prob,
+    #                   noise_levels=(params.noise_min, params.noise_max))
 
-    train_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.train_manifest, labels=labels,
-                                       normalize=True, augment=params.augment)
-    test_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.val_manifest, labels=labels,
-                                      normalize=True, augment=False)
-    train_loader = AudioDataLoader(train_dataset, batch_size=params.batch_size,
-                                   num_workers=1)
-    test_loader = AudioDataLoader(test_dataset, batch_size=params.batch_size,
-                                  num_workers=1)
+    # train_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.train_manifest, labels=labels,
+    #                                    normalize=True, augment=params.augment)
+    # test_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.val_manifest, labels=labels,
+    #                                   normalize=True, augment=False)
+    # train_loader = AudioDataLoader(train_dataset, batch_size=params.batch_size,
+    #                                num_workers=1)
+    # test_loader = AudioDataLoader(test_dataset, batch_size=params.batch_size,
+    #                               num_workers=1)
 
     rnn_type = params.rnn_type.lower()
     assert rnn_type in supported_rnns, "rnn_type should be either lstm, rnn or gru"
@@ -123,8 +124,8 @@ def main():
                        nb_layers       = params.hidden_layers,
                        labels          = labels,
                        rnn_type        = supported_rnns[rnn_type],
-                       audio_conf      = audio_conf,
-                       bidirectional   = False,
+                       audio_conf      = None,
+                       bidirectional   = True,
                        rnn_activation  = params.rnn_act_type,
                        bias            = params.bias)
 
@@ -132,7 +133,7 @@ def main():
     optimizer = torch.optim.SGD(parameters, lr=params.lr,
                                 momentum=params.momentum, nesterov=True,
                                 weight_decay = params.l2)
-    decoder = GreedyDecoder(labels)
+    # decoder = GreedyDecoder(labels)
 
     if args.continue_from:
         print("Loading checkpoint model %s" % args.continue_from)
@@ -161,7 +162,7 @@ def main():
         start_iter = 0
         avg_training_loss = 0
     if params.cuda:
-        model         = torch.nn.DataParallel(model).cuda()
+        model = torch.nn.DataParallel(model).cuda()
 
     print(model)
     print("Number of parameters: %d" % DeepSpeech.get_param_size(model))
@@ -173,13 +174,19 @@ def main():
     forward_time = AverageMeter()
     backward_time = AverageMeter()
 
+    filename = "/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle"
+    # filename = "/scratch/wu636/training/speech_recognition/data/test/deep_speech_train.pickle"
+    batchedData = user_defined_input.Batch(filename)
+
     for epoch in range(start_epoch, params.epochs):
         model.train()
         end = time.time()
-        for i, (data) in enumerate(train_loader, start=start_iter):
-            if i == len(train_loader):
-                break
-            inputs, targets, input_percentages, target_sizes = data
+        for i in range(batchedData.numBatches):
+            inputs, targets, input_percentages, target_sizes = batchedData.batch()
+            inputs = torch.from_numpy(inputs)
+            targets = torch.from_numpy(targets)
+            input_percentages = torch.from_numpy(input_percentages)
+            target_sizes = torch.from_numpy(target_sizes)
             # measure data loading time
             data_time.update(time.time() - end)
             inputs = Variable(inputs, requires_grad=False)
@@ -210,7 +217,7 @@ def main():
                 print("WARNING: received an inf loss, setting loss value to 0")
                 loss_value = 0
             else:
-                loss_value = loss.data[0]
+                loss_value = loss.data.item()
 
             avg_loss += loss_value
             losses.update(loss_value, inputs.size(0))
@@ -236,21 +243,22 @@ def main():
             batch_time.update(time.time() - end)
             end = time.time()
 
-            print('Epoch: [{0}][{1}/{2}]\t'
+            if (i % 20 == 0):
+                print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Forward {forward_time.val:.3f} ({forward_time.avg:.3f})\t'
                   'CTC Time {ctc_time.val:.3f} ({ctc_time.avg:.3f})\t'
                   'Backward {backward_time.val:.3f} ({backward_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
-                (epoch + 1), (i + 1), len(train_loader), batch_time=batch_time,
+                (epoch + 1), (i + 1), batchedData.numBatches, batch_time=batch_time,
                 data_time=data_time, forward_time=forward_time, ctc_time=ctc_time,
                 backward_time=backward_time, loss=losses))
 
             del loss
             del out
 
-        avg_loss /= len(train_loader)
+        avg_loss /= batchedData.numBatches #  len(train_loader)
 
         print('Training Summary Epoch: [{0}]\t'
             'Average Loss {loss:.3f}\t'
