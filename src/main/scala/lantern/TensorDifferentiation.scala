@@ -157,7 +157,7 @@ trait TensorDsl extends DslOps with Diff {
       // open file
       val fd = open(name)
       val len = filelen(fd)
-      printf("file size is %d\\n", len)
+      printf("file size is %ld\\n", len)
 
       val data = mmap[Char](fd, len)
       object reader {
@@ -4151,7 +4151,8 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def mul_sub(in1: Tensor, in2: Tensor): Tensor = {
-      assert(in1.rank > in2.rank && in1.shape.takeRight(in2.rank) == in2.shape.toList, s"mul_sub: in2 shape must match the lower part of in1, got ${in1.shape}, ${in2.shape}")
+      assert(in1.rank > in2.rank)
+      Tensor.assertShapeEqual(in1.shape.takeRight(in2.rank), in2.shape) //, s"mul_sub: in2 shape must match the lower part of in1, got ${in1.shape}, ${in2.shape}")
       val resTensor = Tensor(mallocArray[Float](in1.scalarCount), in1.shape: _*)
       val nGrid = 28
       unchecked[Unit](s"mul_sub<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resTensor.data, ", ", in1.scalarCount, ", ", in2.scalarCount, ")")
@@ -4159,7 +4160,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def mul_sub_grad(in1: TensorR, in2: TensorR, res: TensorR): Unit = {
-      assert(in1.x.rank > in2.x.rank && in1.x.shape.takeRight(in2.x.rank) == in2.x.shape.toList, s"mul_sub_grad: in2 shape must match the lower part of in1, got ${in1.x.shape}, ${in2.x.shape}")
+      // assert(in1.x.rank > in2.x.rank && in1.x.shape.takeRight(in2.x.rank) == in2.x.shape.toList, s"mul_sub_grad: in2 shape must match the lower part of in1, got ${in1.x.shape}, ${in2.x.shape}")
       val temp = Tensor(mallocArray[Float](in1.d.scalarCount), in1.d.shape: _*)
       val nGrid = 28
       unchecked[Unit](s"mul_sub_grad<<<${nGrid}, 512>>>(", in1.x.data, ", ", in1.d.data, ", ", in2.x.data, ", ", temp.data, ", ",

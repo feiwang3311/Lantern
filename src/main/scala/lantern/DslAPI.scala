@@ -333,7 +333,7 @@ trait DslGenBase extends CGenNumericOpsExtra
         |#define MAP_FILE MAP_SHARED
         |#endif
         |
-        |int fsize(int fd) {
+        |long fsize(int fd) {
         |  struct stat stat;
         |  int res = fstat(fd, &stat);
         |  return stat.st_size;

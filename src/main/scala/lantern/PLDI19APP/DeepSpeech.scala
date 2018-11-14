@@ -58,7 +58,9 @@ object DeepSpeech {
         // TODO (Fei Wang): this could be optimized by a user-defined kernel?
         def apply(input: TensorR): TensorR @diff = {
           val padding = TensorR(Tensor.zeros((unit(context) +: input.x.shape.drop(1)): _*))
-          val x = input.concat(0, padding)
+          val xt = input.resize((unit(1) +: input.x.shape): _*).concat(1, padding.resize((unit(1) +: padding.x.shape): _*))
+          val x = xt.resize(input.x.shape(0) + padding.x.shape(0), input.x.shape(1), input.x.shape(2))
+          // val x = input.concat(0, padding)
           val xs = x.repeat0(context).permute(0, 2, 3, 1)
           (xs mul_sub weight).sum(3)
         }
@@ -155,7 +157,7 @@ object DeepSpeech {
       }
 
       val labels = "_'ABCDEFGHIJKLMNOPQRSTUVWXYZ "
-      val net = DeepSpeech(labels = labels)
+      val net = DeepSpeech(labels = labels, bidirectional = false)
       net.registerParameters(s"${net.name}/")
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
       val opt = SGD(net, learning_rate = 3e-8f, gradClip = 1000.0f)
