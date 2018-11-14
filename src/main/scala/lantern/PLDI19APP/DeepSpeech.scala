@@ -20,7 +20,8 @@ object DeepSpeech {
 
   val root_dir = "src/out/PLDI19evaluation/"
   val gpu_file_dir = "deepspeech2/lantern/Lantern.cu"
-  val data_dir: String = "/u/data/u99/wang603/TiarkMlEnv/SampleData/deepspeech_train.bin"
+  // val data_dir: String = "/u/data/u99/wang603/TiarkMlEnv/SampleData/deepspeech_train.bin"
+  val data_dir: String = "/scratch/wu636/training/speech_recognition/data/test/deepspeech_train.bin"
 
   val deepspeechGPU = new LanternDriverCudnn[String, Unit] {
 
@@ -157,7 +158,7 @@ object DeepSpeech {
       val net = DeepSpeech(labels = labels)
       net.registerParameters(s"${net.name}/")
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
-      val opt = SGD(net, learning_rate = 3e-4f, gradClip = 1000.0f)
+      val opt = SGD(net, learning_rate = 3e-8f, gradClip = 1000.0f)
       // val opt = SGD_Momentum(net, learning_rate = 3e-4f, momentum = 0.9f, gradClip = 400.0f, nesterov = true)
 
       def lossFun(input: TensorR, inputLengths: Rep[Array[Int]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
@@ -203,7 +204,7 @@ object DeepSpeech {
           opt.step()
 
           // selective printing
-          if (imgIdx % batchSize == 0) {
+          if (imgIdx % (batchSize * 20) == 0) {
             printf(s"Train epoch %d: [%d/%d (%.0f%%)]\\tAverage Loss: %.6f\\n", epoch, imgIdx, data.length, 100.0 * imgIdx /data.length, trainLoss/imgIdx)
             unchecked[Unit]("fflush(stdout)")
           }

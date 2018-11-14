@@ -25,7 +25,7 @@ object LSTM {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
-      val fl = filelen(fd)
+      val fl = filelen(fd).toInt
       val data = mmap[Char](fd,fl)
       var pos = 0
 
@@ -47,7 +47,7 @@ object LSTM {
       val startTime = get_time()
       val scanner = new Scanner("graham.txt")
       val training_data = scanner.data
-      val data_size = scanner.fl
+      val data_size = scanner.fl   
       // val chars = training_data.distinct  /** this can be done in second stage **/
       // val vocab_size = chars.length
       printf("data has %d chars\\n", data_size)
@@ -231,7 +231,7 @@ object LSTM {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
-      val fl = filelen(fd)
+      val fl = filelen(fd).toInt
       val data = mmap[Char](fd,fl)
       var pos = 0
 

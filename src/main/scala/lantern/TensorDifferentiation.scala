@@ -79,7 +79,7 @@ trait TensorDsl extends DslOps with Diff {
       val tfd = open(s"../data/bin/${name}_${if (train) "train" else "test"}_target.bin")
       val tlen = filelen(tfd)
       val target = mmap[Int](tfd, tlen)
-      val length = tlen/4
+      val length: Rep[Int] = tlen.toInt/4
 
       def dataset = new Tensor(data, Seq(60000, dims(1), dims(2)))
 
@@ -157,21 +157,31 @@ trait TensorDsl extends DslOps with Diff {
       // open file
       val fd = open(name)
       val len = filelen(fd)
+      printf("file size is %d\\n", len)
 
-      // mmap data
       val data = mmap[Char](fd, len)
-      val dataInt: Rep[Array[Int]] = unchecked[Array[Int]]("(int32_t *)", data)
-      val dataFloat: Rep[Array[Float]] = unchecked[Array[Float]]("(float *)", data)
-
-      // helper offset value
-      val offset = var_new(0)
-      def next(size: Rep[Int] = 1): Rep[Int] = {offset += size; offset - size}
+      object reader {
+        val pointer = var_new(unchecked[Long]("(long)", data))
+        def nextI(size: Rep[Int] = 1): Rep[Array[Int]] = {
+          val temp: Rep[Long] = pointer
+          val intArray = unchecked[Array[Int]]("(int32_t*) ", temp)
+          pointer += 4 * size
+          intArray
+        }
+        def nextInt(): Rep[Int] = nextI()(0)
+        def nextF(size: Rep[Int] = 1): Rep[Array[Float]] = {
+          val temp: Rep[Long] = pointer
+          val floatArray = unchecked[Array[Float]]("(float*) ", temp)
+          pointer += 4 * size
+          floatArray
+        }
+      }
 
       // get batchSize and numBatches
-      val batchSize: Rep[Int] = dataInt(next())  // batchSize is 32, and numBatches is 5
-      val num_Batches: Rep[Int] = dataInt(next())
-      val numBatches = 5
+      val batchSize = reader.nextInt  // batchSize is 32, and numBatches is 5
+      val numBatches = reader.nextInt
       val length = batchSize * numBatches
+      printf("data size is %d batches, %d batch size\\n", numBatches, batchSize)
 
       // get array to store information for each batch
       val freqSizes: Rep[Array[Int]] = NewArray[Int](numBatches)
@@ -185,15 +195,16 @@ trait TensorDsl extends DslOps with Diff {
       val targetSizes: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
       val targets: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
 
+      generateRawComment("load data by batchs")
       for (batch <- (0 until numBatches: Rep[Range])) {
         // First, get frequency_size and max_length
-        freqSizes(batch) = dataInt(next())  // freqSize is 161, and maxLength is 229
-        maxLengths(batch) = dataInt(next())
-        printf("freqSize and maxlength are %d %d\\n", freqSizes(batch), maxLengths(batch))
+        freqSizes(batch) = reader.nextInt  // freqSize is 161, and maxLength is 229
+        maxLengths(batch) = reader.nextInt
+        printf("batch %d has freqSize %d maxLength %d\\n", batch, freqSizes(batch), maxLengths(batch))
         // then the sound tensor of float [batchSize * 1 * freqSize * maxLength]
-        inputs(batch) = slice(dataFloat, next(batchSize * freqSizes(batch) * maxLengths(batch)))
+        inputs(batch) = reader.nextF(batchSize * freqSizes(batch) * maxLengths(batch))
         // then the percentage tensor of float [batchSize] (percentage of padding for each sound)
-        percents(batch) = slice(dataFloat, next(batchSize))
+        percents(batch) = reader.nextF(batchSize)
 
         // change percent data to length data
         inputSizes(batch) = NewArray[Int](batchSize)
@@ -202,10 +213,10 @@ trait TensorDsl extends DslOps with Diff {
         for (i <- (0 until batchSize)) inputSizes(batch)(i) = unchecked[Int]("(int)",  maxLength * percent(i) )
 
         // then the targetSize tensor of Int[batchSize]
-        targetSizes(batch) = slice(dataInt, next(batchSize))
+        targetSizes(batch) = reader.nextI(batchSize)
         val sumTargetSize: Rep[Int] = unchecked[Int]("accumulate(", targetSizes(batch), ", ", targetSizes(batch), " + ", batchSize, ", 0)")
         // then the targets tensor of Int[sum(targetSize)]
-        targets(batch) = slice(dataInt, next(sumTargetSize))
+        targets(batch) = reader.nextI(sumTargetSize)
       }
 
       @virtualize
@@ -3971,6 +3982,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def sum(x: Tensor, dim: Int): Tensor = ???
     override def sum_grad(input: TensorR, res: TensorR, dim: Int): Unit = ???
 
+    // TODO (Fei Wang): extend this to support 3D 2D 1D
     override def concat(dim: Int, tensors: Seq[Tensor]): Tensor = {
       assert(dim == 1, "TODO (Fei Wang): only support dim = 1 so far")
       assert(tensors.size == 2, "TODO: (Fei Wang): only support two tensor concatenation so far")
@@ -5646,7 +5658,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t paramsSize;
           |CUDNN_CALL(cudnnGetRNNParamsSize(
           |    cudnnHandle, rnn_desc, x_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
-          |printf("paramsSize: %zu\\n", paramsSize / sizeof(float));
+          |// printf("paramsSize: %zu\\n", paramsSize / sizeof(float));
           |assert(paramsSize / sizeof(float) == """.stripMargin, w.d.scalarCount, s""" && "Expected parameter size mismatch");
           |
           |cudnnFilterDescriptor_t dw_desc;

@@ -25,7 +25,7 @@ object VanillaRNN {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
-      val fl = filelen(fd)
+      val fl = filelen(fd).toInt
       val data = mmap[Char](fd,fl)
       var pos = 0
 
@@ -187,7 +187,7 @@ object VanillaRNN {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
-      val fl = filelen(fd)
+      val fl = filelen(fd).toInt
       val data = mmap[Char](fd,fl)
       var pos = 0
 
