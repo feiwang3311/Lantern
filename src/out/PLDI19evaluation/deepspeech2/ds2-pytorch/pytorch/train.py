@@ -19,12 +19,13 @@ sys.path.append('../')
 
 # from data.bucketing_sampler import BucketingSampler, SpectrogramDatasetWithLength
 # from data.data_loader import AudioDataLoader, SpectrogramDataset
-from decoder import GreedyDecoder
+# from decoder import GreedyDecoder
 from model import DeepSpeech, supported_rnns
+import user_defined_input
 
 import params
 
-from eval_model import  eval_model
+# from eval_model import  eval_model
 
 ###########################################################
 # Comand line arguments, handled by params except seed    #
@@ -97,8 +98,8 @@ def main():
     #cuda = torch.device('cuda')
     criterion = torch.nn.CTCLoss()#.to(cuda)
 
-    # with open(params.labels_path) as label_file:
-    #     labels = str(''.join(json.load(label_file)))
+    with open(params.labels_path) as label_file:
+        labels = str(''.join(json.load(label_file)))
     # audio_conf = dict(sample_rate=params.sample_rate,
     #                   window_size=params.window_size,
     #                   window_stride=params.window_stride,
@@ -123,7 +124,7 @@ def main():
                        nb_layers       = params.hidden_layers,
                        labels          = labels,
                        rnn_type        = supported_rnns[rnn_type],
-                       audio_conf      = audio_conf,
+                       audio_conf      = None,
                        bidirectional   = False,
                        rnn_activation  = params.rnn_act_type,
                        bias            = params.bias)
@@ -173,7 +174,7 @@ def main():
     forward_time = AverageMeter()
     backward_time = AverageMeter()
 
-    filename = ???
+    filename = "/scratch/wu636/training/speech_recognition/data/test/deep_speech_train.pickle"
     batchedData = user_defined_input.Batch(filename)
 
     for epoch in range(start_epoch, params.epochs):

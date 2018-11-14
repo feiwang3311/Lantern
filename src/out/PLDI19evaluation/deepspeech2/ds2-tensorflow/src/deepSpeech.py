@@ -70,7 +70,7 @@ def inputs(eval_data, data_dir, batch_size, use_fp16, shuffle):
     """
     if not data_dir:
         raise ValueError('Please supply a data_dir')
-    print 'Using LibriSpeech Corpus'
+    print('Using LibriSpeech Corpus')
     feats, labels, seq_lens = deepSpeech_input.inputs(eval_data=eval_data,
                                                       data_dir=data_dir,
                                                       batch_size=batch_size,

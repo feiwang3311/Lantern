@@ -102,11 +102,11 @@ def parse_args():
  
     args = parser.parse_args()
 
-    print "debug: ", args.debug
-    print "nchw: ", args.nchw
-    print "dummy: ", args.dummy
-    print "engine: ", args.engine
-    print "initial lr: ", args.initial_lr
+    print("debug: ", args.debug)
+    print("nchw: ", args.nchw)
+    print("dummy: ", args.dummy)
+    print("engine: ", args.engine)
+    print("initial lr: ", args.initial_lr)
 
     # Read architecture hyper-parameters from checkpoint file
     # if one is provided.
@@ -483,7 +483,7 @@ def train():
             print "cannot use checkpoint"
             sess.run(tf.global_variables_initializer())
         """
-        print "forbid the use of checkpoint"
+        print("forbid the use of checkpoint")
         sess.run(tf.global_variables_initializer())
         # print "Trainable Variables: "
         # tvariables_names = [v.name for v in tf.trainable_variables()]
