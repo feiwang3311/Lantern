@@ -17,8 +17,8 @@ import torch.nn.functional as F
 ### Import Data Utils ###
 sys.path.append('../')
 
-from data.bucketing_sampler import BucketingSampler, SpectrogramDatasetWithLength
-from data.data_loader import AudioDataLoader, SpectrogramDataset
+# from data.bucketing_sampler import BucketingSampler, SpectrogramDatasetWithLength
+# from data.data_loader import AudioDataLoader, SpectrogramDataset
 from decoder import GreedyDecoder
 from model import DeepSpeech, supported_rnns
 
@@ -97,24 +97,24 @@ def main():
     #cuda = torch.device('cuda')
     criterion = torch.nn.CTCLoss()#.to(cuda)
 
-    with open(params.labels_path) as label_file:
-        labels = str(''.join(json.load(label_file)))
-    audio_conf = dict(sample_rate=params.sample_rate,
-                      window_size=params.window_size,
-                      window_stride=params.window_stride,
-                      window=params.window,
-                      noise_dir=params.noise_dir,
-                      noise_prob=params.noise_prob,
-                      noise_levels=(params.noise_min, params.noise_max))
+    # with open(params.labels_path) as label_file:
+    #     labels = str(''.join(json.load(label_file)))
+    # audio_conf = dict(sample_rate=params.sample_rate,
+    #                   window_size=params.window_size,
+    #                   window_stride=params.window_stride,
+    #                   window=params.window,
+    #                   noise_dir=params.noise_dir,
+    #                   noise_prob=params.noise_prob,
+    #                   noise_levels=(params.noise_min, params.noise_max))
 
-    train_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.train_manifest, labels=labels,
-                                       normalize=True, augment=params.augment)
-    test_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.val_manifest, labels=labels,
-                                      normalize=True, augment=False)
-    train_loader = AudioDataLoader(train_dataset, batch_size=params.batch_size,
-                                   num_workers=1)
-    test_loader = AudioDataLoader(test_dataset, batch_size=params.batch_size,
-                                  num_workers=1)
+    # train_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.train_manifest, labels=labels,
+    #                                    normalize=True, augment=params.augment)
+    # test_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.val_manifest, labels=labels,
+    #                                   normalize=True, augment=False)
+    # train_loader = AudioDataLoader(train_dataset, batch_size=params.batch_size,
+    #                                num_workers=1)
+    # test_loader = AudioDataLoader(test_dataset, batch_size=params.batch_size,
+    #                               num_workers=1)
 
     rnn_type = params.rnn_type.lower()
     assert rnn_type in supported_rnns, "rnn_type should be either lstm, rnn or gru"
@@ -132,7 +132,7 @@ def main():
     optimizer = torch.optim.SGD(parameters, lr=params.lr,
                                 momentum=params.momentum, nesterov=True,
                                 weight_decay = params.l2)
-    decoder = GreedyDecoder(labels)
+    # decoder = GreedyDecoder(labels)
 
     if args.continue_from:
         print("Loading checkpoint model %s" % args.continue_from)
@@ -161,7 +161,7 @@ def main():
         start_iter = 0
         avg_training_loss = 0
     if params.cuda:
-        model         = torch.nn.DataParallel(model).cuda()
+        model = torch.nn.DataParallel(model).cuda()
 
     print(model)
     print("Number of parameters: %d" % DeepSpeech.get_param_size(model))
@@ -173,13 +173,18 @@ def main():
     forward_time = AverageMeter()
     backward_time = AverageMeter()
 
+    filename = ???
+    batchedData = user_defined_input.Batch(filename)
+
     for epoch in range(start_epoch, params.epochs):
         model.train()
         end = time.time()
-        for i, (data) in enumerate(train_loader, start=start_iter):
-            if i == len(train_loader):
-                break
-            inputs, targets, input_percentages, target_sizes = data
+        # this is where data loading happens, Change!
+        for i in range(batchedData.numBatches):
+        # for i, (data) in enumerate(train_loader, start=start_iter):
+        #    if i == len(train_loader):
+        #        break
+            inputs, targets, input_percentages, target_sizes = batchedData.batch
             # measure data loading time
             data_time.update(time.time() - end)
             inputs = Variable(inputs, requires_grad=False)
