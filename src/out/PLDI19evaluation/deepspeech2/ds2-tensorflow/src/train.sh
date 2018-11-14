@@ -39,9 +39,9 @@ fi
 
 model_dir='../models/librispeech/train'
 
-data_dir='/scratch/wu636/deepSpeech2/data/processed/'
+data_dir='/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-tensorflow/data/processed/'
 
-CUDA_VISIBLE_DEVICES=3 python2.7 xilun_deepSpeech_train.py --batch_size 32 --no-shuffle --max_steps 892 --num_rnn_layers 3 --rnn_type unidirectional --num_hidden 1024 --num_filters 32 --initial_lr 5e-4 --train_dir $model_dir --data_dir $data_dir --debug ${debug} --nchw ${nchw} --engine ${engine} --dummy ${dummy} #--log_device_placement True
+CUDA_VISIBLE_DEVICES=3 python xilun_deepSpeech_train.py --batch_size 32 --no-shuffle --max_steps 892 --num_rnn_layers 3 --num_hidden 1024 --num_filters 32 --initial_lr 5e-4 --train_dir $model_dir --data_dir $data_dir --debug ${debug} --nchw ${nchw} --engine ${engine} --dummy ${dummy} #--log_device_placement True
 
 # CUDA_VISIBLE_DEVICES=3 python2.7 xilun_deepSpeech_train.py --batch_size 32 --no-shuffle --max_steps 14256 --num_rnn_layers 3 --rnn_type unidirectional --num_hidden 1024 --num_filters 32 --initial_lr 5e-4 --train_dir $model_dir --data_dir $data_dir --debug ${debug} --nchw ${nchw} --engine ${engine} --dummy ${dummy}  #--log_device_placement True
 

@@ -102,11 +102,11 @@ def parse_args():
  
     args = parser.parse_args()
 
-    print "debug: ", args.debug
-    print "nchw: ", args.nchw
-    print "dummy: ", args.dummy
-    print "engine: ", args.engine
-    print "initial lr: ", args.initial_lr
+    print("debug: ", args.debug)
+    print("nchw: ", args.nchw)
+    print("dummy: ", args.dummy)
+    print("engine: ", args.engine)
+    print("initial lr: ", args.initial_lr)
 
     # Read architecture hyper-parameters from checkpoint file
     # if one is provided.
@@ -236,7 +236,7 @@ def set_learning_rate():
 def fetch_data():
     """ Fetch features, labels and sequence_lengths from a common queue."""
     tot_batch_size = ARGS.batch_size 
-    with tf.device('/device:GPU:0'):
+    with tf.device('/device:CPU'):
         feats, labels, seq_lens = deepSpeech.inputs(eval_data='train',
                                                     data_dir=ARGS.data_dir,
                                                     batch_size=tot_batch_size,
@@ -483,7 +483,7 @@ def train():
             print "cannot use checkpoint"
             sess.run(tf.global_variables_initializer())
         """
-        print "forbid the use of checkpoint"
+        print("forbid the use of checkpoint")
         sess.run(tf.global_variables_initializer())
         # print "Trainable Variables: "
         # tvariables_names = [v.name for v in tf.trainable_variables()]
