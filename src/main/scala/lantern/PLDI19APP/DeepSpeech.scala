@@ -183,6 +183,7 @@ object DeepSpeech {
       printf("Data reading (all prepare time) in %lf sec\\n", prepareTime)
 
       val loss_save = NewArray[Double](nbEpoch)
+      val time_save = NewArray[Double](nbEpoch)
 
       val addr = getMallocAddr()
       val addrCuda = getCudaMallocAddr()
@@ -215,7 +216,7 @@ object DeepSpeech {
         }
         val delta = trainTimer.getElapsedTime
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/data.length)
-
+        time_save(epoch) = delta / 1000000L
         loss_save(epoch) = trainLoss / data.length
       }
 
@@ -223,12 +224,16 @@ object DeepSpeech {
       val loopTime = totalTime - prepareTime
       val timePerEpoc = loopTime / nbEpoch
 
+      // report median time
+      unchecked[Unit]("sort(", time_save, ", ", time_save, " + ", nbEpoch, ")")
+      val median_time =  time_save(nbEpoch / 2)
+
       val fp2 = openf(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp2, "%lf\\n", loss_save(i))
       }
-      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, median_time)
       closef(fp2)
     }
   }
