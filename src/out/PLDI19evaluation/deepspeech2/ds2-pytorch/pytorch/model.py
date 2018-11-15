@@ -105,7 +105,6 @@ class DeepSpeech(nn.Module):
         self._audio_conf    = audio_conf or {}
         self._labels        = labels
         self.rnn_activation = rnn_activation
-        self.hidden_threshold = hidden_threshold
 
         sample_rate = self._audio_conf.get("sample_rate", 16000)
         window_size = self._audio_conf.get("window_size", 0.02)
@@ -127,13 +126,11 @@ class DeepSpeech(nn.Module):
 
         rnns = []
         rnn = BatchRNN(input_size=rnn_input_size, hidden_size=rnn_hidden_size, rnn_type=rnn_type,
-                       bidirectional=bidirectional, batch_norm=False, rnn_activation=rnn_activation,
-                       bn_bias    = bn_bias)
+                       bidirectional=bidirectional, batch_norm=False, rnn_activation=rnn_activation)
         rnns.append(('0', rnn))
         for x in range(nb_layers - 1):
           rnn = BatchRNN(input_size=rnn_hidden_size, hidden_size=rnn_hidden_size, rnn_type=rnn_type,
-                         bidirectional=bidirectional, batch_norm=False, rnn_activation=rnn_activation,
-                         bn_bias    = bn_bias)
+                         bidirectional=bidirectional, batch_norm=False, rnn_activation=rnn_activation)
           rnns.append(('%d' % (x + 1), rnn))
         self.rnns = nn.Sequential(OrderedDict(rnns))
         fully_connected = nn.Sequential(
