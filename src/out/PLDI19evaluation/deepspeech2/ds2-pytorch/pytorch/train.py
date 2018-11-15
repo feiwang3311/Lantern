@@ -243,7 +243,7 @@ def main():
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if (i % 20 == 0):
+            if ((i+1) % 20 == 0):
                 print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
@@ -263,7 +263,7 @@ def main():
         print('Training Summary Epoch: [{0}]\t'
             'Average Loss {loss:.3f}\t'
             .format( epoch + 1, loss=avg_loss, ))
-
+"""
         start_iter = 0  # Reset start iteration for next epoch
         total_cer, total_wer = 0, 0
         model.eval()
@@ -307,6 +307,6 @@ def main():
     for arg in vars(args):
       print("***%s = %s " %  (arg.ljust(25), getattr(args, arg)))
     print("=======================================================")
-
+"""
 if __name__ == '__main__':
     main()
