@@ -156,7 +156,7 @@ def main():
             # measure forward pass time
             forward_start_time = time.time()
             out = model(inputs)
-            out = out.transpose(0, 1)  # TxNxH
+            # out = out.transpose(0, 1)  # TxNxH
 
             seq_length = out.size(0)
             sizes = Variable(input_percentages.mul_(int(seq_length)).int(), requires_grad=False)

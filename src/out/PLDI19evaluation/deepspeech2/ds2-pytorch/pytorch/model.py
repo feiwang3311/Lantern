@@ -152,7 +152,7 @@ class DeepSpeech(nn.Module):
         x = self.rnns(x)
 
         x = self.fc(x)
-        x = x.transpose(0, 1)
+        # x = x.transpose(0, 1)
 
         # identity in training mode, logsoftmax in eval mode
         x = self.inference_log_softmax(x)
