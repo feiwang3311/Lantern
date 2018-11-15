@@ -4137,6 +4137,11 @@ trait TensorDslCudnn extends TensorDslCublas {
     override val numGates: Int = 3
   }
 
+  val cudnnMathType = None
+  // val cudnnMathType = Some("CUDNN_DEFAULT_MATH")
+  // val cudnnMathType = Some("CUDNN_TENSOR_OP_MATH")
+  // val cudnnMathType = Some("CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION")
+
   /**
     * cuDNN tensor operation backend. WIP.
     * Extends `BackendCublas` to leverage cuBLAS primitives.
@@ -4347,7 +4352,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-          |
+          |""".stripMargin) ++
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
+        Seq("""
           |// Algorithm.
           |cudnnConvolutionFwdAlgo_t algo;
           |CUDNN_CALL(cudnnGetConvolutionForwardAlgorithm(
@@ -4455,7 +4462,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-          |
+          |""".stripMargin) ++
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
+          Seq("""
           |// Algorithm.
           |cudnnConvolutionBwdDataAlgo_t algo;
           |CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
@@ -4511,7 +4520,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    conv_desc,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-          |
+          |""".stripMargin) ++
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
+          Seq("""
           |// Algorithm.
           |cudnnConvolutionBwdFilterAlgo_t algo;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
@@ -5354,7 +5365,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
           |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-          |
+          |""".stripMargin) ++
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, $mathType));")).getOrElse(Seq()) ++
+          Seq("""
           |int32_t seqLength = """.stripMargin, seqLength, s""";
           |int32_t batchSize = """.stripMargin, batchSize, s""";
           |int32_t inputSize = """.stripMargin, inputSize, s""";
@@ -5518,7 +5531,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
           |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-          |
+          |""".stripMargin) ++
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, $mathType));")).getOrElse(Seq()) ++
+          Seq("""
           |int32_t seqLength = """.stripMargin, seqLength, s""";
           |int32_t batchSize = """.stripMargin, batchSize, s""";
           |int32_t inputSize = """.stripMargin, inputSize, s""";
@@ -5632,7 +5647,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
           |    dropout_desc, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
           |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-          |
+          |""".stripMargin) ++
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, $mathType));")).getOrElse(Seq()) ++
+          Seq("""
           |int32_t seqLength = """.stripMargin, seqLength, s""";
           |int32_t batchSize = """.stripMargin, batchSize, s""";
           |int32_t inputSize = """.stripMargin, inputSize, s""";
