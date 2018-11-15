@@ -437,7 +437,7 @@ def train():
     targets = tf.placeholder(tf.float32, [ARGS.batch_size, None])
     max_seqlen = tf.placeholder(tf.int32, [ARGS.batch_size])
     
-    logits = deepSpeech.inference(inputs, max_seqlen, params)
+    logits = deepSpeech.inference(inputs, max_seqlen, ARGS)
     # ctcloss
     loss = deepSpeech.loss(logits, targets, max_seqlen)
     # backward optimize
