@@ -21,6 +21,7 @@ scalacOptions += "-P:continuations:enable"
 //scalacOptions += "-Yvirtualize"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
+resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
 libraryDependencies += "org.scala-lang.lms" %% "lms-core-macrovirt" % "0.9.0-SNAPSHOT"
 
