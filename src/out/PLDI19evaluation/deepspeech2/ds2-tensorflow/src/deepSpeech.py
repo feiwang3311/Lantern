@@ -78,7 +78,7 @@ def inputs(eval_data, data_dir, batch_size, use_fp16, shuffle):
     return feats, labels, seq_lens
 
 
-def inference(sess, feats, seq_lens, params):
+def inference(feats, seq_lens, params):
     """Build the deepSpeech model.
 
     Args:
@@ -159,12 +159,8 @@ def inference(sess, feats, seq_lens, params):
     rnn_input = tf.transpose(rnn_input, perm=[1, 0, 2])
 
     fw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
-    # fw_cell_list = [fw_cell] * params.num_rnn_layers
 
-    # bw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
-    # bw_cell_list = [bw_cell] * params.num_rnn_layers
-
-
+    # conved_seq_lens is the input_size
     conved_seq_lens = get_rnn_seqlen(seq_lens)
 
     rnn_outputs = custom_ops.stacked_brnn(fw_cell, fw_cell, params.num_hidden, params.num_rnn_layers, rnn_input, params.batch_size, conved_seq_lens)
@@ -206,17 +202,17 @@ def loss(logits, labels, seq_lens):
 
     ## scheme 1
     logits_shape = tf.shape(logits)
-    logits_shape = tf.Print(logits_shape, [logits_shape], "logits shape: ")
+    # logits_shape = tf.Print(logits_shape, [logits_shape], "logits shape: ")
     max_seq_len = logits_shape[0]
     # batch_size = logits_shape[1]
-    max_seq_len = tf.Print(max_seq_len, [max_seq_len], "max seq len: ")
+    # max_seq_len = tf.Print(max_seq_len, [max_seq_len], "max seq len: ")
     # conved_seq_lens = tf.fill([batch_size], max_seq_len)
     # conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
 
     ## scheme 2
     conved_seq_lens = get_rnn_seqlen(seq_lens)
 
-#    conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
+    # conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
 
     # Calculate the average ctc loss across the batch.
     ctc_loss = tf.nn.ctc_loss(labels=labels, inputs=tf.cast(logits, tf.float32),

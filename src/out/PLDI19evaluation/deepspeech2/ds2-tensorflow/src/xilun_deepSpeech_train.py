@@ -279,7 +279,7 @@ def get_loss_grads(sess, data, optimizer):
 
 def run_train_loop(sess, operations):
     """ Train the model for required number of steps."""
-    (loss_op, train_op) = operations
+    (logits, loss, train_op) = operations
     num_batches_per_epoch = (deepSpeech.NUM_PER_EPOCH_FOR_TRAIN / ARGS.batch_size)
     run_options = None
     run_metadata = None
@@ -288,6 +288,9 @@ def run_train_loop(sess, operations):
         run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
         run_metadata = tf.RunMetadata()
         trace_file = open('profiling.json', 'w')
+
+    # data is on ml02.cs.purdue.edu
+    batch = inputs.Batch('/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle', ARGS.batch_size)
 
     # Evaluate the ops for max_steps
     epoch = 0
@@ -314,9 +317,17 @@ def run_train_loop(sess, operations):
         # for k, v in zip(mvariables_names, mvalues):
         #     print "Variable: ", k
         #     print v
+
+
+        # get a batch of data
+        freq_size, maxlen, inputs, targets, input_percentages, target_sizes = batch.batch()
+        max_seqlen = tf.convert_to_tensor([maxlen] * ARGS.batch_size)
+        input_x = tf.convert_to_tensor(inputs)
+        input_y = tf.convert_to_tensor(targets)
+        
         forward_time_start = time.time()
 
-        loss_value = sess.run(loss_op, options=run_options, run_metadata=run_metadata)
+        loss_value = sess.run([logits, loss, train_op], options=run_options, run_metadata=run_metadata, feed_dict={inputs: input_x, max_seqlen: input_lens, targets: input_y})
         
         forward_time = time.time() -forward_time_start
 
@@ -408,65 +419,53 @@ def initialize_from_checkpoint(sess, saver):
         print('No checkpoint file found')
         return
 
-"""
-def add_summaries(summaries, learning_rate, grads):
-
-    # Track quantities for Tensorboard display
-    summaries.append(tf.summary.scalar('learning_rate', learning_rate))
-    # Add histograms for gradients.
-    for grad, var in grads:
-        if grad is not None:
-            summaries.append(tf.summary.histogram(var.op.name + '/gradients', grad))
-    # Add histograms for trainable variables.
-    for var in tf.trainable_variables():
-        summaries.append(tf.summary.histogram(var.op.name, var))
-
-    # Build the summary operation from the last tower summaries.
-    summary_op = tf.summary.merge(summaries)
-    return summary_op
-"""
-
 def train():
     """
     Train deepSpeech for a number of steps.
       This function build a set of ops required to build the model and optimize
       weights.
     """
+    # Learning rate set up
+    learning_rate, global_step = set_learning_rate()
+
+    # Create an optimizer that performs gradient descent.
+    # optimizer = tf.train.AdamOptimizer(learning_rate)
+
+    # forward pass to compute loss
+    freq_size = 161
+    inputs = tf.placeholder(tf.float32, [ARGS.batch_size, freq_size, None])
+    targets = tf.placeholder(tf.float32, [ARGS.batch_size, None])
+    max_seqlen = tf.placeholder(tf.int32, [ARGS.batch_size])
+    
+    logits = deepSpeech.inference(inputs, max_seqlen, params)
+    # ctcloss
+    loss = deepSpeech.loss(logits, targets, max_seqlen)
+    # backward optimize
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+    # optimizer.minimize(loss)
+    grads_and_vars = optimizer.compute_gradients(loss)
+    clipped_grads_and_vars = [(tf.clip_by_value(grad, clip_value_min=-400, clip_value_max=400), var) for grad, var in grads_and_vars]
+    apply_gradient_op = optimizer.apply_gradients(grads,
+                                                  global_step=global_step)
+    train_op = apply_gradient_op
+
     with g.as_default(), tf.device('/device:GPU:0'):
-        # Learning rate set up
-        learning_rate, global_step = set_learning_rate()
 
-        # Create an optimizer that performs gradient descent.
-        # optimizer = tf.train.AdamOptimizer(learning_rate)
+        # Start running operations on the Graph. allow_soft_placement
+        # must be set to True to build towers on GPU, as some of the
+        # ops do not have GPU implementations.
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
+                                                log_device_placement=ARGS.log_device_placement))
 
-        # forward pass to compute loss
-        logits_op = deepSpeech.inference()
-        # ctcloss
-        loss_op = deepSpeech.loss()
-        # backward optimize
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate) #.minimize(cross_entropy)
-        grads_and_vars = optimizer.compute_gradients(loss)
-        clipped_grads_and_vars = [(tf.clip_by_value(grad, clip_value_min=-400, clip_value_max=400), var) for grad, var in grads_and_vars]
-        apply_gradient_op = optimizer.apply_gradients(grads,
-                                                      global_step=global_step)
-        train_op = apply_gradient_op
+        print("forbid the use of checkpoint")
+        sess.run(tf.global_variables_initializer())
+        # Start the queue runners.
+        tf.train.start_queue_runners(sess)
+        g.finalize()
 
-
-    # Start running operations on the Graph. allow_soft_placement
-    # must be set to True to build towers on GPU, as some of the
-    # ops do not have GPU implementations.
-    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
-                                            log_device_placement=ARGS.log_device_placement))
-    
-    print("forbid the use of checkpoint")
-    sess.run(tf.global_variables_initializer())
-    # Start the queue runners.
-    tf.train.start_queue_runners(sess)
-    g.finalize()
-    
-    # Run training loop
-    # run_train_loop(sess, (loss_op, train_op, summary_op), saver)
-    run_train_loop(sess, (logits_op, loss_op, train_op))
+        # Run training loop
+        # run_train_loop(sess, (loss_op, train_op, summary_op), saver)
+        run_train_loop(sess, (logits, loss, train_op))
 
 
 def main():
