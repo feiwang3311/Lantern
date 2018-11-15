@@ -237,6 +237,7 @@ def fetch_data():
     """ Fetch features, labels and sequence_lengths from a common queue."""
     tot_batch_size = ARGS.batch_size 
     with tf.device('/cpu'):
+        """
         feats, labels, seq_lens = deepSpeech.inputs(eval_data='train',
                                                     data_dir=ARGS.data_dir,
                                                     batch_size=tot_batch_size,
@@ -244,9 +245,11 @@ def fetch_data():
                                                     shuffle=ARGS.shuffle)
         dense_labels = tf.sparse_tensor_to_dense(labels)
 #        tf.Print(dense_labels, [dense_labels], "labels")
-
+        """
+        filename = "/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle"
+        batchedData = user_defined_input.Batch(filename)
     # Split features and labels and sequence lengths for each tower
-    return feats, labels, seq_lens
+    return batchedData
 
 
 def get_loss_grads(sess, data, optimizer):
@@ -434,81 +437,36 @@ def train():
         learning_rate, global_step = set_learning_rate()
 
         # Create an optimizer that performs gradient descent.
-        optimizer = tf.train.AdamOptimizer(learning_rate)
-        # optimizer = tf.keras.optimizers.SGD(learning_rate,
-        #                                    momentum=0.9,
-        #                                    decay=ARGS.lr_decay_factor)
+        # optimizer = tf.train.AdamOptimizer(learning_rate)
 
-
-        # Fetch a batch worth of data
-        data = fetch_data()
-
-        # Start running operations on the Graph. allow_soft_placement
-        # must be set to True to build towers on GPU, as some of the
-        # ops do not have GPU implementations.
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
-                                                log_device_placement=ARGS.log_device_placement))
-
-        # Construct loss and gradient ops
-        loss_op, grads = get_loss_grads(sess, data, optimizer)
-
-        # Apply the gradients to adjust the shared variables.
+        # forward pass to compute loss
+        logits_op = deepSpeech.inference()
+        # ctcloss
+        loss_op = deepSpeech.loss()
+        # backward optimize
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate) #.minimize(cross_entropy)
+        grads_and_vars = optimizer.compute_gradients(loss)
+        clipped_grads_and_vars = [(tf.clip_by_value(grad, clip_value_min=-400, clip_value_max=400), var) for grad, var in grads_and_vars]
         apply_gradient_op = optimizer.apply_gradients(grads,
                                                       global_step=global_step)
-
-        # Track the moving averages of all trainable variables.
-        # variable_averages = tf.train.ExponentialMovingAverage(ARGS.moving_avg_decay, global_step)
-        # variables_averages_op = variable_averages.apply(tf.trainable_variables())
-
-        # Group all updates to into a single train op.
-        # train_op = tf.group(apply_gradient_op, variables_averages_op)
-
         train_op = apply_gradient_op
 
-        # Build summary op
-        # summary_op = add_summaries(summaries, learning_rate, grads)
 
-        # Create a saver.
-        # saver = tf.train.Saver(tf.global_variables(), max_to_keep=100)
-
-        # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-        # sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
-
-        # Initialize vars.
-        """
-        if ARGS.checkpoint is not None:
-            print "can use checkpoint"
-            global_step = initialize_from_checkpoint(sess, saver)
-        else:
-            print "cannot use checkpoint"
-            sess.run(tf.global_variables_initializer())
-        """
-        print("forbid the use of checkpoint")
-        sess.run(tf.global_variables_initializer())
-        # print "Trainable Variables: "
-        # tvariables_names = [v.name for v in tf.trainable_variables()]
-        # tvalues = sess.run(tvariables_names)
-        # for k, v in zip(tvariables_names, tvalues):
-        #     print "Variable: ", k
-        # print "Global Variables: "
-        # gvariables_names = [v.name for v in tf.global_variables()]
-        # gvalues = sess.run(gvariables_names)
-        # for k, v in zip(gvariables_names, gvalues):
-        #     print "Variable: ", k
-        # print "Moving Average Variables: "
-        # mvariables_names = [v.name for v in tf.moving_average_variables()]
-        # mvalues = sess.run(mvariables_names)
-        # for k, v in zip(mvariables_names, mvalues):
-        #     print "Variable: ", k
-
-        # Start the queue runners.
-        tf.train.start_queue_runners(sess)
-
-        g.finalize()
-
-        # Run training loop
-        # run_train_loop(sess, (loss_op, train_op, summary_op), saver)
-        run_train_loop(sess, (loss_op, train_op))
+    # Start running operations on the Graph. allow_soft_placement
+    # must be set to True to build towers on GPU, as some of the
+    # ops do not have GPU implementations.
+    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
+                                            log_device_placement=ARGS.log_device_placement))
+    
+    print("forbid the use of checkpoint")
+    sess.run(tf.global_variables_initializer())
+    # Start the queue runners.
+    tf.train.start_queue_runners(sess)
+    g.finalize()
+    
+    # Run training loop
+    # run_train_loop(sess, (loss_op, train_op, summary_op), saver)
+    run_train_loop(sess, (logits_op, loss_op, train_op))
 
 
 def main():
