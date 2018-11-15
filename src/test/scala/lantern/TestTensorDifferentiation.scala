@@ -320,6 +320,21 @@ class AdLMSVectorTest extends LanternFunSuite {
     array2_2.eval("abc")
   }
 
+  test("resize") {
+    val testResize = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(3,2,2), 6, 3, -4, 3, -1, -2, -4, 3, 4, 1, 2, 3)
+        val grad = gradR(x => (x + x).resize(2, -1, 3).relu(false))(input)
+        val expectedGrad = Tensor.fromData(Seq(3,2,2), 2, 2, 0, 2, 0, 0, 0, 2, 2, 2, 2, 2)
+        grad.print("grad")
+        Tensor.assertEqual(expectedGrad, grad)
+      }
+    }
+    runTest(testResize)
+  } //
+
   test("testTrans") {
     val testTrans = new LanternDriverC[String, Unit] {
 

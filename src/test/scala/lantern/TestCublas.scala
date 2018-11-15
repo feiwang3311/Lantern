@@ -316,4 +316,22 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(exp)
   }
+
+  testGPU("mask4D") {
+    val exp = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-mask4D"
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fill(Seq(2, 3, 2, 3), 2)
+        val lengths: Rep[Array[Int]] = Array(1, 2)
+        val lengthsGPU = lengths.toGPU(2)
+        val result = x.mask4D(lengthsGPU)
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 3, 2, 3), 2, 0, 0, 2, 0, 0, 2, 0, 0, 2, 0, 0, 2, 0, 0, 2, 0, 0,
+                                                        2, 2, 0, 2, 2, 0, 2, 2, 0, 2, 2, 0, 2, 2, 0, 2, 2, 0)
+        Tensor.assertEqual(expected, result.toCPU())
+      }
+    }
+    runTest(exp)
+  }
 }

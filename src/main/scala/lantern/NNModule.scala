@@ -58,44 +58,57 @@ trait NNModule extends TensorDsl {
       }
 
       val allFields = this.getClass.getDeclaredFields
+      // this part may take more than needed. For instance, all Option or ArrayBuffer type are included due to type erasure
       val subParameters = allFields.filter { f =>
         classOf[Option[TensorR]].isAssignableFrom(f.getType) ||
         classOf[TensorR].isAssignableFrom(f.getType) ||
-        classOf[ArrayBuffer[TensorR]].isAssignableFrom(f.getType)
+        classOf[Seq[TensorR]].isAssignableFrom(f.getType)
       }
       val subModules = allFields.filter { f =>
-        classOf[Module].isAssignableFrom(f.getType) && oops[Boolean](f) { _.get(this) != this }
+        classOf[Module].isAssignableFrom(f.getType) && oops[Boolean](f) { _.get(this) != this } ||
+        classOf[Option[Module]].isAssignableFrom(f.getType) ||
+        classOf[Seq[Module]].isAssignableFrom(f.getType)
       }
 
       subParameters.foreach { field => oops[Unit](field) { x =>
         val field = x.get(this)
         val name = x.getName
-        val fullName = s"$nameScope$name"
+        val fullName = s"${nameScope}${name}"
         field match {
           case t: TensorR => parameters.update(fullName, (t, None))
-          // FIXME: Type argument `TensorR` is eliminated by type erasure.
-          case arr: ArrayBuffer[TensorR] =>
-            arr.zipWithIndex.foreach { case (t, i) =>
-              val name = s"$fullName$i"
+          case arr@((a: TensorR) +: rest) =>
+            arr.asInstanceOf[Seq[TensorR]].zipWithIndex.foreach { case (t, i) =>
+              val name = s"${fullName}_index_$i"
               parameters.update(name, (t, None))
             }
           case Some(t: TensorR) => parameters.update(fullName, (t, None))
-          case None => ()
+          case _ => ()
         }
       }}
       subModules.foreach { field => oops[Unit](field) { x =>
-        val module = x.get(this).asInstanceOf[Module]
-        modules.update(s"$nameScope${x.getName}", module)
-        module.registerParameters(s"$nameScope${x.getName}/")
+        val field = x.get(this)
+        val name = x.getName
+        val fullName = s"${nameScope}${name}"
+        field match {
+          case t: Module => modules.update(fullName, t)
+          case arr@((a: Module) +: rest) =>
+            arr.asInstanceOf[Seq[Module]].zipWithIndex.foreach { case (t, i) =>
+              val name = s"${fullName}_index_$i"
+              modules.update(name, t)
+            }
+          case Some(t: Module) => modules.update(fullName, t)
+          case _ => ()
+        }
       }}
+      modules.foreach {case (name, module) => module.registerParameters(s"${name}/")}
     }
   }
 
-  case class Linear1D(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
+  case class Linear1D(val inSize: Int, val outSize: Int, val bias: Boolean = true, val name: String = "linear1d") extends Module {
     val scale: Float = 1.0f / sqrt(inSize).toFloat
     val weight = TensorR(Tensor.rand(Seq(inSize, outSize), scale))
-    val bias = TensorR(Tensor.zeros(outSize))
-    def apply(in: TensorR): TensorR @diff = in.dot(weight) plusBias bias
+    val biasOp = if (bias) Some(TensorR(Tensor.zeros(outSize))) else None
+    def apply(in: TensorR): TensorR @diff = if (bias) in.dot(weight) plusBias biasOp.get else in.dot(weight)
   }
 
   case class Linear1D2(val inSize1: Int, val inSize2: Int, val outSize: Int, val name: String = "Linear1d2") extends Module {
@@ -112,7 +125,8 @@ trait NNModule extends TensorDsl {
   // kaiming_uniform [-bound, bound] where bound = sqrt(6/fan_in)
   // xaiver_uniform [-bound, bound] where bound = sqrt(6/(fan_in + fan_out))
 
-  case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val useBias: Boolean = true, val pad: Int = 0, val name: String = "conv2d") extends Module {
+  case class Conv2D(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val pad: Seq[Int] = Seq(0, 0),
+    val dilation: Seq[Int] = Seq(1, 1), val useBias: Boolean = true, val name: String = "conv2d") extends Module {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
     // xaiver_uniform initialization
@@ -123,16 +137,17 @@ trait NNModule extends TensorDsl {
     val scale: Float = 2.0f * sqrt(6.0f / (inChannel * kernelSize.head * kernelSize.last)).toFloat
     val kernel = TensorR(Tensor.rand(Seq(outChannel, inChannel, kernelSize.head, kernelSize.last), scale))
     val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
-    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, Seq(pad, pad, pad, pad))
+    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, pad)
   }
 
-  case class Conv2Dn(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val useBias: Boolean = true, val pad: Int = 0, val name: String = "conv2d") extends Module {
+  case class Conv2Dn(val inChannel: Int, val outChannel: Int, val kernelSize: Seq[Int], val stride: Seq[Int] = Seq(1, 1), val pad: Seq[Int] = Seq(0, 0),
+    val useBias: Boolean = true, val name: String = "conv2d") extends Module {
     assert(kernelSize.size == 2, "kernel_size should be Seq[Int] of size 2")
     assert(stride.size == 2, "stride should be Seq[Int] of size 2")
     // normal initialization with mean 0.0 and std 0.01
     val kernel = TensorR(Tensor.randnorm(outChannel, inChannel, kernelSize.head, kernelSize.last))
     val bias = if (useBias) Some(TensorR(Tensor.zeros(outChannel))) else None
-    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, Seq(pad, pad, pad, pad))
+    def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, pad)
   }
 
   abstract class RnnCell extends Module {
@@ -289,7 +304,8 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     // Initialize parameter buffer.
     // cuDNN requires that all parameters are stored in a contiguous buffer.
     // NOTE: Choose different initialization strategy?
-    lazy val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
+    // TODO (Fei Wang): For now we are resigtering this big TensorR, not the pieces of weights and biases. (Better to fix later)
+    lazy val parameterBuffer = TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f))
 
     def getParameterSize(): Int = {
       val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections

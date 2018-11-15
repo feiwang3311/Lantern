@@ -76,7 +76,7 @@ object Resnet50Onnx {
       val model = readONNX(root_dir + model_file)
       val (func, parameters) = model.training_func(model.initializer_map_tensor)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
-        val res = func(input).logSoftmaxB().nllLossB(target)
+        val res = func(input).logSoftmaxB(1).nllLossB(target)
         res.mean()
       }
 
@@ -147,13 +147,14 @@ object Resnet50Onnx {
       val initMap = model.initializer_map_tensor.map{case (name, tr) => (name, tr.toGPU())}
       val (func, parameters) = model.training_func(initMap)
       def lossFun(input: TensorR, target: Rep[Array[Int]]) = { (dummy: TensorR) =>
-        val res = func(input).logSoftmaxB().nllLossB(target)
+        val res = func(input).logSoftmaxB(1).nllLossB(target)
         res.mean()
       }
 
       // Training
       val nbEpoch = 4
       val loss_save = NewArray[Double](nbEpoch)
+      val time_save = NewArray[Double](nbEpoch)
       val addr = getMallocAddr() // remember current allocation pointer here
       val addrCuda = getCudaMallocAddr()
 
@@ -185,6 +186,7 @@ object Resnet50Onnx {
           resetCudaMallocAddr(addrCuda)
         }
         val delta = trainTimer.getElapsedTime
+        time_save(epoch) = delta / 1000000L
         printf("Training completed in %ldms (%ld us/images)\\n", delta/1000L, delta/train.length)
         loss_save(epoch) = trainLoss / train.length
       }
@@ -193,12 +195,16 @@ object Resnet50Onnx {
       val loopTime = totalTime - prepareTime
       val timePerEpoc = loopTime / nbEpoch
 
+      // get median time of epochs
+      unchecked[Unit]("sort(", time_save, ", ", time_save, " + ", nbEpoch, ")")
+      val median_time =  time_save(nbEpoch / 2)
+
       val fp2 = openf(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp2, "%lf\\n", loss_save(i))
       }
-      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, median_time)
       closef(fp2)
     }
   }

@@ -69,7 +69,7 @@ def _bytes_feature(value):
 def _get_file_names():
   """Returns the file names expected to exist in the input_dir."""
   file_names = {}
-  file_names['train'] = ['data_batch_%d' % i for i in xrange(1, 5)]
+  file_names['train'] = ['data_batch_1']
   file_names['validation'] = ['data_batch_5']
   file_names['eval'] = ['test_batch']
   return file_names
@@ -115,7 +115,7 @@ def main(data_dir):
     except OSError:
       pass
     # Convert to tf.train.Example and write the to TFRecords.
-    # convert_to_tfrecord(input_files, output_file)
+    convert_to_tfrecord(input_files, output_file)
   print('Done!')
 
 

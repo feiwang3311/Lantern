@@ -126,26 +126,36 @@ opt = optim.Adagrad(net.parameters(), lr = learning_rate)
 epocNum = 6
 loopStart = time.time()
 loss_save = []
+time_save = []
+epoch_start_time = loopStart
 for epoc in range(epocNum):
   total_loss = 0
   for n in range(tree_data_size):
     opt.zero_grad()
     loss = net.forward(scores[n], words[n], lchs[n], rchs[n])
-    total_loss += loss.data[0]
+    total_loss += loss.item()
     loss.backward()
     opt.step()
+  epoch_end_time = time.time()
+  time_save.append(epoch_end_time - epoch_start_time)
+  epoch_start_time = epoch_end_time
   loss_save.append(total_loss / tree_data_size)
-  print("epoc {}, average_loss {}".format(epoc, total_loss / tree_data_size))
+  print("epoc {}, average_loss {}, time spent {}".format(epoc, total_loss / tree_data_size, time_save[epoc]))
 
 loopEnd = time.time()
-print('looptime is %s ' % (loopEnd - loopStart))
+print('average looptime is %s ' % (loopEnd - loopStart))
 
 prepareTime = loopStart - startTime
 loopTime = loopEnd - loopStart
 timePerEpoch = loopTime / epocNum
 
-with open("result_PyTorch.txt", "w") as f:
+# get median loop time
+time_save.sort()
+median_time = time_save[int(epocNum / 2)]
+print('median looptime is %s ' % median_time)
+
+with open("result_PyTorch", "w") as f:
   f.write("unit: " + "1 epoch\n")
   for loss in loss_save:
     f.write("{}\n".format(loss))
-  f.write("run time: " + str(prepareTime) + " " + str(timePerEpoch) + "\n")
+  f.write("run time: " + str(prepareTime) + " " + str(median_time) + "\n")

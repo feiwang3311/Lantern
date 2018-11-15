@@ -318,11 +318,13 @@ object SentimentTreeLSTM {
 
       val epocN = 6
       val loss_save = NewArray[Double](epocN)
+      val time_save = NewArray[Double](epocN)
 
       val addr = getMallocAddr() // remember current allocation pointer here
       val cudaAddr = getCudaMallocAddr()
       val loopStart = get_time()
 
+      var epoc_start_time = loopStart
       for (epoc <- (0 until epocN): Rep[Range]) {
         var average_loss = 0.0f
         for (n <- (0 until tree_number): Rep[Range]) {
@@ -341,8 +343,10 @@ object SentimentTreeLSTM {
         }
 
         loss_save(epoc) = average_loss
-        val tempTime = get_time()
-        printf("epoc %d, average_loss %f, time %lf\\n", epoc, average_loss, (tempTime - loopStart))
+        val epoc_end_time = get_time()
+        time_save(epoc) = epoc_end_time - epoc_start_time
+        epoc_start_time = epoc_end_time
+        printf("epoc %d, average_loss %f, time %lf\\n", epoc, average_loss, time_save(epoc))
       }
 
       val loopEnd = get_time()
@@ -350,13 +354,17 @@ object SentimentTreeLSTM {
       val loopTime = loopEnd - loopStart
       val timePerEpoc = loopTime / epocN
 
+      // get median time of epochs
+      unchecked[Unit]("sort(", time_save, ", ", time_save, " + ", epocN, ")")
+      val median_time =  time_save(epocN / 2)
+
       val fp2 = openf(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         //printf("loss_saver is %lf \\n", loss_save(i))
         fprintf(fp2, "%lf\\n", loss_save(i))
       }
-      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
+      fprintf(fp2, "run time: %lf %lf\\n", prepareTime, median_time)
       closef(fp2)
 
     }

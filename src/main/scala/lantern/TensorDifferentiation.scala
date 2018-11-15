@@ -138,30 +138,56 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    class DataLoaderTest(name_x: String, name_y: String, dims: Seq[Int]) {
+    // 这个是数据的格式
+    // 每个数据文件开头是两个Int，分别是batch_size和num_batches
+    // 然后是每个batch的数据。每个batch开头是两个Int，分别是frequency_size和max_length
+    // 然后是四个Tensor，类型写在上面的图里了
+    // inputs_percentage 是padding以后非padding数据的比例，targets里每一个target都是英语字符对应的Int
+    @virtualize
+    class DeepSpeechDataLoader(name: String, train: Boolean) {
 
-      val fd = open(name_x)
+      // open file
+      val fd = open(name)
       val len = filelen(fd)
-      val data = mmap[Float](fd, len)
-      val dLength = (len/4L).toInt
 
-      val tfd = open(name_y)
-      val tlen = filelen(tfd)
-      val target = mmap[Int](tfd, tlen)
-      val length = tlen/4
+      // mmap data
+      val data = mmap[Char](fd, len)
+      val dataInt: Rep[Array[Int]] = unchecked[Array[Int]]("(int32_t *)", data)
+      val dataFloat: Rep[Array[Float]] = unchecked[Array[Float]]("(float *)", data)
 
-      @virtualize
-      def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
-        var off = var_new(0)
-        for (batchIndex <- 0 until (length / batchSize): Rep[Range]) {
-          val dataPtr = slice(data, off)
-          val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
-          val targets = slice(target, batchIndex * batchSize)
-          f(batchIndex, t, targets)
-          off += t.scalarCount
-        }
+      // helper offset value
+      var offset: Rep[Int] = (0)
+      def next(size: Rep[Int] = 1): Rep[Int] = {val temp = offset; offset += size; temp}
+
+      // get batchSize and numBatches
+      val batchSize: Rep[Int] = dataInt(next())  // batchSize is 32, and numBatches is 891
+      val numBatches: Rep[Int] = dataInt(next())
+
+      // get array to store information for each batch
+      val freqSizes: Rep[Array[Int]] = NewArray[Int](numBatches)
+      val maxLengths: Rep[Array[Int]] = NewArray[Int](numBatches)
+      // get array of arrays to store the pointers to data
+      val inputs: Rep[Array[Array[Float]]] = NewArray[Array[Float]](numBatches)
+      val percents: Rep[Array[Array[Float]]] = NewArray[Array[Float]](numBatches)
+      val targetSizes: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
+      val targets: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
+
+      for (batch <- (0 until numBatches)) {
+        // First, get frequency_size and max_length
+        freqSizes(batch) = dataInt(next())  // freqSize is 161, and maxLength is 229
+        maxLengths(batch) = dataInt(next())
+        // then the sound tensor of float [batchSize * 1 * freqSize * maxLength]
+        inputs(batch) = slice(dataFloat, next(batchSize * freqSizes(batch) * maxLengths(batch)))
+        // then the percentage tensor of float [batchSize] (percentage of padding for each sound)
+        percents(batch) = slice(dataFloat, next(batchSize))
+        // then the targetSize tensor of Int[batchSize]
+        targetSizes(batch) = slice(dataInt, next(batchSize))
+        val sumTargetSize: Rep[Int] = unchecked[Int]("accumulate(", targetSizes(batch), ", ", targetSizes(batch), " + ", batchSize, ", 0)")
+        // then the targets tensor of Int[sum(targetSize)]
+        targets(batch) = slice(dataInt, next(sumTargetSize))
       }
     }
+
   }
 
   def convSize(size: Int, kernelSize: Int, strideSize: Int) = (size - kernelSize)/strideSize + 1
@@ -332,6 +358,12 @@ trait TensorDsl extends DslOps with Diff {
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
 
+    // in2 has less rank than in1, and the shape of in2 matches with the last ${in2.rank} shapes of in1
+    // i.e. in1.shape = (4 , 5, 6, 7), and in2.shape = (6, 7)
+    // mul is done elementwise for each sub tensor of in1
+    def mul_sub(in1: Tensor, in2: Tensor): Tensor
+    def mul_sub_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit
+
     // Why do we have plusBias and what is the difference of plusBias with elementWise + with broadcasting
     // Ans: plusBias is less general than elementwise + with broadcasting, since it is assume that
     // the bias may be broadcasted, while the other tensor (call it main tensor) doesn't need to.
@@ -345,6 +377,8 @@ trait TensorDsl extends DslOps with Diff {
     def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean, beta: Float, output: Tensor): Unit
     def trans(x: Tensor): Tensor
     def trans_grad(x: TensorR, y: TensorR): Unit
+    def permute(x: Tensor, dims: Int*): Tensor
+    def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit
 
     def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor
     def gemm_grad(x: TensorR, transX: Boolean, y: TensorR, transY: Boolean, alpha: Float, output: TensorR): Unit
@@ -382,6 +416,9 @@ trait TensorDsl extends DslOps with Diff {
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
+    // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
+    def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor
+
     // Activation functions.
     def relu(x: Tensor, inPlace: Boolean = false): Tensor
     def tanh(x: Tensor): Tensor
@@ -402,11 +439,11 @@ trait TensorDsl extends DslOps with Diff {
     def square_grad(input: TensorR, res: TensorR): Unit
 
     // Softmax functions.
-    def softmax(x: Tensor): Tensor
-    def logSoftmax(x: Tensor): Tensor
+    def softmax(x: Tensor, dim: Int = 1): Tensor
+    def logSoftmax(x: Tensor, dim: Int = 1): Tensor
 
-    def softmax_grad(input: TensorR, res: TensorR): Unit
-    def logSoftmax_grad(input: TensorR, res: TensorR): Unit
+    def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit
+    def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit
 
     // Loss functions.
     def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
@@ -714,6 +751,9 @@ trait TensorDsl extends DslOps with Diff {
     override def /=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s / y)
     override def /=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ / _))
 
+    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = ???
+    override def mul_sub_grad(in1: TensorR, in2: TensorR, out:TensorR): Unit = ???
+
     override def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean,  beta: Float, output: Tensor): Unit = {
       (transX, transY) match {
         case (false, false) => output.changeTo { i => x.data(i) * alpha + y.data(i) * beta }
@@ -747,6 +787,9 @@ trait TensorDsl extends DslOps with Diff {
         offT += x.x.shape(0)
       }
     }
+
+    override def permute(x: Tensor, dims: Int*): Tensor = ???
+    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = ???
 
     override def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor = {
       (transX, transY) match {
@@ -903,7 +946,7 @@ trait TensorDsl extends DslOps with Diff {
 
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = {
       val ((dH:Int) :: (dW:Int) :: Nil) = strides.take(2).toList
-      val ((padH:Int) :: (_:Int) :: (padW:Int) :: (_:Int) :: Nil) = pads.take(4).toList
+      val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else if (pads.size == 4) (pads(0), pads(2)) else ???}
       val nOutputPlane = kernel.shape(0)
       val kH = kernel.shape(2)
       val kW = kernel.shape(3)
@@ -1067,6 +1110,22 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
+    override def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor = {
+      // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
+      assert (input.rank == 4, s"input of mask function must be 4D, got ${input.shape}")
+      for (i <- DataLoop(input.shape(0))) {
+        for (j <- DataLoop(input.shape(1))) {
+          for (k <- DataLoop(input.shape(2))) {
+            for (t <- DataLoop(input.shape(3))) {
+              if (t >= lengths(i)) input.data(i * input.shape.strides(0) + j * input.shape.strides(1) + k * input.shape.strides(2) + t) = 0
+            }
+          }
+        }
+      }
+      input
+    }
+
+    @virtualize
     override def relu(x: Tensor, inPlace: Boolean = false): Tensor = {
       val res = if (inPlace) x.data else mallocArray[Float](x.scalarCount)
       for (i <- 0 until x.scalarCount: Rep[Range]) {
@@ -1139,8 +1198,9 @@ trait TensorDsl extends DslOps with Diff {
     override def square_grad(x: TensorR, y: TensorR): Unit = x.d.mutate { (i: Rep[Int]) => y.d.data(i) * x.x.data(i) * 2.0f }
 
     @virtualize
-    override def softmax(x: Tensor): Tensor = {
-      assert(x.rank == 2, "Softmax input must be 2-D: [batchSize, logits]")
+    override def softmax(x: Tensor, dim: Int = 1): Tensor = {
+      assert(x.rank == 2, s"TODO: Fei Wang, Softmax input must be 2-D: [batchSize, logits] for now, got ${x.shape}")
+      assert(dim == 1, s"TODO: Fei Wang, dim must be 1 for now, got ${dim}")
       val max = x.max2D(dim = 1)
       val res = Tensor.zeros_like(x)
       val offset = var_new(0)
@@ -1162,8 +1222,9 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    override def logSoftmax(x: Tensor): Tensor = {
-      assert(x.rank == 2, "Log softmax input must be 2-D: [batchSize, logits]")
+    override def logSoftmax(x: Tensor, dim: Int = 1): Tensor = {
+      assert(x.rank == 2, s"TODO: Fei Wang, Softmax input must be 2-D: [batchSize, logits] for now, got ${x.shape}")
+      assert(dim == 1, s"TODO: Fei Wang, dim must be 1 for now, got ${dim}")
 
       val max = x.max2D(dim = 1)
       val res = Tensor.zeros_like(x)
@@ -1189,9 +1250,9 @@ trait TensorDsl extends DslOps with Diff {
 
     // TODO: Implement `softmax_grad` for CPU.
     // Low-priority if softmax is not used in models.
-    override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
+    override def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
 
-    override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = {
+    override def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = {
       val sum = res.d.sum(dim = 1)
       val offset = var_new(0)
       for (batch <- DataLoop(input.x.shape(0))) {
@@ -1617,7 +1678,9 @@ trait TensorDsl extends DslOps with Diff {
     assert(scalarCount != 0, "Tensor cannot have scalar count 0")
 
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
-    // def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i + 1) +: shape.tail)
+    // TODO (Fei Wang): mind the semantics here!!! it is a slice, not (dim0, dim1) selection!!! Maybe fix with better coding style??
+    // i inclued, j excluded
+    def apply(i: Int, j: Int): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i) +: shape.tail)
 
     // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
     // OR, should we depend this function on other function such as map?
@@ -1696,6 +1759,8 @@ trait TensorDsl extends DslOps with Diff {
     def /=(that: Rep[Float]): Unit = backend./=(this, that)
     def /= (that: Tensor): Unit = backend./=(this, that)
 
+    def mul_sub(in2: Tensor): Tensor = backend.mul_sub(this, in2)
+
     def fillInPlace(value: Rep[Float]): Unit = backend.fillInPlace(this, value)
     def setAsOne() = fillInPlace(1)
     def clear() = fillInPlace(0)
@@ -1743,11 +1808,14 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def trans() = backend.trans(this)
+    def permute(dims: Int*) = backend.permute(this, dims: _*)
 
     def exp() = backend.exp(this)
     def log() = backend.log(this)
     def sqrt() = backend.sqrt(this)
     def square() = backend.square(this)
+
+    def mask4D(lengths: Rep[Array[Int]]): Tensor = backend.mask4D(this, lengths)
 
     def relu(inPlace: Boolean = false) = backend.relu(this, inPlace)
     def tanh() = backend.tanh(this)
@@ -1846,8 +1914,12 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def softmax_batch() = backend.softmax(this)
+    def softmax_batch(dim: Int = 1) = {
+      if (dim < 0) backend.softmax(this, this.rank + dim)
+      else backend.softmax(this, dim)
+    }
 
+    // deprecated (older version that only works for 1D case), should remove
     @virtualize
     def softmax() = {
       assert(this.rank == 1, "TODO: softmax only handles 1d vectors so far: " + this.rank)
@@ -1859,15 +1931,16 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize  // batched log softmax
-    def logSoftmaxB() = backend.logSoftmax(this)
+    def logSoftmaxB(dim: Int = 1) = {
+      if (dim < 0) backend.logSoftmax(this, dim + this.rank)
+      else backend.logSoftmax(this, dim)
+    }
 
+    // deprecated (older version that only works for 1D case), should remove
     @virtualize
     def logSoftmax() = {
       assert(this.rank == 1, "TODO: logSoftmax only handles 1d vectors so far")
-      backend.logSoftmax(this.resize(1, this.shape(0)))
-      // val m = this.max
-      // val logsum = m + Math.log(this.fold(0.0f)((agg, x) => agg + Math.exp(x - m).toFloat)).toFloat
-      // this.map(x => x - logsum)
+      backend.logSoftmax(this.resize(1, this.shape(0)), 1)
     }
 
     def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
@@ -1881,10 +1954,10 @@ trait TensorDsl extends DslOps with Diff {
       // Tensor.scalar(-1.0f * this.data(target))
     }
 
-    def reshape(dims: Int*) = {
-      assert(scalarCount == dims.product, s"Invalid shape, scalar count mismatch: $shape, $dims")
-      Tensor(data, dims: _*)
-    }
+    // def reshape(dims: Int*) = {
+    //   assert(scalarCount == dims.product, s"Invalid shape, scalar count mismatch: $shape, $dims")
+    //   Tensor(data, dims: _*)
+    // }
 
     def resize(dims: Int*) = {
       generateRawComment(s"resize to $dims")
@@ -2435,6 +2508,7 @@ trait TensorDsl extends DslOps with Diff {
     var isInput: Boolean = false // true if it is an input (no need to compute gradient)
 
     def apply(i: Rep[Int]) = new TensorR(x(i), d(i))
+    def apply(i: Int, j: Int) = new TensorR(x(i, j), d(i, j))
 
     def clip_grad(bound: Float) = {
       d.clipAt(bound)
@@ -2566,6 +2640,12 @@ trait TensorDsl extends DslOps with Diff {
       backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
+    def mul_sub(in2: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.mul_sub(in2.x)); k(y)
+      generateRawComment("backprop for mul_sub")
+      backend.mul_sub_grad(this, in2, y)
+    }
+
     // `dot` represents the following:
     // - vector-vector dot product.
     //   [V] dot [V] => [1] (scalar)
@@ -2593,6 +2673,12 @@ trait TensorDsl extends DslOps with Diff {
       backend.trans_grad(this, y)
     }
 
+    def permute(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.permute(dims: _*)); k(y)
+      generateRawComment(s"backprop for permute ${dims}")
+      backend.permute_grad(this, y, dims: _*)
+    }
+
     def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(backend.exp(x)); k(y)
       generateRawComment("backprop for exp")
@@ -2615,6 +2701,12 @@ trait TensorDsl extends DslOps with Diff {
       val y = TensorR(x.square()); k(y)
       generateRawComment("backprop for square")
       backend.square_grad(this, y)
+    }
+
+    def mask4D(lengths: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+      x.mask4D(lengths); k(this)
+      generateRawComment("backprop for mask4D, not sure if gradient should be masked as well?")
+      // this.d.mask4D(lengths)
     }
 
     def relu(inPlace: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2696,29 +2788,30 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    def softmax_batch(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.softmax_batch()); k(y)
-      backend.softmax_grad(this, y)
+    def softmax_batch(dim: Int = 1): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val adjust_dim = if (dim < 0) this.x.rank + dim else dim
+      val y = TensorR(x.softmax_batch(adjust_dim)); k(y)
+      backend.softmax_grad(this, y, adjust_dim)
     }
 
+    // deprecated (older version that only works with 1D data), should remove
     def logSoftmax(): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert(this.x.rank == 1, s"logSoftmax are for 1D vectors, got ${this.x.shape}")
       val y = TensorR(x.logSoftmax()); k(y)  // note that y is 2D (batchSize = 1, length)
       backend.logSoftmax_grad(resizeHelperNoChecker(this, 1, this.x.shape(0)), y)
-      // val s = y.d.sum().data(0)
-      // for (i <- 0 until y.x.scalarCount: Rep[Range]) {
-      //   this.d.data(i) += y.d.data(i) - Math.exp(y.x.data(i)).toFloat * s
-      // }
     }
 
-    def logSoftmaxB(): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.logSoftmaxB()); k(y)
-      backend.logSoftmax_grad(this, y)
+    def logSoftmaxB(dim: Int = 1): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val adjust_dim = if (dim < 0) this.x.rank + dim else dim
+      val y = TensorR(x.logSoftmaxB(adjust_dim)); k(y)
+      backend.logSoftmax_grad(this, y, adjust_dim)
     }
 
-    def resize(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
-      k(new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*)))
-    }
+    // def resize(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
+    //   k(new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*)))
+    // }
+
+    def resize(dims: Int*): TensorR = new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*))
 
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert (this.x.rank == 2, s"nllLossB() function only takes tensor of rank 2, got ${this.x.shape}")
@@ -2752,7 +2845,6 @@ trait TensorDsl extends DslOps with Diff {
     def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
       assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
       assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
-      assert(pads.tail.forall(x => x == pads.head), "pads should be the same in all directions")
       val (output, finputOption) = bias match {
         case Some(bias) => backend.conv2D_batch(x, kernel.x, Some(bias.x), strides, pads)
         case None =>       backend.conv2D_batch(x, kernel.x, None, strides, pads)
@@ -2760,9 +2852,11 @@ trait TensorDsl extends DslOps with Diff {
       val y = TensorR(output); k(y)
 
       generateRawComment("conv2D back-propagate")
+      val paddings = if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else {if (pads.size == 1) (pads(0), pads(0)) else ???}}
+      val stridess = if (strides.size == 2) (strides(0), strides(1)) else ???
       finputOption match {
-        case None => backend.conv2D_batch_grad(this, None, kernel, y, bias, (pads.head, pads.head), (strides.head, strides.last), dilations = (1, 1))
-        case Some(finput) => backend.conv2D_batch_grad(this, Some(TensorR(finput)), kernel, y, bias, (pads.head, pads.head), (strides.head, strides.last), dilations = (1, 1))
+        case None => backend.conv2D_batch_grad(this, None, kernel, y, bias, paddings, stridess, dilations = (1, 1))
+        case Some(finput) => backend.conv2D_batch_grad(this, Some(TensorR(finput)), kernel, y, bias, paddings, stridess, dilations = (1, 1))
       }
     }
 
@@ -2908,6 +3002,11 @@ trait TensorDsl extends DslOps with Diff {
     val k1 = FUNc(k)
 
     if (c) RST(k1(a)) else RST(k1(b))
+  }
+
+  @virtualize
+  def If(c: Boolean)(a: => TensorR @diff)(b: => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+    if (c) RST(k(a)) else RST(k(b))
   }
 
   @virtualize
@@ -3133,6 +3232,14 @@ trait TensorDsl extends DslOps with Diff {
 }
 
 trait TensorDslCublas extends TensorDsl with GPUOps {
+
+  val concatMap = new scala.collection.mutable.HashMap[Int,String]()
+  val permuteKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
+  val permuteGradKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
+  val mulSubKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
+  val mulSubGradKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
+  val mask4dKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
+  var next: Int = 0
 
   def getCudaMallocAddr(): Rep[Long] = {
     unchecked[Long]("(long)gpuMallocAddr")
@@ -3510,6 +3617,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
 
+    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = ???
+    override def mul_sub_grad(in1: TensorR, in2: TensorR, res: TensorR): Unit = ???
+
     override def plusBias(main: Tensor, bias: Tensor): Tensor = { ??? }
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = { ??? }
 
@@ -3563,6 +3673,69 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def trans_grad(x: TensorR, y: TensorR): Unit = {
       assert(x.x.rank == 2 && y.x.rank == 2 && x.x.shape.reverse == y.x.shape)
       this.geam(x.d, false, 1.0f, y.d, true, 1.0f, x.d)
+    }
+
+    override def permute(x: Tensor, dims: Int*): Tensor = {
+      assert(dims.sorted == ((0 until x.rank): Range), s"permutation dimensions should be within ranks, got ${x.shape}, ${dims}")
+      val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(i => x.shape(i)): _*)
+
+      if (!permuteKernelMap.contains(x.shape ++ dims)) {
+        permuteKernelMap(x.shape ++ dims) = (s"""
+         |__global__ void permute${next}(float * in, float * out) {
+         |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+         |  int stride = gridDim.x * blockDim.x;
+         |  int xstrides[] = {${x.shape.strides.mkString(", ")}};
+         |  int ystrides[] = {${resTensor.shape.strides.mkString(", ")}};
+         |  int dims[] = {${dims.mkString(", ")}};
+         |  int xindex[] = {0, 0, 0, 0};  // this line may be uncessary too
+         |  for (; tid < ${x.scalarCount}; tid += stride) {
+         |    int linearIndex = tid;
+         |    int yIndex = 0;
+         |    for (int i = 0; i < ${x.rank}; ++i) {
+         |       xindex[i] = linearIndex / xstrides[i];
+         |       linearIndex = linearIndex - xstrides[i] * xindex[i];
+         |       yIndex += xindex[i] * ystrides[dims[i]];
+         |    }
+         |    out[yIndex] = in[tid];
+         |  }
+         |}
+        """.stripMargin, s"permute${next}")
+        next = next + 1
+      }
+      val kernelFuncName: String = permuteKernelMap(x.shape ++ dims)._2
+      val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
+      unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", x.data, ", ", resTensor.data, ")")
+      resTensor
+    }
+
+    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = {
+      assert(dims.sorted == ((0 until x.x.rank): Range), s"permutation dimensions should be within ranks, got ${x.x.shape}, ${dims}")
+      if (!permuteGradKernelMap.contains(x.x.shape ++ dims)) {
+        permuteGradKernelMap(x.x.shape ++ dims) = (s"""
+         |__global__ void permute_grad${next}(float * in, float * out) {
+         |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+         |  int stride = gridDim.x * blockDim.x;
+         |  int xstrides[] = {${x.x.shape.strides.mkString(", ")}};
+         |  int ystrides[] = {${y.x.shape.strides.mkString(", ")}};
+         |  int dims[] = {${dims.mkString(", ")}};
+         |  int xindex[] = {0, 0, 0, 0};  // this line may be uncessary too
+         |  for (; tid < ${x.x.scalarCount}; tid += stride) {
+         |    int linearIndex = tid;
+         |    int yIndex = 0;
+         |    for (int i = 0; i < ${x.x.rank}; ++i) {
+         |       xindex[i] = linearIndex / xstrides[i];
+         |       linearIndex = linearIndex - xstrides[i] * xindex[i];
+         |       yIndex += xindex[i] * ystrides[dims[i]];
+         |    }
+         |    in[tid] += out[yIndex];
+         |  }
+         |}
+        """.stripMargin, s"permute_grad${next}")
+        next = next + 1
+      }
+      val kernelFuncName: String = permuteGradKernelMap(x.x.shape ++ dims)._2
+      val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
+      unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", x.d.data, ", ", y.d.data, ")")
     }
 
     override def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor = {
@@ -3686,6 +3859,35 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
+    override def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor = {
+      // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
+      // Note: We assume that lengths is passed to GPU already, at the beginning of each epoch
+      assert(input.rank == 4, s"mask4D only deals with inputs of 4D, got ${input.shape}")
+      if (!mask4dKernelMap.contains(input.shape)) {
+        mask4dKernelMap(input.shape) = (s"""
+         |__global__ void mask4D${next}(float* in, int* mask) {
+         |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+         |  int stride = gridDim.x * blockDim.x;
+         |  int xstrides[] = {${input.shape.strides.mkString(", ")}};
+         |  int xindex[] = {0, 0, 0, 0};  // this line may not be necessary
+         |  for (; tid < ${input.scalarCount}; tid += stride) {
+         |    int linearIndex = tid;
+         |    for (int i = 0; i < ${input.rank}; i++) {
+         |      xindex[i] = linearIndex / xstrides[i];
+         |      linearIndex = linearIndex - xstrides[i] * xindex[i];
+         |    }
+         |    if (xindex[3] >= mask[xindex[0]]) in[tid] = 0;
+         |  }
+         |}
+        """.stripMargin, s"mask4D${next}")
+        next = next + 1
+      }
+      val kernelFuncName: String = mask4dKernelMap(input.shape)._2
+      val nGrid = 28
+      unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", input.data, ", ", lengths, ")")
+      input
+    }
+
     override def relu(x: Tensor, inPlace: Boolean = false): Tensor = ???
     override def tanh(x: Tensor): Tensor = ???
     override def sigmoid(x: Tensor): Tensor = ???
@@ -3693,10 +3895,10 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def tanh_grad(input: TensorR, res: TensorR): Unit = ???
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
 
-    override def softmax(x: Tensor): Tensor = ???
-    override def logSoftmax(x: Tensor): Tensor = ???
-    override def softmax_grad(input: TensorR, res: TensorR): Unit = ???
-    override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = ???
+    override def softmax(x: Tensor, dim: Int = 1): Tensor = ???
+    override def logSoftmax(x: Tensor, dim: Int = 1): Tensor = ???
+    override def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
+    override def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
 
     override def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor = {
       val size = x.scalarCount
@@ -3817,22 +4019,36 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val sizeDim1 = tensors(0).shape(1)
       val sizeDim2 = tensors(1).shape(1)
 
+      // concatMap(next) = s"""
+      // |__global__ void concat2D_1D_grad$next(float* in1, int dimSize1, int nElement1,
+      // |                                      float* in2, int dimSize2, int nElement2,
+      // |                                      float* out, int concatDim) {
+      // |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      // |  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
+      // |  if (tid >= nElement) return;
+      // |  float* data = blockIdx.y == 0 ? in1 : in2;
+      // |  int offset = blockIdx.y == 0 ? 0 : dimSize1;
+      // |  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
+      // |  int dataOffset = offset * outStride1;
+      // |  int stride = gridDim.x * blockDim.x;
+      // |  while (tid < nElement) {
+      // |    int elementOffset = 1;
+      // |    data[tid] += out[dataOffset + elementOffset];
+      // |    tid += stride;
+      // |  }
+      // |}""".stripMargin
+      // next = next + 1
+
       val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
       unchecked[Unit](
         "{\n",
         s"dim3 grid(${nGrid}, 2);\n",
         "concat2D_1D_greg<<<grid, 512>>>(", tensors(0).data, ", ", sizeDim1, ", ", tensors(0).scalarCount, ", ",
         tensors(1).data, ", ", sizeDim2, ", ", tensors(1).scalarCount, ", ",
-        res, ", ", 1, ", ", 
+        res, ", ", 1, ", ",
         dim0, ", ", dim1, ", ", dim2, ", ", dim3, ", ",
         resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ",resTensor.shape.strides(2), ", ",resTensor.shape.strides(3), ");\n",
         "}")
-//      unchecked[Unit](
-//        "{\n",
-//        "dim3 grid(", (sizeLow+511) / 512, ", ", sizeHigh * 2, ");\n",
-//        "concat2D_1D_loop<<<grid, 512>>>(", tensors(0).data, ", ", tensors(1).data, ", ", res, ", ",
-//        sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
-//        "}")
       resTensor
     }
 
@@ -3849,25 +4065,17 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       val sizeHigh = dim0
       val sizeDim1 = tensorRs(0).x.shape(1)
       val sizeDim2 = tensorRs(1).x.shape(1)
-      
+
       val nGrid = 28 //tensorRs(0).x.scalarCount / 512 / 5 + 1
       unchecked[Unit](
         "{\n",
         s"dim3 grid(${nGrid}, 2);\n",
         "concat2D_1D_greg_grad<<<grid, 512>>>(", tensorRs(0).d.data, ", ", sizeDim1, ", ", tensorRs(0).d.scalarCount, ", ",
         tensorRs(1).d.data, ", ", sizeDim2, ", ", tensorRs(1).d.scalarCount, ", ",
-        output.d.data, ", ", 1, ", ", 
+        output.d.data, ", ", 1, ", ",
         dim0, ", ", dim1, ", ", dim2, ", ", dim3, ", ",
         output.d.shape.strides(0), ", ", output.d.shape.strides(1), ", ", output.d.shape.strides(2), ", ", output.d.shape.strides(3), ");\n",
         "}")
-
-      // concatenate with user-define kernel function (1D grid 3D block)
-      // unchecked[Unit](
-      //   "{\n",
-      //   "dim3 grid(", (sizeLow+511) / 512, ", ",  sizeHigh * 2, ");\n",
-      //   "concat2D_1D_loop_grad<<<grid, 512>>>(", tensorRs(0).d.data, ",", tensorRs(1).d.data, ",", output.d.data, ", ",
-      //   sizeLow, ", ", sizeHigh, ", ", sizeDim1, ", ", sizeDim2, ");\n",
-      //   "}")
     }
 
     override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
@@ -3971,6 +4179,51 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def cleanup(): Unit = {
       super.cleanup()
       generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
+    }
+
+    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = {
+      assert(in1.rank > in2.rank && in1.shape.takeRight(in2.rank) == in2.shape.toList, s"mul_sub: in2 shape must match the lower part of in1, got ${in1.shape}, ${in2.shape}")
+      val resTensor = Tensor(mallocArray[Float](in1.scalarCount), in1.shape: _*)
+      if (!mulSubKernelMap.contains(Seq(in1.rank, in2.rank) ++ in1.shape)) {
+        mulSubKernelMap(Seq(in1.rank, in2.rank) ++ in1.shape) = (s"""
+         |__global__ void mul_sub${next}(float* in1, float* in2, float* out) {
+         |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+         |  int stride = gridDim.x * blockDim.x;
+         |  for (; tid < ${in1.scalarCount}; tid += stride) {
+         |    out[tid] = in1[tid] * in2[tid % ${in2.scalarCount}];
+         |  }
+         |}
+        """.stripMargin, s"mul_sub${next}")
+        next = next + 1
+      }
+      val kernelFuncName: String = mulSubKernelMap(Seq(in1.rank, in2.rank) ++ in1.shape)._2
+      val nGrid = 28
+      unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resTensor.data, ")")
+      resTensor
+    }
+    override def mul_sub_grad(in1: TensorR, in2: TensorR, res: TensorR): Unit = {
+      assert(in1.x.rank > in2.x.rank && in1.x.shape.takeRight(in2.x.rank) == in2.x.shape.toList, s"mul_sub_grad: in2 shape must match the lower part of in1, got ${in1.x.shape}, ${in2.x.shape}")
+      val temp = Tensor(mallocArray[Float](in1.d.shape.product), in1.d.shape: _*)
+      if (!mulSubGradKernelMap.contains(Seq(in1.x.rank, in2.x.rank) ++ in1.x.shape)) {
+        mulSubGradKernelMap(Seq(in1.x.rank, in2.x.rank) ++ in1.x.shape) = (s"""
+         |__global__ void mul_sub_grad${next}(float* in1_x, float* in1_d, float* in2_x, float* in2_d, float* out) {
+         |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+         |  int stride = gridDim.x * blockDim.x;
+         |  for (; tid < ${in1.x.scalarCount}; tid += stride) {
+         |    int index = tid % ${in2.x.scalarCount};
+         |    in1_d[tid] += out[tid] * in2_x[index];
+         |    // in2_d[index] += in1_x[tid] * out[tid];
+         |    in2_d[tid] = in1_x[tid] * out[tid];  // this is the temp array, need to be reduced!
+         |  }
+         |}
+        """.stripMargin, s"mul_sub_grad${next}")
+        next = next + 1
+      }
+      val kernelFuncName: String = mulSubGradKernelMap(Seq(in1.x.rank, in2.x.rank) ++ in1.x.shape)._2
+      val nGrid = 28
+      unchecked[Unit](s"${kernelFuncName}<<<${nGrid}, 512>>>(", in1.x.data, ", ", in1.d.data, ", ", in2.x.data, ", ", temp.data, ", ", res.d.data, ")")
+      // then reduce temp and add into in2.d
+      cudnnReduceTensor(temp, ReductionOp.Add, (0 until (in1.x.rank - in2.x.rank)), true, Some(in2.d.data), false)
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
@@ -4247,24 +4500,21 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
 
       assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
-      assert(pads.size == 4, "Pads should have length 4: [padTop, padBottom, padLeft, padRight]")
+      val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else ???}}
       val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
-      val ((padUp:Int) :: (padDown:Int) :: (padLeft:Int) :: (padRight:Int) :: Nil) = pads.take(4).toList
       assert(strideRow >= 1, "Row stride must be at least 1")
       assert(strideCol >= 1, "Column stride must be at least 1")
-      assert(padUp == padDown && padUp == padLeft && padUp == padRight, "All paddings must be equal (for now)")
 
       assert(kernel.shape(1) == input.shape(1), s"In-channel count mismatch: input.shape[1] ${input.shape(1)} should match kernel.shape[1] ${kernel.shape(1)}")
-      assert(input.shape(2) + 2 * padUp >= kernel.shape(2) && input.shape(3) + 2 * padUp >= kernel.shape(3),
-        s"Image too small for conv: input is ${input.shape}, kernel is ${kernel.shape}")
+      assert(input.shape(2) + 2 * padH >= kernel.shape(2) && input.shape(3) + 2 * padW >= kernel.shape(3))
 
       // Execute `cudnnConvolutionForward`.
-      val resWidth = convSize(input.shape(2) + padLeft + padRight, kernel.shape(2), strideRow)
-      val resHeight = convSize(input.shape(3) + padUp + padDown, kernel.shape(3), strideCol)
+      val resWidth = convSize(input.shape(2) + padH * 2, kernel.shape(2), strideRow)
+      val resHeight = convSize(input.shape(3) + padW * 2, kernel.shape(3), strideCol)
       val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
       val resData = mallocArray[Float](resShape.product)
       val res = Tensor(resData, resShape: _*)
-      cudnnConvolutionForward(input, kernel, res, padding = (padUp, padLeft), strides = (strideCol, strideRow), dilations = (1, 1))
+      cudnnConvolutionForward(input, kernel, res, padding = (padH, padW), strides = (strideRow, strideCol), dilations = (1, 1))
 
       // If bias is defined, execute `cudnnAddBiasTensor`.
       bias match {
@@ -4285,13 +4535,6 @@ trait TensorDslCudnn extends TensorDslCublas {
         case Some(bias) =>
           cudnnConvolutionBackwardBias(bias.d, res.d)
       }
-      // input.x.toCPU().printHead(10, "forward, input of conv")
-      // input.d.toCPU().printHead(10, "backprop, input of conv")
-      // filter.x.toCPU().printHead(10, "forward, filter of conv")
-      // filter.d.toCPU().printHead(10, "backprop, filter of conv")
-      // res.x.toCPU().printHead(10, "forward, res of conv")
-      // res.d.toCPU().printHead(10, "backprop, res of conv")
-      // error("")
     }
 
     def Pool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]], mode: PoolModes.Value, nanOpt: NanOpt.Value): Tensor = {
@@ -4771,6 +5014,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(input.d.shape == res.d.shape,
         s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
       val one = NewArray[Float](1); one(0) = 1
+      val zero = NewArray[Float](1); zero(0) = 0
       unchecked[Unit](
         Seq(s"""
           |{
@@ -4791,7 +5035,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           "CUDNN_CALL(cudnnActivationBackward(\n" +
           "    cudnnHandle, act_desc,\n" +
           "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ", x_desc, ", input.x.data, ",\n",
-          "    ", one, ", x_desc, ", input.d.data, "));\n" +
+          "    ", (if (inPlace) zero else one), ", x_desc, ", input.d.data, "));\n" +
           "}"): _*
       )
     }
@@ -4830,7 +5074,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     // override def square_grad(x: TensorR, y: TensorR): Unit = ???
 
     def cudnnSoftmaxForward(x: Tensor, mode: SoftmaxMode.Value): Tensor = {
-      assert(x.rank == 4, "Currently, softmax functions only support tensors of rank 4")
+      assert(x.rank == 4, s"Softmax kernel only takes tensors of rank 4, and reduce on dim 1. Reshape your tensor accordingly before using this function. Got ${x.shape}")
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
@@ -4853,16 +5097,14 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     def cudnnSoftmaxBackward(input: TensorR, res: TensorR, mode: SoftmaxMode.Value): Unit = {
-      assert(input.x.rank == 4, "Currently, softmax only support tensors of rank 4")
+      assert(input.x.rank == 4, s"SoftmaxBackward kernel only takes tensors of rank 4, and reduce on dim 1. Reshape your tensor accordingly before using this function. Got ${input.x.shape}")
       // NOTE: shape assertions are relaxed.
       // Assume that {input/result * forward/backward} values all have the same shape.
       // The shape of the input forward value is used in the generated code.
-      /*
       assert(input.x.shape == res.x.shape,
         s"Currently, input and result shapes must be equal: ${input.x.shape}, ${res.x.shape}")
       assert(input.d.shape == res.d.shape,
         s"Currently, input gradient and result gradient shapes must be equal: ${input.d.shape}, ${res.d.shape}")
-      */
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
         Seq(s"""
@@ -4882,44 +5124,46 @@ trait TensorDslCudnn extends TensorDslCublas {
       )
     }
 
-    // NOTE: The `input.rank == 2` assertion currently matches the CPU implementation.
-    // Conceptually, softmax should support arbitrary rank tensors and an arbitrary reduction axis.
-    // This would require some shape padding/transformation.
-    def softmaxHelper(x: Tensor, mode: SoftmaxMode.Value): Tensor = {
-      assert(x.rank == 2, "Softmax input must be 2-D: [batchSize, logits]")
-      val tmpIn = x.reshape(x.shape(0), x.shape(1), 1, 1)
+    def softmaxHelper(x: Tensor, dim: Int, mode: SoftmaxMode.Value): Tensor = {
+      assert(dim >= 0 && dim < x.rank, s"dim should be in range of input rank, got ${x.shape}, ${dim}")
+      val tmpIn = x.resize(x.shape.take(dim).product, x.shape(dim), x.shape.drop(dim+1).product, 1)
       val tmpOut = cudnnSoftmaxForward(tmpIn, mode)
-      val res = tmpOut.reshape(x.shape: _*)
+      val res = tmpOut.resize(x.shape: _*)
       res
     }
 
-    override def softmax(x: Tensor): Tensor = softmaxHelper(x, SoftmaxMode.Accurate)
-    override def logSoftmax(x: Tensor): Tensor = softmaxHelper(x, SoftmaxMode.Log)
+    override def softmax(x: Tensor, dim: Int = 1): Tensor = softmaxHelper(x, dim, SoftmaxMode.Accurate)
+    override def logSoftmax(x: Tensor, dim: Int = 1): Tensor = softmaxHelper(x, dim, SoftmaxMode.Log)
 
-    // TODO: Relax rank assertions, see `softmaxHelper` above.
-    def softmaxBackwardHelper(input: TensorR, res: TensorR, mode: SoftmaxMode.Value): Unit = {
-      assert(input.x.rank == 2, "Softmax input must be 2-D: [batchSize, logits]")
-      val tmpInX = input.x.reshape(input.x.shape(0), input.x.shape(1), 1, 1)
-      val tmpIn = new TensorR(tmpInX, input.d)
-      cudnnSoftmaxBackward(tmpIn, res, mode)
+    def softmaxBackwardHelper(input: TensorR, res: TensorR, dim: Int, mode: SoftmaxMode.Value): Unit = {
+      assert(dim >= 0 && dim < input.x.rank, s"dim should be in range of input rank, got ${input.x.shape}, ${dim}")
+      // assert(input.x.rank == 2, "Softmax input must be 2-D: [batchSize, logits]")
+      val tmpIn = new TensorR(input.x.resize(input.x.shape.take(dim).product, input.x.shape(dim), input.x.shape.drop(dim+1).product, 1),
+                              input.d.resize(input.x.shape.take(dim).product, input.x.shape(dim), input.x.shape.drop(dim+1).product, 1))
+      val tmpOut = new TensorR(res.x.resize(res.x.shape.take(dim).product, res.x.shape(dim), res.x.shape.drop(dim+1).product, 1),
+                               res.d.resize(res.x.shape.take(dim).product, res.x.shape(dim), res.x.shape.drop(dim+1).product, 1))
+      cudnnSoftmaxBackward(tmpIn, tmpOut, mode)
     }
 
-    override def softmax_grad(input: TensorR, res: TensorR): Unit =
-      softmaxBackwardHelper(input, res, SoftmaxMode.Accurate)
-    override def logSoftmax_grad(input: TensorR, res: TensorR): Unit = {
-      softmaxBackwardHelper(input, res, SoftmaxMode.Log)
+    override def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit =
+      softmaxBackwardHelper(input, res, dim, SoftmaxMode.Accurate)
+    override def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = {
+      softmaxBackwardHelper(input, res, dim, SoftmaxMode.Log)
     }
 
     // TODO: Relax rank 4 requirement after implementing tensor descriptor helper functions.
     // `cudnnReduceTensor` supports tensors up to dimension 8.
-    def cudnnReduceTensor(x: Tensor, op: ReductionOp.Value, indices: Seq[Int], flatten: Boolean = true): Tensor = {
-      assert(x.rank == 4, "Currently, reduction only support tensors of rank 4")
-      assert(indices.forall(i => x.shape.indices.contains(i)),
-        s"Indices out of bounds: $indices, tensor shape is ${x.shape}")
-      val unflatShape = x.shape.zipWithIndex.map { case (dim, i) =>
+    def cudnnReduceTensor(x: Tensor, op: ReductionOp.Value, indices: Seq[Int], flatten: Boolean = true, toTensor: Option[Rep[Array[Float]]] = None, clear: Boolean = true): Tensor = {
+      // assert(x.rank == 4, "Currently, reduction only support tensors of rank 4")
+      assert(indices.forall(i => x.shape.indices.contains(i)), s"Indices out of bounds: $indices, tensor shape is ${x.shape}")
+      val xShape = x.shape.padTo(4, 1)
+      val unflatShape = xShape.zipWithIndex.map { case (dim, i) =>
         if (indices.contains(i)) 1 else dim
       }
-      val res = Tensor(mallocArray[Float](unflatShape.product), unflatShape: _*)
+      val res = toTensor match {
+        case None => Tensor(mallocArray[Float](unflatShape.product), unflatShape: _*)
+        case Some(array) => Tensor(array, unflatShape: _*)
+      }
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
       unchecked[Unit](
@@ -4929,7 +5173,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
           |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    ${x.shape(0)}, ${x.shape(1)}, ${x.shape(2)}, ${x.shape(3)}));
+          |    ${xShape(0)}, ${xShape(1)}, ${xShape(2)}, ${xShape(3)}));
           |
           |cudnnTensorDescriptor_t out_desc;
           |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
@@ -4954,7 +5198,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         Seq(
           "CUDNN_CALL(cudnnReduceTensor(\n" +
           s"    cudnnHandle, reduce_desc, indices, 0, ws_data, ws_size,\n" +
-          "    ", one, ", x_desc, ", x.data, ", ", zero, ", out_desc, ", res.data, "));\n" +
+          "    ", one, ", x_desc, ", x.data, ", ", (if (clear) zero else one), ", out_desc, ", res.data, "));\n" +
           "}"): _*
       )
       val resShape = x.shape.zipWithIndex.flatMap { case (dim, i) =>
@@ -4974,7 +5218,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for sum op")
-      assert(res.d.shape == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      assert(res.d.shape.dims == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
       cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, 1): _*))
     }
@@ -4987,7 +5231,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for mean op")
-      assert(res.d.shape == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      assert(res.d.shape.dims == Seq(1), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
       cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, 1): _*), scale = 1.0f / input.x.scalarCount)
     }
@@ -5323,7 +5567,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       size_t                          workSpaceSizeInBytes,
       const void                     *reserveSpace,
       size_t                          reserveSpaceSizeInBytes)
-       */
+      */
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnRNNBackwardWeights
@@ -5426,22 +5670,22 @@ trait TensorDslCudnn extends TensorDslCublas {
           "}"): _*)
       /*
       cudnnStatus_t cudnnRNNBackwardWeights(
-    cudnnHandle_t                   handle,
-    const cudnnRNNDescriptor_t      rnnDesc,
-    const int                       seqLength,
-    const cudnnTensorDescriptor_t  *xDesc,
-    const void                     *x,
-    const cudnnTensorDescriptor_t   hxDesc,
-    const void                     *hx,
-    const cudnnTensorDescriptor_t  *yDesc,
-    const void                     *y,
-    const void                     *workspace,
-    size_t                          workSpaceSizeInBytes,
-    const cudnnFilterDescriptor_t   dwDesc,
-    void                           *dw,
-    const void                     *reserveSpace,
-    size_t                          reserveSpaceSizeInBytes)
-       */
+      cudnnHandle_t                   handle,
+      const cudnnRNNDescriptor_t      rnnDesc,
+      const int                       seqLength,
+      const cudnnTensorDescriptor_t  *xDesc,
+      const void                     *x,
+      const cudnnTensorDescriptor_t   hxDesc,
+      const void                     *hx,
+      const cudnnTensorDescriptor_t  *yDesc,
+      const void                     *y,
+      const void                     *workspace,
+      size_t                          workSpaceSizeInBytes,
+      const cudnnFilterDescriptor_t   dwDesc,
+      void                           *dw,
+      const void                     *reserveSpace,
+      size_t                          reserveSpaceSizeInBytes)
+      */
     }
 
     def cudnnRNNBackward(mode: RnnMode,
@@ -5455,6 +5699,48 @@ trait TensorDslCudnn extends TensorDslCublas {
       cudnnRNNBackwardData(mode, input, hx, cx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
       // TODO: Need to update `BackwardWeights` to accumulate gradients.
       cudnnRNNBackwardWeights(mode, input, hx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
+    }
+
+    // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnCTCLoss
+    def cudnnCTCLoss(probs: Tensor, labels: Rep[Array[Int]],
+                     inputLengths: Rep[Array[Int]], targetLengths: Rep[Array[Int]]): (Tensor, Tensor) = {
+      assert(probs.rank == 3, "Probability tensor should have rank 3: [inputLength, batchSize, alphabetSize]")
+      val inputLength = probs.shape(0)
+      val batchSize = probs.shape(1)
+      val alphabetSize = probs.shape(2)
+      // Note: `inputLengths` and `targetLengths` should have length equal to `batchSize`.
+      // Note: `cudnnGetCTCLossWorkspaceSize` requires that the batchSize (i.e. size of targetLengths) is NO greater than 256.
+      assert(batchSize <= 256, s"'cudnnGetCTCLossWorkspaceSize' requires batch size less than 256, got $batchSize")
+
+      val costs = Tensor(mallocArray[Float](batchSize), batchSize)
+      val grad = Tensor(mallocArray[Float](probs.scalarCount), probs.shape: _*)
+      unchecked[Unit](
+        Seq(s"""
+          |{
+          |cudnnTensorDescriptor_t probs_desc;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&probs_desc));
+          |int probs_dims[] = {$inputLength, $batchSize, $alphabetSize};
+          |int probs_strides[] = {probs_dims[1] * probs_dims[2], probs_dims[2], 1};
+          |CUDNN_CALL(cudnnSetTensorNdDescriptor(
+          |    probs_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, probs_dims, probs_strides));
+          |
+          |cudnnTensorDescriptor_t grad_desc = probs_desc;
+          |
+          |cudnnCTCLossDescriptor_t ctc_desc;
+          |CUDNN_CALL(cudnnCreateCTCLossDescriptor(&ctc_desc));
+          |CUDNN_CALL(cudnnSetCTCLossDescriptor(ctc_desc, CUDNN_DATA_FLOAT));
+          |""".stripMargin) ++
+        Seq(
+          "size_t wsSize;\n" +
+          "CUDNN_CALL(cudnnGetCTCLossWorkspaceSize(\n" +
+          "    cudnnHandle, probs_desc, grad_desc, ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
+          "    CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, &wsSize));\n" +
+          "void *ws = myGpuMalloc(wsSize);\n\n" +
+          "CUDNN_CALL(cudnnCTCLoss(\n" +
+          "    cudnnHandle, probs_desc, ", probs.data, ", ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
+          "    ", costs.data, ", grad_desc, ", grad.data, ", CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, ws, wsSize));\n" +
+          "}"): _*)
+      (costs, grad)
     }
   }
 
