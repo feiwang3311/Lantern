@@ -34,7 +34,7 @@ parser.add_argument('--seed', default=0xdeadbeef, type=int, help='Random Seed')
 
 parser.add_argument('--acc', default=23.0, type=float, help='Target WER')
 
-parser.add_argument('--start_epoch', default=-1, type=int, help='Number of epochs at which to start from')
+parser.add_argument('--start_epoch', default=0, type=int, help='Number of epochs at which to start from')
 
 def to_np(x):
     return x.data.cpu().numpy()
@@ -88,8 +88,6 @@ def main():
             print('Directory already exists.')
         else:
             raise
-    cuda = torch.device('cuda')
-    criterion = torch.nn.CTCLoss(reduction='none').to(cuda)
 
     with open(params.labels_path) as label_file:
         labels = str(''.join(json.load(label_file)))
@@ -110,6 +108,9 @@ def main():
     optimizer = torch.optim.SGD(parameters, lr=params.lr,
                                 momentum=params.momentum, nesterov=False,
                                 weight_decay = params.l2)
+    cuda = torch.device('cuda')
+    criterion = torch.nn.CTCLoss(reduction='none').to(cuda)
+
 
     avg_loss = 0
     start_epoch = 0
@@ -131,14 +132,18 @@ def main():
     filename = "/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle"
     batchedData = user_defined_input.Batch(filename)
 
-    def train_one_epoch(epoch, end):
+    def train_one_epoch(epoch):
         avg_loss = 0
+        end = time.time()
         for i in range(batchedData.numBatches):
             inputs, targets, input_percentages, target_sizes = batchedData.batch()
+
+            # making all inputs Tensor
             inputs = torch.from_numpy(inputs)
             targets = torch.from_numpy(targets)
             input_percentages = torch.from_numpy(input_percentages)
             target_sizes = torch.from_numpy(target_sizes)
+
             # measure data loading time
             data_time.update(time.time() - end)
             inputs = Variable(inputs, requires_grad=False)
@@ -151,14 +156,14 @@ def main():
             # measure forward pass time
             forward_start_time = time.time()
             out = model(inputs)
-            out = out.transpose(0, 1)  # TxNxH
+            # out = out.transpose(0, 1)  # TxNxH
 
             seq_length = out.size(0)
             sizes = Variable(input_percentages.mul_(int(seq_length)).int(), requires_grad=False)
 
             # measure ctc loss computing time
             ctc_start_time = time.time()
-            out = out.log_softmax(2)  # .detach().requires_grad_()
+            out = out.log_softmax(2)  #.detach().requires_grad_()
             loss = criterion(out, targets, sizes, target_sizes)
             ctc_time.update(time.time() - ctc_start_time)
 
@@ -194,7 +199,6 @@ def main():
 
             # measure elapsed time
             batch_time.update(time.time() - end)
-            end = time.time()
 
             if (i % 20 == 0):
                 print('Epoch: [{0}][{1}/{2}]\t'
@@ -215,14 +219,13 @@ def main():
 
         print('Training Summary Epoch: [{0}]\t'
             'Average Loss {loss:.3f}\t'
-            .format( epoch + 1, loss=avg_loss, ))
+            .format(epoch + 1, loss=avg_loss, ))
 
         loss_results[epoch] = avg_loss
 
+    model.train()
     for epoch in range(start_epoch, params.epochs):
-        model.train()
-        end = time.time()
-        train_one_epoch(epoch, end)
+        train_one_epoch(epoch)
 
 
 if __name__ == '__main__':
