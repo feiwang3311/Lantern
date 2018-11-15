@@ -39,14 +39,14 @@ object DeepSpeech {
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
         // we don't actually use outputLengths here. The pytorch imp needs it for pack_padded_sequence and pad_packed_sequence
-        def apply(input: TensorR, outputLengths: Rep[Array[Int]]): TensorR @diff = {
-          val in1 = IF (useBatchNorm) {
+        def apply(input: TensorR): TensorR @diff = {
+          val in1 = If_B (useBatchNorm) {
             val input2D = input.resize(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
             val inputBN = batchNorm.get.apply(input2D)
             inputBN.resize(input.x.shape(0), input.x.shape(1), input.x.shape(2))
           } { input }
           val output = rnn(in1)
-          IF (bidirectional) {output.resize(output.x.shape(0), output.x.shape(1), 2, -1).sum(2)} {output}
+          If_B (bidirectional) {output.resize(output.x.shape(0), output.x.shape(1), 2, output.x.shape(2) / 2).sum(2)} {output}
         }
       }
 
@@ -58,9 +58,7 @@ object DeepSpeech {
         // TODO (Fei Wang): this could be optimized by a user-defined kernel?
         def apply(input: TensorR): TensorR @diff = {
           val padding = TensorR(Tensor.zeros((unit(context) +: input.x.shape.drop(1)): _*))
-          val xt = input.resize((unit(1) +: input.x.shape): _*).concat(1, padding.resize((unit(1) +: padding.x.shape): _*))
-          val x = xt.resize(input.x.shape(0) + padding.x.shape(0), input.x.shape(1), input.x.shape(2))
-          // val x = input.concat(0, padding)
+          val x = input.concat(0, padding)
           val xs = x.repeat0(context).permute(0, 2, 3, 1)
           (xs mul_sub weight).sum(3)
         }
@@ -84,7 +82,7 @@ object DeepSpeech {
           val bn1 = BatchNorm2D(32)
           val conv2 = Conv2D(32, 32, Seq(21, 11), stride = Seq(2, 1), pad = Seq(10, 5))
           val bn2 = BatchNorm2D(32)
-          def apply(in: TensorR, lengths: Rep[Array[Int]]): TensorR @diff = {
+          def apply(in: TensorR): TensorR @diff = {
             // NOTE: This function assume that the lengths array is already on GPU
             val step1 = conv1(in)
             val step2 = bn1(step1).hardTanh(0, 20, inPlace = true)
@@ -122,37 +120,37 @@ object DeepSpeech {
           }
         }
 
-        def getSeqLens(lengths: Rep[Array[Int]], size: Rep[Int]) = {
-          conv.modules.foldLeft(lengths) { case(ls, (_, m)) =>
-            if (m.isInstanceOf[Conv2D]) {
-              val mm = m.asInstanceOf[Conv2D]
-              val ls_next = NewArray[Int](size)
-              for (i <- 0 until size) ls_next(i) = (ls(i) + 2 * mm.pad(1) - mm.dilation(1) * (mm.kernelSize(1) - 1) - 1) / mm.stride(1) + 1
+//        def getSeqLens(lengths: Rep[Array[Int]], size: Rep[Int]) = {
+//          conv.modules.foldLeft(lengths) { case(ls, (_, m)) =>
+//            if (m.isInstanceOf[Conv2D]) {
+//              val mm = m.asInstanceOf[Conv2D]
+//              val ls_next = NewArray[Int](size)
+//              for (i <- 0 until size) ls_next(i) = (ls(i) + 2 * mm.pad(1) - mm.dilation(1) * (mm.kernelSize(1) - 1) - 1) / mm.stride(1) + 1
               // ls.map(x => (x + 2 * mm.pad(1) - mm.dilation(1) * (mm.kernelSize(1) - 1) - 1) / mm.stride(1) + 1)
-              ls_next } else ls
-          }
-        }
+//              ls_next } else ls
+//          }
+//        }
 
-        def apply(input: TensorR, lengths: Rep[Array[Int]]): (TensorR, Rep[Array[Int]]) @diff = {
+        def apply(input: TensorR): TensorR @diff = {
           // input is B * C * D * T
-          generateRawComment("before getting length info") // line 1117
-          val outputLengths = getSeqLens(lengths, input.x.shape(0))
-          val outputLengthsGPU = outputLengths.toGPU(input.x.shape(0))
-          generateRawComment("after getting length info") // line 1138
-          val step1 = conv(input, outputLengthsGPU)  // TODO (Fei Wang): this is a potential error for the pytorch implementation
+          // generateRawComment("before getting length info") // line 1117
+          // val outputLengths = getSeqLens(lengths, input.x.shape(0))
+          // val outputLengthsGPU = outputLengths.toGPU(input.x.shape(0))
+          // generateRawComment("after getting length info") // line 1138
+          val step1 = conv(input)
           generateRawComment("after conv ops")  // line 1480
           val step2 = step1.resize(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
           generateRawComment("after resize and permute") // line 1576
 
-          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = IF (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in, outputLengthsGPU))}
+          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If_B (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in))}
           val step4 = rec(rnns, step3)
           generateRawComment("after RNN layers")// line 8711
 
-          val step5 = IF (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }
-          generateRawComment("after bidirectional sum") // line 8450
+          val step5 = If_B (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }
+          generateRawComment("after maybe lookahead") // line 8450
           // TODO igore eval_mode (which needs a softmax layer) for now
-          (fc(step5), outputLengthsGPU)  // B * T * num_alphabet
+          fc(step5)  // T * B * num_alphabet
         }
       }
 
@@ -162,12 +160,13 @@ object DeepSpeech {
       val opt = SGD(net, learning_rate = 3e-8f, gradClip = 1000.0f)
       // val opt = SGD_Momentum(net, learning_rate = 3e-4f, momentum = 0.9f, gradClip = 400.0f, nesterov = true)
 
-      def lossFun(input: TensorR, inputLengths: Rep[Array[Int]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
-        val (probs, outputLength) = net(input, inputLengths)
-        val probs1 = probs.softmax_batch(2)
-        generateRawComment("before CTC loss")// line 8572
-        val loss = probs1.ctcLoss(outputLength.toCPU(input.x.shape(0)), target, targetSize)
-        generateRawComment("after CTC loss")// line 8641
+      def lossFun(input: TensorR, percent: Rep[Array[Float]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
+        val probs = net(input).softmax_batch(2)
+        generateRawComment("before CTC loss") // line 8572
+        val outputLength = NewArray[Int](probs.x.shape(1))
+        for (i <- 0 until probs.x.shape(1)) outputLength(i) = unchecked[Int]("(int)", percent(i) * probs.x.shape(0))
+        val loss = probs.ctcLoss(outputLength, target, targetSize)
+        generateRawComment("after CTC loss") // line 8641
         TensorR(loss)
       }
 
@@ -195,11 +194,11 @@ object DeepSpeech {
         printf("Start training epoch %d\\n", epoch + 1)
         trainTimer.startTimer
 
-        data.foreachBatch { (batchIndex: Rep[Int], input: Tensor, inputLength: Rep[Array[Int]], target: Rep[Array[Int]], targetLength: Rep[Array[Int]]) =>
+        data.foreachBatch { (batchIndex: Rep[Int], input: Tensor, percent: Rep[Array[Float]], target: Rep[Array[Int]], targetLength: Rep[Array[Int]]) =>
 
           imgIdx += batchSize
           val inputR = TensorR(input.toGPU(), isInput = true)
-          val loss = gradR_loss(lossFun(inputR, inputLength, target, targetLength))(Tensor.zeros(1))
+          val loss = gradR_loss(lossFun(inputR, percent, target, targetLength))(Tensor.zeros(1))
           trainLoss += loss.data(0)
           // opt.perform{case (name, (tr, ot)) => tr.d.toCPU().printHead(5, name)}
           // error("stop")

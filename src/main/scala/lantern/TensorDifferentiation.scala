@@ -146,11 +146,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    // 这个是数据的格式
-    // 每个数据文件开头是两个Int，分别是batch_size和num_batches
-    // 然后是每个batch的数据。每个batch开头是两个Int，分别是frequency_size和max_length
-    // 然后是四个Tensor，类型写在上面的图里了
-    // inputs_percentage 是padding以后非padding数据的比例，targets里每一个target都是英语字符对应的Int
     @virtualize
     class DeepSpeechDataLoader(name: String, train: Boolean) {
 
@@ -190,7 +185,7 @@ trait TensorDsl extends DslOps with Diff {
       // get array of arrays to store the pointers to data
       val inputs: Rep[Array[Array[Float]]] = NewArray[Array[Float]](numBatches)
       val percents: Rep[Array[Array[Float]]] = NewArray[Array[Float]](numBatches)
-      val inputSizes: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
+      // val inputSizes: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
       // val inputs = NewArray[Tensor](numBatches)
       // val percents = NewArray[Tensor](numBatches)
       val targetSizes: Rep[Array[Array[Int]]] = NewArray[Array[Int]](numBatches)
@@ -208,10 +203,10 @@ trait TensorDsl extends DslOps with Diff {
         percents(batch) = reader.nextF(batchSize)
 
         // change percent data to length data
-        inputSizes(batch) = NewArray[Int](batchSize)
-        val maxLength = maxLengths(batch)
-        val percent = percents(batch)
-        for (i <- (0 until batchSize)) inputSizes(batch)(i) = unchecked[Int]("(int)",  maxLength * percent(i) )
+        // inputSizes(batch) = NewArray[Int](batchSize)
+        // val maxLength = maxLengths(batch)
+        // val percent = percents(batch)
+        // for (i <- (0 until batchSize)) inputSizes(batch)(i) = unchecked[Int]("(int)",  maxLength * percent(i) )
 
         // then the targetSize tensor of Int[batchSize]
         targetSizes(batch) = reader.nextI(batchSize)
@@ -222,15 +217,15 @@ trait TensorDsl extends DslOps with Diff {
 
       @virtualize
       // the lossFun takes a Batch (Tensor), inputLengths, labels, labelLengths (all Rep[Array[Int]])
-      def foreachBatch(f: (Rep[Int], Tensor, Rep[Array[Int]], Rep[Array[Int]], Rep[Array[Int]]) => Unit) = {
+      def foreachBatch(f: (Rep[Int], Tensor, Rep[Array[Float]], Rep[Array[Int]], Rep[Array[Int]]) => Unit) = {
         for (batchIndex <- 0 until numBatches: Rep[Range]) {
           val maxLength = maxLengths(batchIndex)
           val freqSize = freqSizes(batchIndex)
           val input: Tensor = Tensor(inputs(batchIndex), batchSize, 1, freqSize, maxLength)
-          val inputLength: Rep[Array[Int]] = inputSizes(batchIndex)
+          val percent: Rep[Array[Float]] = percents(batchIndex)
           val target: Rep[Array[Int]] = targets(batchIndex)
           val targetSize: Rep[Array[Int]] = targetSizes(batchIndex)
-          f(batchIndex, input, inputLength, target, targetSize)
+          f(batchIndex, input, percent, target, targetSize)
         }
       }
     }
@@ -2029,10 +2024,12 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def resize(dims: Rep[Int]*) = {
-      assert(SeqRBOps(dims).count(_ < 0) <= 1, s"at most one negative dimension in resize.")
-      val new_dims: Seq[Rep[Int]] = dims.map(x => if (x > 0) x else this.scalarCount / dims.filterProduct(_ > 0))
-      assert(new_dims.product1 == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
-      Tensor(this.data, new_dims : _*)
+      // assert(SeqRBOps(dims).count(_ < 0) <= 1, s"at most one negative dimension in resize.")
+      // val new_dims: Seq[Rep[Int]] = dims.map(x => if (x > 0) x else {this.scalarCount / dims.filterProduct(_ > 0)})
+      // assert(new_dims.product1 == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
+      // Danger !!!! (Fei Wang): disabling computation for -1 size without checking!!!
+      // Tensor(this.data, new_dims : _*)
+      Tensor(this.data, dims : _*)
     }
 
     @virtualize
@@ -3076,6 +3073,10 @@ trait TensorDsl extends DslOps with Diff {
     val k1 = FUNc(k)
 
     if (c) RST(k1(a)) else RST(k1(b))
+  }
+  
+  def If_B(c: Boolean)(a: => TensorR @diff)(b: => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
+    if (c) RST(k(a)) else RST (k(b))
   }
 
   @virtualize
