@@ -2,7 +2,7 @@ name := "Lantern"
 
 version := "1.0"
 
-scalaVersion := "2.12.4"
+scalaVersion := "2.12.7"
 
 // cps
 
@@ -32,6 +32,8 @@ libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value %
 
 //libraryDependencies += "org.scalactic" %% "scalactic" % scalaVersion.value
 
+libraryDependencies ++= Seq("org.bytedeco.javacpp-presets" % "onnx-platform" % "1.3.0-1.4.4-SNAPSHOT")
+
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
 
 val paradiseVersion = "2.1.0"
@@ -53,13 +55,13 @@ addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVe
 // mainClass in (Compile, packageBin) := Some("scala.lantern")
 
 // scala support for protobuf (for adding onnx support)
-PB.targets in Compile := Seq(
-  scalapb.gen() -> (sourceManaged in Compile).value
-)
+//PB.targets in Compile := Seq(
+//  scalapb.gen() -> (sourceManaged in Compile).value
+//)
 
 // (optional) If you need scalapb/scalapb.proto or anything from
 // google/protobuf/*.proto
-libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
+//libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
 
 // Testing.
 
