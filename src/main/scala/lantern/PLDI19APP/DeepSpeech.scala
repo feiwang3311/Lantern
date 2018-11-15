@@ -34,7 +34,7 @@ object DeepSpeech {
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L80
       case class BatchRNN(val name: String = "batch_rnn",
                           inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = RnnTanhMode,
-                          bidirectional: Boolean = false, useBatchNorm: Boolean = true) extends Module {
+                          bidirectional: Boolean = true, useBatchNorm: Boolean = false) extends Module {
         val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
@@ -71,7 +71,7 @@ object DeepSpeech {
                             rnnMode: RnnMode = RnnTanhMode, labels: String = "abc",
                             rnnHiddenSize: Int = 1024, numLayers: Int = 3,
                             sampleRate: Int = 16000, windowSize: Float = 0.02f,
-                            bidirectional: Boolean = false, context: Int = 20) extends Module with Serializable {
+                            bidirectional: Boolean = true, context: Int = 20) extends Module with Serializable {
 
         assert(rnnHiddenSize >= 1, "RNN hidden size must be at least 1")
         assert(numLayers >= 1, "Number of RNN layers must be at least 1")
@@ -86,9 +86,9 @@ object DeepSpeech {
           val bn2 = BatchNorm2D(32)
           def apply(in: TensorR, lengths: Rep[Array[Int]]): TensorR @diff = {
             // NOTE: This function assume that the lengths array is already on GPU
-            val step1 = conv1(in).mask4D(lengths)
-            val step2 = bn1(step1).mask4D(lengths).hardTanh(0, 20, inPlace = true)
-            val step3 = conv2(step2).mask4D(lengths)
+            val step1 = conv1(in)
+            val step2 = bn1(step1).hardTanh(0, 20, inPlace = true)
+            val step3 = conv2(step2)
             bn2(step3).hardTanh(0, 20, inPlace = true)
           }
         }
@@ -103,7 +103,7 @@ object DeepSpeech {
 
         val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
           if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
-          else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional)
+          else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
         }
 
         val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
@@ -158,7 +158,6 @@ object DeepSpeech {
 
       val labels = "_'ABCDEFGHIJKLMNOPQRSTUVWXYZ "
       val net = DeepSpeech(labels = labels, bidirectional = true)
-      net.registerParameters(s"${net.name}/")
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
       val opt = SGD(net, learning_rate = 3e-8f, gradClip = 1000.0f)
       // val opt = SGD_Momentum(net, learning_rate = 3e-4f, momentum = 0.9f, gradClip = 400.0f, nesterov = true)
@@ -173,7 +172,7 @@ object DeepSpeech {
       }
 
       // Training
-      val nbEpoch = 4 
+      val nbEpoch = 1 
 
       // TODO: Replace with real data loader.
       val data = new Dataset.DeepSpeechDataLoader(data_dir, true)
@@ -204,7 +203,7 @@ object DeepSpeech {
           trainLoss += loss.data(0)
           // opt.perform{case (name, (tr, ot)) => tr.d.toCPU().printHead(5, name)}
           // error("stop")
-          opt.step()
+          // opt.step()
 
           // selective printing
           if (imgIdx % (batchSize * 20) == 0) {

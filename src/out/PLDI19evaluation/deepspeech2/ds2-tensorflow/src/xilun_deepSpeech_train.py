@@ -236,7 +236,7 @@ def set_learning_rate():
 def fetch_data():
     """ Fetch features, labels and sequence_lengths from a common queue."""
     tot_batch_size = ARGS.batch_size 
-    with tf.device('/device:CPU'):
+    with tf.device('/cpu'):
         feats, labels, seq_lens = deepSpeech.inputs(eval_data='train',
                                                     data_dir=ARGS.data_dir,
                                                     batch_size=tot_batch_size,

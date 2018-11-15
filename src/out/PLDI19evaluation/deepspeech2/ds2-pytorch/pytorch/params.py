@@ -35,7 +35,7 @@ rnn_type      = 'rnn' #Type of the RNN. rnn|gru|lstm are supported
 rnn_act_type  = 'relu' #Type of the activation within RNN. tanh | relu are supported
 
 # Training parameters
-epochs          = 16 # Number of training epochs
+epochs          = 4 # Number of training epochs
 learning_anneal = 1.1 # Annealing applied to learning rate every epoch
 lr              = 0.0001 # initial learning rate
 momentum        = 0.9 # momentum

@@ -10,22 +10,15 @@ import numpy as np
 
 import torch
 from torch.autograd import Variable
-# from warpctc_pytorch import CTCLoss
-
 import torch.nn.functional as F
 
 ### Import Data Utils ###
 sys.path.append('../')
 
-# from data.bucketing_sampler import BucketingSampler, SpectrogramDatasetWithLength
-# from data.data_loader import AudioDataLoader, SpectrogramDataset
-# from decoder import GreedyDecoder
 from model import DeepSpeech, supported_rnns
 import user_defined_input
 
 import params
-
-# from eval_model import  eval_model
 
 ###########################################################
 # Comand line arguments, handled by params except seed    #
@@ -95,27 +88,11 @@ def main():
             print('Directory already exists.')
         else:
             raise
-    #cuda = torch.device('cuda')
-    criterion = torch.nn.CTCLoss()#.to(cuda)
+    cuda = torch.device('cuda')
+    criterion = torch.nn.CTCLoss(reduction='none').to(cuda)
 
     with open(params.labels_path) as label_file:
         labels = str(''.join(json.load(label_file)))
-    # audio_conf = dict(sample_rate=params.sample_rate,
-    #                   window_size=params.window_size,
-    #                   window_stride=params.window_stride,
-    #                   window=params.window,
-    #                   noise_dir=params.noise_dir,
-    #                   noise_prob=params.noise_prob,
-    #                   noise_levels=(params.noise_min, params.noise_max))
-
-    # train_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.train_manifest, labels=labels,
-    #                                    normalize=True, augment=params.augment)
-    # test_dataset = SpectrogramDataset(audio_conf=audio_conf, manifest_filepath=params.val_manifest, labels=labels,
-    #                                   normalize=True, augment=False)
-    # train_loader = AudioDataLoader(train_dataset, batch_size=params.batch_size,
-    #                                num_workers=1)
-    # test_loader = AudioDataLoader(test_dataset, batch_size=params.batch_size,
-    #                               num_workers=1)
 
     rnn_type = params.rnn_type.lower()
     assert rnn_type in supported_rnns, "rnn_type should be either lstm, rnn or gru"
@@ -131,38 +108,15 @@ def main():
 
     parameters = model.parameters()
     optimizer = torch.optim.SGD(parameters, lr=params.lr,
-                                momentum=params.momentum, nesterov=True,
+                                momentum=params.momentum, nesterov=False,
                                 weight_decay = params.l2)
-    # decoder = GreedyDecoder(labels)
 
-    if args.continue_from:
-        print("Loading checkpoint model %s" % args.continue_from)
-        package = torch.load(args.continue_from)
-        model.load_state_dict(package['state_dict'])
-        optimizer.load_state_dict(package['optim_dict'])
-        start_epoch = int(package.get('epoch', 1)) - 1  # Python index start at 0 for training
-        start_iter = package.get('iteration', None)
-        if start_iter is None:
-            start_epoch += 1  # Assume that we saved a model after an epoch finished, so start at the next epoch.
-            start_iter = 0
-        else:
-            start_iter += 1
-        avg_loss = int(package.get('avg_loss', 0))
-
-        if args.start_epoch != -1:
-          start_epoch = args.start_epoch
-
-        loss_results[:start_epoch], cer_results[:start_epoch], wer_results[:start_epoch] = package['loss_results'][:start_epoch], package[ 'cer_results'][:start_epoch], package['wer_results'][:start_epoch]
-        print(loss_results)
-        epoch = start_epoch
-
-    else:
-        avg_loss = 0
-        start_epoch = 0
-        start_iter = 0
-        avg_training_loss = 0
+    avg_loss = 0
+    start_epoch = 0
+    start_iter = 0
+    avg_training_loss = 0
     if params.cuda:
-        model = torch.nn.DataParallel(model).cuda()
+        model.cuda()
 
     print(model)
     print("Number of parameters: %d" % DeepSpeech.get_param_size(model))
@@ -175,12 +129,10 @@ def main():
     backward_time = AverageMeter()
 
     filename = "/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle"
-    # filename = "/scratch/wu636/training/speech_recognition/data/test/deep_speech_train.pickle"
     batchedData = user_defined_input.Batch(filename)
 
-    for epoch in range(start_epoch, params.epochs):
-        model.train()
-        end = time.time()
+    def train_one_epoch(epoch, end):
+        avg_loss = 0
         for i in range(batchedData.numBatches):
             inputs, targets, input_percentages, target_sizes = batchedData.batch()
             inputs = torch.from_numpy(inputs)
@@ -206,18 +158,19 @@ def main():
 
             # measure ctc loss computing time
             ctc_start_time = time.time()
+            out = out.log_softmax(2)  # .detach().requires_grad_()
             loss = criterion(out, targets, sizes, target_sizes)
             ctc_time.update(time.time() - ctc_start_time)
 
             loss = loss / inputs.size(0)  # average the loss by minibatch
 
-            loss_sum = loss.data.sum()
+            loss_sum = loss.sum()
             inf = float("inf")
             if loss_sum == inf or loss_sum == -inf:
                 print("WARNING: received an inf loss, setting loss value to 0")
                 loss_value = 0
             else:
-                loss_value = loss.data.item()
+                loss_value = loss_sum.data.item()
 
             avg_loss += loss_value
             losses.update(loss_value, inputs.size(0))
@@ -228,7 +181,7 @@ def main():
             backward_start_time = time.time()
             # compute gradient
             optimizer.zero_grad()
-            loss.backward()
+            loss_sum.backward()
 
             torch.nn.utils.clip_grad_norm(model.parameters(), params.max_norm)
             # SGD step
@@ -264,49 +217,13 @@ def main():
             'Average Loss {loss:.3f}\t'
             .format( epoch + 1, loss=avg_loss, ))
 
-        start_iter = 0  # Reset start iteration for next epoch
-        total_cer, total_wer = 0, 0
-        model.eval()
-
-        wer, cer = eval_model( model, test_loader, decoder)
-
         loss_results[epoch] = avg_loss
-        wer_results[epoch] = wer
-        cer_results[epoch] = cer
-        print('Validation Summary Epoch: [{0}]\t'
-              'Average WER {wer:.3f}\t'
-              'Average CER {cer:.3f}\t'.format(
-            epoch + 1, wer=wer, cer=cer))
 
-        if args.checkpoint:
-            file_path = '%s/deepspeech_%d.pth.tar' % (save_folder, epoch + 1)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
-                                            wer_results=wer_results, cer_results=cer_results),
-                       file_path)
-        # anneal lr
-        optim_state = optimizer.state_dict()
-        optim_state['param_groups'][0]['lr'] = optim_state['param_groups'][0]['lr'] / params.learning_anneal
-        optimizer.load_state_dict(optim_state)
-        print('Learning rate annealed to: {lr:.6f}'.format(lr=optim_state['param_groups'][0]['lr']))
+    for epoch in range(start_epoch, params.epochs):
+        model.train()
+        end = time.time()
+        train_one_epoch(epoch, end)
 
-        if best_wer is None or best_wer > wer:
-            print("Found better validated model, saving to %s" % args.model_path)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
-                                            wer_results=wer_results, cer_results=cer_results)
-                       , args.model_path)
-            best_wer = wer
-
-        avg_loss = 0
-
-        #If set to exit at a given accuracy, exit
-        if params.exit_at_acc and (best_wer <= args.acc):
-            break
-
-    print("=======================================================")
-    print("***Best WER = ", best_wer)
-    for arg in vars(args):
-      print("***%s = %s " %  (arg.ljust(25), getattr(args, arg)))
-    print("=======================================================")
 
 if __name__ == '__main__':
     main()
