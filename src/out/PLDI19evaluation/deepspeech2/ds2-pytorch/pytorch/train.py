@@ -134,8 +134,8 @@ def main():
 
     def train_one_epoch(epoch):
         avg_loss = 0
-        end = time.time()
         for i in range(batchedData.numBatches):
+            end = time.time()
             inputs, targets, input_percentages, target_sizes = batchedData.batch()
 
             # making all inputs Tensor
@@ -156,7 +156,7 @@ def main():
             # measure forward pass time
             forward_start_time = time.time()
             out = model(inputs)
-            # out = out.transpose(0, 1)  # TxNxH
+            out = out.transpose(0, 1)  # TxNxH
 
             seq_length = out.size(0)
             sizes = Variable(input_percentages.mul_(int(seq_length)).int(), requires_grad=False)
@@ -164,6 +164,8 @@ def main():
             # measure ctc loss computing time
             ctc_start_time = time.time()
             out = out.log_softmax(2)  #.detach().requires_grad_()
+            # print(sizes.shape)
+            # print(out.shape)
             loss = criterion(out, targets, sizes, target_sizes)
             ctc_time.update(time.time() - ctc_start_time)
 
@@ -225,8 +227,10 @@ def main():
 
     model.train()
     for epoch in range(start_epoch, params.epochs):
+        startTime = time.time()
         train_one_epoch(epoch)
-
+        endTime = time.time()
+        print("epoch {} used {} seconds".format(epoch, endTime - startTime))
 
 if __name__ == '__main__':
     main()
