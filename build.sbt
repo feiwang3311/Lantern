@@ -21,7 +21,6 @@ scalacOptions += "-P:continuations:enable"
 //scalacOptions += "-Yvirtualize"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
-resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
 libraryDependencies += "org.scala-lang.lms" %% "lms-core-macrovirt" % "0.9.0-SNAPSHOT"
 
@@ -33,7 +32,7 @@ libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value %
 
 //libraryDependencies += "org.scalactic" %% "scalactic" % scalaVersion.value
 
-libraryDependencies ++= Seq("org.bytedeco.javacpp-presets" % "onnx-platform" % "1.3.0-1.4.4-SNAPSHOT")
+libraryDependencies ++= Seq("org.bytedeco.javacpp-presets" % "onnx-platform" % "1.3.0-1.4.3")
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
 
