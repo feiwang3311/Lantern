@@ -4071,7 +4071,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 trait TensorDslCudnn extends TensorDslCublas {
 
   // A map from tensor shapes to cuDNN tensor descriptors.
-  private var tensorDescriptorCache = MutableMap[Dimensions, Rep[String]]()
+  private var tensorDescriptorCache = MutableMap[Dimensions, String]()
   private var tensorDescriptorCount = 0
   def freshDescriptorId: Int = { val tmp = tensorDescriptorCount; tensorDescriptorCount += 1; tmp }
 
