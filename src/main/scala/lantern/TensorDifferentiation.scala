@@ -4181,9 +4181,9 @@ trait TensorDslCudnn extends TensorDslCublas {
     override val numGates: Int = 3
   }
 
-  val cudnnMathType = None
+  // val cudnnMathType = None
   // val cudnnMathType = Some("CUDNN_DEFAULT_MATH")
-  // val cudnnMathType = Some("CUDNN_TENSOR_OP_MATH")
+  val cudnnMathType = Some("CUDNN_TENSOR_OP_MATH")
   // val cudnnMathType = Some("CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION")
 
   /**
@@ -4573,7 +4573,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    cudnnHandle,
           |    in_desc, grad_out_desc, conv_desc, grad_filt_desc,
           |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-          |algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+          |//algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(

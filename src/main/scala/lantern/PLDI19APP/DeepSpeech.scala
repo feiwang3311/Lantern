@@ -99,7 +99,7 @@ object DeepSpeech {
           tmp
         }
 
-        printf("initial rnn input size is %ld \\n", rnnInputSize)
+        printf("initial rnn input size is %d \\n", rnnInputSize)
         val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
           if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
           else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)

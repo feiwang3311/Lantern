@@ -715,7 +715,7 @@ float* x57 = (float*)myGpuMalloc(32 * sizeof(float));
 float* x58 = (float*)myGpuMalloc(32 * sizeof(float));
 float* x59 = (float*)myGpuMalloc(32 * sizeof(float));
 float* x60 = (float*)myGpuMalloc(32 * sizeof(float));
-printf("initial rnn input size is %ld \n",672);
+printf("initial rnn input size is %d \n",672);
 printf("inputSize for batchRNN is %d\n",672);
 int32_t x63 = 0;
 float* x64 = (float*)myMalloc(3477504 * sizeof(float));;
@@ -1039,7 +1039,7 @@ CUDNN_CALL(cudnnSetConvolution2dDescriptor(
     conv_desc,
     0, 0, 2, 2, 1, 1,
     CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 // Algorithm.
 cudnnConvolutionFwdAlgo_t algo;
 CUDNN_CALL(cudnnGetConvolutionForwardAlgorithm(
@@ -1149,7 +1149,7 @@ CUDNN_CALL(cudnnSetConvolution2dDescriptor(
     conv_desc,
     0, 0, 2, 1, 1, 1,
     CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 // Algorithm.
 cudnnConvolutionFwdAlgo_t algo;
 CUDNN_CALL(cudnnGetConvolutionForwardAlgorithm(
@@ -1275,7 +1275,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x400;
@@ -1408,7 +1408,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x435;
@@ -1540,7 +1540,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x435;
@@ -1802,19 +1802,11 @@ CUDNN_CALL(cudnnReduceTensor(
 // after CTC loss
 float* x552 = (float*)myGpuMalloc(1 * sizeof(float));
 // make sure the size of loss is 1
-<<<<<<< HEAD
-arrayFill_greg<<<28, 512>>>(x555, 1.0f, 1);
-// backend is lantern.TensorDslCudnn$BackendCudnn@23570a7f
-CUDA_CALL(cudaMemcpy(x326, x548, 1 * sizeof(float), cudaMemcpyDeviceToHost));
-float* x560 = (float*)myMalloc(1 * sizeof(float));;
-x560[0] = 1.0f;
-=======
 arrayFill_greg<<<28, 512>>>(x552, 1.0f, 1);
-// backend is lantern.TensorDslCudnn$BackendCudnn@35b7ace9
+// backend is lantern.TensorDslCudnn$BackendCudnn@3ddce270
 CUDA_CALL(cudaMemcpy(x327, x545, 1 * sizeof(float), cudaMemcpyDeviceToHost));
 float* x557 = (float*)myMalloc(1 * sizeof(float));;
 x557[0] = 1.0f;
->>>>>>> minor
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -1882,7 +1874,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x435;
@@ -1969,7 +1961,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x435;
@@ -2050,7 +2042,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x435;
@@ -2137,7 +2129,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x435;
@@ -2218,7 +2210,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x400;
@@ -2305,7 +2297,7 @@ CUDNN_CALL(cudnnSetRNNDescriptor(
     /*hiddenSize*/ 1024, /*numLayers*/ 1,
     dropout_desc, CUDNN_LINEAR_INPUT, CUDNN_BIDIRECTIONAL,
     CUDNN_RNN_TANH, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 int32_t seqLength = x376;
 int32_t batchSize = x230;
 int32_t inputSize = x400;
@@ -2454,7 +2446,7 @@ CUDNN_CALL(cudnnSetConvolution2dDescriptor(
     conv_desc,
     0, 0, 2, 1, 1, 1,
     CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 // Algorithm.
 cudnnConvolutionBwdDataAlgo_t algo;
 CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
@@ -2501,14 +2493,14 @@ CUDNN_CALL(cudnnSetConvolution2dDescriptor(
     conv_desc,
     0, 0, 2, 1, 1, 1,
     CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 // Algorithm.
 cudnnConvolutionBwdFilterAlgo_t algo;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+//algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -2580,14 +2572,14 @@ CUDNN_CALL(cudnnSetConvolution2dDescriptor(
     conv_desc,
     0, 0, 2, 2, 1, 1,
     CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
 // Algorithm.
 cudnnConvolutionBwdFilterAlgo_t algo;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
     cudnnHandle,
     in_desc, grad_out_desc, conv_desc, grad_filt_desc,
     CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+//algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
 // Workspace.
 size_t ws_size;
 CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
