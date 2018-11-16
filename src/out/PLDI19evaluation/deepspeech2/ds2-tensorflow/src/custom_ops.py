@@ -55,26 +55,27 @@ class CustomRNNCell2(BasicRNNCell):
            W: feature_size * num_units
            U: num_units * num_units
         """
-        with tf.variable_scope(scope or type(self).__name__):
-            # print "rnn cell input size: ", inputs.get_shape().as_list()
-            # print "rnn cell state size: ", state.get_shape().as_list()
-            wsize = inputs.get_shape()[1]
-            w = _variable_on_cpu('W', [self._num_units, wsize], initializer=tf.orthogonal_initializer())
-            # print w.name
-            resi = tf.matmul(inputs, w, transpose_a=False, transpose_b=True)
-            # batch_size * num_units
-            bn_resi = seq_batch_norm(resi)
-            # bn_resi = resi
-            usize = state.get_shape()[1]
-            u = _variable_on_cpu('U', [self._num_units, usize], initializer=tf.orthogonal_initializer())
-            resu = tf.matmul(state, u, transpose_a=False, transpose_b=True)
-            # res_nb = tf.add_n([bn_resi, resu])
-            res_nb = tf.add(bn_resi, resu)
-            bias = _variable_on_cpu('B', [self._num_units],
-                                     tf.constant_initializer(0))
-            res = tf.add(res_nb, bias)
-            output = relux(res, capping=20)
-        return output, output
+        with tf.device('/device:GPU:0'):
+            with tf.variable_scope(scope or type(self).__name__):
+                # print "rnn cell input size: ", inputs.get_shape().as_list()
+                # print "rnn cell state size: ", state.get_shape().as_list()
+                wsize = inputs.get_shape()[1]
+                w = _variable_on_cpu('W', [self._num_units, wsize], initializer=tf.orthogonal_initializer())
+                # print w.name
+                resi = tf.matmul(inputs, w, transpose_a=False, transpose_b=True)
+                # batch_size * num_units
+                bn_resi = seq_batch_norm(resi)
+                # bn_resi = resi
+                usize = state.get_shape()[1]
+                u = _variable_on_cpu('U', [self._num_units, usize], initializer=tf.orthogonal_initializer())
+                resu = tf.matmul(state, u, transpose_a=False, transpose_b=True)
+                # res_nb = tf.add_n([bn_resi, resu])
+                res_nb = tf.add(bn_resi, resu)
+                bias = _variable_on_cpu('B', [self._num_units],
+                                         tf.constant_initializer(0))
+                res = tf.add(res_nb, bias)
+                output = relux(res, capping=20)
+                return output, output
 
 
 def stacked_brnn(cell_fw, cell_bw, num_units, num_layers, inputs, batch_size, conved_seq_lens):
@@ -87,17 +88,18 @@ def stacked_brnn(cell_fw, cell_bw, num_units, num_layers, inputs, batch_size, co
     :param batch_size: batch size
     :return: the output of last layer bidirectional rnn with concatenating
     """
-    prev_layer = inputs
-    for i in range(num_layers):
-        with tf.variable_scope("brnn-%d" % i) as scope:
-            state_fw = cell_fw.zero_state(batch_size, tf.float32)
-            state_bw = cell_fw.zero_state(batch_size, tf.float32)
-            (outputs, state) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, prev_layer, sequence_length=conved_seq_lens,
-                                                               initial_state_fw=state_fw, initial_state_bw=state_bw, dtype=tf.float32, time_major=True) 
-            outputs_fw, outputs_bw = outputs
-            # prev_layer = tf.add_n([outputs_fw, outputs_bw])
-            prev_layer = array_ops.concat(outputs, 2)
-    return prev_layer
+    with tf.device('/device:GPU:0'):
+        prev_layer = inputs
+        for i in range(num_layers):
+            with tf.variable_scope("brnn-%d" % i) as scope:
+                state_fw = cell_fw.zero_state(batch_size, tf.float32)
+                state_bw = cell_fw.zero_state(batch_size, tf.float32)
+                (outputs, state) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, prev_layer, sequence_length=conved_seq_lens,
+                                                                   initial_state_fw=state_fw, initial_state_bw=state_bw, dtype=tf.float32, time_major=True) 
+                outputs_fw, outputs_bw = outputs
+                # prev_layer = tf.add_n([outputs_fw, outputs_bw])
+                prev_layer = array_ops.concat(outputs, 2)
+        return prev_layer
 
 
 def relux(x, capping=None):

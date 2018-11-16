@@ -291,7 +291,6 @@ def run_train_loop(sess, operations):
     for step in range(ARGS.max_steps):
         if step % num_batches_per_epoch == 0:
             epoch = epoch + 1
-        batch_time_start = time.time()
 
         # print "Trainable Variables: "
         # tvariables_names = [v.name for v in tf.trainable_variables()]
@@ -311,18 +310,20 @@ def run_train_loop(sess, operations):
         # for k, v in zip(mvariables_names, mvalues):
         #     print "Variable: ", k
         #     print v
-        forward_time_start = time.time()
-
-        loss_value = sess.run(loss_op, options=run_options, run_metadata=run_metadata)
+        # forward_time_start = time.time()
+        # loss_value = sess.run([loss_op], options=run_options, run_metadata=run_metadata)
+        # forward_time = time.time() - forward_time_start
         
-        forward_time = time.time() -forward_time_start
+        batch_time_start = time.time()
+        loss_value, _ = sess.run([loss_op, train_op], options=run_options, run_metadata=run_metadata)
+        """
 
         backward_time_start = time.time()
 
         sess.run(train_op, options=run_options, run_metadata=run_metadata)
 
         backward_time = time.time() - backward_time_start
-
+        """
         batch_time = time.time() - batch_time_start
         
         assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
@@ -331,11 +332,11 @@ def run_train_loop(sess, operations):
         # modify the formatted string;
         print('Epoch: [{0}][{1}/{2}]\t'
               'Time {3:.3f}\t'
-              'Forward Time {4:.3f}\t'
-              'Backward Time {5:.3f}\t'
-              'Loss {6:.4f}\t'.format(
+              # 'Forward Time {4:.3f}\t'
+              # 'Backward Time {5:.3f}\t'
+              'Loss {4:.4f}\t'.format(
             epoch, step % num_batches_per_epoch + 1, num_batches_per_epoch, batch_time,
-            forward_time, backward_time, loss_value))
+            loss_value))
 
         """
         if step >= 10:
@@ -435,10 +436,7 @@ def train():
 
         # Create an optimizer that performs gradient descent.
         optimizer = tf.train.AdamOptimizer(learning_rate)
-        # optimizer = tf.keras.optimizers.SGD(learning_rate,
-        #                                    momentum=0.9,
-        #                                    decay=ARGS.lr_decay_factor)
-
+        # optimizer = tf.train.GradientDescentOptimizer(learning_rate)
 
         # Fetch a batch worth of data
         data = fetch_data()
