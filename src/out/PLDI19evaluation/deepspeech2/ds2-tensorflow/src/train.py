@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import inputs
+import user_defined_input
 import model
 import time
 import tensorflow as tf
@@ -20,11 +20,12 @@ def train(args):
   window_size = 0.02
   rnn_hidden_size = 1024
   num_batches = 200
-  x = tf.placeholder(tf.float32, shape = (batch_size, freq_size, 1, None))
+  x = tf.placeholder(tf.float32, shape = (batch_size, 1, freq_size, None))
   y = tf.sparse.placeholder(tf.int32)
   percent = tf.placeholder(tf.float32, shape = (batch_size))
 
-  ctc_loss = model.loss(x, sample_rate, window_size, rnn_hidden_size, y, percent)
+  num_classes = len(args.labels)
+  ctc_loss = model.loss(x, sample_rate, window_size, rnn_hidden_size, y, percent, num_classes)
   with tf.name_scope('optimizer'):
     train_step = tf.train.GradientDescentOptimizer(args.lr).minimize(ctc_loss)
 
@@ -106,6 +107,7 @@ if __name__ == '__main__':
   parser.add_argument('--weight_decay', type=float, default=0.0,
             help='''L2 regularization factor for convolution layer weights.
                     0.0 indicates no regularization.''')
+  parser.add_argument('--labels', type=str, default = "_'ABCDEFGHIJKLMNOPQRSTUVWXYZ ")
   args = parser.parse_args()
 
   train(args)
