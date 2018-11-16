@@ -35,6 +35,7 @@ object DeepSpeech {
       case class BatchRNN(val name: String = "batch_rnn",
                           inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = RnnTanhMode,
                           bidirectional: Boolean = true, useBatchNorm: Boolean = false) extends Module {
+        printf("inputSize for batchRNN is %d\\n", inputSize)
         val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
@@ -77,9 +78,9 @@ object DeepSpeech {
 
         val conv = new Module with Serializable {
           val name = "conv"
-          val conv1 = Conv2D(1, 32, Seq(41, 11), stride = Seq(2, 2), pad = Seq(20, 5), useBias = false)
+          val conv1 = Conv2D(1, 32, Seq(41, 11), stride = Seq(2, 2), useBias = false)
           val bn1 = BatchNorm2D(32)
-          val conv2 = Conv2D(32, 32, Seq(21, 11), stride = Seq(2, 1), pad = Seq(10, 5), useBias = false)
+          val conv2 = Conv2D(32, 32, Seq(21, 11), stride = Seq(2, 1), useBias = false)
           val bn2 = BatchNorm2D(32)
           def apply(in: TensorR): TensorR @diff = {
             // NOTE: This function assume that the lengths array is already on GPU
@@ -98,6 +99,7 @@ object DeepSpeech {
           tmp
         }
 
+        printf("initial rnn input size is %ld \\n", rnnInputSize)
         val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
           if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
           else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
@@ -201,7 +203,7 @@ object DeepSpeech {
           trainLoss += loss.data(0)
           // opt.perform{case (name, (tr, ot)) => tr.d.toCPU().printHead(5, name)}
           // error("stop")
-          // opt.step()
+          opt.step()
 
           // selective printing
           if (imgIdx % (batchSize * 20) == 0) {

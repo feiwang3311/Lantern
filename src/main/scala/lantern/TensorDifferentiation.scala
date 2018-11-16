@@ -197,7 +197,6 @@ trait TensorDsl extends DslOps with Diff {
         // First, get frequency_size and max_length
         freqSizes(batch) = reader.nextInt  // freqSize is 161, and maxLength is 229
         maxLengths(batch) = reader.nextInt
-        printf("batch %d has freqSize %d maxLength %d\\n", batch, freqSizes(batch), maxLengths(batch))
         // then the sound tensor of float [batchSize * 1 * freqSize * maxLength]
         inputs(batch) = reader.nextF(batchSize * freqSizes(batch) * maxLengths(batch))
         // then the percentage tensor of float [batchSize] (percentage of padding for each sound)
