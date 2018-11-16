@@ -171,24 +171,21 @@ def inference(sess, feats, seq_lens, params):
     conved_seq_lens = get_rnn_seqlen(seq_lens)
 
     rnn_outputs = custom_ops.stacked_brnn(fw_cells, bw_cells, rnn_input, params.batch_size, conved_seq_lens)
-    print(rnn_outputs.get_shape())
-#    _activation_summary(rnn_outputs)
 
     # Linear layer(WX + b) - softmax is applied by CTC cost function.
     # with tf.variable_scope('softmax_linear') as scope:
-    weights = _variable_with_weight_decay('weights', [NUM_CLASSES, params.num_hidden * 2],
+    weights = _variable_with_weight_decay('weights', [NUM_CLASSES, params.num_hidden],
                                           wd_value=None,
                                           use_fp16=params.use_fp16)
     biases = _variable_on_cpu('biases', [NUM_CLASSES],
                               tf.constant_initializer(0.0),
                               params.use_fp16)
-    logit_inputs = tf.reshape(rnn_outputs, [-1, params.num_hidden * 2])
+    logit_inputs = tf.reshape(rnn_outputs, [-1, params.num_hidden])
     #logits = tf.add(tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True),
     #                biases, name=scope.name)
     logits = tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True)
     logits = tf.reshape(logits, [-1, params.batch_size, NUM_CLASSES])
     # _activation_summary(logits)
-    print(logits.get_shape())
     return logits
 
 
@@ -223,6 +220,9 @@ def loss(logits, labels, seq_lens):
     #conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
 
     # Calculate the average ctc loss across the batch.
+    # print(labels.get_shape())
+    # print(logits.get_shape())
+    print(tf.cast(logits, tf.float32).get_shape())
     ctc_loss = tf.nn.ctc_loss(labels=labels, inputs=tf.cast(logits, tf.float32),
                               sequence_length=conved_seq_lens, 
                               preprocess_collapse_repeated=False,

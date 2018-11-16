@@ -150,12 +150,11 @@ def tower_loss(sess, feats, labels, seq_lens):
 
     # Build inference Graph.    
     logits = deepSpeech.inference(sess, feats, seq_lens, ARGS)
-    print(logits.get_shape())
-
+    
     # Build the portion of the Graph calculating the losses. Note that we will
     # assemble the total_loss using a custom function below.
     total_loss = deepSpeech.loss(logits, labels, seq_lens)
-    print(total_loss.get_shape())
+    # print(total_loss.get_shape())
 
     # Compute the moving average of all individual losses and the total loss.
     # loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
@@ -263,8 +262,6 @@ def get_loss_grads(sess, data, optimizer):
     with tf.device('/device:GPU:0'):
         # Calculate the loss for the deepSpeech model.
         loss = tower_loss(sess, feats, labels, seq_lens)
-        print(loss.get_shape())
-
         # Retain the summaries from the final tower.
         # summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
 

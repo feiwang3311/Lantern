@@ -139,9 +139,7 @@ def stacked_brnn(cells_fw, cells_bw, inputs, batch_size, conved_seq_lens):
     prev_layer = inputs
     for i in range(3): ## don't forget to change it to ARGS.num_players
         with tf.variable_scope("brnn-%d" % i) as scope:
-            print(prev_layer.get_shape())
             outputs, _, _ = while_loop_rnn(cells_fw[i], cells_bw[i], prev_layer)
-            print(prev_layer.get_shape())
             prev_layer = outputs
     return prev_layer
 
