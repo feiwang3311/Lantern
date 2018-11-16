@@ -96,97 +96,100 @@ def inference(sess, feats, seq_lens, params):
     #########################
     #  convolutional layers
     #########################
-    with tf.device('/device:GPU:0'):
-        with tf.variable_scope('conv1') as scope:
-            ## N, T, F
-            feats = tf.expand_dims(feats, axis=3)
+    with tf.variable_scope('conv1') as scope:
+        ## N, T, F
+        feats = tf.expand_dims(feats, axis=3)
 
-            ## N, T, F, 1
-            # convolution
-            kernel = _variable_with_weight_decay('weights',
-                                                 shape=[11, 41, 1, params.num_filters],
-                                                 wd_value=None,
-                                                 use_fp16=params.use_fp16)
-            conv = tf.nn.conv2d(feats, kernel,
-                                [1, 2, 2, 1],
-                                padding='VALID')
-            # biases = _variable_on_cpu('biases', [params.num_filters],
-            #                           tf.constant_initializer(-0.05),
-            #                          params.use_fp16)
-            # bias = tf.nn.bias_add(conv, biases)
+        ## N, T, F, 1
+        # convolution
+        kernel = _variable_with_weight_decay('weights',
+                                             shape=[11, 41, 1, params.num_filters],
+                                             wd_value=None,
+                                             use_fp16=params.use_fp16)
+        conv = tf.nn.conv2d(feats, kernel,
+                            [1, 2, 2, 1],
+                            padding='VALID')
+        # biases = _variable_on_cpu('biases', [params.num_filters],
+        #                           tf.constant_initializer(-0.05),
+        #                          params.use_fp16)
+        # bias = tf.nn.bias_add(conv, biases)
 
-            ## N, T, F, 32
-            # batch normalization
-            bn = custom_ops.batch_norm(conv)
+        ## N, T, F, 32
+        # batch normalization
+        bn = custom_ops.batch_norm(conv)
 
-            # clipped ReLU
-            conv1 = custom_ops.relux(bn, capping=20)
-    #        _activation_summary(conv1)
+        # clipped ReLU
+        conv1 = custom_ops.relux(bn, capping=20)
+#        _activation_summary(conv1)
 
-        with tf.variable_scope('conv2') as scope:
-            ## N, T, F, 32
-            # convolution
-            kernel = _variable_with_weight_decay('weights',
-                                                 shape=[11, 21, params.num_filters, params.num_filters],
-                                                 wd_value=None,
-                                                 use_fp16=params.use_fp16) 
-            conv = tf.nn.conv2d(conv1,
-                                kernel,
-                                [1, 1, 2, 1],
-                                padding='VALID')
-            # biases = _variable_on_cpu('biases',
-            #                           [params.num_filters],
-            #                           tf.constant_initializer(-0.05),
-            #                           params.use_fp16)
-            # bias = tf.nn.bias_add(conv, biases)
+    with tf.variable_scope('conv2') as scope:
+        ## N, T, F, 32
+        # convolution
+        kernel = _variable_with_weight_decay('weights',
+                                             shape=[11, 21, params.num_filters, params.num_filters],
+                                             wd_value=None,
+                                             use_fp16=params.use_fp16) 
+        conv = tf.nn.conv2d(conv1,
+                            kernel,
+                            [1, 1, 2, 1],
+                            padding='VALID')
+        # biases = _variable_on_cpu('biases',
+        #                           [params.num_filters],
+        #                           tf.constant_initializer(-0.05),
+        #                           params.use_fp16)
+        # bias = tf.nn.bias_add(conv, biases)
 
-            ## N, T, F, 32
-            # batch normalization
-            bn = custom_ops.batch_norm(conv)
+        ## N, T, F, 32
+        # batch normalization
+        bn = custom_ops.batch_norm(conv)
 
-            # clipped ReLU
-            conv2 = custom_ops.relux(bn, capping=20)
-    #        _activation_summary(conv2)
+        # clipped ReLU
+        conv2 = custom_ops.relux(bn, capping=20)
+#        _activation_summary(conv2)
 
-        ######################
-        # recurrent layers
-        ######################
-        # Reshape conv output to fit rnn input: N, T, F * C
-        fdim = conv2.get_shape().dims
-        feat_dim = fdim[2].value * fdim[3].value
-        rnn_input = tf.reshape(conv2, [params.batch_size, -1, feat_dim])
+    ######################
+    # recurrent layers
+    ######################
+    # Reshape conv output to fit rnn input: N, T, F * C
+    fdim = conv2.get_shape().dims
+    feat_dim = fdim[2].value * fdim[3].value
+    rnn_input = tf.reshape(conv2, [params.batch_size, -1, feat_dim])
 
-        # Permute into time major order for rnn: T, N, F * C
-        rnn_input = tf.transpose(rnn_input, perm=[1, 0, 2])
+    # Permute into time major order for rnn: T, N, F * C
+    rnn_input = tf.transpose(rnn_input, perm=[1, 0, 2])
+    # T is unknown. N = 32, F * C = 672
+    # rnn_input = tf.unstack(rnn_input)
 
-        fw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
-        # fw_cell_list = [fw_cell] * params.num_rnn_layers
+    # fw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
+    # fw_cell_list = [fw_cell] * params.num_rnn_layers
 
-        # bw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
-        # bw_cell_list = [bw_cell] * params.num_rnn_layers
+    # bw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
+    # bw_cell_list = [bw_cell] * params.num_rnn_layers
 
+    fw_cells = [tf.nn.rnn_cell.BasicRNNCell(params.num_hidden) for i in range(params.num_rnn_layers)]
+    bw_cells = [tf.nn.rnn_cell.BasicRNNCell(params.num_hidden) for i in range(params.num_rnn_layers)]
+    conved_seq_lens = get_rnn_seqlen(seq_lens)
 
-        conved_seq_lens = get_rnn_seqlen(seq_lens)
+    rnn_outputs = custom_ops.stacked_brnn(fw_cells, bw_cells, rnn_input, params.batch_size, conved_seq_lens)
+    print(rnn_outputs.get_shape())
+#    _activation_summary(rnn_outputs)
 
-        rnn_outputs = custom_ops.stacked_brnn(fw_cell, fw_cell, params.num_hidden, params.num_rnn_layers, rnn_input, params.batch_size, conved_seq_lens)
-    #    _activation_summary(rnn_outputs)
-
-        # Linear layer(WX + b) - softmax is applied by CTC cost function.
-        with tf.variable_scope('softmax_linear') as scope:
-            weights = _variable_with_weight_decay('weights', [NUM_CLASSES, params.num_hidden * 2],
-                                                  wd_value=None,
-                                                  use_fp16=params.use_fp16)
-    #        biases = _variable_on_cpu('biases', [NUM_CLASSES],
-    #                                  tf.constant_initializer(0.0),
-    #                                  params.use_fp16)
-            logit_inputs = tf.reshape(rnn_outputs, [-1, params.num_hidden * 2])
-    #        logits = tf.add(tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True),
-    #                        biases, name=scope.name)
-            logits = tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True)
-            logits = tf.reshape(logits, [-1, params.batch_size, NUM_CLASSES])
-    #        _activation_summary(logits)
-
-        return logits
+    # Linear layer(WX + b) - softmax is applied by CTC cost function.
+    with tf.variable_scope('softmax_linear') as scope:
+        weights = _variable_with_weight_decay('weights', [NUM_CLASSES, params.num_hidden * 2],
+                                              wd_value=None,
+                                              use_fp16=params.use_fp16)
+        biases = _variable_on_cpu('biases', [NUM_CLASSES],
+                                  tf.constant_initializer(0.0),
+                                  params.use_fp16)
+        logit_inputs = tf.reshape(rnn_outputs, [-1, params.num_hidden * 2])
+        logits = tf.add(tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True),
+                        biases, name=scope.name)
+        logits = tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True)
+        logits = tf.reshape(logits, [-1, params.batch_size, NUM_CLASSES])
+        # _activation_summary(logits)
+    # print(logits.get_shape())
+    return logits
 
 
 def loss(logits, labels, seq_lens):
@@ -206,16 +209,16 @@ def loss(logits, labels, seq_lens):
     # dense_labels = tf.Print(dense_labels, [dense_labels], "labels: ")
 
     ## scheme 1
-    logits_shape = tf.shape(logits)
+    # logits_shape = tf.shape(logits)
     # logits_shape = tf.Print(logits_shape, [logits_shape], "logits shape: ")
-    max_seq_len = logits_shape[0]
-    batch_size = logits_shape[1]
+    # max_seq_len = logits_shape[0]
+    # batch_size = logits_shape[1]
     # max_seq_len = tf.Print(max_seq_len, [max_seq_len], "max seq len: ")
-    conved_seq_lens = tf.fill([batch_size], max_seq_len)
+    # conved_seq_lens = tf.fill([batch_size], max_seq_len)
     # conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
 
     ## scheme 2
-    # conved_seq_lens = get_rnn_seqlen(seq_lens)
+    conved_seq_lens = get_rnn_seqlen(seq_lens)
 
 #    conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
 

@@ -68,17 +68,16 @@ def _variable_with_weight_decay(name, shape, wd_value, use_fp16):
     Returns:
       Variable Tensor
     """
-    with tf.device('/device:GPU:0'):
-        dtype = tf.float16 if use_fp16 else tf.float32
-        #    var = _variable_on_cpu(name, shape,
-        var = _variable_on_gpu(name, shape,
-                               tf.contrib.layers.variance_scaling_initializer(mode='FAN_IN',
-                                                                              uniform=False,
-                                                                              seed=None,
-                                                                              dtype=dtype), use_fp16)
-        if wd_value is not None:
-            weight_decay = tf.cast(tf.mul(tf.nn.l2_loss(var),
-                                          wd_value, name='weight_loss'),
-                                   tf.float32)
-            tf.add_to_collection('losses', weight_decay)
-        return var
+    dtype = tf.float16 if use_fp16 else tf.float32
+    #    var = _variable_on_cpu(name, shape,
+    var = _variable_on_gpu(name, shape,
+                           tf.contrib.layers.variance_scaling_initializer(mode='FAN_IN',
+                                                                          uniform=False,
+                                                                          seed=None,
+                                                                          dtype=dtype), use_fp16)
+    if wd_value is not None:
+        weight_decay = tf.cast(tf.mul(tf.nn.l2_loss(var),
+                                      wd_value, name='weight_loss'),
+                               tf.float32)
+        tf.add_to_collection('losses', weight_decay)
+    return var

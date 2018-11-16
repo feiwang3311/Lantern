@@ -148,12 +148,14 @@ def tower_loss(sess, feats, labels, seq_lens):
        the total loss for a batch of data
     """
 
-    # Build inference Graph.
+    # Build inference Graph.    
     logits = deepSpeech.inference(sess, feats, seq_lens, ARGS)
+    print(logits.get_shape())
 
     # Build the portion of the Graph calculating the losses. Note that we will
     # assemble the total_loss using a custom function below.
     total_loss = deepSpeech.loss(logits, labels, seq_lens)
+    print(total_loss.get_shape())
 
     # Compute the moving average of all individual losses and the total loss.
     # loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
@@ -261,6 +263,7 @@ def get_loss_grads(sess, data, optimizer):
     with tf.device('/device:GPU:0'):
         # Calculate the loss for the deepSpeech model.
         loss = tower_loss(sess, feats, labels, seq_lens)
+        print(loss.get_shape())
 
         # Retain the summaries from the final tower.
         # summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
@@ -313,7 +316,7 @@ def run_train_loop(sess, operations):
         # forward_time_start = time.time()
         # loss_value = sess.run([loss_op], options=run_options, run_metadata=run_metadata)
         # forward_time = time.time() - forward_time_start
-        
+
         batch_time_start = time.time()
         loss_value, _ = sess.run([loss_op, train_op], options=run_options, run_metadata=run_metadata)
         """
@@ -325,7 +328,7 @@ def run_train_loop(sess, operations):
         backward_time = time.time() - backward_time_start
         """
         batch_time = time.time() - batch_time_start
-        
+
         assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
 
         # separate data loading time;
@@ -430,83 +433,84 @@ def train():
       This function build a set of ops required to build the model and optimize
       weights.
     """
-    with g.as_default(), tf.device('/device:GPU:0'):
-        # Learning rate set up
-        learning_rate, global_step = set_learning_rate()
+    with tf.device('/device:GPU:0'):
+        with g.as_default():
+            # Learning rate set up
+            learning_rate, global_step = set_learning_rate()
 
-        # Create an optimizer that performs gradient descent.
-        optimizer = tf.train.AdamOptimizer(learning_rate)
-        # optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+            # Create an optimizer that performs gradient descent.
+            optimizer = tf.train.AdamOptimizer(learning_rate)
+            # optimizer = tf.train.GradientDescentOptimizer(learning_rate)
 
-        # Fetch a batch worth of data
-        data = fetch_data()
+            # Fetch a batch worth of data
+            data = fetch_data()
 
-        # Start running operations on the Graph. allow_soft_placement
-        # must be set to True to build towers on GPU, as some of the
-        # ops do not have GPU implementations.
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
-                                                log_device_placement=ARGS.log_device_placement))
+            # Start running operations on the Graph. allow_soft_placement
+            # must be set to True to build towers on GPU, as some of the
+            # ops do not have GPU implementations.
+            sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
+                                                    log_device_placement=ARGS.log_device_placement))
 
-        # Construct loss and gradient ops
-        loss_op, grads = get_loss_grads(sess, data, optimizer)
+            # Construct loss and gradient ops
+            loss_op, grads = get_loss_grads(sess, data, optimizer)
 
-        # Apply the gradients to adjust the shared variables.
-        apply_gradient_op = optimizer.apply_gradients(grads,
-                                                      global_step=global_step)
+            # Apply the gradients to adjust the shared variables.
+            apply_gradient_op = optimizer.apply_gradients(grads,
+                                                          global_step=global_step)
 
-        # Track the moving averages of all trainable variables.
-        # variable_averages = tf.train.ExponentialMovingAverage(ARGS.moving_avg_decay, global_step)
-        # variables_averages_op = variable_averages.apply(tf.trainable_variables())
+            # Track the moving averages of all trainable variables.
+            # variable_averages = tf.train.ExponentialMovingAverage(ARGS.moving_avg_decay, global_step)
+            # variables_averages_op = variable_averages.apply(tf.trainable_variables())
 
-        # Group all updates to into a single train op.
-        # train_op = tf.group(apply_gradient_op, variables_averages_op)
+            # Group all updates to into a single train op.
+            # train_op = tf.group(apply_gradient_op, variables_averages_op)
 
-        train_op = apply_gradient_op
+            train_op = apply_gradient_op
 
-        # Build summary op
-        # summary_op = add_summaries(summaries, learning_rate, grads)
+            # Build summary op
+            # summary_op = add_summaries(summaries, learning_rate, grads)
 
-        # Create a saver.
-        # saver = tf.train.Saver(tf.global_variables(), max_to_keep=100)
+            # Create a saver.
+            # saver = tf.train.Saver(tf.global_variables(), max_to_keep=100)
 
-        # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-        # sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
+            # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+            # sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
 
-        # Initialize vars.
-        """
-        if ARGS.checkpoint is not None:
-            print "can use checkpoint"
-            global_step = initialize_from_checkpoint(sess, saver)
-        else:
-            print "cannot use checkpoint"
+            # Initialize vars.
+            """
+            if ARGS.checkpoint is not None:
+                print "can use checkpoint"
+                global_step = initialize_from_checkpoint(sess, saver)
+            else:
+                print "cannot use checkpoint"
+                sess.run(tf.global_variables_initializer())
+            """
+            print("forbid the use of checkpoint")
             sess.run(tf.global_variables_initializer())
-        """
-        print("forbid the use of checkpoint")
-        sess.run(tf.global_variables_initializer())
-        # print "Trainable Variables: "
-        # tvariables_names = [v.name for v in tf.trainable_variables()]
-        # tvalues = sess.run(tvariables_names)
-        # for k, v in zip(tvariables_names, tvalues):
-        #     print "Variable: ", k
-        # print "Global Variables: "
-        # gvariables_names = [v.name for v in tf.global_variables()]
-        # gvalues = sess.run(gvariables_names)
-        # for k, v in zip(gvariables_names, gvalues):
-        #     print "Variable: ", k
-        # print "Moving Average Variables: "
-        # mvariables_names = [v.name for v in tf.moving_average_variables()]
-        # mvalues = sess.run(mvariables_names)
-        # for k, v in zip(mvariables_names, mvalues):
-        #     print "Variable: ", k
+            # print "Trainable Variables: "
+            # tvariables_names = [v.name for v in tf.trainable_variables()]
+            # tvalues = sess.run(tvariables_names)
+            # for k, v in zip(tvariables_names, tvalues):
+            #     print "Variable: ", k
+            # print "Global Variables: "
+            # gvariables_names = [v.name for v in tf.global_variables()]
+            # gvalues = sess.run(gvariables_names)
+            # for k, v in zip(gvariables_names, gvalues):
+            #     print "Variable: ", k
+            # print "Moving Average Variables: "
+            # mvariables_names = [v.name for v in tf.moving_average_variables()]
+            # mvalues = sess.run(mvariables_names)
+            # for k, v in zip(mvariables_names, mvalues):
+            #     print "Variable: ", k
 
-        # Start the queue runners.
-        tf.train.start_queue_runners(sess)
+            # Start the queue runners.
+            tf.train.start_queue_runners(sess)
 
-        g.finalize()
+            g.finalize()
 
-        # Run training loop
-        # run_train_loop(sess, (loss_op, train_op, summary_op), saver)
-        run_train_loop(sess, (loss_op, train_op))
+            # Run training loop
+            # run_train_loop(sess, (loss_op, train_op, summary_op), saver)
+            run_train_loop(sess, (loss_op, train_op))
 
 
 def main():

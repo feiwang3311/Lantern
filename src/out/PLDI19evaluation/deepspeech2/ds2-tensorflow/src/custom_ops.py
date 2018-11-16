@@ -55,30 +55,29 @@ class CustomRNNCell2(BasicRNNCell):
            W: feature_size * num_units
            U: num_units * num_units
         """
-        with tf.device('/device:GPU:0'):
-            with tf.variable_scope(scope or type(self).__name__):
-                # print "rnn cell input size: ", inputs.get_shape().as_list()
-                # print "rnn cell state size: ", state.get_shape().as_list()
-                wsize = inputs.get_shape()[1]
-                w = _variable_on_cpu('W', [self._num_units, wsize], initializer=tf.orthogonal_initializer())
-                # print w.name
-                resi = tf.matmul(inputs, w, transpose_a=False, transpose_b=True)
-                # batch_size * num_units
-                bn_resi = seq_batch_norm(resi)
-                # bn_resi = resi
-                usize = state.get_shape()[1]
-                u = _variable_on_cpu('U', [self._num_units, usize], initializer=tf.orthogonal_initializer())
-                resu = tf.matmul(state, u, transpose_a=False, transpose_b=True)
-                # res_nb = tf.add_n([bn_resi, resu])
-                res_nb = tf.add(bn_resi, resu)
-                bias = _variable_on_cpu('B', [self._num_units],
-                                         tf.constant_initializer(0))
-                res = tf.add(res_nb, bias)
-                output = relux(res, capping=20)
-                return output, output
+        with tf.variable_scope(scope or type(self).__name__):
+            # print "rnn cell input size: ", inputs.get_shape().as_list()
+            # print "rnn cell state size: ", state.get_shape().as_list()
+            wsize = inputs.get_shape()[1]
+            w = _variable_on_cpu('W', [self._num_units, wsize], initializer=tf.orthogonal_initializer())
+            # print w.name
+            resi = tf.matmul(inputs, w, transpose_a=False, transpose_b=True)
+            # batch_size * num_units
+            bn_resi = seq_batch_norm(resi)
+            # bn_resi = resi
+            usize = state.get_shape()[1]
+            u = _variable_on_cpu('U', [self._num_units, usize], initializer=tf.orthogonal_initializer())
+            resu = tf.matmul(state, u, transpose_a=False, transpose_b=True)
+            # res_nb = tf.add_n([bn_resi, resu])
+            res_nb = tf.add(bn_resi, resu)
+            bias = _variable_on_cpu('B', [self._num_units],
+                                     tf.constant_initializer(0))
+            res = tf.add(res_nb, bias)
+            output = relux(res, capping=20)
+        return output, output
 
 
-def stacked_brnn(cell_fw, cell_bw, num_units, num_layers, inputs, batch_size, conved_seq_lens):
+def stacked_brnn(cells_fw, cells_bw, inputs, batch_size, conved_seq_lens):
     """
     multi layer bidirectional rnn
     :param cell: RNN cell
@@ -88,18 +87,63 @@ def stacked_brnn(cell_fw, cell_bw, num_units, num_layers, inputs, batch_size, co
     :param batch_size: batch size
     :return: the output of last layer bidirectional rnn with concatenating
     """
-    with tf.device('/device:GPU:0'):
-        prev_layer = inputs
-        for i in range(num_layers):
-            with tf.variable_scope("brnn-%d" % i) as scope:
-                state_fw = cell_fw.zero_state(batch_size, tf.float32)
-                state_bw = cell_fw.zero_state(batch_size, tf.float32)
-                (outputs, state) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, prev_layer, sequence_length=conved_seq_lens,
-                                                                   initial_state_fw=state_fw, initial_state_bw=state_bw, dtype=tf.float32, time_major=True) 
-                outputs_fw, outputs_bw = outputs
-                # prev_layer = tf.add_n([outputs_fw, outputs_bw])
-                prev_layer = array_ops.concat(outputs, 2)
-        return prev_layer
+
+    """
+    prev_layer = inputs
+    for i in range(num_layers):
+        with tf.variable_scope("brnn-%d" % i) as scope:
+            state_fw = cell_fw.zero_state(batch_size, tf.float32)
+            state_bw = cell_bw.zero_state(batch_size, tf.float32)
+            (outputs, state) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, prev_layer, sequence_length=conved_seq_lens,
+                                                               initial_state_fw=state_fw, initial_state_bw=state_bw, dtype=tf.float32, time_major=True) 
+            outputs_fw, outputs_bw = outputs
+            # prev_layer = tf.add_n([outputs_fw, outputs_bw])
+            prev_layer = array_ops.concat(outputs, 2)
+    return prev_layer
+    """
+    """ A stack_brnn impl: It still requires len to be fixed. 
+    initial_states_fw = []
+    initial_states_bw = []
+    for i, (cell_fw, cell_bw) in enumerate(zip(cells_fw, cells_bw)):
+        initial_states_fw.append(cell_fw.zero_state(batch_size, tf.float32))
+        initial_states_bw.append(cell_bw.zero_state(batch_size, tf.float32))
+    outputs, _, _ = tf.contrib.rnn.stack_bidirectional_rnn(cells_bw, cells_bw, inputs, initial_states_fw=initial_states_fw, initial_states_bw=initial_states_bw, dtype=tf.float32, sequence_length=conved_seq_lens)
+    return outputs
+    """
+    def while_loop_rnn(cell_fw, cell_bw, x):
+        initial_state_fw = cell_fw.zero_state(batch_size, tf.float32)
+        initial_state_bw = cell_bw.zero_state(batch_size, tf.float32)
+        x_t = x
+        # x_t = tf.transpose(x, [1, 0, 2])
+        
+        def compute(i, cur_state_fw, cur_state_bw, out):
+            output, cur_state_fw, cur_state_bw = tf.nn.static_bidirectional_rnn(cell_fw, cell_bw, [x_t[i]], cur_state_fw, cur_state_bw)
+            output = tf.add_n(tf.split(output[0], [1024, 1024], 1))
+            # output = output[0]
+            # 32 * 1024
+            # print(output.get_shape())
+            return i+1, cur_state_fw, cur_state_bw, out.write(i, output)
+
+        time = tf.shape(x_t)[0]
+
+        _, cur_state_fw, cur_state_bw, out = tf.while_loop(
+            lambda a, b, c, d: a < time,
+            compute,
+            (0, initial_state_fw, initial_state_bw, tf.TensorArray(tf.float32, time))
+        )
+        # print(tf.concat(out.stack(), 3).get_shape())
+        # print(out.read(0).get_shape()) # 32 * 1024
+        # print(out.stack().get_shape())
+        return out.stack(), cur_state_fw, cur_state_bw
+    
+    prev_layer = inputs
+    for i in range(3): ## don't forget to change it to ARGS.num_players
+        with tf.variable_scope("brnn-%d" % i) as scope:
+            print(prev_layer.get_shape())
+            outputs, _, _ = while_loop_rnn(cells_fw[i], cells_bw[i], prev_layer)
+            print(prev_layer.get_shape())
+            prev_layer = outputs
+    return prev_layer
 
 
 def relux(x, capping=None):
