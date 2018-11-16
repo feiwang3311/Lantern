@@ -38,7 +38,6 @@ object DeepSpeech {
         val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
-        // we don't actually use outputLengths here. The pytorch imp needs it for pack_padded_sequence and pad_packed_sequence
         def apply(input: TensorR): TensorR @diff = {
           val in1 = If_B (useBatchNorm) {
             val input2D = input.resize(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
@@ -78,9 +77,9 @@ object DeepSpeech {
 
         val conv = new Module with Serializable {
           val name = "conv"
-          val conv1 = Conv2D(1, 32, Seq(41, 11), stride = Seq(2, 2), pad = Seq(20, 5))
+          val conv1 = Conv2D(1, 32, Seq(41, 11), stride = Seq(2, 2), pad = Seq(20, 5), useBias = false)
           val bn1 = BatchNorm2D(32)
-          val conv2 = Conv2D(32, 32, Seq(21, 11), stride = Seq(2, 1), pad = Seq(10, 5))
+          val conv2 = Conv2D(32, 32, Seq(21, 11), stride = Seq(2, 1), pad = Seq(10, 5), useBias = false)
           val bn2 = BatchNorm2D(32)
           def apply(in: TensorR): TensorR @diff = {
             // NOTE: This function assume that the lengths array is already on GPU
