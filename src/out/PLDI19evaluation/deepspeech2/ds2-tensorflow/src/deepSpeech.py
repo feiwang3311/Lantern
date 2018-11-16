@@ -175,20 +175,20 @@ def inference(sess, feats, seq_lens, params):
 #    _activation_summary(rnn_outputs)
 
     # Linear layer(WX + b) - softmax is applied by CTC cost function.
-    with tf.variable_scope('softmax_linear') as scope:
-        weights = _variable_with_weight_decay('weights', [NUM_CLASSES, params.num_hidden * 2],
-                                              wd_value=None,
-                                              use_fp16=params.use_fp16)
-        biases = _variable_on_cpu('biases', [NUM_CLASSES],
-                                  tf.constant_initializer(0.0),
-                                  params.use_fp16)
-        logit_inputs = tf.reshape(rnn_outputs, [-1, params.num_hidden * 2])
-        logits = tf.add(tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True),
-                        biases, name=scope.name)
-        logits = tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True)
-        logits = tf.reshape(logits, [-1, params.batch_size, NUM_CLASSES])
-        # _activation_summary(logits)
-    # print(logits.get_shape())
+    # with tf.variable_scope('softmax_linear') as scope:
+    weights = _variable_with_weight_decay('weights', [NUM_CLASSES, params.num_hidden * 2],
+                                          wd_value=None,
+                                          use_fp16=params.use_fp16)
+    biases = _variable_on_cpu('biases', [NUM_CLASSES],
+                              tf.constant_initializer(0.0),
+                              params.use_fp16)
+    logit_inputs = tf.reshape(rnn_outputs, [-1, params.num_hidden * 2])
+    #logits = tf.add(tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True),
+    #                biases, name=scope.name)
+    logits = tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True)
+    logits = tf.reshape(logits, [-1, params.batch_size, NUM_CLASSES])
+    # _activation_summary(logits)
+    print(logits.get_shape())
     return logits
 
 
@@ -220,7 +220,7 @@ def loss(logits, labels, seq_lens):
     ## scheme 2
     conved_seq_lens = get_rnn_seqlen(seq_lens)
 
-#    conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
+    #conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
 
     # Calculate the average ctc loss across the batch.
     ctc_loss = tf.nn.ctc_loss(labels=labels, inputs=tf.cast(logits, tf.float32),
@@ -229,10 +229,10 @@ def loss(logits, labels, seq_lens):
                               ctc_merge_repeated=True,
                               time_major=True,
                               ignore_longer_outputs_than_inputs=True)
-#    ctc_loss = tf.Print(ctc_loss, [ctc_loss], "CTC loss: ", summarize=32)
+    #ctc_loss = tf.Print(ctc_loss, [ctc_loss], "CTC loss: ", summarize=32)
     ctc_loss_mean = tf.reduce_mean(ctc_loss, name='ctc_loss')
-#    ctc_loss_mean = tf.Print(ctc_loss_mean, [ctc_loss_mean], "mean CTC loss: ")
-    # tf.add_to_collection('losses', ctc_loss_mean)
+    #ctc_loss_mean = tf.Print(ctc_loss_mean, [ctc_loss_mean], "mean CTC loss: ")
+    #tf.add_to_collection('losses', ctc_loss_mean)
 
     # The total loss is defined as the cross entropy loss plus all
     # of the weight decay terms (L2 loss).
