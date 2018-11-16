@@ -4090,6 +4090,7 @@ trait TensorDslCudnn extends TensorDslCublas {
                |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
                |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), "))"): _*)
         } else {
+          assert(x.rank >= 3, "'cudnnCreateTensorDescriptor' only supports descriptors for tensors with rank at least 3")
           val dims: Seq[Any] = x.shape.flatMap(dim => Seq[Any](dim, ", "))
           val strides: Seq[Any] = x.shape.strides.flatMap(stride => Seq[Any](stride, ", "))
           val dimsName = s"dims$id"
