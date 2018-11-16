@@ -92,8 +92,8 @@ object DeepSpeech {
 
         val rnnInputSize: Int = {
           var tmp: Int = (floor((sampleRate * windowSize) / 2) + 1).toInt
-          tmp = (floor(tmp + 2 * 20 - 41) / 2 + 1).toInt
-          tmp = (floor(tmp + 2 * 10 - 21) / 2 + 1).toInt
+          tmp = (floor(tmp - 41) / 2 + 1).toInt
+          tmp = (floor(tmp - 21) / 2 + 1).toInt
           tmp *= 32
           tmp
         }

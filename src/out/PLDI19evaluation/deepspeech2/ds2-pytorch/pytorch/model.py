@@ -50,7 +50,7 @@ class InferenceBatchLogSoftmax(nn.Module):
 
 
 class BatchRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, rnn_type=nn.RNN, bidirectional=True, batch_norm=False, rnn_activation='relu', bias = False):
+    def __init__(self, input_size, hidden_size, rnn_type=nn.RNN, bidirectional=True, batch_norm=False, rnn_activation='relu', bias = True):
         super(BatchRNN, self).__init__()
 
         self.input_size     = input_size
