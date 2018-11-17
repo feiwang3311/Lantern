@@ -83,7 +83,7 @@ def plot(files, model):
   N = len(labels)
   ind = np.arange(1, N+1)
 
-  ps = plt.bar(ind, loopTimes, width = 0.55)
+  ps = plt.bar(ind, loopTimes, width = 0.25)
   for i in range(N):
     ps[i].set_facecolor(getColor(labels[i]))
   ax.set_xticks(ind)
