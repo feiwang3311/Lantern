@@ -23,9 +23,10 @@ def train(args):
   x = tf.placeholder(tf.float32, shape = (batch_size, 1, freq_size, None))
   y = tf.sparse.placeholder(tf.int32)
   percent = tf.placeholder(tf.float32, shape = (batch_size))
+  rawLength = tf.placeholder(tf.int32, shape(1))
 
   num_classes = len(args.labels)
-  ctc_loss = model.loss(x, sample_rate, window_size, rnn_hidden_size, y, percent, num_classes)
+  ctc_loss = model.loss(x, sample_rate, window_size, rnn_hidden_size, y, percent, rawLength, num_classes)
   with tf.name_scope('optimizer'):
     train_step = tf.train.GradientDescentOptimizer(args.lr).minimize(ctc_loss)
 
@@ -43,7 +44,7 @@ def train(args):
       train_accuracy = 0.0
       start = time.time()
       for i in range(num_batches):
-        inputs, targets, input_percentages, target_sizes = batchedData.batch()
+        inputs, targets, input_percentages, raw_length, target_sizes = batchedData.batchWithRawLength()
         # Need to process targets and target_size into SparseMatrix (i.e. indices, values, shape)
         values = targets
         ind = []
@@ -58,7 +59,8 @@ def train(args):
         _, loss = sess.run([train_step, ctc_loss], feed_dict={
           x: inputs,
           y: tf.SparseTensorValue(indices, values, shape),
-          percent: input_percentages})
+          percent: input_percentages,
+          rawLength: raw_length})
         train_accuracy += loss
         if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:
           print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))

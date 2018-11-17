@@ -19,6 +19,13 @@ class Batch(object):
 		self.batchedData = self.dict[b'batchedData']
 		self.current_batch = 0
 
+        def batchWithRawLength(self):
+            (_, maxlen, inputs, input_percentages, target_sizes, targets) = self.batchedData[self.current_batch]
+            self.current_batch += 1
+            if self.current_batch >= self.numBatches:
+                self.current_batch = 0
+            return inputs, targets, input_percentages, maxlen, target_sizes
+
 	def batch(self):
 		(_, _, inputs, input_percentages, target_sizes, targets) = self.batchedData[self.current_batch]
 		self.current_batch += 1

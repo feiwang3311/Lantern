@@ -23,6 +23,10 @@ def getInputSize(sample_rate, window_size):
   rnn_input_size = int(math.floor(rnn_input_size - 21) / 2 + 1)
   rnn_input_size *= 32
 
+def getSeqLength(raw_length):
+    seqL = (math.floor(raw_length - 11) / 2 + 1) 
+    seqL = seqL - 10
+
 def batchNorm2D(input1, paramSize, variance_epsilon=0.00001):
   mean   = tf.reshape(tf.Variable([0]*paramSize, dtype=tf.float32), [1, paramSize, 1, 1])
   var    = tf.reshape(tf.Variable([1]*paramSize, dtype=tf.float32), [1, paramSize, 1, 1])
@@ -118,13 +122,14 @@ def inference(feats, sample_rate, window_size, rnn_hidden_size, num_classes):
   step10 = fully_connected(step9, num_classes)
 
 
-def loss(feats, sample_rate, window_size, rnn_hidden_size, labels, percent, num_classes):
+def loss(feats, sample_rate, window_size, rnn_hidden_size, labels, percent, raw_length, num_classes):
   logits = inference(feats, sample_rate, window_size, rnn_hidden_size, num_classes)
   # Calculate the average ctc loss across the batch.
   # labels: An int32 SparseTensor. labels.indices[i, :] == [b, t] means labels.values[i] stores the id for (batch b, time t).
   # labels.values[i] must take on values in [0, num_labels). See core/ops/ctc_ops.cc for more details.
+  seqLength = tf.cast((getSeqLength(raw_length) * percent), tf.int32)
   ctc_loss = tf.nn.ctc_loss(labels=labels, inputs=logits,
-                            sequence_length=tf.cast(tf.shape(logits)[0] * percent, tf.int32),
+                            sequence_length=seqLength,
                             time_major=True)
   # ctc_loss = tf.Print(ctc_loss, [ctc_loss], "CTC loss: ", summarize=32)
   ctc_loss_mean = tf.reduce_mean(ctc_loss, name='ctc_loss')
