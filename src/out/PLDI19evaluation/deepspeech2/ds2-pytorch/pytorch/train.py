@@ -35,6 +35,8 @@ parser.add_argument('--seed', default=0xdeadbeef, type=int, help='Random Seed')
 parser.add_argument('--acc', default=23.0, type=float, help='Target WER')
 
 parser.add_argument('--start_epoch', default=0, type=int, help='Number of epochs at which to start from')
+parser.add_argument('--write_to', default='result_PyTorch', type=str, help='where to save the performance')
+parser.add_argument('--epochs', default=1, type=int, help='number of epochs to run')
 
 def to_np(x):
     return x.data.cpu().numpy()
@@ -223,14 +225,26 @@ def main():
             'Average Loss {loss:.3f}\t'
             .format(epoch + 1, loss=avg_loss, ))
 
-        loss_results[epoch] = avg_loss
+        return avg_loss
 
     model.train()
-    for epoch in range(start_epoch, params.epochs):
+    loss_save = []
+    time_save = []
+    for epoch in range(start_epoch, args.epochs):
         startTime = time.time()
-        train_one_epoch(epoch)
+        loss_save.append(train_one_epoch(epoch))
         endTime = time.time()
+        time_save.append(endTime - startTime)
         print("epoch {} used {} seconds".format(epoch, endTime - startTime))
+
+    time_save.sort()
+    median_time = time_save[int(args.epochs / 2)]
+    with open(args.write_to, "w") as f:
+        f.write("unit: " + "1 epoch\n")
+        for loss in loss_save:
+            f.write("{}\n".format(loss))
+        f.write("run time: " + str(0.0) + " " + str(median_time) + "\n")
+        
 
 if __name__ == '__main__':
     main()

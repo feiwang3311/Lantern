@@ -13,6 +13,23 @@ source /scratch-ml00/wang603/conda3/bin/activate
 echo "Note: Maybe downloading cifar10_data"
 python3 generate_cifar10_data.py --data-dir cifar10_data
 
+
+echo "Exp: run DeepSpeech2 here"
+echo "Exp: run pytorch deepspeech2"
+cd deepspeech2
+cd ds2-pytorch/pytorch
+python3 train.py
+cd ../../lantern
+echo "Exp: run lantern deepspeech2"
+nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ Lantern.cu -o Lantern -lcublas -lcudnn
+./Lantern result_Lantern
+cd ../
+cp ds2-pytorch/pytorch/result_PyTorch result_PyTorch.txt
+cp lantern/result_Lantern result_Lantern.txt
+python3 ../plot.py DeepSpeech2 result_Lantern.txt result_PyTorch.txt
+
+exit 1 
+
 echo "Exp: run squeezenet models first"
 cd squeezenet
 cd pytorch
@@ -97,6 +114,10 @@ cp tensorflow/result_TensorFold20 result_TF20.txt
 cp dynet/result_DyNetNB result_DyNetNB.txt
 cp dynet/result_DyNetB result_DyNetB.txt
 python3 ../plot.py TreeLSTM result_Lantern.txt result_PyTorch.txt result_TF20.txt result_DyNetNB.txt result_DyNetB.txt
+
+
+
+
 
 exit 1
 

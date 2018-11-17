@@ -19,12 +19,16 @@ class Batch(object):
     self.batchedData = self.dict[b'batchedData']
     self.current_batch = 0
 
-    def batchWithRawLength(self):
-      (_, maxlen, inputs, input_percentages, target_sizes, targets) = self.batchedData[self.current_batch]
-      self.current_batch += 1
-      if self.current_batch >= self.numBatches:
-        self.current_batch = 0
-      return inputs, targets, input_percentages, maxlen, target_sizes
+  def batchWithRawLength(self):
+    (_, maxlen, inputs, input_percentages, target_sizes, targets) = self.batchedData[self.current_batch]
+    self.current_batch += 1
+    if self.current_batch >= self.numBatches:
+      self.current_batch = 0
+    return (np.asarray(inputs, dtype=np.float32),
+            np.asarray(targets, dtype=np.int32),
+            np.asarray(input_percentages, dtype=np.float32),
+            np.asarray([maxlen], dtype=np.int32),
+            np.asarray(target_sizes, dtype=np.int32))
 
   def batch(self):
     (_, _, inputs, input_percentages, target_sizes, targets) = self.batchedData[self.current_batch]
@@ -50,5 +54,8 @@ class Batch(object):
           g.write(struct.pack('@i', int(by)))
 
 if __name__ == '__main__':
+  batch = Batch("/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle")
+  batch.batchWithRawLength()
+  exit(1)
   batch = Batch('../../cifar10_data/cifar-10-batches-py/data_batch_1', 64)
   batch.write_to_bin('../cifar10_data/cifar-10-batches-bin/small_batch_x.bin', '../cifar10_data/cifar-10-batches-bin/small_batch_y.bin')

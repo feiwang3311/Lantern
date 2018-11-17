@@ -8,24 +8,24 @@ import model
 import time
 import tensorflow as tf
 import statistics
+import numpy as np
 
 def train(args):
   print("run tensorflow deepspeech2")
   startTime = time.time()
 
-  # hard code!!
   freq_size = 161
   batch_size = 32
   sample_rate = 16000
   window_size = 0.02
   rnn_hidden_size = 1024
   num_batches = 200
-  x = tf.placeholder(tf.float32, shape = (batch_size, 1, freq_size, None))
-  y = tf.sparse.placeholder(tf.int32)
-  percent = tf.placeholder(tf.float32, shape = (batch_size))
-  rawLength = tf.placeholder(tf.int32, shape(1))
+  x = tf.placeholder(tf.float32, shape=(batch_size, 1, freq_size, None), name="sequence_input")
+  y = tf.sparse.placeholder(tf.int32, name="labels")
+  percent = tf.placeholder(tf.float64, shape=(batch_size), name="percent_length")
+  rawLength = tf.placeholder(tf.int32, shape=(1), name="max_length")
 
-  num_classes = len(args.labels)
+  num_classes = len(args.labels)  + 1
   ctc_loss = model.loss(x, sample_rate, window_size, rnn_hidden_size, y, percent, rawLength, num_classes)
   with tf.name_scope('optimizer'):
     train_step = tf.train.GradientDescentOptimizer(args.lr).minimize(ctc_loss)
@@ -37,6 +37,7 @@ def train(args):
   config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
   with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
+    sess.run(tf.local_variables_initializer())
     loopStart = time.time()
     loss_save = []
     time_save = []
@@ -56,13 +57,9 @@ def train(args):
         # indices = np.array([[3, 2, 0], [4, 5, 1]], dtype=np.int64)
         # values = np.array([1.0, 2.0], dtype=np.float32)
         # shape = np.array([7, 9, 2], dtype=np.int64)
-        _, loss = sess.run([train_step, ctc_loss], feed_dict={
-          x: inputs,
-          y: tf.SparseTensorValue(indices, values, shape),
-          percent: input_percentages,
-          rawLength: raw_length})
+        _, loss = sess.run([train_step, ctc_loss], feed_dict={x: inputs, y: tf.SparseTensorValue(indices, values, shape), percent: input_percentages, rawLength: raw_length})
         train_accuracy += loss
-        if (i + 1) % (batch.total_size // batch.batch_size // 10) == 0:
+        if (i + 1) % (20) == 0:
           print('epoch %d: step %d, training loss %f' % (epoch + 1, i + 1, train_accuracy / (i * 100)))
       stop = time.time()
       time_save.append(stop - start)
@@ -86,14 +83,14 @@ def train(args):
 
 if __name__ == '__main__':
   # Training settings
-  parser = argparse.ArgumentParser(description='TensorFlow cifar10 Example')
-  parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+  parser = argparse.ArgumentParser(description='TensorFlow DeepSpeech2 Example')
+  parser.add_argument('--batch-size', type=int, default=32, metavar='N',
             help='input batch size for training (default: 64)')
-  parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
+  parser.add_argument('--test-batch-size', type=int, default=32, metavar='N',
             help='input batch size for testing (default: 1000)')
-  parser.add_argument('--epochs', type=int, default=4, metavar='N',
+  parser.add_argument('--epochs', type=int, default=1, metavar='N',
             help='number of epochs to train (default: 4)')
-  parser.add_argument('--lr', type=float, default=0.05, metavar='LR',
+  parser.add_argument('--lr', type=float, default=0.0000005, metavar='LR',
             help='learning rate (default: 0.05)')
   parser.add_argument('--momentum', type=float, default=0.0, metavar='M',
             help='SGD momentum (default: 0.5)')
