@@ -62,12 +62,23 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   implicit def Seq2SeqRep(x: Seq[Int]) = x map (unit(_))
+  implicit def SeqRB2SeqRBOps[T](s: Seq[T]): SeqRBOps[T] = SeqRBOps(s)
+  @virtualize
   case class SeqRBOps[T](s: Seq[T]) {
     def forall(f: T => Rep[Boolean]): Rep[Boolean] = s.foldLeft(unit(true)){case (l, r) => l && f(r)}
-    @virtualize
+    // {
+    //   for (i <- (0 until s.size): Rep[Range])
+    //     if (!f(s(i))) return false
+    //   true
+    // }
     def count(f: T => Rep[Boolean]): Rep[Int] = s.foldLeft(unit(0)){case (l, r) => if (f(r)) (l+1) else l}
+    // {
+    //   val c = var_new(0)
+    //   for (i <- (0 until s.size): Rep[Range])
+    //     if (f(s(i))) c += 1
+    //   c
+    // }
   }
-  implicit def SeqRB2SeqRBOps[T](s: Seq[T]) = SeqRBOps(s)
 
   object Dataset {
     class DataLoader(name: String, train: Boolean, mean: Float, std: Float, dims: Seq[Int]) {
@@ -232,6 +243,22 @@ trait TensorDsl extends DslOps with Diff {
   }
 
   def convSize(size: Rep[Int], kernelSize: Rep[Int], strideSize: Int, pad: Int = 0) = (size + 2 * pad - kernelSize)/strideSize + 1
+  @virtualize
+  def resizeDim(scalarCount: Rep[Int], toDims: Seq[Rep[Int]]): Seq[Rep[Int]] = {
+    val count = var_new(0)
+    val prod = var_new(1)
+    def check(dimseq: Seq[Rep[Int]]): Unit =
+      if (dimseq.size > 0) {
+        if (dimseq.head < 0) { count += 1 }
+        else prod *= dimseq.head
+        check(dimseq.tail)
+      }
+    check(toDims)
+    if (count >= 2) assertC(false, "cannot have 2 or more -1s in resize!!")
+    if (count == 0) assert(prod == scalarCount, "must same size!!")
+    toDims.map(x => if (x > 0) x else scalarCount / prod)
+  }
+
   def mmax(a: Int, b: Int) = if (a >= b) a else b
   @virtualize
   def mmax(a: Rep[Int], b: Rep[Int]) = if (a >= b) a else b
@@ -2024,12 +2051,15 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def resize(dims: Rep[Int]*) = {
+
+      Tensor(this.data, resizeDim(this.scalarCount, dims): _*)
+
       // assert(SeqRBOps(dims).count(_ < 0) <= 1, s"at most one negative dimension in resize.")
       // val new_dims: Seq[Rep[Int]] = dims.map(x => if (x > 0) x else {this.scalarCount / dims.filterProduct(_ > 0)})
       // assert(new_dims.product1 == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
-      // Danger !!!! (Fei Wang): disabling computation for -1 size without checking!!!
+      // // Danger !!!! (Fei Wang): disabling computation for -1 size without checking!!!
       // Tensor(this.data, new_dims : _*)
-      Tensor(this.data, dims : _*)
+      // // Tensor(this.data, dims : _*)
     }
 
     @virtualize
@@ -2879,11 +2909,15 @@ trait TensorDsl extends DslOps with Diff {
       backend.logSoftmax_grad(this, y, adjust_dim)
     }
 
-    def resize(dims: Rep[Int]*): TensorR @diff = shift { (k: TensorR => Unit) =>
-      k(new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*)))
-    }
+    // def resize(dims: Rep[Int]*): TensorR @diff = shift { (k: TensorR => Unit) =>
+    //   val newDims = resizeDim(this.x.scalarCount, dims)
+    //   k(new TensorR(new Tensor(this.x.data, newDims), new Tensor(this.d.data, newDims)))
+    // }
 
-    // def resize(dims: Rep[Int]*) = new TensorR(this.x.resize(dims : _*), this.d.resize(dims : _*))
+    def resize(dims: Rep[Int]*) = {
+      val newDims = resizeDim(this.x.scalarCount, dims)
+      new TensorR(new Tensor(this.x.data, newDims), new Tensor(this.d.data, newDims))
+    }
 
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert (this.x.rank == 2, s"nllLossB() function only takes tensor of rank 2, got ${this.x.shape}")
