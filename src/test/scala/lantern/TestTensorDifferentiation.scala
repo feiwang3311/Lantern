@@ -1274,7 +1274,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(input2.d, Tensor.fill(Seq(3, 4, 5), 3.0f))
 
         val input3 = Tensor.ones(2,4,5,5)
-        Tensor.assertEqual(input3.sum(3).sum(2).sum(0).resize(-1, 1, 1), input3.batchNormAv() * 2 * 5 * 5)
+        Tensor.assertEqual(input3.sum(3).sum(2).sum(0).resize(4, 1, 1), input3.batchNormAv() * 2 * 5 * 5)
 
         val input4 = TensorR(input3)
         gradR_loss(dummy => input4.batchNormAv().sum())(Tensor.zeros(1))
