@@ -102,6 +102,7 @@ echo "Note: now Let's run TensorFlow Fold. Need to use another install with Tens
 deactivate
 
 # python3 -m venv tensorfold-dev
+# source tensorfold-dev/bin/activate
 # pip3 install tensorflow==1.0.0
 # pip install https://storage.googleapis.com/tensorflow_fold/tensorflow_fold-0.0.1-py3-none-linux_x86_64.whl
 # pip3 install matplotlib
