@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <cblas.h>
 #include <algorithm>
+#include <numeric>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -624,7 +625,7 @@ cudnnHandle_t cudnnHandle;
 CUDNN_CALL(cudnnCreate(&cudnnHandle));
 // Tensor 'toGPU' invocation.
 float* x275 = (float*)myGpuMalloc(262144 * sizeof(float));
-int32_t x4 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
+int32_t x4 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
 int32_t x5 = fsize(x4);
 float* x6 = (float*)mmap(0, x5, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x4, 0);
 float* x7 = x6+5205440;
@@ -7572,8 +7573,8 @@ CUDNN_CALL(cudnnPoolingForward(
     poolingDesc, 
     x2154, in_desc, x2150, x2152, out_desc, x2156));
 };
-// resize to WrappedArray(64, 2048)
-// gemm: WrappedArray(64, 2048), Vector(10, 2048)
+// resize to WrappedArray(64, -1)
+// gemm: ArrayBuffer(64, 2048), Vector(10, 2048)
 float* x2160 = (float*)myGpuMalloc(640 * sizeof(float));
 float* x2161 = (float*)myMalloc(1 * sizeof(float));;
 x2161[0] = 0.0f;

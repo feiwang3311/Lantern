@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <cblas.h>
 #include <algorithm>
+#include <numeric>
 
 using namespace std;
 #ifndef MAP_FILE
@@ -120,7 +121,7 @@ x279[x290] = x295;
 
 }
 int32_t x301 = x277 / 64;
-int32_t x2 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
+int32_t x2 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
 int32_t x3 = fsize(x2);
 float* x4 = (float*)mmap(0, x3, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x2, 0);
 float* x151 = x4+0;
@@ -17613,8 +17614,8 @@ x17318[x17319] = x17334;
 }
 
 }
-// resize to WrappedArray(64, 2048)
-// gemm: WrappedArray(64, 2048), Vector(10, 2048)
+// resize to WrappedArray(64, -1)
+// gemm: ArrayBuffer(64, 2048), Vector(10, 2048)
 float* x17342 = (float*)myMalloc(640 * sizeof(float));;
 cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 64,10,2048,1.0,x17313,2048,x226,2048,0,x17342,10);
 int32_t x17344 = 0;
