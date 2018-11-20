@@ -4437,7 +4437,7 @@ assert(false && "must same size!!");
 float* x1421 = (float*)myGpuMalloc(1 * sizeof(float));
 // make sure the size of loss is 1
 arrayFill_greg<<<28, 512>>>(x1421, 1.0f, 1);
-// backend is lantern.TensorDslCudnn$BackendCudnn@7931faf3
+// backend is lantern.TensorDslCudnn$BackendCudnn@5bfe071d
 CUDA_CALL(cudaMemcpy(x335, x1397, 1 * sizeof(float), cudaMemcpyDeviceToHost));
 // 'mean' gradient
 // backprop for mean op
