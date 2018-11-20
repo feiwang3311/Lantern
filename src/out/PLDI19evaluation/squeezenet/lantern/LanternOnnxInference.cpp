@@ -644,7 +644,8 @@ int32_t x3150 = 512 * x2936;
 int32_t x3183 = 10 * x3182;
 int32_t x3204 = 8192 * x3182;
 float* x46 = x41+723904;
-int64_t x3262 = (int64_t)x9;
+int32_t x3184 = 64 * x3183;
+int64_t x3282 = (int64_t)x9;
 for(int x98=0; x98 < 4; x98++) {
 struct timeval begin_1, end_1, diff_1;
 int32_t x100 = x98 + 1;
@@ -3442,18 +3443,39 @@ memcpy(x3240, x3243, 4 * x3181);;
 cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 10,x3182,8192,1,x46,8192,x3214,x3182,1,x3212,x3182);
 
 }
-int64_t x3252 = (long)mallocAddr;
-int64_t x3253 = x3252 - x95;
-memset((void*)x95, 0, x3253);
+int32_t x3252 = 0;
+int32_t x3253 = 1;
+x3253 *= 64;
+x3253 *= 10;
+int32_t x3256 = x3252;
+bool x3257 = x3256 >= 2;
+if (x3257) {
+printf("cannot have 2 or more -1s in resize!!\n");
+assert(false && "");
+} else {
+}
+bool x3263 = x3256 == 0;
+if (x3263) {
+int32_t x3264 = x3253;
+bool x3265 = x3264 == x3184;
+if (x3265) {
+} else {
+assert(false && "must same size!!");
+}
+} else {
+}
+int64_t x3272 = (long)mallocAddr;
+int64_t x3273 = x3272 - x95;
+memset((void*)x95, 0, x3273);
 mallocAddr = (void*)x95;
 
 }
 gettimeofday(&end_1, NULL);
 timeval_subtract(&diff_1, &end_1, &begin_1);;
-int64_t x3260 = ((diff_1.tv_sec * 1000000L) + (diff_1.tv_usec));
-int64_t x3261 = x3260 / 1000LL;
-int64_t x3263 = x3260 / x3262;
-printf("Inferencing completed in %ldms (%ld us/images)\n",x3261,x3263);
+int64_t x3280 = ((diff_1.tv_sec * 1000000L) + (diff_1.tv_usec));
+int64_t x3281 = x3280 / 1000LL;
+int64_t x3283 = x3280 / x3282;
+printf("Inferencing completed in %ldms (%ld us/images)\n",x3281,x3283);
 
 }
 // Backend cleanup.

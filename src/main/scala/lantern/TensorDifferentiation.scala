@@ -2472,22 +2472,14 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def dimBroadcast(a: Seq[Rep[Int]], b: Seq[Rep[Int]]): Option[(Dimensions, Dimensions, Dimensions)] = {
-      def bc(a: Seq[Rep[Int]], b: Seq[Rep[Int]], trail: List[Rep[Int]]): List[Rep[Int]] = {
-        if (a.size == 0) b.toList ++ trail
-        else if (b.size == 0) a.toList ++ trail
-        else if (a.last == unit(1)) bc(a.init, b.init, b.last :: trail)
-        else if (b.last == unit(1)) bc(a.init, b.init, a.last :: trail)
-        else if (a.last == b.last) bc(a.init, b.init, a.last :: trail)
-        else List(-7) // indicate dim not Compatible by broadcast
-      }
-      val res: List[Rep[Int]] = bc(a, b, List())
-      // if (res == List(-7)) None
-      // else {
-        // add dimensions of 1 to tensors with smaller rank
+      val header: Seq[Rep[Int]] = if (a.size > b.size) a.take(a.size - b.size) else b.take(b.size - a.size)
+      val body: Seq[(Rep[Int], Rep[Int])] = (a.reverse zip b.reverse).reverse
+      val comp: Rep[Boolean] = SeqRBOps(body).forall{case (x, y) => x == unit(1) || y == unit(1) || x == y}
+      assertC(comp, s"dimensions not compatible for broadcasting ${"%d," * a.size} with ${"%d," * b.size}", (a ++ b): _*)
+      val Body: Seq[Rep[Int]] = body.map{case (x, y) => if (x <= y) y else x}
+      val res: List[Rep[Int]] = (header ++ Body).toList
       if (a.size > b.size) Some((Dimensions(a), Dimensions(Seq.fill(a.size - b.size)(unit(1)) ++ b), Dimensions(res)))
-      else if (a.size < b.size) Some((Dimensions(Seq.fill(b.size - a.size)(unit(1)) ++ a), Dimensions(b), Dimensions(res)))
-      else Some((Dimensions(a), Dimensions(b), Dimensions(res)))
-      // }
+      else Some((Dimensions(Seq.fill(b.size - a.size)(unit(1)) ++ a), Dimensions(b), Dimensions(res)))
     }
 
     def randseed(seed: Int) = unchecked[Unit]("srand(", seed, ")")

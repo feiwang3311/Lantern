@@ -29,7 +29,7 @@ trait DslOps extends PrimitiveOps with NumericOpsExtra with BooleanOps
 
 trait DslExp extends DslOps
     with PrimitiveOpsExpOpt with NumericOpsExpOpt with NumericOpsExtraExp with BooleanOpsExp
-    with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp with OrderingOpsExp
+    with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp with OrderingOpsExpOpt
     with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp
     with FunctionsRecursiveExp with WhileExp with StaticDataExp
     with UtilOpsExp with UncheckedOpsExp with MathOpsExp
