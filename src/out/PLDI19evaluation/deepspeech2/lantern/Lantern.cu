@@ -2467,7 +2467,7 @@ CUDNN_CALL(cudnnReduceTensor(
 float* x1092 = (float*)myGpuMalloc(1 * sizeof(float));
 // make sure the size of loss is 1
 arrayFill_greg<<<28, 512>>>(x1092, 1.0f, 1);
-// backend is lantern.TensorDslCudnn$BackendCudnn@2c114c25
+// backend is lantern.TensorDslCudnn$BackendCudnn@788c3e96
 CUDA_CALL(cudaMemcpy(x327, x1085, 1 * sizeof(float), cudaMemcpyDeviceToHost));
 int32_t x1097 = 0;
 int32_t x1098 = 1;
