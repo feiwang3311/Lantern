@@ -17,8 +17,29 @@ import java.io.File
 
 class AdLMSVectorTest extends LanternFunSuite {
 
+  test("IF") {
+    val IF_Test = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.zeros(3, 4)
+        val grad = gradR(x => IF(1 < 0){
+          generateRawComment("true branch")
+          x + x
+        }{
+          generateRawComment("false branch")
+          x * x
+        })(input)
+        generateRawComment("show gradient")
+      }
+    }
+    // System.out.println(IF_Test.code)
+    IF_Test.eval("abc")
+  }
+
   test("array0") {
     val array0 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -39,6 +60,8 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("vector-vector-dot") {
     val vvdot = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -53,6 +76,8 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("matrix-vector-dot") {
     val mvdot = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val m = Tensor.fromData(Seq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
@@ -76,7 +101,6 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("matrix-matrix-dot") {
     val mmdot = new LanternDriverC[String, Unit] {
-
       override val fileName = currentTestName
 
       @virtualize
@@ -171,7 +195,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("softmax") {
     val softmax = new LanternDriverC[String, Unit] {
-      override val fileName = "lantern-cpu-softmax"
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -197,7 +221,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("log-softmax") {
     val logSoftmax = new LanternDriverC[String, Unit] {
-      override val fileName = "lantern-cpu-log-softmax"
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -219,7 +243,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("nll-loss") {
     val nllLoss = new LanternDriverC[String, Unit] {
-      override val fileName = "lantern-cpu-nll-loss"
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -243,6 +267,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array2") {
     val array2 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -266,6 +291,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array2_1"){
     val array2_1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -292,6 +318,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array2_2") {
     val array2_2 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -337,6 +364,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("testTrans") {
     val testTrans = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -351,6 +379,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array2_3") {
     val array2_3 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -400,7 +429,8 @@ class AdLMSVectorTest extends LanternFunSuite {
            val tmp = (Wxh1 dot x1)
            val h1 = (tmp + (Whh1 dot t(1)) + bh1).tanh() // use hidden state and x1 to compute hidden state
            val e1 = (Why1.dot(h1) + by1).exp()                       // use new hidden state to compute unnormalized prob
-           val p1 = e1 / e1.sum()                            // use unnormalized prob to compute normalize prob
+           val temp1 = e1.sum()
+           val p1 = e1 / temp1                            // use unnormalized prob to compute normalize prob
            generateRawComment("Compute new loss")
            val newloss = t(0) - (p1 dot y1).log()            // loss is updated by original loss t(0) and additional loss
            generateRawComment("Done computing loss")
@@ -480,6 +510,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array2_4"){
     val array2_4 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet (a: Rep[String]): Rep[Unit] = {
@@ -505,6 +536,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array2_5") {
     val array2_5 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet (a: Rep[String]): Rep[Unit] = {
@@ -532,6 +564,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array3") {
     val array3 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -555,6 +588,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array4") {
     val array4 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -578,6 +612,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array4_1") {
     val array4_1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -610,6 +645,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   test("array4_2") {
     // test using array data by closure
     val array4_2 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
 
@@ -654,6 +690,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array4_4") {
     val array4_4 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -695,6 +732,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array5") {
     val array5 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -711,6 +749,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array6") {
     val array6 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -726,6 +765,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array7") {
     val array7 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -743,6 +783,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array7_1") {
     val array7_1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -761,6 +802,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array8"){
     val array8 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -778,6 +820,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array9") {
     val array9 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -794,6 +837,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array10") {
     val array10 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -826,6 +870,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array11") {
     val array11 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -877,6 +922,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("array11_1") {
     val array11_1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
@@ -940,6 +986,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("maxpool_test1") {
     val maxpool_test1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -965,6 +1012,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("maxpool_back_test1") {
     val maxpool_back_test1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -994,6 +1042,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("dropout_test1") {
     val dropout_test1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1020,6 +1069,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("dropout_back_test1") {
     val dropout_back_test1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1046,6 +1096,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("op_conv_forward") {
     val deb = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1066,6 +1117,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("op_conv_pad") {
     val deb = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1086,6 +1138,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("op_conv_pad2") {
     val deb = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1106,6 +1159,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("op_conv_pad_nobias") {
     val deb = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1125,6 +1179,8 @@ class AdLMSVectorTest extends LanternFunSuite {
   test("backprop_op_conv") {
 
     val deb = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = TensorR(Tensor.ones(1,1,3,3))
@@ -1155,6 +1211,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   test("backprop_op_conv_pad") {
 
     val deb = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = TensorR(Tensor.ones(1,1,4,4))
@@ -1189,6 +1246,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("averagePool_backprop") {
     val deb = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = TensorR(Tensor.ones(1,1,4,4))
@@ -1231,7 +1289,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(input2.d, Tensor.fill(Seq(3, 4, 5), 3.0f))
 
         val input3 = Tensor.ones(2,4,5,5)
-        Tensor.assertEqual(input3.sum(3).sum(2).sum(0).resize(-1, 1, 1), input3.batchNormAv() * 2 * 5 * 5)
+        Tensor.assertEqual(input3.sum(3).sum(2).sum(0).resize(4, 1, 1), input3.batchNormAv() * 2 * 5 * 5)
 
         val input4 = TensorR(input3)
         gradR_loss(dummy => input4.batchNormAv().sum())(Tensor.zeros(1))
@@ -1248,8 +1306,9 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("elementwiseOpNoBroadCastSqrt") {
+
     val sqrt = new LanternDriverC[String, Unit] {
-      override val fileName = "lantern-cublas-sqrt"
+      override val fileName = currentTestName
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val x = Tensor.fill(Seq(3, 2, 3, 3), 16)
@@ -1267,7 +1326,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
   test("elementwiseOpNoBroadCastSquare") {
     val square = new LanternDriverC[String, Unit] {
-      override val fileName = "lantern-cublas-square"
+      override val fileName = currentTestName
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val x = Tensor.fill(Seq(3, 2, 3, 3), 3)

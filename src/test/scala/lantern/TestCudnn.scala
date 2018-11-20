@@ -159,7 +159,7 @@ class TestCudnn extends LanternFunSuite {
         val input = Tensor.randinit(Seq(1,1,2,3))
         val result = input.tanh()
         val grad = gradR(x => x.tanh())(input)
-        val expected = Tensor.ones(1) - result * result
+        val expected = Tensor.fill(Seq(1,1,2,3), 1) - result * result
         backend = BackendCPU()
         Tensor.assertEqual(expected.toCPU(), grad.toCPU())
       }
@@ -176,7 +176,7 @@ class TestCudnn extends LanternFunSuite {
         val input = Tensor.randinit(Seq(1,1,2,3))
         val result = input.sigmoid()
         val grad = gradR(x => x.sigmoid())(input)
-        val expected = (Tensor.ones(1) - result) * result
+        val expected = (Tensor.fill(Seq(1,1,2,3),1) - result) * result
         backend = BackendCPU()
         Tensor.assertEqual(expected.toCPU(), grad.toCPU())
       }
@@ -373,6 +373,29 @@ class TestCudnn extends LanternFunSuite {
     runTest(nllLoss)
   }
 
+  testGPU("repeat0") {
+    val repeat0 = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-repeat0"
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(5,2,2), 1,2,3,4, 1,2,3,4, 1,2,3,4, 0,0,0,0, 0,0,0,0)
+        val result = input.repeat0(2)
+        val grad = gradR(x => x.repeat0(2))(input)
+
+        backend = BackendCPU()
+        generateRawComment("check for correctness")
+        val expectedResult = Tensor.fromData(Seq(3,3,2,2),
+          1,2,3,4, 1,2,3,4, 1,2,3,4,
+          1,2,3,4, 1,2,3,4, 0,0,0,0,
+          1,2,3,4, 0,0,0,0, 0,0,0,0)
+        val expectedGrad = Tensor.fromData(Seq(5,2,2), 1,1,1,1, 2,2,2,2, 3,3,3,3, 0,0,0,0, 0,0,0,0)
+        Tensor.assertEqual(expectedResult, result.toCPU())
+        Tensor.assertEqual(expectedGrad, grad.toCPU())
+      }
+    }
+    runTest(repeat0)
+  }
+
   testGPU("concat_grad") {
     val concat = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-concat-grad"
@@ -486,42 +509,42 @@ class TestCudnn extends LanternFunSuite {
         // grad.toCPU().print("grad")
         // TODO (Fei Wang) need to be confirmed by PyTorch
         val expectedResult = Tensor.fromData(Seq(3, 2, 3, 3),
-          -4.70055f, -2.42800f, 0.33646f, 
-          -1.71884f, -3.37612f, -3.03992f, 
-          -0.07803f, 1.66236f, -2.64498f, 
-          -4.40594f, -2.17456f, 0.45260f, 
-          -2.48382f, -3.67889f, -3.86906f, 
-          0.42170f, -4.03358f, -0.95436f, 
-          -0.62918f, 0.73989f, 2.56785f, 
-          -3.27966f, -1.47426f, -0.98174f, 
-          -0.55874f, -0.70138f, 0.62703f, 
-          -0.44310f, 0.65435f, -0.73941f, 
-          -2.76659f, 0.87396f, 1.42567f, 
-          1.76504f, -2.91541f, -3.78245f, 
-          -3.30510f, 1.85414f, 2.58171f, 
-          -0.99299f, 2.04517f, -2.28546f, 
-          -2.79128f, -3.18326f, -1.24514f, 
-          -2.01499f, 1.94021f, -0.85590f, 
-          1.60013f, -0.91634f, -2.54044f, 
+          -4.70055f, -2.42800f, 0.33646f,
+          -1.71884f, -3.37612f, -3.03992f,
+          -0.07803f, 1.66236f, -2.64498f,
+          -4.40594f, -2.17456f, 0.45260f,
+          -2.48382f, -3.67889f, -3.86906f,
+          0.42170f, -4.03358f, -0.95436f,
+          -0.62918f, 0.73989f, 2.56785f,
+          -3.27966f, -1.47426f, -0.98174f,
+          -0.55874f, -0.70138f, 0.62703f,
+          -0.44310f, 0.65435f, -0.73941f,
+          -2.76659f, 0.87396f, 1.42567f,
+          1.76504f, -2.91541f, -3.78245f,
+          -3.30510f, 1.85414f, 2.58171f,
+          -0.99299f, 2.04517f, -2.28546f,
+          -2.79128f, -3.18326f, -1.24514f,
+          -2.01499f, 1.94021f, -0.85590f,
+          1.60013f, -0.91634f, -2.54044f,
           1.48045f, 0.51965f, 0.44109f)
         val expectedGrad = Tensor.fromData(Seq(3, 2, 3, 3),
           3.09040f, -0.20212f, 3.45742f,
-          -1.22957f, 1.17154f, 0.68444f, 
-          -3.60681f, 1.53643f, 0.11224f, 
-          1.99813f, -1.06226f, 1.89603f, 
-          -0.63810f, 1.00096f, 1.26179f, 
-          1.93841f, 1.48743f, -2.73582f, 
-          -2.80830f, 2.87292f, 0.22452f, 
-          1.03179f, -1.58392f, -2.29750f, 
-          -2.91035f, -2.70368f, 3.03643f, 
-          -3.43702f, 1.61933f, -3.03063f, 
-          -0.25029f, 1.31812f, 0.56144f, 
-          0.09597f, -0.04617f, 1.14300f, 
-          1.06865f, 1.25857f, 0.20445f, 
-          -2.28120f, 0.98180f, -0.40863f, 
-          0.32422f, 0.89211f, -1.91587f, 
-          -1.28113f, -0.14428f, -2.87085f, 
-          0.32216f, -2.78796f, -0.56045f, 
+          -1.22957f, 1.17154f, 0.68444f,
+          -3.60681f, 1.53643f, 0.11224f,
+          1.99813f, -1.06226f, 1.89603f,
+          -0.63810f, 1.00096f, 1.26179f,
+          1.93841f, 1.48743f, -2.73582f,
+          -2.80830f, 2.87292f, 0.22452f,
+          1.03179f, -1.58392f, -2.29750f,
+          -2.91035f, -2.70368f, 3.03643f,
+          -3.43702f, 1.61933f, -3.03063f,
+          -0.25029f, 1.31812f, 0.56144f,
+          0.09597f, -0.04617f, 1.14300f,
+          1.06865f, 1.25857f, 0.20445f,
+          -2.28120f, 0.98180f, -0.40863f,
+          0.32422f, 0.89211f, -1.91587f,
+          -1.28113f, -0.14428f, -2.87085f,
+          0.32216f, -2.78796f, -0.56045f,
           0.48630f, 1.80406f, 1.91181f)
         Tensor.assertEqual(expectedResult, result.toCPU(), tal = 0.0001f)
         Tensor.assertEqual(expectedGrad, grad.toCPU(), tal = 0.0001f)
@@ -646,8 +669,8 @@ class TestCudnn extends LanternFunSuite {
 
         // Test parameter registration.
         rnn.registerParameters("lstm")
-        System.out.println(rnn.parameters)
-        System.out.println(rnn.parameters.size)
+        // System.out.println(rnn.parameters)
+        // System.out.println(rnn.parameters.size)
         val expectedParameterCount = numLayers * numDirections * 4
         assert(rnn.parameters.size == expectedParameterCount)
 
@@ -703,8 +726,8 @@ class TestCudnn extends LanternFunSuite {
         val opt = SGD(rnn, learning_rate = 0.1f)
 
         // Test parameter registration.
-        System.out.println(rnn.parameters)
-        System.out.println(rnn.parameters.size)
+        // System.out.println(rnn.parameters)
+        // System.out.println(rnn.parameters.size)
         val expectedParameterCount = numLayers * numDirections * 4
         assert(rnn.parameters.size == expectedParameterCount)
 
@@ -742,12 +765,12 @@ class TestCudnn extends LanternFunSuite {
 
         // val logProbs = Tensor.ones(inputLength, batchSize, alphabetSize)
         // Note: `probs` should be the result of `logProbs.softmax(dim = 2)`.
-        val probs = Tensor.fill(Seq(inputLength, batchSize, alphabetSize), 0.05f)
-        val target = Array(Seq.fill(batchSize)(1).map(unit(_)): _*)
-        val inputLengths = Array(Seq.fill(batchSize)(inputLength).map(unit(_)): _*)
-        val targetLengths = Array(Seq.fill(batchSize)(1).map(unit(_)): _*)
-
-        val (loss, _) = BackendCudnn().cudnnCTCLoss(probs, target, inputLengths, targetLengths)
+        val probs = TensorR(Tensor.fill(Seq(inputLength, batchSize, alphabetSize), 0.05f))
+        val target = Array(Seq.fill(batchSize * 2)(5).map(unit(_)): _*)
+        val inputLengths = Array(Seq.fill(batchSize)(inputLength - 21).map(unit(_)): _*)
+        inputLengths(3) = inputLength
+        val targetLengths = Array(Seq.fill(batchSize)(2).map(unit(_)): _*)
+        val loss = probs.ctcLoss(inputLengths, target, targetLengths)
 
         backend = BackendCPU()
         loss.toCPU().print()

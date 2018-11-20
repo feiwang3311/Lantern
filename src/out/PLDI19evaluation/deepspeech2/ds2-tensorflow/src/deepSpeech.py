@@ -78,7 +78,7 @@ def inputs(eval_data, data_dir, batch_size, use_fp16, shuffle):
     return feats, labels, seq_lens
 
 
-def inference(sess, feats, seq_lens, params):
+def inference(feats, seq_lens, params):
     """Build the deepSpeech model.
 
     Args:
@@ -157,35 +157,31 @@ def inference(sess, feats, seq_lens, params):
 
     # Permute into time major order for rnn: T, N, F * C
     rnn_input = tf.transpose(rnn_input, perm=[1, 0, 2])
-    # T is unknown. N = 32, F * C = 672
-    # rnn_input = tf.unstack(rnn_input)
 
-    # fw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
-    # fw_cell_list = [fw_cell] * params.num_rnn_layers
 
-    # bw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
-    # bw_cell_list = [bw_cell] * params.num_rnn_layers
+    fw_cell = custom_ops.CustomRNNCell2(params.num_hidden)
 
-    fw_cells = [tf.nn.rnn_cell.BasicRNNCell(params.num_hidden) for i in range(params.num_rnn_layers)]
-    bw_cells = [tf.nn.rnn_cell.BasicRNNCell(params.num_hidden) for i in range(params.num_rnn_layers)]
+    # conved_seq_lens is the input_size
     conved_seq_lens = get_rnn_seqlen(seq_lens)
 
-    rnn_outputs = custom_ops.stacked_brnn(fw_cells, bw_cells, rnn_input, params.batch_size, conved_seq_lens)
+    rnn_outputs = custom_ops.stacked_brnn(fw_cell, fw_cell, params.num_hidden, params.num_rnn_layers, rnn_input, params.batch_size, conved_seq_lens)
+#    _activation_summary(rnn_outputs)
 
     # Linear layer(WX + b) - softmax is applied by CTC cost function.
-    # with tf.variable_scope('softmax_linear') as scope:
-    weights = _variable_with_weight_decay('weights', [NUM_CLASSES, params.num_hidden],
-                                          wd_value=None,
-                                          use_fp16=params.use_fp16)
-    biases = _variable_on_cpu('biases', [NUM_CLASSES],
-                              tf.constant_initializer(0.0),
-                              params.use_fp16)
-    logit_inputs = tf.reshape(rnn_outputs, [-1, params.num_hidden])
-    #logits = tf.add(tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True),
-    #                biases, name=scope.name)
-    logits = tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True)
-    logits = tf.reshape(logits, [-1, params.batch_size, NUM_CLASSES])
-    # _activation_summary(logits)
+    with tf.variable_scope('softmax_linear') as scope:
+        weights = _variable_with_weight_decay('weights', [NUM_CLASSES, params.num_hidden * 2],
+                                              wd_value=None,
+                                              use_fp16=params.use_fp16)
+#        biases = _variable_on_cpu('biases', [NUM_CLASSES],
+#                                  tf.constant_initializer(0.0),
+#                                  params.use_fp16)
+        logit_inputs = tf.reshape(rnn_outputs, [-1, params.num_hidden * 2])
+#        logits = tf.add(tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True),
+#                        biases, name=scope.name)
+        logits = tf.matmul(logit_inputs, weights, transpose_a=False, transpose_b=True)
+        logits = tf.reshape(logits, [-1, params.batch_size, NUM_CLASSES])
+#        _activation_summary(logits)
+
     return logits
 
 
@@ -206,9 +202,10 @@ def loss(logits, labels, seq_lens):
     # dense_labels = tf.Print(dense_labels, [dense_labels], "labels: ")
 
     ## scheme 1
-    # logits_shape = tf.shape(logits)
+
+    logits_shape = tf.shape(logits)
     # logits_shape = tf.Print(logits_shape, [logits_shape], "logits shape: ")
-    # max_seq_len = logits_shape[0]
+    max_seq_len = logits_shape[0]
     # batch_size = logits_shape[1]
     # max_seq_len = tf.Print(max_seq_len, [max_seq_len], "max seq len: ")
     # conved_seq_lens = tf.fill([batch_size], max_seq_len)
@@ -217,22 +214,21 @@ def loss(logits, labels, seq_lens):
     ## scheme 2
     conved_seq_lens = get_rnn_seqlen(seq_lens)
 
-    #conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
+
+    # conved_seq_lens = tf.Print(conved_seq_lens, [conved_seq_lens], "conved seq len: ", summarize=32)
 
     # Calculate the average ctc loss across the batch.
-    # print(labels.get_shape())
-    # print(logits.get_shape())
-    print(tf.cast(logits, tf.float32).get_shape())
     ctc_loss = tf.nn.ctc_loss(labels=labels, inputs=tf.cast(logits, tf.float32),
                               sequence_length=conved_seq_lens, 
                               preprocess_collapse_repeated=False,
                               ctc_merge_repeated=True,
                               time_major=True,
                               ignore_longer_outputs_than_inputs=True)
-    #ctc_loss = tf.Print(ctc_loss, [ctc_loss], "CTC loss: ", summarize=32)
+
+#    ctc_loss = tf.Print(ctc_loss, [ctc_loss], "CTC loss: ", summarize=32)
     ctc_loss_mean = tf.reduce_mean(ctc_loss, name='ctc_loss')
-    #ctc_loss_mean = tf.Print(ctc_loss_mean, [ctc_loss_mean], "mean CTC loss: ")
-    #tf.add_to_collection('losses', ctc_loss_mean)
+#    ctc_loss_mean = tf.Print(ctc_loss_mean, [ctc_loss_mean], "mean CTC loss: ")
+    # tf.add_to_collection('losses', ctc_loss_mean)
 
     # The total loss is defined as the cross entropy loss plus all
     # of the weight decay terms (L2 loss).

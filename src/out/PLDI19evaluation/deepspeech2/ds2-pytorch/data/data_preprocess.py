@@ -367,15 +367,16 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 def write_dataset_to_binary_file(filename, data_loader):
+    data_loader_length = min(len(data_loader), 200)
     start_iter = 0 
     for i, (data) in enumerate(data_loader, start=start_iter):
-        if i == len(data_loader):
+        if i == data_loader_length:
             break
         inputs, targets, input_percentages, target_sizes = data
         if i == start_iter:
             with open(filename, 'wb') as f:
                 f.write(struct.pack("@i", params.batch_size))
-                f.write(struct.pack("@i", len(data_loader)-start_iter))
+                f.write(struct.pack("@i", data_loader_length-start_iter))
                 # bin format for Lantern:
                 # Int: batch_size, num_batches
                 # Int: freq_size, max_length
@@ -542,7 +543,7 @@ def main():
         pass
 
     for dataset_name in ['val', 'test', 'train']:
-        filename = save_folder + 'deepspeech_{}.pickle'.format(dataset_name)
+        filename = save_folder + 'deepspeech_{}.bin'.format(dataset_name)
         manifest = {'train': params.train_manifest, 'val': params.val_manifest, 'test': params.test_manifest}
         manifest_filepath = manifest[dataset_name]
         if manifest_filepath is None:
@@ -564,8 +565,8 @@ def main():
                                  num_workers=1, drop_last=True)
 
 
-        write_dataset_to_pickle_file(filename, data_loader=loader)
-        read_dataset_from_pickle_file(filename)
+        write_dataset_to_bin_file(filename, data_loader=loader)
+#        read_dataset_from_bin_file(filename)
 
 if __name__ == '__main__':
     main()

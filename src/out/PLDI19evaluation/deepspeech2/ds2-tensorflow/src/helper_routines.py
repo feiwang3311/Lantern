@@ -39,11 +39,12 @@ def _variable_on_cpu(name, shape, initializer=None, use_fp16=False, trainable=Tr
     Returns:
       Variable Tensor
     """
-    with tf.device('/device:GPU:0'):
+
+    with tf.device('/cpu'):
         dtype = tf.float16 if use_fp16 else tf.float32
         var = tf.get_variable(name, shape,
                               initializer=initializer, dtype=dtype, trainable=trainable)
-        return var
+    return var
 
 def _variable_on_gpu(name, shape, initializer=None, use_fp16=False, trainable=True):
     with tf.device('/device:GPU:0'):

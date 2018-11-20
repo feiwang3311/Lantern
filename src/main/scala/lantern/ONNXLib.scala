@@ -177,8 +177,13 @@ trait ONNXLib extends TensorDsl {
     val (float_init, int_init) = initializer.partition(_.getDataType.name == "FLOAT")
 
     // read and save int parameters as non-Rep type
-    val intMap: MMap[String, (Seq[Int], Array[Int])] =
-      MMap(int_init.map(ParseHelper.extract_init(_)).map{case (name, (dims, dt, arr)) => (name -> (dims, arr.map(_.toInt))) }.toMap.toSeq: _*)
+    // intMap are tensors that hold shape informations, so the Seq[Int] is the rank, and will always be size 1. The Array[Rep[Int]] is the shape, which is unknown at staging time
+    val intMap: MMap[String, (Seq[Int], Seq[Rep[Int]])] =
+      MMap(int_init.map(ParseHelper.extract_init(_)).map{
+        case (name, (dims, dt, arr: Array[Float])) =>
+          val resAfter: Seq[Rep[Int]] = arr.map(_.toInt).toSeq.map(unit(_))
+          ( name -> (dims, resAfter) )
+      }.toMap.toSeq: _*)
 
     // record all float parameters
     val parameterFileName = model_file + ".bin"
@@ -534,7 +539,7 @@ trait ONNXLib extends TensorDsl {
     // read the nodes and build the function for inference
     def inference_func(initializer_map_tensor: Map[String, Tensor]): (Tensor => Tensor) = { x: Tensor =>
     // lazy val inference_func: (Tensor => Tensor) = { x: Tensor =>
-      assert(x.dimensions == x_dims, "input tensor is not of the correct dimensions")
+      Tensor.assertShapeEqual(x.shape, Dimensions(x_dims))
 
       // generate Tensors (or TensorRs) of intermediate steps and inputs
       val intermediate_map_tensor: MMap[String, Tensor] = MMap()
@@ -600,14 +605,14 @@ trait ONNXLib extends TensorDsl {
               val out = input_s.head.concat(axis, input_s.tail: _*)
               intermediate_map_tensor += (output -> out)
             } else {
-              // For now this means that the inputs are in tntMaps
+              // For now this means that the inputs are in intMaps
               val input_s = inputs.map(x => intMap.get(x).get)
-              val dims = input_s map {case (d, a) => d}
-              val datas = input_s map {case (d, a) => a}
+              val dims: Seq[Seq[Int]] = input_s map {case (d, a) => d}
+              val datas: Seq[Seq[Rep[Int]]] = input_s map {case (d, a) => a}
               dims foreach { d => assert(d.size == 1, s"shape tensors should have rank 1, got ${d}")}
               assert(axis == 0, s"concatenating shape tensors should only be on dim 0, got ${axis}")
               val conDims = dims.foldLeft(Seq(0))((a, b) => Seq(a(0) + b(0)))
-              val conDatas = datas.foldLeft(scala.Array[Int]())((a, b) => a ++ b)
+              val conDatas = datas.foldLeft(scala.Seq[Rep[Int]]())((a, b) => a ++ b)
               intMap += (output -> (conDims, conDatas))
             }
           }
@@ -654,9 +659,9 @@ trait ONNXLib extends TensorDsl {
 
             val input1 = twoMaps(inputs.head)
             // input2 should be Int64 tensor (we can find it in intMap)
-            val (dim2, input2: Array[Int]) = intMap(inputs.last)
+            val (dim2, input2: Seq[Rep[Int]]) = intMap(inputs.last)
             assert (dim2.size == 1, s"reshape parameter (if presented as a tensor) should be dim 1, got ${dim2.size}")
-            val out = input1.resize(input2.toSeq: _*)
+            val out = input1.resize(input2: _*)
 
             intermediate_map_tensor += (output -> out)
           }
@@ -679,7 +684,7 @@ trait ONNXLib extends TensorDsl {
 
           case flattenNode(input, output, axis) => {
             val input1 = twoMaps(input)
-            val shape = (input1.shape.take(axis) :+ -1)
+            val shape = (input1.shape.take(axis) :+ unit(-1))
             intermediate_map_tensor += (output -> input1.resize(shape: _*))
           }
 
@@ -692,16 +697,16 @@ trait ONNXLib extends TensorDsl {
 
           case shapeNode(input, output) => {
             val input1 = twoMaps(input)
-            val out: Seq[Int] = input1.shape
+            val out: Seq[Rep[Int]] = input1.shape
             // For now, saving Int typed Tensor to intMap (mutable map of type String -> (Seq[Int], Array[Int]))
-            intMap += (output -> (Seq(out.size), out.toArray))
+            intMap += (output -> ( Seq(out.size), out) )
           }
 
           case sliceNode(input, output, attMap: Map[String, List[Int]]) => {
             if (inTwoMaps(input)) {
               ??? // TODO (Fei Wang): implemented general slice node
             } else {
-              val (dim1, input1: Array[Int]) = intMap.get(input).get
+              val (dim1, input1: Seq[Rep[Int]]) = intMap.get(input).get
               val axes: List[Int] = attMap.get("axes").get
               val starts: List[Int] = attMap.get("starts").get
               val ends: List[Int] = attMap.get("ends").get
@@ -717,7 +722,7 @@ trait ONNXLib extends TensorDsl {
             if (inTwoMaps(input)) {
               ??? // TODO (Fei Wang): implement general squeeze node function
             } else {
-              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              val (dim1: Seq[Int], input1) = intMap.get(input).get
               assert(axes == List(0),  s"squeeze on shape tensor must be on dim 0, axes got ${axes}")
               assert(dim1 == Seq(1), s"the dimension to squeeze must be dim 1, got ${dim1}")
               assert(input1.size == 1, s"to squeeze on the shape tensor, it must have 1 element, got ${input1}")
@@ -727,14 +732,14 @@ trait ONNXLib extends TensorDsl {
 
           case constantNode(output, data) => {
             // For now we assume that constantNode are Int (for tensor shape)
-            intMap += (output -> (Seq[Int](), scala.Array(data.toInt)))
+            intMap += (output -> (Seq[Int](), Seq(unit(data.toInt))))
           }
 
           case unsqueezeNode(input, output, axes) => {
             if (inTwoMaps(input)) {
               ??? // TODO (Fei Wang): implement general unsqueeze function
             } else {
-              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              val (dim1: Seq[Int], input1) = intMap.get(input).get
               assert(axes == List(0),  s"unsqueeze on shape tensor must be on dim 0, axes got ${axes}")
               assert(dim1 == Seq[Int](),  s"unsqueeze on shape tensor must be empty seq, dims got ${dim1}")
               assert(input1.size == 1, s"unsqueeze on shape tensor must have 1 element, got ${input1}")
@@ -746,7 +751,6 @@ trait ONNXLib extends TensorDsl {
             if (inTwoMaps(input)) {
               val input1 = twoMaps(input)
               assert(pads.sum == 0 , s"TODO: only supporting no padding so far, got ${pads}")
-              // TODO (Fei Wang): implement real padding later, for now we assume that padding is all 0
               intermediate_map_tensor += (output -> input1)
             } else {
               ???
@@ -766,7 +770,7 @@ trait ONNXLib extends TensorDsl {
       val initializer_map_tensorR: Map[String, TensorR] = initializer_map_tensor.map { case(name, tensor) => (name -> TensorR(tensor))}
       val func = { x: TensorR =>
         // lazy val training_func: (TensorR => TensorR @diff) = { x: TensorR =>
-        assert(x.x.dimensions == x_dims, "input tensor is not of the correct dimensions")
+        Tensor.assertShapeEqual(x.x.shape, Dimensions(x_dims), "input tensor is not of the correct dimensions")
 
         // generate Tensors (or TensorRs) of intermediate steps and inputs
         val intermediate_map_tensorR: MMap[String, TensorR] = MMap()
@@ -820,7 +824,7 @@ trait ONNXLib extends TensorDsl {
               val datas = input_s.map{case (d, a) => a}
               dims foreach (d => assert(d.size == 1, s"intMaps (for shapeTensors) should all be rank 1, got ${d}"))
               val con_dims = dims.foldLeft(Seq(0))((a, b) => Seq(a(0) + b(0)))
-              val con_datas = datas.foldLeft(scala.Array[Int]())((a, b) => a ++ b)
+              val con_datas = datas.foldLeft(scala.Seq[Rep[Int]]())((a, b) => a ++ b)
               intMap += (output -> (con_dims, con_datas))
             }
 
@@ -880,7 +884,7 @@ trait ONNXLib extends TensorDsl {
 
             val input1 = twoMaps(inputs.head)
             // input2 should be Int64 tensor (we can find it in intMap)
-            val (dim2, input2: Array[Int]) = intMap(inputs.last)
+            val (dim2, input2) = intMap(inputs.last)
             assert (dim2.size == 1, s"reshape parameter (if presented as a tensor) should be dim 1, got ${dim2.size}")
             val out = input1.resize(input2.toSeq: _*)
 
@@ -910,7 +914,7 @@ trait ONNXLib extends TensorDsl {
           } else if (node.isInstanceOf[flattenNode]) {
             val flattenNode(input, output, axis) = node
             val input1 = twoMaps(input)
-            val shape = input1.x.shape.take(axis) :+ -1
+            val shape = input1.x.shape.take(axis) :+ unit(-1)
             val out = input1.resize(shape: _*)
             intermediate_map_tensorR.update(output, out)
 
@@ -924,21 +928,21 @@ trait ONNXLib extends TensorDsl {
           } else if (node.isInstanceOf[shapeNode]) {
             val shapeNode(input, output) = node
             val input1 = twoMaps(input)
-            val shape: Seq[Int] = input1.x.shape
+            val shape = input1.x.shape
             // Note: shape information, which is non Rep type, should be saved in intMap
-            intMap += (output -> (Seq[Int](shape.size), shape.toArray))
+            intMap += (output -> (Seq(shape.size), shape))
 
           } else if (node.isInstanceOf[constantNode]) {
             val constantNode(output, data) = node
             // For now we assume constantNode are Int (for shape)
-            intMap += (output -> (Seq[Int](), scala.Array(data.toInt)))
+            intMap += (output -> (Seq[Int](), Seq(unit(data.toInt))))
 
           } else if (node.isInstanceOf[sliceNode]) {
             val sliceNode(input, output, attMap) = node
             if (inTwoMaps(input)) {
               ???  // TODO (Fei Wang) handle general slice case
             } else {
-              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              val (dim1: Seq[Int], input1) = intMap.get(input).get
               val axes: List[Int] = attMap.getOrElse("axes", List[Int]())
               val starts: List[Int] = attMap.getOrElse("starts", List[Int]())
               val ends: List[Int] = attMap.getOrElse("ends", List[Int]())
@@ -954,7 +958,7 @@ trait ONNXLib extends TensorDsl {
             if (inTwoMaps(input)) {
               ???  // TODO (Fei Wang) handle general slice case
             } else {
-              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              val (dim1: Seq[Int], input1) = intMap.get(input).get
               assert(axes == List(0),  s"squeeze on shape tensor must be on dim 0, axes got ${axes}")
               assert(dim1 == Seq(1), s"the dimension to squeeze must be dim 1, got ${dim1}")
               assert(input1.size == 1, s"to squeeze on the shape tensor, it must have 1 element, got ${input1}")
@@ -966,7 +970,7 @@ trait ONNXLib extends TensorDsl {
             if (inTwoMaps(input)) {
               ??? // TODO: (Fei Wang) handle the general unsqueeze case
             } else {
-              val (dim1: Seq[Int], input1: Array[Int]) = intMap.get(input).get
+              val (dim1: Seq[Int], input1) = intMap.get(input).get
               assert(axes == List(0),  s"unsqueeze on shape tensor must be on dim 0, axes got ${axes}")
               assert(dim1 == Seq[Int](),  s"unsqueeze on shape tensor must be empty seq, dims got ${dim1}")
               assert(input1.size == 1, s"unsqueeze on shape tensor must have 1 element, got ${input1}")
@@ -978,7 +982,6 @@ trait ONNXLib extends TensorDsl {
             if (inTwoMaps(input)) {
               val input1 = twoMaps(input)
               assert(pads.sum == 0 , s"TODO: only supporting no padding so far, got ${pads}")
-              // TODO (Fei Wang): implement real padding later, for now we assume that padding is all 0
               intermediate_map_tensorR += (output -> input1)
             } else {
               ???
@@ -995,7 +998,6 @@ trait ONNXLib extends TensorDsl {
       (func, initializer_map_tensorR)
     }
 
-    // TODO: (Fei Wang) define nicer API for inferencing and training
   }
 
   def readOnnxData(filename: String): Rep[Array[Float]] =
@@ -1016,13 +1018,5 @@ trait ONNXLib extends TensorDsl {
       }.toSeq : _*
     )
   }
-
-  // def readNumpy(filename: String) = {
-  //   val in = new FileInputStream(filename)
-  //   var c = 0
-  //   while ({c = in.read; c != -1}) {
-  //     System.out.println(c)
-  //   }
-  // }
 
 }

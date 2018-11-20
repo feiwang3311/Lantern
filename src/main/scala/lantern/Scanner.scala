@@ -8,8 +8,8 @@ import scala.virtualization.lms.common._
 trait ScannerOps extends Base with UncheckedOps {
   def open(name: Rep[String]): Rep[Int]
   def close(fd: Rep[Int]): Rep[Unit]
-  def filelen(fd: Rep[Int]): Rep[Int]
-  def mmap[T:Manifest](fd: Rep[Int], len: Rep[Int]): Rep[Array[T]]
+  def filelen(fd: Rep[Int]): Rep[Long]
+  def mmap[T:Manifest](fd: Rep[Int], len: Rep[Long]): Rep[Array[T]]
   def stringFromCharArray(buf: Rep[Array[Char]], pos: Rep[Int], len: Rep[Int]): Rep[String]
   def prints(s: Rep[String]): Rep[Int]
   def infix_toInt(c: Rep[Char]): Rep[Int] = c.asInstanceOf[Rep[Int]]
@@ -33,8 +33,8 @@ trait ScannerOpsExp extends ScannerOps with UncheckedOpsExp {
     case _ => throw new Exception(s"${manifest[T]} todo")
   }
   def open(path: Rep[String]) = uncheckedPure[Int]("open(",path,",0)")
-  def filelen(fd: Rep[Int]) = uncheckedPure[Int]("fsize(",fd,")") // FIXME: fresh name
-  def mmap[T:Manifest](fd: Rep[Int], len: Rep[Int]) = uncheckedPure[Array[T]]("(",remap(manifest[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
+  def filelen(fd: Rep[Int]) = uncheckedPure[Long]("fsize(",fd,")") // FIXME: fresh name
+  def mmap[T:Manifest](fd: Rep[Int], len: Rep[Long]) = uncheckedPure[Array[T]]("(",remap(manifest[T]),"*)mmap(0, ",len,", PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, ",fd,", 0)")
   def stringFromCharArray(data: Rep[Array[Char]], pos: Rep[Int], len: Rep[Int]): Rep[String] = uncheckedPure[String](data,"+",pos)
   def close(fd: Rep[Int]) = unchecked[Unit]("close(",fd,")")
   def prints(s: Rep[String]): Rep[Int] = unchecked[Int]("printll(",s,")")

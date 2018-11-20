@@ -48,7 +48,7 @@ trait NNModule extends TensorDsl {
       forEachNamedParameter { case (_, (tr, t)) => f(tr, t) }
 
     // Implicit parameter registration system.
-    def registerParameters(nameScope: String): Unit = {
+    def registerParameters(nameScope: String, parent: Option[Module] = None): Unit = {
       def oops[T](field: Field)(read: Field => T) = {
         val acc = field.isAccessible
         field.setAccessible(true)
@@ -57,7 +57,11 @@ trait NNModule extends TensorDsl {
         res
       }
 
-      val allFields = this.getClass.getDeclaredFields
+      val allFields1: Array[java.lang.reflect.Field] = this.getClass.getDeclaredFields
+      val allFields = allFields1.filter { field => oops[Boolean](field) {
+        x => x.get(this) != this && (parent match { case None => true; case Some(p) => x.get(this) != p })
+      }}
+
       // this part may take more than needed. For instance, all Option or ArrayBuffer type are included due to type erasure
       val subParameters = allFields.filter { f =>
         classOf[Option[TensorR]].isAssignableFrom(f.getType) ||
@@ -100,7 +104,8 @@ trait NNModule extends TensorDsl {
           case _ => ()
         }
       }}
-      modules.foreach {case (name, module) => module.registerParameters(s"${name}/")}
+
+      modules.foreach {case (name, module) => module.registerParameters(s"${name}/", Some(this))}
     }
   }
 
@@ -150,8 +155,34 @@ trait NNModule extends TensorDsl {
     def apply(in: TensorR): TensorR @diff = in.convBBP(kernel, bias, stride, pad)
   }
 
+  case class BatchNorm1D(dimSize: Int, name: String = "batch_norm_1d") extends Module {
+    val scale: TensorR = TensorR(Tensor.ones(dimSize))
+    val bias: TensorR = TensorR(Tensor.zeros(dimSize))
+    val runningMean: Tensor = Tensor.zeros(dimSize)
+    val runningVar: Tensor = Tensor.zeros(dimSize)
+    @virtualize
+    def apply(in: TensorR): TensorR @diff = {
+      assert(in.x.rank == 2)
+      assert(in.x.shape.dims(1) == unit(dimSize), "BatchNorm1D input should be rank2, with shape 1 same as dimSize, got %d : %d") //, in.x.shape(1), dimSize)
+      in.batchNorm1D(scale, bias, runningMean, runningVar)
+    }
+  }
+
+  case class BatchNorm2D(num_features: Int, eps: Float =1e-05f, momentum: Float =0.1f, affine: Boolean = true,
+    track_running_stats: Boolean = true, name: String = "batch_norm_2d") extends Module {
+    assert(affine && track_running_stats, "TODO: not yet handling them to be false")
+    val scale: TensorR = TensorR(Tensor.ones(num_features))
+    val bias: TensorR = TensorR(Tensor.zeros(num_features))
+    val runningMean: Tensor = Tensor.zeros(num_features)
+    val runningVar: Tensor = Tensor.zeros(num_features)
+    def apply(in: TensorR): TensorR @diff = {
+      assert(in.x.rank == 4 && in.x.shape(1) == unit(num_features), s"BatchNorm2D input should be rank 2, with shape 1 same as num_features, got ${in.x.shape} : ${num_features}")
+      in.batchNorm(scale, bias, runningMean, runningVar)
+    }
+  }
+
   abstract class RnnCell extends Module {
-    def init(batchSize: Int): ArrayBuffer[TensorR]
+    def init(batchSize: Rep[Int]): ArrayBuffer[TensorR]
     def apply(ins: ArrayBuffer[TensorR]): ArrayBuffer[TensorR] @diff
   }
 
@@ -165,7 +196,7 @@ trait NNModule extends TensorDsl {
       val hidden = inLinear(in, lastHidden).tanh()
       ArrayBuffer(outLinear(hidden), hidden)
     }
-    def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)))
+    def init(batchSize: Rep[Int]) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)))
   }
 
   case class LSTMCell(val inputSize: Int, val hiddenSize: Int, val outputSize: Int, val name: String = "lstm_cell") extends RnnCell {
@@ -191,7 +222,7 @@ trait NNModule extends TensorDsl {
       val h = o * c.tanh()
       ArrayBuffer(outLinear(h), h, c)
     }
-    def init(batchSize: Int) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)), TensorR(Tensor.zeros(batchSize, hiddenSize)))
+    def init(batchSize: Rep[Int]) = ArrayBuffer(TensorR(Tensor.zeros(batchSize, hiddenSize)), TensorR(Tensor.zeros(batchSize, hiddenSize)))
   }
 
   // case class DynamicRNN(val cell: RnnCell, val name: String = "dynamic_rnn_unroll") extends Module {
@@ -262,6 +293,14 @@ trait NNModule extends TensorDsl {
       backend.adagrad_update(tr, t, learning_rate, gradClip, descent)
     }
   }
+
+  case class SGD_Momentum(val module: Module, val learning_rate: Float, val momentum: Float = 0.9f, val gradClip: Float = 400.0f, val nesterov: Boolean = false, val descent: Boolean = true) extends Optim {
+    module.enrichParameter()
+    @virtualize
+    def step_func = { case (tr, Some(t)) =>
+      backend.momentum_update(tr, t, learning_rate, momentum, gradClip, nesterov, descent)
+    }
+  }
 }
 
 // FIXME: Eliminate explicit `backend` definition if possible.
@@ -305,7 +344,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     // cuDNN requires that all parameters are stored in a contiguous buffer.
     // NOTE: Choose different initialization strategy?
     // TODO (Fei Wang): For now we are resigtering this big TensorR, not the pieces of weights and biases. (Better to fix later)
-    lazy val parameterBuffer = TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f))
+    lazy val parameterBuffer = (TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
 
     def getParameterSize(): Int = {
       val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections

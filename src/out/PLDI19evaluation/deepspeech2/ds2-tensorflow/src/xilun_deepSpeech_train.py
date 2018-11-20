@@ -148,13 +148,12 @@ def tower_loss(sess, feats, labels, seq_lens):
        the total loss for a batch of data
     """
 
-    # Build inference Graph.    
+    # Build inference Graph.
     logits = deepSpeech.inference(sess, feats, seq_lens, ARGS)
-    
+
     # Build the portion of the Graph calculating the losses. Note that we will
     # assemble the total_loss using a custom function below.
     total_loss = deepSpeech.loss(logits, labels, seq_lens)
-    # print(total_loss.get_shape())
 
     # Compute the moving average of all individual losses and the total loss.
     # loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
@@ -238,6 +237,8 @@ def fetch_data():
     """ Fetch features, labels and sequence_lengths from a common queue."""
     tot_batch_size = ARGS.batch_size 
     with tf.device('/cpu'):
+
+        """
         feats, labels, seq_lens = deepSpeech.inputs(eval_data='train',
                                                     data_dir=ARGS.data_dir,
                                                     batch_size=tot_batch_size,
@@ -245,9 +246,11 @@ def fetch_data():
                                                     shuffle=ARGS.shuffle)
         dense_labels = tf.sparse_tensor_to_dense(labels)
 #        tf.Print(dense_labels, [dense_labels], "labels")
-
+        """
+        filename = "/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle"
+        batchedData = user_defined_input.Batch(filename)
     # Split features and labels and sequence lengths for each tower
-    return feats, labels, seq_lens
+    return batchedData
 
 
 def get_loss_grads(sess, data, optimizer):
@@ -276,7 +279,7 @@ def get_loss_grads(sess, data, optimizer):
 
 def run_train_loop(sess, operations):
     """ Train the model for required number of steps."""
-    (loss_op, train_op) = operations
+    (logits, loss, train_op) = operations
     num_batches_per_epoch = (deepSpeech.NUM_PER_EPOCH_FOR_TRAIN / ARGS.batch_size)
     run_options = None
     run_metadata = None
@@ -286,11 +289,15 @@ def run_train_loop(sess, operations):
         run_metadata = tf.RunMetadata()
         trace_file = open('profiling.json', 'w')
 
+    # data is on ml02.cs.purdue.edu
+    batch = inputs.Batch('/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle', ARGS.batch_size)
+
     # Evaluate the ops for max_steps
     epoch = 0
     for step in range(ARGS.max_steps):
         if step % num_batches_per_epoch == 0:
             epoch = epoch + 1
+        batch_time_start = time.time()
 
         # print "Trainable Variables: "
         # tvariables_names = [v.name for v in tf.trainable_variables()]
@@ -310,33 +317,39 @@ def run_train_loop(sess, operations):
         # for k, v in zip(mvariables_names, mvalues):
         #     print "Variable: ", k
         #     print v
-        # forward_time_start = time.time()
-        # loss_value = sess.run([loss_op], options=run_options, run_metadata=run_metadata)
-        # forward_time = time.time() - forward_time_start
 
-        batch_time_start = time.time()
-        loss_value, _ = sess.run([loss_op, train_op], options=run_options, run_metadata=run_metadata)
-        """
+
+        # get a batch of data
+        freq_size, maxlen, inputs, targets, input_percentages, target_sizes = batch.batch()
+        max_seqlen = tf.convert_to_tensor([maxlen] * ARGS.batch_size)
+        input_x = tf.convert_to_tensor(inputs)
+        input_y = tf.convert_to_tensor(targets)
+        
+        forward_time_start = time.time()
+
+        loss_value = sess.run([logits, loss, train_op], options=run_options, run_metadata=run_metadata, feed_dict={inputs: input_x, max_seqlen: input_lens, targets: input_y})
+        
+        forward_time = time.time() -forward_time_start
 
         backward_time_start = time.time()
 
         sess.run(train_op, options=run_options, run_metadata=run_metadata)
 
         backward_time = time.time() - backward_time_start
-        """
-        batch_time = time.time() - batch_time_start
 
+        batch_time = time.time() - batch_time_start
+        
         assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
 
         # separate data loading time;
         # modify the formatted string;
         print('Epoch: [{0}][{1}/{2}]\t'
               'Time {3:.3f}\t'
-              # 'Forward Time {4:.3f}\t'
-              # 'Backward Time {5:.3f}\t'
-              'Loss {4:.4f}\t'.format(
+              'Forward Time {4:.3f}\t'
+              'Backward Time {5:.3f}\t'
+              'Loss {6:.4f}\t'.format(
             epoch, step % num_batches_per_epoch + 1, num_batches_per_epoch, batch_time,
-            loss_value))
+            forward_time, backward_time, loss_value))
 
         """
         if step >= 10:
@@ -406,108 +419,54 @@ def initialize_from_checkpoint(sess, saver):
         print('No checkpoint file found')
         return
 
-"""
-def add_summaries(summaries, learning_rate, grads):
-
-    # Track quantities for Tensorboard display
-    summaries.append(tf.summary.scalar('learning_rate', learning_rate))
-    # Add histograms for gradients.
-    for grad, var in grads:
-        if grad is not None:
-            summaries.append(tf.summary.histogram(var.op.name + '/gradients', grad))
-    # Add histograms for trainable variables.
-    for var in tf.trainable_variables():
-        summaries.append(tf.summary.histogram(var.op.name, var))
-
-    # Build the summary operation from the last tower summaries.
-    summary_op = tf.summary.merge(summaries)
-    return summary_op
-"""
-
 def train():
     """
     Train deepSpeech for a number of steps.
       This function build a set of ops required to build the model and optimize
       weights.
     """
-    with tf.device('/device:GPU:0'):
-        with g.as_default():
-            # Learning rate set up
-            learning_rate, global_step = set_learning_rate()
 
-            # Create an optimizer that performs gradient descent.
-            optimizer = tf.train.AdamOptimizer(learning_rate)
-            # optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+    # Learning rate set up
+    learning_rate, global_step = set_learning_rate()
 
-            # Fetch a batch worth of data
-            data = fetch_data()
+    # Create an optimizer that performs gradient descent.
+    # optimizer = tf.train.AdamOptimizer(learning_rate)
 
-            # Start running operations on the Graph. allow_soft_placement
-            # must be set to True to build towers on GPU, as some of the
-            # ops do not have GPU implementations.
-            sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
-                                                    log_device_placement=ARGS.log_device_placement))
+    # forward pass to compute loss
+    freq_size = 161
+    inputs = tf.placeholder(tf.float32, [ARGS.batch_size, freq_size, None])
+    targets = tf.placeholder(tf.float32, [ARGS.batch_size, None])
+    max_seqlen = tf.placeholder(tf.int32, [ARGS.batch_size])
+    
+    logits = deepSpeech.inference(inputs, max_seqlen, ARGS)
+    # ctcloss
+    loss = deepSpeech.loss(logits, targets, max_seqlen)
+    # backward optimize
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+    # optimizer.minimize(loss)
+    grads_and_vars = optimizer.compute_gradients(loss)
+    clipped_grads_and_vars = [(tf.clip_by_value(grad, clip_value_min=-400, clip_value_max=400), var) for grad, var in grads_and_vars]
+    apply_gradient_op = optimizer.apply_gradients(grads,
+                                                  global_step=global_step)
+    train_op = apply_gradient_op
 
-            # Construct loss and gradient ops
-            loss_op, grads = get_loss_grads(sess, data, optimizer)
+    with g.as_default(), tf.device('/device:GPU:0'):
 
-            # Apply the gradients to adjust the shared variables.
-            apply_gradient_op = optimizer.apply_gradients(grads,
-                                                          global_step=global_step)
+        # Start running operations on the Graph. allow_soft_placement
+        # must be set to True to build towers on GPU, as some of the
+        # ops do not have GPU implementations.
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
+                                                log_device_placement=ARGS.log_device_placement))
 
-            # Track the moving averages of all trainable variables.
-            # variable_averages = tf.train.ExponentialMovingAverage(ARGS.moving_avg_decay, global_step)
-            # variables_averages_op = variable_averages.apply(tf.trainable_variables())
+        print("forbid the use of checkpoint")
+        sess.run(tf.global_variables_initializer())
+        # Start the queue runners.
+        tf.train.start_queue_runners(sess)
+        g.finalize()
 
-            # Group all updates to into a single train op.
-            # train_op = tf.group(apply_gradient_op, variables_averages_op)
-
-            train_op = apply_gradient_op
-
-            # Build summary op
-            # summary_op = add_summaries(summaries, learning_rate, grads)
-
-            # Create a saver.
-            # saver = tf.train.Saver(tf.global_variables(), max_to_keep=100)
-
-            # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-            # sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
-
-            # Initialize vars.
-            """
-            if ARGS.checkpoint is not None:
-                print "can use checkpoint"
-                global_step = initialize_from_checkpoint(sess, saver)
-            else:
-                print "cannot use checkpoint"
-                sess.run(tf.global_variables_initializer())
-            """
-            print("forbid the use of checkpoint")
-            sess.run(tf.global_variables_initializer())
-            # print "Trainable Variables: "
-            # tvariables_names = [v.name for v in tf.trainable_variables()]
-            # tvalues = sess.run(tvariables_names)
-            # for k, v in zip(tvariables_names, tvalues):
-            #     print "Variable: ", k
-            # print "Global Variables: "
-            # gvariables_names = [v.name for v in tf.global_variables()]
-            # gvalues = sess.run(gvariables_names)
-            # for k, v in zip(gvariables_names, gvalues):
-            #     print "Variable: ", k
-            # print "Moving Average Variables: "
-            # mvariables_names = [v.name for v in tf.moving_average_variables()]
-            # mvalues = sess.run(mvariables_names)
-            # for k, v in zip(mvariables_names, mvalues):
-            #     print "Variable: ", k
-
-            # Start the queue runners.
-            tf.train.start_queue_runners(sess)
-
-            g.finalize()
-
-            # Run training loop
-            # run_train_loop(sess, (loss_op, train_op, summary_op), saver)
-            run_train_loop(sess, (loss_op, train_op))
+        # Run training loop
+        # run_train_loop(sess, (loss_op, train_op, summary_op), saver)
+        run_train_loop(sess, (logits, loss, train_op))
 
 
 def main():

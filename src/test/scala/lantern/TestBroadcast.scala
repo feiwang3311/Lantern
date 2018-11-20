@@ -19,30 +19,39 @@ import java.io.File;
 class BroadCastingTest extends LanternFunSuite {
   test("broadcasting") {
     val test1 = new LanternDriverC[String, Unit] {
-      def snippet(a: Rep[String]) = {}
+      override val fileName = currentTestName
+
+      def snippet(a: Rep[String]) = {test()}
       def test() = {
-        def dimfy(x: Option[(Seq[Int], Seq[Int], Seq[Int])]) = x match {
-          case None => None
-          case Some((x1, x2, x3)) => Some((new Dimensions(x1), new Dimensions(x2), new Dimensions(x3)))
+        def testDim(in1: Seq[Rep[Int]], in2: Seq[Rep[Int]], out1: Seq[Rep[Int]], out2: Seq[Rep[Int]], out3: Seq[Rep[Int]]) = {
+          Tensor.dimBroadcast(in1, in2) match {
+            case Some((a, b, c)) =>
+              Tensor.assertShapeEqual(a, new Dimensions(out1))
+              Tensor.assertShapeEqual(b, new Dimensions(out2))
+              Tensor.assertShapeEqual(c, new Dimensions(out3))
+          }
         }
-        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(2, 3)) == dimfy(Some((Seq(2, 3), Seq(2, 3), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(3), Seq(2, 3)) == dimfy(Some((Seq(1, 3), Seq(2, 3), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(3)) == dimfy(Some((Seq(2, 3), Seq(1, 3), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(1, 3), Seq(2, 3)) == dimfy(Some((Seq(1, 3), Seq(2, 3), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(1, 3)) == dimfy(Some((Seq(2, 3), Seq(1, 3), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(2, 1)) == dimfy(Some((Seq(2, 3), Seq(2, 1), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(2, 1), Seq(2, 3)) == dimfy(Some((Seq(2, 1), Seq(2, 3), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(), Seq(2, 3)) == dimfy(Some((Seq(1, 1), Seq(2, 3), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(2, 3), Seq()) == dimfy(Some((Seq(2, 3), Seq(1, 1), Seq(2, 3)))))
-        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(3, 3)) == dimfy(None))
-        assert(Tensor.dimBroadcast(Seq(2, 3), Seq(2, 3, 3)) == dimfy(None))
+        testDim(Seq(2, 3), Seq(2, 3), Seq(2, 3), Seq(2, 3), Seq(2, 3))
+        testDim(Seq(2, 3), Seq(2, 3), Seq(2, 3), Seq(2, 3), Seq(2, 3))
+        testDim(Seq(3), Seq(2, 3), Seq(1, 3), Seq(2, 3), Seq(2, 3))
+        testDim(Seq(2, 3), Seq(3), Seq(2, 3), Seq(1, 3), Seq(2, 3))
+        testDim(Seq(1, 3), Seq(2, 3), Seq(1, 3), Seq(2, 3), Seq(2, 3))
+        testDim(Seq(2, 3), Seq(1, 3), Seq(2, 3), Seq(1, 3), Seq(2, 3))
+        testDim(Seq(2, 3), Seq(2, 1), Seq(2, 3), Seq(2, 1), Seq(2, 3))
+        testDim(Seq(2, 1), Seq(2, 3), Seq(2, 1), Seq(2, 3), Seq(2, 3))
+        testDim(Seq(), Seq(2, 3), Seq(1, 1), Seq(2, 3), Seq(2, 3))
+        testDim(Seq(2, 3), Seq(), Seq(2, 3), Seq(1, 1), Seq(2, 3))
+        // assert(Tensor.dimBroadcast(Seq(2, 3), Seq(3, 3)) == dimfy(None))
+        // assert(Tensor.dimBroadcast(Seq(2, 3), Seq(2, 3, 3)) == dimfy(None))
       }
     }
-    test1.test()
+    runTest(test1)
   }
 
   test("add_broadcast1") {
     val test1 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f), 2, 3)
         val tensor2 = Tensor(Array[Float](6,5,4,3,2,1), 2, 3)
@@ -63,6 +72,8 @@ class BroadCastingTest extends LanternFunSuite {
 
   test("add_broadcast2") {
     val test2 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6), 2, 3)
         val tensor2 = Tensor(Array[Float](1,2), 2, 1)
@@ -83,6 +94,8 @@ class BroadCastingTest extends LanternFunSuite {
 
   test("add_broadcast3") {
     val test3 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6), 2, 3)
         val tensor2 = Tensor(Array[Float](3,4,5), 1, 3)
@@ -103,6 +116,8 @@ class BroadCastingTest extends LanternFunSuite {
 
   test("add_broadcast4") {
     val test4 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2,2,2)
         val tensor2 = Tensor(Array[Float](1,2), 2)
@@ -123,6 +138,8 @@ class BroadCastingTest extends LanternFunSuite {
 
   test("add_broadcast5") {
     val test5 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,3,4), 2, 1, 2)
@@ -146,6 +163,8 @@ class BroadCastingTest extends LanternFunSuite {
 
   test("minus_broadcast5") {
     val test5 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
+
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,3,4), 2, 1, 2)
@@ -165,6 +184,7 @@ class BroadCastingTest extends LanternFunSuite {
 
   test("mult_broadcast5") {
     val test5 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,3,4), 2, 1, 2)
@@ -185,6 +205,7 @@ class BroadCastingTest extends LanternFunSuite {
 
   test("div_broadcast5") {
     val test5 = new LanternDriverC[String, Unit] {
+      override val fileName = currentTestName
       def snippet(a: Rep[String]): Rep[Unit] = {
         val tensor1 = Tensor(Array[Float](1,2,3,4,5,6,7,8), 2, 2, 2)
         val tensor2 = Tensor(Array[Float](1,2,2,4), 2, 1, 2)

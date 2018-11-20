@@ -20,12 +20,11 @@ class Batch(object):
 		self.current_batch = 0
 
 	def batch(self):
-		# temp is a tupel of (freqSize, maxLength, prob, pencent, label, labelLength)
-		(_, _, inputs, input_percentages, target_sizes, targets) = self.batchedData[self.current_batch]
-		self.current_batch += 1
-		if self.current_batch >= self.numBatches:
-			self.current_batch = 0
-		return inputs, targets, input_percentages, target_sizes
+        (_, _, inputs, input_percentages, target_sizes, targets) = self.batchedData[self.current_batch]
+        self.current_batch += 1
+        if self.current_batch >= self.numBatches:
+            self.current_batch = 0
+        return inputs, targets, input_percentages, target_sizes
 
 	def write_to_bin(self, input_file, target_file):
 		with open(input_file, 'wb') as f:
