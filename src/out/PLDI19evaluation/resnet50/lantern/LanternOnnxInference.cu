@@ -664,7 +664,7 @@ cudnnHandle_t cudnnHandle;
 CUDNN_CALL(cudnnCreate(&cudnnHandle));
 // Tensor 'toGPU' invocation.
 float* x276 = (float*)myGpuMalloc(262144 * sizeof(float));
-int32_t x5 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
+int32_t x5 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
 int64_t x6 = fsize(x5);
 float* x7 = (float*)mmap(0, x6, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x5, 0);
 float* x8 = x7+5205440;
@@ -8790,7 +8790,7 @@ CUDNN_CALL(cudnnPoolingForward(
 int32_t x3008 = 0;
 int32_t x3009 = 1;
 x3009 *= 64;
-x3008 += 1;
+x3009 *= 2048;
 int32_t x3012 = x3008;
 bool x3013 = x3012 >= 2;
 if (x3013) {
@@ -8808,18 +8808,17 @@ assert(false && "must same size!!");
 }
 } else {
 }
-int32_t x3028 = x3009;
-// gemm: List(Const(64), Sym(3029)), Vector(Const(10), Const(2048))
-float* x3032 = (float*)myGpuMalloc(640 * sizeof(float));
-float* x3033 = (float*)myMalloc(1 * sizeof(float));;
-x3033[0] = 0.0f;
+// gemm: List(Const(64), Const(2048)), Vector(Const(10), Const(2048))
+float* x3029 = (float*)myGpuMalloc(640 * sizeof(float));
+float* x3030 = (float*)myMalloc(1 * sizeof(float));;
+x3030[0] = 0.0f;
+float* x3032 = (float*)myMalloc(1 * sizeof(float));;
+x3032[0] = 1.0f;
+CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, 10,64,2048,x3032,x939,2048,x3006,2048,x3030,x3029,10));
 float* x3035 = (float*)myMalloc(1 * sizeof(float));;
 x3035[0] = 1.0f;
-CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, 10,64,2048,x3035,x939,2048,x3006,2048,x3033,x3032,10));
-float* x3038 = (float*)myMalloc(1 * sizeof(float));;
-x3038[0] = 1.0f;
-float* x3040 = (float*)myMalloc(1 * sizeof(float));;
-x3040[0] = 1.0f;
+float* x3037 = (float*)myMalloc(1 * sizeof(float));;
+x3037[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -8835,33 +8834,33 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 10, 1, 1));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x3038, bias_desc, x402, x3040, out_desc, x3032));
+    cudnnHandle, x3035, bias_desc, x402, x3037, out_desc, x3029));
 };
 // Tensor 'toCPU' invocation.
-float* x3044 = (float*)myMalloc(640 * sizeof(float));;
-CUDA_CALL(cudaMemcpy(x3044, x3032, 640 * sizeof(float), cudaMemcpyDeviceToHost));
+float* x3041 = (float*)myMalloc(640 * sizeof(float));;
+CUDA_CALL(cudaMemcpy(x3041, x3029, 640 * sizeof(float), cudaMemcpyDeviceToHost));
 printf("output (size Const(64) x Const(10))\n");
-float x3047 = 0.0f;
-for(int x3049=0; x3049 < 640; x3049++) {
-float x3050 = x3047;
-float x3051 = x3044[x3049];
-float x3052 = fabs(x3051);
-float x3053 = fabs(x3050);
-bool x3054 = x3052 > x3053;
-float x3055;
-if (x3054) {
-x3055 = x3051;
+float x3044 = 0.0f;
+for(int x3046=0; x3046 < 640; x3046++) {
+float x3047 = x3044;
+float x3048 = x3041[x3046];
+float x3049 = fabs(x3048);
+float x3050 = fabs(x3047);
+bool x3051 = x3049 > x3050;
+float x3052;
+if (x3051) {
+x3052 = x3048;
 } else {
-x3055 = x3050;
+x3052 = x3047;
 }
-x3047 = x3055;
+x3044 = x3052;
 
 }
-float x3059 = x3047;
-printf("Max Abs: %.5f || ",x3059);
-for(int x3061=0; x3061 < 10; x3061++) {
-float x3062 = x3044[x3061];
-printf("%.5f ",x3062);
+float x3056 = x3044;
+printf("Max Abs: %.5f || ",x3056);
+for(int x3058=0; x3058 < 10; x3058++) {
+float x3059 = x3041[x3058];
+printf("%.5f ",x3059);
 
 }
 printf("\n");

@@ -128,7 +128,7 @@ int32_t x332 = x331 * x331;
 int32_t x340 = 1728 * x332;
 int32_t x333 = 64 * x332;
 int32_t x338 = 27 * x332;
-int32_t x3 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
+int32_t x3 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
 int64_t x4 = fsize(x3);
 float* x5 = (float*)mmap(0, x4, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x3, 0);
 float* x152 = x5+0;
@@ -40431,7 +40431,7 @@ x31753[x31761] = x31779;
 int32_t x31789 = 0;
 int32_t x31790 = 1;
 x31790 *= 64;
-x31789 += 1;
+x31790 *= 2048;
 int32_t x31793 = x31789;
 bool x31794 = x31793 >= 2;
 if (x31794) {
@@ -40440,9 +40440,9 @@ assert(false && "");
 } else {
 }
 bool x31799 = x31793 == 0;
-int32_t x31744 = 64 * x31743;
 if (x31799) {
 int32_t x31800 = x31790;
+int32_t x31744 = 64 * x31743;
 bool x31801 = x31800 == x31744;
 if (x31801) {
 } else {
@@ -40450,60 +40450,57 @@ assert(false && "must same size!!");
 }
 } else {
 }
-int32_t x31808 = x31790;
-// gemm: List(Const(64), Sym(31809)), Vector(Const(10), Const(2048))
-assert(false && "ERROR not specified");
-float* x31813 = (float*)myMalloc(640 * sizeof(float));;
-int32_t x31809 = x31744 / x31808;
-cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 64,10,x31809,1.0,x31748,x31809,x227,x31809,0,x31813,10);
-int32_t x31815 = 0;
-int32_t x31816 = 0;
-int32_t x31817 = 0;
-for(int x31818=0; x31818 < 64; x31818++) {
-int32_t x31819 = x31816;
-int32_t x31820 = x31817;
-int32_t x31821 = x31815;
-int32_t x31822 = x31821;
-int32_t x31823 = x31819;
+// gemm: List(Const(64), Const(2048)), Vector(Const(10), Const(2048))
+float* x31809 = (float*)myMalloc(640 * sizeof(float));;
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, 64,10,2048,1.0,x31748,2048,x227,2048,0,x31809,10);
+int32_t x31811 = 0;
+int32_t x31812 = 0;
+int32_t x31813 = 0;
+for(int x31814=0; x31814 < 64; x31814++) {
+int32_t x31815 = x31812;
+int32_t x31816 = x31813;
+int32_t x31817 = x31811;
+int32_t x31818 = x31817;
+int32_t x31819 = x31815;
+int32_t x31820 = x31816;
+for(int x31821=0; x31821 < 10; x31821++) {
+int32_t x31822 = x31819;
+float x31823 = x31809[x31822];
 int32_t x31824 = x31820;
-for(int x31825=0; x31825 < 10; x31825++) {
-int32_t x31826 = x31823;
-float x31827 = x31813[x31826];
-int32_t x31828 = x31824;
-float x31829 = x48[x31828];
-float x31830 = x31827 + x31829;
-x31813[x31826] = x31830;
-x31822 += 1;
-x31823 += 1;
-x31824 += 1;
+float x31825 = x48[x31824];
+float x31826 = x31823 + x31825;
+x31809[x31822] = x31826;
+x31818 += 1;
+x31819 += 1;
+x31820 += 1;
 
 }
-x31815 += 10;
-x31816 += 10;
+x31811 += 10;
+x31812 += 10;
 
 }
 printf("output (size Const(64) x Const(10))\n");
-float x31842 = 0.0f;
-for(int x31844=0; x31844 < 640; x31844++) {
-float x31845 = x31842;
-float x31846 = x31813[x31844];
-float x31847 = fabs(x31846);
-float x31848 = fabs(x31845);
-bool x31849 = x31847 > x31848;
-float x31850;
-if (x31849) {
-x31850 = x31846;
+float x31838 = 0.0f;
+for(int x31840=0; x31840 < 640; x31840++) {
+float x31841 = x31838;
+float x31842 = x31809[x31840];
+float x31843 = fabs(x31842);
+float x31844 = fabs(x31841);
+bool x31845 = x31843 > x31844;
+float x31846;
+if (x31845) {
+x31846 = x31842;
 } else {
-x31850 = x31845;
+x31846 = x31841;
 }
-x31842 = x31850;
+x31838 = x31846;
 
 }
-float x31854 = x31842;
-printf("Max Abs: %.5f || ",x31854);
-for(int x31856=0; x31856 < 10; x31856++) {
-float x31857 = x31813[x31856];
-printf("%.5f ",x31857);
+float x31850 = x31838;
+printf("Max Abs: %.5f || ",x31850);
+for(int x31852=0; x31852 < 10; x31852++) {
+float x31853 = x31809[x31852];
+printf("%.5f ",x31853);
 
 }
 printf("\n");

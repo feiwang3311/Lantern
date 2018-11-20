@@ -699,7 +699,7 @@ float x39 = x38 / 1000000.0f;
 printf("Data reading in %lf sec\n",x39);
 // Tensor 'toGPU' invocation.
 float* x98 = (float*)myGpuMalloc(32768 * sizeof(float));
-int32_t x41 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
+int32_t x41 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
 int64_t x42 = fsize(x41);
 float* x43 = (float*)mmap(0, x42, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x41, 0);
 float* x45 = x43+526720;
@@ -4437,7 +4437,7 @@ assert(false && "must same size!!");
 float* x1421 = (float*)myGpuMalloc(1 * sizeof(float));
 // make sure the size of loss is 1
 arrayFill_greg<<<28, 512>>>(x1421, 1.0f, 1);
-// backend is lantern.TensorDslCudnn$BackendCudnn@5bfe071d
+// backend is lantern.TensorDslCudnn$BackendCudnn@1d32f135
 CUDA_CALL(cudaMemcpy(x335, x1397, 1 * sizeof(float), cudaMemcpyDeviceToHost));
 // 'mean' gradient
 // backprop for mean op
