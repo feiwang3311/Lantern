@@ -72,11 +72,11 @@ class SqueezeNet(nn.Module):
     for m in self.modules():
       if isinstance(m, nn.Conv2d):
         if m is self.final_conv:
-          weight_init.normal(m.weight, mean=0.0, std=0.01)
+          weight_init.normal_(m.weight, mean=0.0, std=0.01)
         else:
-          weight_init.kaiming_uniform(m.weight)
+          weight_init.kaiming_uniform_(m.weight)
         if m.bias is not None:
-          weight_init.constant(m.bias, 0)
+          weight_init.constant_(m.bias, 0)
 
   def forward(self, x):
     x = self.firstConv(x)
@@ -105,9 +105,9 @@ class Test(nn.Module):
     torch.manual_seed(42)
     for m in self.modules():
       if isinstance(m, nn.Conv2d):
-        weight_init.kaiming_uniform(m.weight)
+        weight_init.kaiming_uniform_(m.weight)
         if m.bias is not None:
-          weight_init.constant(m.bias, 0)
+          weight_init.constant_(m.bias, 0)
   def forward(self, x):
     printHead(10, x, "input")
     x = self.features(x)

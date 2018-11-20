@@ -1561,8 +1561,8 @@ trait TensorDsl extends DslOps with Diff {
 
     override def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = {
       val epsilon: Float = 0.00001f
-      val out1 = (x - runningMean.resize(-1,1,1)) / (runningVar + epsilon).sqrt().resize(-1, 1, 1)
-      out1 * scale.resize(-1,1,1) + bias.resize(-1,1,1)
+      val out1 = (x - runningMean.resize(1,-1,1,1)) / (runningVar + epsilon).sqrt().resize(1,-1, 1, 1)
+      out1 * scale.resize(1,-1,1,1) + bias.resize(1,-1,1,1)
     }
     override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = {
       val saveMean = x.batchNormAv()
@@ -4463,12 +4463,19 @@ trait TensorDslCudnn extends TensorDslCublas {
       main
     }
 
+    @virtualize
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = if (!bias.isInput) {
       // WARN (Fei Wang): plusBias is abused for non-bias case as well (add residual in resnet)
       // TODO (Fei Wang): Bandit solution: if bias and main are of the same shape, use AddTensor (by calling cudnnAddBiasTensor)
-      if (main.x.shape == bias.x.shape) cudnnAddBiasTensor(main.d, bias.d)  // add main.d into bias.d (in place)
+      if (main.x.rank == bias.x.rank) {
+        if (SeqRBOps(main.x.shape.dims zip bias.x.shape.dims).forall{case (a, b) => a == b})
+          cudnnAddBiasTensor(main.d, bias.d)
+        else cudnnConvolutionBackwardBias(bias.d, main.d)  // add main.d into bias.d (with reduction)
+      } else cudnnConvolutionBackwardBias(bias.d, main.d)  // add main.d into bias.d (with reduction)
+
+      // if (main.x.shape == bias.x.shape) cudnnAddBiasTensor(main.d, bias.d)  // add main.d into bias.d (in place)
       // otherwise: use BackwardBias (which may fail if bias,d is more than 1D)
-      else cudnnConvolutionBackwardBias(bias.d, main.d)  // add main.d into bias.d (with reduction)
+      // else cudnnConvolutionBackwardBias(bias.d, main.d)  // add main.d into bias.d (with reduction)
       // TODO (Fei Wang): be more general, use ReduceTensor!
     }
 
@@ -4607,7 +4614,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    cudnnHandle,
           |    in_desc, grad_out_desc, conv_desc, grad_filt_desc,
           |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-          |//algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+          |algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
