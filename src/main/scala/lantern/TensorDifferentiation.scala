@@ -266,7 +266,7 @@ trait TensorDsl extends DslOps with Diff {
     def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix + ix_a).AsInstanceOf[Char]
   }
 
-  case class Dimensions(val dims: Seq[Rep[Int]]) {
+  case class Dimensions(val dims: Seq[Rep[Int]], broadcasted: Rep[Boolean] = unit(false)) {
     def apply(idx: Int) = {
       if (!dims.indices.contains(idx)) throw new IndexOutOfBoundsException(s"Index $idx out of bounds")
       else dims(idx)
@@ -409,8 +409,8 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
-    def +(x: Tensor, y: Tensor): Tensor
-    def add_grad(x: TensorR, y: TensorR, output: TensorR): Unit
+    def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions)
+    def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit
 
     // In-place elementwise addition.
     def +=(x: Tensor, y: Rep[Float]): Unit
@@ -418,8 +418,8 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise subtraction.
     def -(x: Tensor, y: Rep[Float]): Tensor
-    def -(x: Tensor, y: Tensor): Tensor
-    def minus_grad(x: TensorR, y: TensorR, output: TensorR): Unit
+    def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions)
+    def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit
 
     // In-place elementwise subtraction.
     def -=(x: Tensor, y: Rep[Float]): Unit
@@ -427,8 +427,8 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise multiplication.
     def *(x: Tensor, y: Rep[Float]): Tensor
-    def *(x: Tensor, y: Tensor): Tensor
-    def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit
+    def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions)
+    def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit
 
     // In-place elementwise multiplication.
     def *=(x: Tensor, y: Rep[Float]): Unit
@@ -436,8 +436,8 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise division.
     def /(x: Tensor, y: Rep[Float]): Tensor
-    def /(x: Tensor, y: Tensor): Tensor
-    def div_grad(x: TensorR, y: TensorR, output: TensorR): Unit
+    def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions)
+    def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit
 
     // In-place elementwise division.
     def /=(x: Tensor, y: Rep[Float]): Unit
@@ -767,7 +767,7 @@ trait TensorDsl extends DslOps with Diff {
             val idxY = (yStridesShadow zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
             op(x.data(idxX), y.data(idxY))
           })
-          res
+          (res, xShape, yShape)
         }
         case _ => ???
       }
@@ -818,8 +818,8 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     override def +(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s + y)
-    override def +(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ + _)
-    override def add_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+    override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseOpWithBroadCast(x, y, _ + _)
+    override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val op1 = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
       val op2 = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
       backpropElementWiseOpWithBroadCast(x, y, output, op1, op2)
@@ -829,8 +829,8 @@ trait TensorDsl extends DslOps with Diff {
     override def +=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ + _))
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s - y)
-    override def -(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ - _)
-    override def minus_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+    override def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseOpWithBroadCast(x, y, _ - _)
+    override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val op1 = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
       val op2 = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => 0.0f - c
       backpropElementWiseOpWithBroadCast(x, y, output, op1, op2)
@@ -840,8 +840,8 @@ trait TensorDsl extends DslOps with Diff {
     override def -=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ - _))
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s * y)
-    override def *(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ * _)
-    override def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+    override def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseOpWithBroadCast(x, y, _ * _)
+    override def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val op1 = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c * b
       val op2 = (a: Rep[Float], _: Rep[Float], c: Rep[Float]) => c * a
       backpropElementWiseOpWithBroadCast(x, y, output, op1, op2)
@@ -851,8 +851,8 @@ trait TensorDsl extends DslOps with Diff {
     override def *=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ * _))
 
     override def /(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s / y)
-    override def /(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ / _)
-    override def div_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+    override def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseOpWithBroadCast(x, y, _ / _)
+    override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val op1 = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c / b
       val op2 = (a: Rep[Float], b: Rep[Float], c: Rep[Float]) => -1.0f * a * c / (b * b)
       backpropElementWiseOpWithBroadCast(x, y, output, op1, op2)
@@ -861,8 +861,11 @@ trait TensorDsl extends DslOps with Diff {
     override def /=(x: Tensor, y: Rep[Float]): Unit = mapInPlace(x, s => s / y)
     override def /=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ / _))
 
-    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = in1 * in2
-    override def mul_sub_grad(in1: TensorR, in2: TensorR, out:TensorR): Unit = mul_grad(in1, in2, out)
+    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = this.*(in1, in2)._1
+    override def mul_sub_grad(in1: TensorR, in2: TensorR, out:TensorR): Unit = {
+      val in2Shape = Dimensions(Seq(unit(1), unit(1)) ++ in2.x.shape.dims, true)
+      mul_grad(in1, in2, out, out.x.shape, in2Shape)
+    }
 
     override def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit = {
       (transX, transY) match {
@@ -1810,7 +1813,7 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise addition.
     def +(that: Rep[Float]): Tensor = backend.+(this, that)
-    def +(that: Tensor): Tensor = backend.+(this, that)
+    def +(that: Tensor): Tensor = backend.+(this, that)._1
 
     // In-place elementwise addition.
     def +=(that: Rep[Float]): Unit = backend.+=(this, that)
@@ -1818,7 +1821,7 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise subtraction.
     def -(that: Rep[Float]): Tensor = backend.-(this, that)
-    def -(that: Tensor): Tensor = backend.-(this, that)
+    def -(that: Tensor): Tensor = backend.-(this, that)._1
 
     // In-place elementwise subtraction.
     def -=(that: Rep[Float]): Unit = backend.-=(this, that)
@@ -1826,7 +1829,7 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise multiplication.
     def *(that: Rep[Float]): Tensor = backend.*(this, that)
-    def *(that: Tensor): Tensor = backend.*(this, that)
+    def *(that: Tensor): Tensor = backend.*(this, that)._1
 
     // In-place elementwise multiplication.
     def *=(that: Rep[Float]): Unit = backend.*=(this, that)
@@ -1834,7 +1837,7 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise division.
     def /(that: Rep[Float]): Tensor = backend./(this, that)
-    def /(that: Tensor): Tensor = backend./(this, that)
+    def /(that: Tensor): Tensor = backend./(this, that)._1
 
     // In-place elementwise division.
     def /=(that: Rep[Float]): Unit = backend./=(this, that)
@@ -2444,9 +2447,18 @@ trait TensorDsl extends DslOps with Diff {
       val comp: Rep[Boolean] = body.forallR{case (x, y) => x == unit(1) || y == unit(1) || x == y}
       assertC(comp, s"dimensions not compatible for broadcasting ${"%d," * a.size} with ${"%d," * b.size}", (a ++ b): _*)
       val Body: Seq[Rep[Int]] = body.map{case (x, y) => if (x <= y) y else x}
-      val res: List[Rep[Int]] = (header ++ Body).toList
-      if (a.size > b.size) Some((Dimensions(a), Dimensions(Seq.fill(a.size - b.size)(unit(1)) ++ b), Dimensions(res)))
-      else Some((Dimensions(Seq.fill(b.size - a.size)(unit(1)) ++ a), Dimensions(b), Dimensions(res)))
+      val res: Seq[Rep[Int]] = header ++ Body
+      if (a.size > b.size) {
+        val shapeB = Seq.fill(a.size - b.size)(unit(1)) ++ b
+        val sameA = (a zip res).forallR{case (x, y) => x == y}
+        val sameB = (shapeB zip res).forallR{case (x, y) => x == y}
+        Some((Dimensions(a, !sameA), Dimensions(shapeB, !sameB), Dimensions(res)))
+      } else {
+        val shapeA = Seq.fill(b.size - a.size)(unit(1)) ++ a
+        val sameA = (shapeA zip res).forallR{case (x, y) => x == y}
+        val sameB = (b zip res).forallR{case (x, y) => x == y}
+        Some((Dimensions(shapeA, !sameA), Dimensions(b, !sameB), Dimensions(res)))
+      }
     }
 
     def randseed(seed: Int) = unchecked[Unit]("srand(", seed, ")")
@@ -2584,9 +2596,10 @@ trait TensorDsl extends DslOps with Diff {
       this.d += y.d
     }
     def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x + that.x); k(y)
+      val (ya, xShape, yShape) = backend.+(x, that.x)
+      val y = TensorR(ya); k(y)
       generateRawComment("back prop for + op")
-      backend.add_grad(this, that, y)
+      backend.add_grad(this, that, y, xShape, yShape)
     }
 
     def - (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2594,9 +2607,10 @@ trait TensorDsl extends DslOps with Diff {
       this.d += y.d
     }
     def - (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x - that.x); k(y)
+      val (ya, xShape, yShape) = backend.-(x, that.x)
+      val y = TensorR(ya); k(y)
       generateRawComment("back prop for - op")
-      backend.minus_grad(this, that, y)
+      backend.minus_grad(this, that, y, xShape, yShape)
     }
 
     // mark: HERE: following code need to be backend depend!
@@ -2608,9 +2622,10 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x * that.x); k(y)
+      val (ya, xShape, yShape) = backend.*(x, that.x)
+      val y = TensorR(ya); k(y)
       generateRawComment("backprop for * op")
-      backend.mul_grad(this, that, y)
+      backend.mul_grad(this, that, y, xShape, yShape)
     }
 
     // element wise division
@@ -2620,9 +2635,10 @@ trait TensorDsl extends DslOps with Diff {
       this.d.addMul(1.0f / that, y.d)
     }
     def / (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x / that.x); k(y)
+      val (ya, xShape, yShape) = backend./(x, that.x)
+      val y = TensorR(ya); k(y)
       generateRawComment("backprop for / op")
-      backend.div_grad(this, that, y)
+      backend.div_grad(this, that, y, xShape, yShape)
     }
 
     def mul_sub(in2: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -3557,7 +3573,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         "}")
     }
 
-    def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): Tensor = {
+    def elementwiseBinaryOp(x: Tensor, y: Tensor)(op: (String, String) => String): (Tensor, Dimensions, Dimensions) = {
       // TODO (Fei Wang): bandit solution, since the broadcasted solution is buggy now, and we don't need broadcast for now, let's have a same-shape special case
       if (x.shape == y.shape) {
         val gridDimX = 28 // (x.scalarCount + 511) / 512
@@ -3570,7 +3586,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
         else if (op("1", "1") == "1 / 1") unchecked[Unit](s"elementwise_1D_1D_div<<<${gridDimX}, 512>>>(", x.data, ", ", y.data, ", ", resData, ", ", x.scalarCount, ")")
         else if (op("1", "1") == "1 - 1") unchecked[Unit](s"elementwise_1D_1D_minus<<<${gridDimX}, 512>>>(", x.data, ", ", y.data, ", ", resData, ", ", x.scalarCount, ")")
         else ???
-        res
+        (res, res.shape, res.shape)
       } else {
         // TODO (Fei Wang): we know this function probably has bug
         Tensor.dimBroadcast(x.shape, y.shape) match {
@@ -3579,7 +3595,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
             val resData = mallocArray[Float](resShape.scalarCount)
             val res = Tensor(resData, resShape: _*)
             launchBinaryKernel(res, x, y)(op)
-            res
+            (res, xShape, yShape)
         }
       }
     }
@@ -3594,29 +3610,29 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     }
 
     override def +(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " + ", y))
-    override def +(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " + " + _ }
-    override def add_grad(x: TensorR, y: TensorR, output: TensorR): Unit = ???
+    override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementwiseBinaryOp(x, y) { _ + " + " + _ }
+    override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = ???
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " + ", y))
     override def +=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " + " + _ }
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " - ", y))
-    override def -(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " - " + _ }
-    override def minus_grad(x: TensorR, y: TensorR, output: TensorR): Unit = ???
+    override def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementwiseBinaryOp(x, y) { _ + " - " + _ }
+    override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = ???
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " - ", y))
     override def -=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " - " + _ }
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " * ", y))
-    override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " * " + _ }
-    override def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit = ???
+    override def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementwiseBinaryOp(x, y) { _ + " * " + _ }
+    override def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = ???
 
     override def *=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " * ", y))
     override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " * " + _ }
 
     override def /(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " / ", y))
-    override def /(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " / " + _ }
-    override def div_grad(x: TensorR, y: TensorR, output: TensorR): Unit = ???
+    override def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementwiseBinaryOp(x, y) { _ + " / " + _ }
+    override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = ???
 
     override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
@@ -4169,7 +4185,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       kernelName
     }
 
-    def elementWiseWithBroadCast(in1: Tensor, in2: Tensor, op: String): Tensor = {
+    def elementWiseWithBroadCast(in1: Tensor, in2: Tensor, op: String): (Tensor, Dimensions, Dimensions) = {
       Tensor.dimBroadcast(in1.shape, in2.shape) match {
         case Some((xShape, yShape, resShape)) => {
           val resData = mallocArray[Float](resShape.scalarCount)
@@ -4197,46 +4213,63 @@ trait TensorDslCudnn extends TensorDslCublas {
           } else {
             assert(false, s"elementWiseWithBroadCast only handle tensors with rank no larger than 4, got ${resShape.dims.size}")
           }
-          res
+          (res, xShape, yShape)
         }
         case _ => ???
       }
     }
 
     override def +(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def +(x: Tensor, y: Tensor): Tensor = elementWiseWithBroadCast(x, y, "+")
-    override def add_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+    override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "+")
+    @virtualize
+    override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
-      if (!x.isInput) cudnnReduceUpdateTensor(x.d, x.d.shape, output.d, output.d.shape, one, one)
-      if (!y.isInput) cudnnReduceUpdateTensor(y.d, y.d.shape, output.d, output.d.shape, one, one)
+      if (!x.isInput) {
+        if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, output.d, output.d.shape, one, one)
+        else geam(x.d, false, 1.0f, output.d, false, 1.0f, x.d)
+      }
+      if (!y.isInput) {
+        if (yShape.broadcasted) cudnnReduceUpdateTensor(y.d, yShape, output.d, output.d.shape, one, one)
+        else geam(y.d, false, 1.0f, output.d, false, 1.0f, y.d)
+      }
     }
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = ???
     override def +=(x: Tensor, y: Tensor): Unit = ???
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def -(x: Tensor, y: Tensor): Tensor = elementWiseWithBroadCast(x, y, "-")
-    override def minus_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+    override def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "-")
+    @virtualize
+    override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
       val minus_one = NewArray[Float](1); one(0) = -1
-      if (!x.isInput) cudnnReduceUpdateTensor(x.d, x.d.shape, output.d, output.d.shape, one, one)
-      if (!y.isInput) cudnnReduceUpdateTensor(y.d, y.d.shape, output.d, output.d.shape, minus_one, one)
+      if (!x.isInput) {
+        if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, output.d, output.d.shape, one, one)
+        else geam(x.d, false, 1.0f, output.d, false, 1.0f, x.d)
+      }
+      if (!y.isInput) {
+        if (yShape.broadcasted) cudnnReduceUpdateTensor(y.d, yShape, output.d, output.d.shape, minus_one, one)
+        else geam(y.d, false, 1.0f, output.d, false, -1.0f, x.d)
+      }
     }
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = ???
     override def -=(x: Tensor, y: Tensor): Unit = ???
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def *(x: Tensor, y: Tensor): Tensor = elementWiseWithBroadCast(x, y, "*")
-    override def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
+    override def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "*")
+    @virtualize
+    override def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
       if (!x.isInput) {
         val scaledXD = y.x * output.d
-        cudnnReduceUpdateTensor(x.d, x.d.shape, scaledXD, scaledXD.shape, one, one)
+        if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, scaledXD, scaledXD.shape, one, one)
+        else geam(x.d, false, 1.0f, scaledXD, false, 1.0f, x.d)
       }
       if (!y.isInput) {
         val scaledYD = x.x * output.d
-        cudnnReduceUpdateTensor(y.d, y.d.shape, scaledYD, scaledYD.shape, one, one)
+        if (yShape.broadcasted) cudnnReduceUpdateTensor(y.d, yShape, scaledYD, scaledYD.shape, one, one)
+        else geam(y.d, false, 1.0f, scaledYD, false, 1.0f, y.d)
       }
     }
 
@@ -4244,9 +4277,20 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def *=(x: Tensor, y: Tensor): Unit = ???
 
     override def /(x: Tensor, y: Rep[Float]): Tensor = ???
-    override def /(x: Tensor, y: Tensor): Tensor = elementWiseWithBroadCast(x, y, "/")
-    override def div_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
-      ???
+    override def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "/")
+    @virtualize
+    override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
+      val one = NewArray[Float](1); one(0) = 1
+      if (!x.isInput) {
+        val scaledXD = output.d / y.x
+        if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, scaledXD, scaledXD.shape, one, one)
+        else geam(x.d, false, 1.0f, scaledXD, false, 1.0f, x.d)
+      }
+      if (!y.isInput) {
+        val scaledYD = x.x * output.d / (y.x * y.x) // TODO (fuse kernel)
+        if (yShape.broadcasted) cudnnReduceUpdateTensor(y.d, yShape, scaledYD, scaledYD.shape, one, one)
+        else geam(y.d, false, 1.0f, scaledYD, false, -1.0f, y.d)
+      }
     }
 
     override def /=(x: Tensor, y: Rep[Float]): Unit = ???

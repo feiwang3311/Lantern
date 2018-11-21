@@ -18,7 +18,7 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(plus)
   }
-  
+
   testGPU("broadCastingPlus2") {
     val plus = new LanternDriverCudnn[String, Unit] {
       override val fileName = currentTestName
