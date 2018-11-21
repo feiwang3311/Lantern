@@ -355,7 +355,6 @@ class AdLMSVectorTest extends LanternFunSuite {
         val input = Tensor.fromData(Seq(3,2,2), 6, 3, -4, 3, -1, -2, -4, 3, 4, 1, 2, 3)
         val grad = gradR(x => (x + x).resize(2, -1, 3).relu(false))(input)
         val expectedGrad = Tensor.fromData(Seq(3,2,2), 2, 2, 0, 2, 0, 0, 0, 2, 2, 2, 2, 2)
-        grad.print("grad")
         Tensor.assertEqual(expectedGrad, grad)
       }
     }

@@ -69,6 +69,7 @@ trait TensorDsl extends DslOps with Diff {
     def count(f: T => Rep[Boolean]): Rep[Int] = s.foldLeft(unit(0)){case (l, r) => if (f(r)) (l+1) else l}
   }
 
+  // TODO: try to separate Dataset into a different file
   object Dataset {
     class DataLoader(name: String, train: Boolean, mean: Float, std: Float, dims: Seq[Int]) {
 
@@ -252,15 +253,14 @@ trait TensorDsl extends DslOps with Diff {
   @virtualize
   def mmax(a: Rep[Int], b: Rep[Int]) = if (a >= b) a else b
 
-  def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = {
-    __ifThenElse((!cond), { printf(msg + "\\n", args : _*); error("") }, {})
-  }
-
   def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
+
   @virtualize
   def assert(b: Rep[Boolean], s: String) = if (!b) error(s)
   @virtualize
   def assert(b: Rep[Boolean]) = if (!b) error("ERROR not specified")
+  @virtualize
+  def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = if (!cond) {printf(msg + "\\n", args : _*); error("")} else {}
 
   object Encoding {
     val ix_a = 96  // index starts from 1
@@ -617,6 +617,38 @@ trait TensorDsl extends DslOps with Diff {
       for (i <- DataLoop(x.scalarCount)) x.data(i) = value
     }
 
+    def fillByLinearIndex(x: Tensor, func: (Rep[Int] => Rep[Float])): Unit = {
+      for (i <- DataLoop(x.scalarCount)) x.data(i) = func(i)
+    }
+
+    // TODO (Need Dependent Type for func??)
+    @virtualize
+    def fillByStepIndex(x: Tensor, func: (Seq[Rep[Int]] => Rep[Float])): Unit = {
+      def write(shape: Seq[Rep[Int]], index: Seq[Rep[Int]]): Unit = {
+        for (i <- (0 until shape(0)))
+          if (shape.size == 1) {
+            val idx = (x.shape.strides zip index).foldLeft(i){case (a, (b, c)) => a + b * c}
+            x.data(idx) = func(index :+ i)
+          } else {
+            write(shape.tail, index :+ i)
+          }
+      }
+      write(x.shape, Seq[Rep[Int]]())
+    }
+
+    @virtualize
+    def traverseShapeByStepIndex(x: Dimensions, func: (Seq[Rep[Int]] => Unit)): Unit = {
+      def act(shape: Seq[Rep[Int]], index: Seq[Rep[Int]]): Unit = {
+        for (i <- (0 until shape(0)))
+          if (shape.size == 1) {
+            func(index :+ i)
+          } else {
+            act(shape.tail, index :+ i)
+          }
+      }
+      act(x.dims, Seq[Rep[Int]]())
+    }
+
     override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor = {
       seed match {
         case None => ()
@@ -692,15 +724,33 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    // TODO (Optimize) (Fei Wang): adapt it so that it can be done with a kernel function (index => f(index))
-    // nested loop is smart, but not elegant
+    // TODO (Fei Wang) need to verify the performance of this function!
     @virtualize
     def elementWiseOpWithBroadCast(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
+      Tensor.dimBroadcast(x.shape, y.shape) match {
+        case Some((xShape, yShape, resShape)) => {
+          val resData = mallocArray[Float](resShape.scalarCount)
+          val res = new Tensor(resData, resShape)
+          val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+          val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+          fillByStepIndex(res, {idx: Seq[Rep[Int]] =>
+            val idxX = (xStridesShadow zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
+            val idxY = (yStridesShadow zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
+            op(x.data(idxX), y.data(idxY))
+          })
+          res
+        }
+        case _ => ???
+      }
+    }
+
+    // TODO (Fei Wang) remove after confirming the performance of the other function
+    @virtualize
+    def elementWiseOpWithBroadCast2(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         // this check is not longer valid because dimBroadcast never returns None
         // case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) => {
-          assertC(resShape.dims.forallR(_ > 0), "broadcasting dim not match %s %s", x.shape.toString, y.shape.toString)
           val resData = mallocArray[Float](resShape.scalarCount)
           val res = new Tensor(resData, resShape)
 
@@ -734,14 +784,31 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    // TODO (Optimize) (Fei Wang): adapt it so that it can be done with a kernel function (index => f(index))
-    // nested loop is smart, but not elegant
+    type RF3 = ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])
+    @virtualize // (fuse gradient updates of both operands
+    def backpropElementWiseOpWithBroadCast(in1: TensorR, in2: TensorR, out: TensorR, op1: RF3, op2: RF3): Unit = {
+      Tensor.dimBroadcast(in1.x.shape, in2.x.shape) match {
+        case Some((xShape, yShape, resShape)) => {
+          val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+          val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+          traverseShapeByStepIndex(resShape, {idx: Seq[Rep[Int]] =>
+            val idxX = (xStridesShadow zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
+            val idxY = (yStridesShadow zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
+            val idxR = (resShape.strides zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
+            if (!in1.isInput) in1.d.data(idxX) += op1(in1.x.data(idxX), in2.x.data(idxY), out.d.data(idxR))
+            if (!in2.isInput) in2.d.data(idxY) += op2(in1.x.data(idxX), in2.x.data(idxY), out.d.data(idxR))
+          })
+        }
+        case _ => ???
+      }
+    }
+
+    // TODO (Fei Wang) remove after confirming the performance of the other function
     @virtualize
-    def backpropElementWiseOpWithBroadCast(in1: TensorR, that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
+    def backpropElementWiseOpWithBroadCast2(in1: TensorR, that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
       // assume y.x = elementWiseOpWithBroadCast(this.x, that.x, someOp)
       // assume that opThis returns the increment of this.d; opThat returns the increment of that.d
       // both opThis and opThat takes this.x, that.x, and y.d as parameters
-      // TODO (Fei Wang): in some cases (if this, or that are inputs (x, y), there gradients are not initialized/useless)
       Tensor.dimBroadcast(in1.x.shape, that.x.shape) match {
         case None => throw new IllegalArgumentException(s"dimensions of tensors do not match! ${in1.x.shape.seq} != ${that.x.shape.seq}")
         case Some((thisShape, thatShape, yShape)) => {
@@ -775,11 +842,25 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    // TODO (Optimize) (Fei Wang): adapt it so that it can be done with a kernel function (index => f(index))
-    // nested loop is smart, but not elegant
-    // x += y (with potentially broadcasting y, or reducing y (reverse of broadcasting x))
     @virtualize
+    // x += op(x, y) (with potentially broadcasting y, or reducing y (reverse of broadcasting x))
     def inplaceElementWiseOpWithBroadCastOrReduce(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
+      Tensor.dimBroadcast(x.shape, y.shape) match {
+        case Some((xShape, yShape, resShape)) => {
+          val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+          val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+          traverseShapeByStepIndex(resShape, {idx: Seq[Rep[Int]] =>
+            val idxX = (xStridesShadow zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
+            val idxY = (yStridesShadow zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
+            x.data(idxX) = op(x.data(idxX), y.data(idxY))
+          })
+        }
+      }
+    }
+
+    // TODO (Fei Wang) remove after confirming the performance of the other function
+    @virtualize
+    def inplaceElementWiseOpWithBroadCastOrReduce2(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
         case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
         case Some((xShape, yShape, resShape)) => {
@@ -827,8 +908,8 @@ trait TensorDsl extends DslOps with Diff {
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s * y)
     override def *(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ * _)
+
     override def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
-      // this.d.add_mult(that.x, y.d); that.d.add_mult(this.x, y.d)
       val opThis = (_: Rep[Float], b: Rep[Float], c: Rep[Float]) => c * b
       val opThat = (a: Rep[Float], _: Rep[Float], c: Rep[Float]) => c * a
       backpropElementWiseOpWithBroadCast(x, y, output, opThis, opThat)
@@ -843,8 +924,8 @@ trait TensorDsl extends DslOps with Diff {
     override def /=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s / y)
     override def /=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ / _))
 
-    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = ???
-    override def mul_sub_grad(in1: TensorR, in2: TensorR, out:TensorR): Unit = ???
+    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = in1 * in2
+    override def mul_sub_grad(in1: TensorR, in2: TensorR, out:TensorR): Unit = mul_grad(in1, in2, out)
 
     override def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean,  beta: Float, output: Tensor): Unit = {
       (transX, transY) match {
@@ -1342,7 +1423,6 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     // TODO: Implement `softmax_grad` for CPU.
-    // Low-priority if softmax is not used in models.
     override def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
 
     override def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = {
