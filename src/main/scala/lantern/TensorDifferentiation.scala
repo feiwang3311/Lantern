@@ -4242,7 +4242,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     @virtualize
     override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
-      val minus_one = NewArray[Float](1); one(0) = -1
+      val minus_one = NewArray[Float](1); minus_one(0) = -1
       if (!x.isInput) {
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, output.d, output.d.shape, one, one)
         else geam(x.d, false, 1.0f, output.d, false, 1.0f, x.d)
@@ -4281,6 +4281,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     @virtualize
     override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
+      val minus_one = NewArray[Float](1); minus_one(0) = -1
       if (!x.isInput) {
         val scaledXD = output.d / y.x
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, scaledXD, scaledXD.shape, one, one)
@@ -4288,7 +4289,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
       if (!y.isInput) {
         val scaledYD = x.x * output.d / (y.x * y.x) // TODO (fuse kernel)
-        if (yShape.broadcasted) cudnnReduceUpdateTensor(y.d, yShape, scaledYD, scaledYD.shape, one, one)
+        if (yShape.broadcasted) cudnnReduceUpdateTensor(y.d, yShape, scaledYD, scaledYD.shape, minus_one, one)
         else geam(y.d, false, 1.0f, scaledYD, false, -1.0f, y.d)
       }
     }
@@ -5427,7 +5428,8 @@ trait TensorDslCudnn extends TensorDslCublas {
       generateRawComment("backprop for sum op")
       assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
       // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
-      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, unit(1)): _*))
+      val shape = Seq(unit(1), input.d.scalarCount, unit(1), unit(1))
+      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(shape: _*))
     }
 
     override def mean(x: Tensor): Tensor = {

@@ -344,7 +344,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     // cuDNN requires that all parameters are stored in a contiguous buffer.
     // NOTE: Choose different initialization strategy?
     // TODO (Fei Wang): For now we are resigtering this big TensorR, not the pieces of weights and biases. (Better to fix later)
-    lazy val parameterBuffer = (TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
+    lazy val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
 
     def getParameterSize(): Int = {
       val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections
