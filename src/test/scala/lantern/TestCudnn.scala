@@ -14,6 +14,14 @@ class TestCudnn extends LanternFunSuite {
         val tensor2 = Tensor.fromData(Seq(2, 3), 6,5,4,3,2,1)
         Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](7,7,7,7,7,7), 2, 3))
         Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](7,7,7,7,7,7), 2, 3))
+
+	// test backprop
+        val a = TensorR(tensor1)
+        val b = TensorR(tensor2)
+        def loss(dummy: TensorR) = (a + b).sum()
+        gradR_loss(loss)(Tensor.zeros(1))
+        Tensor.assertEqual(a.d, Tensor(Array[Float](1,1,1,1,1,1), 2, 3))
+        Tensor.assertEqual(b.d, Tensor(Array[Float](1,1,1,1,1,1), 2, 3))
       }
     }
     runTest(plus)
