@@ -18,6 +18,101 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(plus)
   }
+  
+  testGPU("broadCastingPlus2") {
+    val plus = new LanternDriverCudnn[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val tensor1 = Tensor.fromData(Seq(2, 3), 1,2,3,4,5,6)
+        val tensor2 = Tensor.fromData(Seq(2, 1), 1,2)
+        Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](2,3,4,6,7,8), 2, 3))
+        Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](2,3,4,6,7,8), 2, 3))  
+      }
+    }
+    runTest(plus)
+  }
+
+  test("broadCastingPlus3") {
+    val test3 = new LanternDriverCudnn[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val tensor1 = Tensor.fromData(Seq(2, 3), 1,2,3,4,5,6)
+        val tensor2 = Tensor.fromData(Seq(1, 3), 3,4,5)
+        Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](4,6,8,7,9,11), 2,3))
+        Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](4,6,8,7,9,11), 2,3))
+      }
+    }
+    runTest(test3)
+  }
+
+  test("broadCastingPlus4") {
+    val test4 = new LanternDriverCudnn[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val tensor1 = Tensor.fromData(Seq(2, 2, 2), 1,2,3,4,5,6,7,8)
+        val tensor2 = Tensor.fromData(Seq(2), 1,2)
+        Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](2,4,4,6,6,8,8,10), 2,2,2))
+        Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](2,4,4,6,6,8,8,10), 2,2,2))
+      }
+    }
+    runTest(test4)
+  }
+
+  test("broadCastingPlus5") {
+    val test5 = new LanternDriverCudnn[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val tensor1 = Tensor.fromData(Seq(2,2,2), 1,2,3,4,5,6,7,8)
+        val tensor2 = Tensor.fromData(Seq(2,1,2), 1,2,3,4)
+        Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](2,4,4,6,8,10,10,12), 2,2,2))
+        Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](2,4,4,6,8,10,10,12), 2,2,2))
+      }
+    }
+    runTest(test5)
+  }
+
+  test("broadCastingMinus5") {
+    val test5 = new LanternDriverCudnn[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val tensor1 = Tensor.fromData(Seq(2,2,2), 1,2,3,4,5,6,7,8)
+        val tensor2 = Tensor.fromData(Seq(2,1,2), 1,2,3,4)
+        Tensor.assertEqual((tensor1 - tensor2).toCPU(), Tensor(Array[Float](0,0,2,2,2,2,4,4), 2,2,2))
+      }
+    }
+    runTest(test5)
+  }
+
+  test("broadCastingMult5") {
+    val test5 = new LanternDriverCudnn[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val tensor1 = Tensor.fromData(Seq(2,2,2), 1,2,3,4,5,6,7,8)
+        val tensor2 = Tensor.fromData(Seq(2,1,2), 1,2,3,4)
+        Tensor.assertEqual((tensor1 * tensor2).toCPU(), Tensor(Array[Float](1,4,3,8,15,24,21,32), 2,2,2))
+      }
+    }
+    runTest(test5)
+  }
+
+  test("broadCastingDiv5") {
+    val test5 = new LanternDriverCudnn[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val tensor1 = Tensor.fromData(Seq(2,2,2), 1,2,3,4,5,6,7,8)
+        val tensor2 = Tensor.fromData(Seq(2,1,2), 1,2,2,4)
+        Tensor.assertEqual((tensor1 / tensor2).toCPU(), Tensor(Array[Float](1,1,3,2,2.5f,1.5f,3.5f,2), 2,2,2))
+      }
+    }
+    runTest(test5)
+  }
 
   testGPU("broadCastingPlus2") {
     val plus = new LanternDriverCudnn[String, Unit] {
