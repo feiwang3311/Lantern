@@ -68,7 +68,7 @@ trait TensorDsl extends DslOps with Diff {
     def forallR(f: T => Rep[Boolean]): Rep[Boolean] = s.foldLeft(None: Option[Rep[Boolean]]) {
       case (None, r) => Some(f(r))
       case (Some(l), r) => Some(l && f(r))
-    }.get
+    }.getOrElse(true)
     def count(f: T => Rep[Boolean]): Rep[Int] = s.foldLeft(unit(0)){case (l, r) => if (f(r)) (l+1) else l}
   }
 
@@ -2430,7 +2430,7 @@ trait TensorDsl extends DslOps with Diff {
     def dimBroadcast(a: Seq[Rep[Int]], b: Seq[Rep[Int]]): Option[(Dimensions, Dimensions, Dimensions)] = {
       val header: Seq[Rep[Int]] = if (a.size > b.size) a.take(a.size - b.size) else b.take(b.size - a.size)
       val body: Seq[(Rep[Int], Rep[Int])] = (a.reverse zip b.reverse).reverse
-      val comp: Rep[Boolean] = (body).forallR{case (x, y) => x == unit(1) || y == unit(1) || x == y}
+      val comp: Rep[Boolean] = body.forallR{case (x, y) => x == unit(1) || y == unit(1) || x == y}
       assertC(comp, s"dimensions not compatible for broadcasting ${"%d," * a.size} with ${"%d," * b.size}", (a ++ b): _*)
       val Body: Seq[Rep[Int]] = body.map{case (x, y) => if (x <= y) y else x}
       val res: List[Rep[Int]] = (header ++ Body).toList
