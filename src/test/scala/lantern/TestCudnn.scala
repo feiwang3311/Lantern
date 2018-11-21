@@ -33,7 +33,7 @@ class TestCudnn extends LanternFunSuite {
     runTest(plus)
   }
 
-  test("broadCastingPlus3") {
+  testGPU("broadCastingPlus3") {
     val test3 = new LanternDriverCudnn[String, Unit] {
       override val fileName = currentTestName
       @virtualize
@@ -47,7 +47,7 @@ class TestCudnn extends LanternFunSuite {
     runTest(test3)
   }
 
-  test("broadCastingPlus4") {
+  testGPU("broadCastingPlus4") {
     val test4 = new LanternDriverCudnn[String, Unit] {
       override val fileName = currentTestName
       @virtualize
@@ -61,7 +61,7 @@ class TestCudnn extends LanternFunSuite {
     runTest(test4)
   }
 
-  test("broadCastingPlus5") {
+  testGPU("broadCastingPlus5") {
     val test5 = new LanternDriverCudnn[String, Unit] {
       override val fileName = currentTestName
       @virtualize
@@ -75,7 +75,7 @@ class TestCudnn extends LanternFunSuite {
     runTest(test5)
   }
 
-  test("broadCastingMinus5") {
+  testGPU("broadCastingMinus5") {
     val test5 = new LanternDriverCudnn[String, Unit] {
       override val fileName = currentTestName
       @virtualize
@@ -88,7 +88,7 @@ class TestCudnn extends LanternFunSuite {
     runTest(test5)
   }
 
-  test("broadCastingMult5") {
+  testGPU("broadCastingMult5") {
     val test5 = new LanternDriverCudnn[String, Unit] {
       override val fileName = currentTestName
       @virtualize
@@ -101,7 +101,7 @@ class TestCudnn extends LanternFunSuite {
     runTest(test5)
   }
 
-  test("broadCastingDiv5") {
+  testGPU("broadCastingDiv5") {
     val test5 = new LanternDriverCudnn[String, Unit] {
       override val fileName = currentTestName
       @virtualize
