@@ -4168,16 +4168,16 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     def elementWiseWithBroadCastKernel(rank: Int, op: String): String = {
       if (!elementWiseWithBroadCastKernelMap.contains((rank, op))) {
-        val in1Stride = ((0 until rank): Range).map(x => s"in1Stride$x").mkString(", ")
-        val in2Stride = ((0 until rank): Range).map(x => s"in2Stride$x").mkString(", ")
-        val outStride = ((0 until rank): Range).map(x => s"outStride$x").mkString(", ")
-        val linearToStep = ((0 until rank): Range).map(x => s"    outIndex$x = linearIdx / outStride$x; linearIdx = linearIdx - outIndex$x * outStride$x;").mkString("\n")
+        val in1Stride = ((0 until rank): Range).map(x => s"int in1Stride$x").mkString(", ")
+        val in2Stride = ((0 until rank): Range).map(x => s"int in2Stride$x").mkString(", ")
+        val outStride = ((0 until rank): Range).map(x => s"int outStride$x").mkString(", ")
+        val linearToStep = ((0 until rank): Range).map(x => s"    int outIndex$x = linearIdx / outStride$x; linearIdx = linearIdx - outIndex$x * outStride$x;").mkString("\n")
         val in1Index = ((0 until rank): Range).map(x => s"in1Stride$x * outIndex$x").mkString(" + ")
         val in2Index = ((0 until rank): Range).map(x => s"in2Stride$x * outIndex$x").mkString(" + ")
         val kernel = s"""
-        |__global__ void elementWiseWithBroadCast${op}${nextKernel}(float* in1, float* in2, float* out, int size,
+        |__global__ void elementWiseWithBroadCast${nextKernel}(float* in1, float* in2, float* out, int size,
         |                ${in1Stride}, ${in2Stride}, ${outStride}) {
-        |  int tid = int tid = threadIdx.x + blockIdx.x * blockDim.x;
+        |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
         |  int stride = gridDim.x * blockDim.x;
         |  for (int i = tid; i < size; i += stride) {
         |    int linearIdx = tid;
@@ -4188,7 +4188,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         |  }
         |}
         """
-        val kernelName = s"elementWiseWithBroadCast${op}${nextKernel}"
+        val kernelName = s"elementWiseWithBroadCast${nextKernel}"
         elementWiseWithBroadCastKernelMap((rank, op)) = (kernel, kernelName)
         // don't forget to increment counter!!
         nextKernel += 1
@@ -4207,18 +4207,18 @@ trait TensorDslCudnn extends TensorDslCublas {
           val kernelName = elementWiseWithBroadCastKernel(resShape.dims.size, op)
           val nGrid = 28
           if (resShape.dims.size == 1) {
-            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ",
+            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ", res.scalarCount, ", ",
               xStridesShadow(0), ", ", yStridesShadow(0), ", ", resShape.strides(0), ")")
           } else if (resShape.dims.size == 2) {
-            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ",
+            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ", res.scalarCount, ", ",
               xStridesShadow(0), ", ", xStridesShadow(1), ", ", yStridesShadow(0), ", ", yStridesShadow(1), ", ", resShape.strides(0), ", ", resShape.strides(1), ")")
           } else if (resShape.dims.size == 3) {
-            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ",
+            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ", res.scalarCount, ", ",
               xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ",
               yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ",
               resShape.strides(0), ", ", resShape.strides(1), ", ", resShape.strides(2), ")")
           } else if (resShape.dims.size == 4) {
-            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ",
+            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ", res.scalarCount, ", ",
               xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ", xStridesShadow(3), ", ",
               yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ", yStridesShadow(3), ", ",
               resShape.strides(0), ", ", resShape.strides(1), ", ", resShape.strides(2), ", ", resShape.strides(3), ")")
