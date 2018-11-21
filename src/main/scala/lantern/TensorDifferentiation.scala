@@ -65,7 +65,10 @@ trait TensorDsl extends DslOps with Diff {
   implicit def SeqRB2SeqRBOps[T](s: Seq[T]): SeqRBOps[T] = SeqRBOps(s)
   @virtualize
   case class SeqRBOps[T](s: Seq[T]) {
-    def forallR(f: T => Rep[Boolean]): Rep[Boolean] = s.foldLeft(unit(true)){case (l, r) => l && f(r)}
+    def forallR(f: T => Rep[Boolean]): Rep[Boolean] = s.foldLeft(None: Option[Rep[Boolean]]) {
+      case (None, r) => Some(f(r))
+      case (Some(l), r) => Some(l && f(r))
+    }.get
     def count(f: T => Rep[Boolean]): Rep[Int] = s.foldLeft(unit(0)){case (l, r) => if (f(r)) (l+1) else l}
   }
 
@@ -459,7 +462,7 @@ trait TensorDsl extends DslOps with Diff {
     def plusBias_grad(main: TensorR, bias: TensorR): Unit
 
     // output = x * alpha + y * beta (can be in-place if output is x or y)
-    def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean, beta: Float, output: Tensor): Unit
+    def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit
     def trans(x: Tensor): Tensor
     def trans_grad(x: TensorR, y: TensorR): Unit
     def permute(x: Tensor, dims: Int*): Tensor
@@ -850,7 +853,7 @@ trait TensorDsl extends DslOps with Diff {
     override def mul_sub(in1: Tensor, in2: Tensor): Tensor = in1 * in2
     override def mul_sub_grad(in1: TensorR, in2: TensorR, out:TensorR): Unit = mul_grad(in1, in2, out)
 
-    override def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean,  beta: Float, output: Tensor): Unit = {
+    override def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit = {
       (transX, transY) match {
         case (false, false) => output.changeTo { i => x.data(i) * alpha + y.data(i) * beta }
         case _ => ???
@@ -2011,7 +2014,12 @@ trait TensorDsl extends DslOps with Diff {
     def resize(dims: Rep[Int]*) = Tensor(this.data, resizeDim(this.scalarCount, dims): _*)
 
     @virtualize
-    def amax() = this.fold(0.0f)((agg, x) => if (Math.abs(x) > Math.abs(agg)) x else agg)
+    // NOTE: this function is fixed to run on CPU!
+    def amax() = {
+      val res = var_new[Float](0.0f)
+      for (i <- DataLoop(this.scalarCount)) var_assign(res, if (Math.abs(res) > Math.abs(this.data(i))) res else this.data(i))
+      res
+    }
 
     def printHead(count: Int = 10, msg: String = ""): Unit = {
       if (msg != "")
@@ -2554,41 +2562,6 @@ trait TensorDsl extends DslOps with Diff {
       d.clipAt(bound)
     }
 
-    // fused ops (but slower!)
-    def linearTanh(x: TensorR, b: TensorR) = shift { k: (TensorR => Unit) =>
-      val y = TensorR(this.x.linearTanh(x.x, b.x)); k(y)
-      generateRawComment("back prop for linearTanh")
-      val offSet = var_new(0)
-      for (i <- DataLoop(this.x.shape(0))) {
-        val d_res_add = (1.0f - y.x.data(i) * y.x.data(i)) * y.d.data(i)
-        b.d.data(i) += d_res_add
-        for (j <- DataLoop(this.x.shape(1))) {
-          x.d.data(j) += d_res_add * this.x.data(offSet + j)
-          this.d.data(offSet + j) += d_res_add * x.x.data(j)
-        }
-        offSet += this.x.shape(1)
-      }
-    }
-
-    // fused ops (but slower!)
-    def linear2Tanh(x: TensorR, W2: TensorR, x2: TensorR, b: TensorR) = shift { k: (TensorR => Unit) =>
-      val y = TensorR(this.x.linear2Tanh(x.x, W2.x, x2.x, b.x)); k(y)
-      generateRawComment("back prop for linear2Tanh")
-      val offSet = var_new(0)
-      for (i <- DataLoop(this.x.shape(0))) {
-        val d_res_add = (1.0f - y.x.data(i) * y.x.data(i)) * y.d.data(i)
-        b.d.data(i) += d_res_add
-        for (j <- DataLoop(this.x.shape(1))) {
-          val idx = offSet + j
-          x.d.data(j) += d_res_add * this.x.data(idx)
-          this.d.data(idx) += d_res_add * x.x.data(j)
-          x2.d.data(j) += d_res_add * W2.x.data(idx)
-          W2.d.data(idx) += d_res_add * x2.x.data(j)
-        }
-        offSet += this.x.shape(1)
-      }
-    }
-
     @virtualize
     def backpropElementWiseOpWithBroadCast(that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
       // assume y.x = elementWiseOpWithBroadCast(this.x, that.x, someOp)
@@ -2633,10 +2606,6 @@ trait TensorDsl extends DslOps with Diff {
       val y = TensorR(x + that.x); k(y)
       generateRawComment("back prop for + op")
       backend.+=(this.d, y.d); backend.+=(that.d, y.d)
-      // TODO: (Fei Wang): potential optimization (define specific +_grad to fuse to updates)
-      // val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
-      // val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
-      // backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     def - (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -2647,20 +2616,19 @@ trait TensorDsl extends DslOps with Diff {
       val y = TensorR(x - that.x); k(y)
       generateRawComment("back prop for - op")
       backend.+=(this.d, y.d); backend.-=(that.d, y.d)
-      // TODO: (Fei Wang): potential optimization (define specific +_grad to fuse to updates)
-      // val opThis = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => c
-      // val opThat = (_: Rep[Float], _: Rep[Float], c: Rep[Float]) => -1.0f * c
-      // backpropElementWiseOpWithBroadCast(that, y, opThis, opThat)
     }
 
     // mark: HERE: following code need to be backend depend!
     // this is element wise multiplication
     def * (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that); k(y)
+      generateRawComment("back prop for * with scalar")
+      backend.geam(this.d, false, 1.0f, y.d, false, that, this.d)
       // this.d += y.d * that
       // TODO (Fei Wang) this is LOCKED TO CPU: should be flexible on backend and use geam for GPU
-      this.d.addMul(that, y.d)
+      // this.d.addMul(that, y.d)
     }
+
     def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that.x); k(y)
       generateRawComment("backprop for * op")
@@ -3048,7 +3016,7 @@ trait TensorDsl extends DslOps with Diff {
 
     if (c) RST(k1(a)) else RST(k1(b))
   }
-  
+
   def If_B(c: Boolean)(a: => TensorR @diff)(b: => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
     if (c) RST(k(a)) else RST (k(b))
   }
@@ -3404,23 +3372,25 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
       gpu_array_copy_device_to_device(src, dest, length)
 
     override def arrayToTensor(array: Rep[Array[Float]], dims: Rep[Int]*): Tensor = new Tensor(array, dims)
-      // BackendCPU().arrayToTensor(array, dims: _*).toGPU()
 
     override def makeTensor(dims: Seq[Rep[Int]], scalars: Float*): Tensor =
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()
 
-    // TOOO: Compare performance with GPU allocation + `fillInPlace`.
-    override def fill(dims: Seq[Rep[Int]], value: Rep[Float]): Tensor =
-      BackendCPU().fill(dims, value).toGPU()
+    override def fill(dims: Seq[Rep[Int]], value: Rep[Float]): Tensor = {
+      val size: Rep[Int] = dims.foldLeft(unit(1)){case (a, b) => a * b}
+      val resArray = mallocArray[Float](size)
+      val nGrid = 28
+      unchecked[Unit](s"arrayFill<<<${nGrid}, 512>>>(", resArray, ", ", value, ", ", size, ")")
+      Tensor(resArray, dims: _*)
+    }
 
     override def fillWithBias(dims: Seq[Rep[Int]], bias: Tensor, dim: Int): Tensor =
       BackendCPU().fillWithBias(dims, bias.toCPU(), dim).toGPU()
 
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
-      // TODO: Consider different grid/block parameters.
       val size = x.scalarCount
-      val nGrid = 28 // size / 512 / 10 + 1
-      unchecked[Unit](s"arrayFill_greg<<<${nGrid}, 512>>>(", x.data, ", ", value, ", ", size, ")")
+      val nGrid = 28
+      unchecked[Unit](s"arrayFill<<<${nGrid}, 512>>>(", x.data, ", ", value, ", ", size, ")")
     }
 
     // TODO: Implement random initialization using cuRAND API.
@@ -3685,7 +3655,7 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     override def plusBias(main: Tensor, bias: Tensor): Tensor = ???
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = ???
 
-    override def geam(x: Tensor, transX: Boolean, alpha: Float, y: Tensor, transY: Boolean, beta: Float, output: Tensor): Unit = {
+    override def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit = {
       val alpha1 = NewArray[Float](1); alpha1(0) = alpha
       val beta1 = NewArray[Float](1); beta1(0) = beta
       (transX, transY) match {
@@ -4061,6 +4031,9 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
 
 trait TensorDslCudnn extends TensorDslCublas {
 
+  val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
+  var nextKernel = 0
+
   // A map from tensor shapes to cuDNN tensor descriptors.
   private var tensorDescriptorCache = MutableMap[Dimensions, String]()
   private var tensorDescriptorCount = 0
@@ -4193,6 +4166,96 @@ trait TensorDslCudnn extends TensorDslCublas {
       generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
     }
 
+    def elementWiseWithBroadCastKernel(rank: Int, op: String): String = {
+      if (!elementWiseWithBroadCastKernelMap.contains((rank, op))) {
+        val in1Stride = ((0 until rank): Range).map(x => s"in1Stride$x").mkString(", ")
+        val in2Stride = ((0 until rank): Range).map(x => s"in2Stride$x").mkString(", ")
+        val outStride = ((0 until rank): Range).map(x => s"outStride$x").mkString(", ")
+        val linearToStep = ((0 until rank): Range).map(x => s"    outIndex$x = linearIdx / outStride$x; linearIdx = linearIdx - outIndex$x * outStride$x;").mkString("\n")
+        val in1Index = ((0 until rank): Range).map(x => s"in1Stride$x * outIndex$x").mkString(" + ")
+        val in2Index = ((0 until rank): Range).map(x => s"in2Stride$x * outIndex$x").mkString(" + ")
+        val kernel = s"""
+        |__global__ void elementWiseWithBroadCast${op}${nextKernel}(float* in1, float* in2, float* out, int size,
+        |                ${in1Stride}, ${in2Stride}, ${outStride}) {
+        |  int tid = int tid = threadIdx.x + blockIdx.x * blockDim.x;
+        |  int stride = gridDim.x * blockDim.x;
+        |  for (int i = tid; i < size; i += stride) {
+        |    int linearIdx = tid;
+        |    ${linearToStep}
+        |    int in1Index = ${in1Index};
+        |    int in2Index = ${in2Index};
+        |    out[tid] = in1[in1Index] ${op} in2[in2Index];
+        |  }
+        |}
+        """
+        val kernelName = s"elementWiseWithBroadCast${op}${nextKernel}"
+        elementWiseWithBroadCastKernelMap((rank, op)) = (kernel, kernelName)
+        // don't forget to increment counter!!
+        nextKernel += 1
+      }
+      val (kernel, kernelName) = elementWiseWithBroadCastKernelMap((rank, op))
+      kernelName
+    }
+
+    def elementWiseWithBroadCast(in1: Tensor, in2: Tensor, op: String): Tensor = {
+      Tensor.dimBroadcast(in1.shape, in2.shape) match {
+        case Some((xShape, yShape, resShape)) => {
+          val resData = mallocArray[Float](resShape.scalarCount)
+          val res = new Tensor(resData, resShape)
+          val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+          val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+          val kernelName = elementWiseWithBroadCastKernel(resShape.dims.size, op)
+          val nGrid = 28
+          if (resShape.dims.size == 1) {
+            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ",
+              xStridesShadow(0), ", ", yStridesShadow(0), ", ", resShape.strides(0), ")")
+          } else if (resShape.dims.size == 2) {
+            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ",
+              xStridesShadow(0), ", ", xStridesShadow(1), ", ", yStridesShadow(0), ", ", yStridesShadow(1), ", ", resShape.strides(0), ", ", resShape.strides(1), ")")
+          } else if (resShape.dims.size == 3) {
+            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ",
+              xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ",
+              yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ",
+              resShape.strides(0), ", ", resShape.strides(1), ", ", resShape.strides(2), ")")
+          } else if (resShape.dims.size == 4) {
+            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ",
+              xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ", xStridesShadow(3), ", ",
+              yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ", yStridesShadow(3), ", ",
+              resShape.strides(0), ", ", resShape.strides(1), ", ", resShape.strides(2), ", ", resShape.strides(3), ")")
+          } else {
+            assert(false, s"elementWiseWithBroadCast only handle tensors with rank no larger than 4, got ${resShape.dims.size}")
+          }
+          res
+        }
+        case _ => ???
+      }
+    }
+
+    // override def +(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " + ", y))
+    override def +(x: Tensor, y: Tensor): Tensor = elementWiseWithBroadCast(x, y, "+") // TO HERE
+
+    // override def +=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " + ", y))
+    // override def +=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " + " + _ }
+
+    // override def -(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " - ", y))
+    // override def -(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " - " + _ }
+
+    // override def -=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " - ", y))
+    // override def -=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " - " + _ }
+
+    // override def *(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " * ", y))
+    // override def *(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " * " + _ }
+
+    // override def *=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " * ", y))
+    // override def *=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " * " + _ }
+
+    // override def /(x: Tensor, y: Rep[Float]): Tensor = elementwiseUnaryOp(x)(s => Seq(s + " / ", y))
+    // override def /(x: Tensor, y: Tensor): Tensor = elementwiseBinaryOp(x, y) { _ + " / " + _ }
+
+    // override def /=(x: Tensor, y: Rep[Float]): Unit = elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
+    // override def /=(x: Tensor, y: Tensor): Unit = elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
+
+
     override def mul_sub(in1: Tensor, in2: Tensor): Tensor = {
       assert(in1.rank > in2.rank)
       Tensor.assertShapeEqual(in1.shape.takeRight(in2.rank), in2.shape) //, s"mul_sub: in2 shape must match the lower part of in1, got ${in1.shape}, ${in2.shape}")
@@ -4232,12 +4295,6 @@ trait TensorDslCudnn extends TensorDslCublas {
       val smallerInD: Tensor = in.d(0, in.x.shape(0) - context)
       cudnnReduceTensor(temp, ReductionOp.Add, Seq(1), true, Some(smallerInD.data), false)
       ()
-      // use a while loop (May have race conditions)
-      // for (i <- 0 until out.x.shape(0)) {
-      //   val inSlice = in.d(i, i + context + 1)
-      //   val outSlice = out.d(i)
-      //   val nGrid = 28
-      //   unchecked[Unit](s"elementwise_1D_1D_add<<<${nGrid}, 512>>>(", inSlice.data, ", ", outSlice.data, ", ", inSlice.data, ", ", inSlice.scalarCount, ")")
     }
 
     override def permute(x: Tensor, dims: Int*): Tensor = {

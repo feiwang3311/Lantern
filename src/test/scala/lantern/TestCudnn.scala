@@ -5,6 +5,21 @@ import org.scala_lang.virtualized.SourceContext
 
 class TestCudnn extends LanternFunSuite {
 
+  testGPU("broadCastingPlus") {
+    val plus = new LanternDriverCudnn[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val tensor1 = Tensor(Array(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f), 2, 3)
+        val tensor2 = Tensor(Array[Float](6,5,4,3,2,1), 2, 3)
+        val res = tensor1 + tensor2
+        res.toCPU().print("result")
+        // Tensor.assertEqual(tensor1 + tensor2, Tensor(Array[Float](7,7,7,7,7,7), 2, 3))
+      }
+    }
+    runTest(plus)
+  }
+
   testGPU("mul_sub") {
     val mul_sub = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-mulsub"

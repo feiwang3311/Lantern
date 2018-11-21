@@ -109,7 +109,7 @@ __global__ void arrayUpdate(T *data, int index, T value) {
   data[index] = value;
 }
 
-__global__ void arrayFill_greg(float* data, float value, int size) {
+__global__ void arrayFill(float* data, float value, int size) {
   int stride = gridDim.x * blockDim.x;
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   for (int i = tid; i < size; i += stride) data[i] = value;
@@ -389,6 +389,16 @@ __global__ void elementwise_1D_1D_square_grad(float* in_x, float* in_d, float* o
   int stride = gridDim.x * blockDim.x;
   for (; tid < size; tid += stride)
     if (tid < size) in_d[tid] += out_d[tid] * 2 * in_x[tid];
+}
+
+__global__ void clipAt(float* in, float bound, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride)
+    if (tid < size) {
+      if (in[tid] > bound) in[tid] = bound;
+      if (in[tid] < -bound) in[tid] = -bound;
+    }
 }
 
 __global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int xstrides2, int xstrides3, int scalarCount) {
@@ -699,7 +709,7 @@ float x39 = x38 / 1000000.0f;
 printf("Data normalized (all prepare time) in %lf sec\n",x39);
 // Tensor 'toGPU' invocation.
 float* x313 = (float*)myGpuMalloc(262144 * sizeof(float));
-int32_t x42 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
+int32_t x42 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/resnet50/resnet50.onnx.bin",0);
 int64_t x43 = fsize(x42);
 float* x44 = (float*)mmap(0, x43, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x42, 0);
 float* x45 = x44+5205440;
@@ -2941,261 +2951,261 @@ int32_t x3444 = x3443 * x3439;
 int32_t x3440 = x3439 * x3439;
 int32_t x3441 = 2048 * x3440;
 int32_t x3442 = 64 * x3441;
-bool x3627 = true || false;
-bool x3629;
-if (x3627) {
-bool x3628 = true || true;
-x3629 = x3628;
-} else {
-x3629 = false;
-}
-bool x3630;
-if (x3629) {
-bool x3628 = true || true;
-x3630 = x3628;
-} else {
-x3630 = false;
-}
-bool x3631;
+bool x3630 = true || false;
+bool x3632;
 if (x3630) {
-bool x3628 = true || true;
-x3631 = x3628;
+bool x3631 = true || true;
+x3632 = x3631;
 } else {
-x3631 = false;
+x3632 = false;
 }
-float x3626 = 1.0f / 64.0f;
-bool x3751 = x3387 == x3270;
-bool x3752;
-if (x3751) {
-x3752 = x3751;
+bool x3633;
+if (x3632) {
+bool x3631 = true || true;
+x3633 = x3631;
 } else {
-x3752 = false;
+x3633 = false;
 }
-bool x3753 = x3387 == 1;
-bool x3754 = x3753 || x3751;
+bool x3634;
+if (x3633) {
+bool x3631 = true || true;
+x3634 = x3631;
+} else {
+x3634 = false;
+}
+float x3629 = 1.0f / 64.0f;
+bool x3754 = x3387 == x3270;
 bool x3755;
 if (x3754) {
 x3755 = x3754;
 } else {
 x3755 = false;
 }
-bool x3822 = x3270 == x3127;
-bool x3823;
-if (x3822) {
-x3823 = x3822;
+bool x3756 = x3387 == 1;
+bool x3757 = x3756 || x3754;
+bool x3758;
+if (x3757) {
+x3758 = x3757;
 } else {
-x3823 = false;
+x3758 = false;
 }
-bool x3824 = x3409 || x3822;
-bool x3825;
-if (x3824) {
-x3825 = x3824;
+bool x3825 = x3270 == x3127;
+bool x3826;
+if (x3825) {
+x3826 = x3825;
 } else {
-x3825 = false;
+x3826 = false;
 }
-bool x3892 = x3127 == x3153;
-bool x3893;
-if (x3892) {
-x3893 = x3892;
+bool x3827 = x3409 || x3825;
+bool x3828;
+if (x3827) {
+x3828 = x3827;
 } else {
-x3893 = false;
+x3828 = false;
 }
-bool x3894 = x3292 || x3892;
-bool x3895;
-if (x3894) {
-x3895 = x3894;
+bool x3895 = x3127 == x3153;
+bool x3896;
+if (x3895) {
+x3896 = x3895;
 } else {
-x3895 = false;
+x3896 = false;
 }
-bool x3974 = x3010 == x2893;
-bool x3975;
-if (x3974) {
-x3975 = x3974;
+bool x3897 = x3292 || x3895;
+bool x3898;
+if (x3897) {
+x3898 = x3897;
 } else {
-x3975 = false;
+x3898 = false;
 }
-bool x3976 = x3010 == 1;
-bool x3977 = x3976 || x3974;
+bool x3977 = x3010 == x2893;
 bool x3978;
 if (x3977) {
 x3978 = x3977;
 } else {
 x3978 = false;
 }
-bool x4045 = x2893 == x2776;
-bool x4046;
-if (x4045) {
-x4046 = x4045;
+bool x3979 = x3010 == 1;
+bool x3980 = x3979 || x3977;
+bool x3981;
+if (x3980) {
+x3981 = x3980;
 } else {
-x4046 = false;
+x3981 = false;
 }
-bool x4047 = x3032 || x4045;
-bool x4048;
-if (x4047) {
-x4048 = x4047;
+bool x4048 = x2893 == x2776;
+bool x4049;
+if (x4048) {
+x4049 = x4048;
 } else {
-x4048 = false;
+x4049 = false;
 }
-bool x4115 = x2776 == x2659;
-bool x4116;
-if (x4115) {
-x4116 = x4115;
+bool x4050 = x3032 || x4048;
+bool x4051;
+if (x4050) {
+x4051 = x4050;
 } else {
-x4116 = false;
+x4051 = false;
 }
-bool x4117 = x2915 || x4115;
-bool x4118;
-if (x4117) {
-x4118 = x4117;
+bool x4118 = x2776 == x2659;
+bool x4119;
+if (x4118) {
+x4119 = x4118;
 } else {
-x4118 = false;
+x4119 = false;
 }
-bool x4185 = x2659 == x2542;
-bool x4186;
-if (x4185) {
-x4186 = x4185;
+bool x4120 = x2915 || x4118;
+bool x4121;
+if (x4120) {
+x4121 = x4120;
 } else {
-x4186 = false;
+x4121 = false;
 }
-bool x4187 = x2798 || x4185;
-bool x4188;
-if (x4187) {
-x4188 = x4187;
+bool x4188 = x2659 == x2542;
+bool x4189;
+if (x4188) {
+x4189 = x4188;
 } else {
-x4188 = false;
+x4189 = false;
 }
-bool x4255 = x2542 == x2399;
-bool x4256;
-if (x4255) {
-x4256 = x4255;
+bool x4190 = x2798 || x4188;
+bool x4191;
+if (x4190) {
+x4191 = x4190;
 } else {
-x4256 = false;
+x4191 = false;
 }
-bool x4257 = x2681 || x4255;
-bool x4258;
-if (x4257) {
-x4258 = x4257;
+bool x4258 = x2542 == x2399;
+bool x4259;
+if (x4258) {
+x4259 = x4258;
 } else {
-x4258 = false;
+x4259 = false;
 }
-bool x4325 = x2399 == x2425;
-bool x4326;
-if (x4325) {
-x4326 = x4325;
+bool x4260 = x2681 || x4258;
+bool x4261;
+if (x4260) {
+x4261 = x4260;
 } else {
-x4326 = false;
+x4261 = false;
 }
-bool x4327 = x2564 || x4325;
-bool x4328;
-if (x4327) {
-x4328 = x4327;
+bool x4328 = x2399 == x2425;
+bool x4329;
+if (x4328) {
+x4329 = x4328;
 } else {
-x4328 = false;
+x4329 = false;
 }
-bool x4407 = x2282 == x2165;
-bool x4408;
-if (x4407) {
-x4408 = x4407;
+bool x4330 = x2564 || x4328;
+bool x4331;
+if (x4330) {
+x4331 = x4330;
 } else {
-x4408 = false;
+x4331 = false;
 }
-bool x4409 = x2282 == 1;
-bool x4410 = x4409 || x4407;
+bool x4410 = x2282 == x2165;
 bool x4411;
 if (x4410) {
 x4411 = x4410;
 } else {
 x4411 = false;
 }
-bool x4478 = x2165 == x2048;
-bool x4479;
-if (x4478) {
-x4479 = x4478;
+bool x4412 = x2282 == 1;
+bool x4413 = x4412 || x4410;
+bool x4414;
+if (x4413) {
+x4414 = x4413;
 } else {
-x4479 = false;
+x4414 = false;
 }
-bool x4480 = x2304 || x4478;
-bool x4481;
-if (x4480) {
-x4481 = x4480;
+bool x4481 = x2165 == x2048;
+bool x4482;
+if (x4481) {
+x4482 = x4481;
 } else {
-x4481 = false;
+x4482 = false;
 }
-bool x4548 = x2048 == x1905;
-bool x4549;
-if (x4548) {
-x4549 = x4548;
+bool x4483 = x2304 || x4481;
+bool x4484;
+if (x4483) {
+x4484 = x4483;
 } else {
-x4549 = false;
+x4484 = false;
 }
-bool x4550 = x2187 || x4548;
-bool x4551;
-if (x4550) {
-x4551 = x4550;
+bool x4551 = x2048 == x1905;
+bool x4552;
+if (x4551) {
+x4552 = x4551;
 } else {
-x4551 = false;
+x4552 = false;
 }
-bool x4618 = x1905 == x1931;
-bool x4619;
-if (x4618) {
-x4619 = x4618;
+bool x4553 = x2187 || x4551;
+bool x4554;
+if (x4553) {
+x4554 = x4553;
 } else {
-x4619 = false;
+x4554 = false;
 }
-bool x4620 = x2070 || x4618;
-bool x4621;
-if (x4620) {
-x4621 = x4620;
+bool x4621 = x1905 == x1931;
+bool x4622;
+if (x4621) {
+x4622 = x4621;
 } else {
-x4621 = false;
+x4622 = false;
 }
-bool x4700 = x1788 == x1671;
-bool x4701;
-if (x4700) {
-x4701 = x4700;
+bool x4623 = x2070 || x4621;
+bool x4624;
+if (x4623) {
+x4624 = x4623;
 } else {
-x4701 = false;
+x4624 = false;
 }
-bool x4702 = x1788 == 1;
-bool x4703 = x4702 || x4700;
+bool x4703 = x1788 == x1671;
 bool x4704;
 if (x4703) {
 x4704 = x4703;
 } else {
 x4704 = false;
 }
-bool x4771 = x1671 == x1531;
-bool x4772;
-if (x4771) {
-x4772 = x4771;
+bool x4705 = x1788 == 1;
+bool x4706 = x4705 || x4703;
+bool x4707;
+if (x4706) {
+x4707 = x4706;
 } else {
-x4772 = false;
+x4707 = false;
 }
-bool x4773 = x1810 || x4771;
-bool x4774;
-if (x4773) {
-x4774 = x4773;
+bool x4774 = x1671 == x1531;
+bool x4775;
+if (x4774) {
+x4775 = x4774;
 } else {
-x4774 = false;
+x4775 = false;
 }
-bool x4841 = x1531 == x1461;
-bool x4842;
-if (x4841) {
-x4842 = x4841;
+bool x4776 = x1810 || x4774;
+bool x4777;
+if (x4776) {
+x4777 = x4776;
 } else {
-x4842 = false;
+x4777 = false;
 }
-bool x4843 = x1693 || x4841;
-bool x4844;
-if (x4843) {
-x4844 = x4843;
+bool x4844 = x1531 == x1461;
+bool x4845;
+if (x4844) {
+x4845 = x4844;
 } else {
-x4844 = false;
+x4845 = false;
 }
-int32_t x6542 = x1394 / 10;
-double x6547 = (double)x11;
-int64_t x6573 = (int64_t)x11;
-float x6577 = (float)x11;
+bool x4846 = x1693 || x4844;
+bool x4847;
+if (x4846) {
+x4847 = x4846;
+} else {
+x4847 = false;
+}
+int32_t x6545 = x1394 / 10;
+double x6550 = (double)x11;
+int64_t x6576 = (int64_t)x11;
+float x6580 = (float)x11;
 for(int x1386=0; x1386 < 4; x1386++) {
 struct timeval begin_1, end_1, diff_1;
 float x1388 = 0.0f;
@@ -9534,7 +9544,7 @@ float* x3447 = (float*)myGpuMalloc(x3444 * sizeof(float));
 int32_t x3448 = 0;
 int32_t x3449 = 1;
 x3449 *= 64;
-x3449 *= 2048;
+x3448 += 1;
 int32_t x3452 = x3448;
 bool x3453 = x3452 >= 2;
 if (x3453) {
@@ -9552,19 +9562,20 @@ assert(false && "must same size!!");
 }
 } else {
 }
+int32_t x3468 = x3449;
 // foward of gemm
-// gemm: List(Const(64), Const(2048)), Vector(Const(10), Const(2048))
-float* x3470 = (float*)myGpuMalloc(640 * sizeof(float));
-float* x3471 = (float*)myMalloc(1 * sizeof(float));;
-x3471[0] = 0.0f;
-float* x3473 = (float*)myMalloc(1 * sizeof(float));;
-x3473[0] = 1.0f;
-CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, 10,64,2048,x3473,x976,2048,x3445,2048,x3471,x3470,10));
-float* x3476 = (float*)myGpuMalloc(640 * sizeof(float));
-float* x3477 = (float*)myMalloc(1 * sizeof(float));;
-x3477[0] = 1.0f;
-float* x3479 = (float*)myMalloc(1 * sizeof(float));;
-x3479[0] = 1.0f;
+// gemm: List(Const(64), Sym(3469)), Vector(Const(10), Const(2048))
+float* x3473 = (float*)myGpuMalloc(640 * sizeof(float));
+float* x3474 = (float*)myMalloc(1 * sizeof(float));;
+x3474[0] = 0.0f;
+float* x3476 = (float*)myMalloc(1 * sizeof(float));;
+x3476[0] = 1.0f;
+CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, 10,64,2048,x3476,x976,2048,x3445,2048,x3474,x3473,10));
+float* x3479 = (float*)myGpuMalloc(640 * sizeof(float));
+float* x3480 = (float*)myMalloc(1 * sizeof(float));;
+x3480[0] = 1.0f;
+float* x3482 = (float*)myMalloc(1 * sizeof(float));;
+x3482[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -9580,36 +9591,36 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 10, 1, 1));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x3477, bias_desc, x439, x3479, out_desc, x3470));
+    cudnnHandle, x3480, bias_desc, x439, x3482, out_desc, x3473));
 };
-int32_t x3482 = 0;
-int32_t x3483 = 1;
-x3483 *= 64;
-x3483 *= 10;
-x3483 *= 1;
-x3483 *= 1;
-int32_t x3488 = x3482;
-bool x3489 = x3488 >= 2;
-if (x3489) {
+int32_t x3485 = 0;
+int32_t x3486 = 1;
+x3486 *= 64;
+x3486 *= 10;
+x3486 *= 1;
+x3486 *= 1;
+int32_t x3491 = x3485;
+bool x3492 = x3491 >= 2;
+if (x3492) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3494 = x3488 == 0;
-if (x3494) {
-int32_t x3495 = x3483;
-bool x3496 = x3495 == 640;
-if (x3496) {
+bool x3497 = x3491 == 0;
+if (x3497) {
+int32_t x3498 = x3486;
+bool x3499 = x3498 == 640;
+if (x3499) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-float* x3503 = (float*)myMalloc(1 * sizeof(float));;
-x3503[0] = 0.0f;
-float* x3505 = (float*)myMalloc(1 * sizeof(float));;
-x3505[0] = 1.0f;
-float* x3507 = (float*)myGpuMalloc(640 * sizeof(float));
+float* x3506 = (float*)myMalloc(1 * sizeof(float));;
+x3506[0] = 0.0f;
+float* x3508 = (float*)myMalloc(1 * sizeof(float));;
+x3508[0] = 1.0f;
+float* x3510 = (float*)myGpuMalloc(640 * sizeof(float));
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -9619,61 +9630,61 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 10, 1, 1));
 CUDNN_CALL(cudnnSoftmaxForward(
     cudnnHandle, CUDNN_SOFTMAX_LOG, CUDNN_SOFTMAX_MODE_CHANNEL,
-    x3505, x_desc, x3470, x3503, x_desc, x3507));
+    x3508, x_desc, x3473, x3506, x_desc, x3510));
 };
-int32_t x3509 = 0;
-int32_t x3510 = 1;
-x3510 *= 64;
-x3510 *= 10;
-int32_t x3513 = x3509;
-bool x3514 = x3513 >= 2;
-if (x3514) {
+int32_t x3512 = 0;
+int32_t x3513 = 1;
+x3513 *= 64;
+x3513 *= 10;
+int32_t x3516 = x3512;
+bool x3517 = x3516 >= 2;
+if (x3517) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3519 = x3513 == 0;
-if (x3519) {
-int32_t x3520 = x3510;
-bool x3521 = x3520 == 640;
-if (x3521) {
+bool x3522 = x3516 == 0;
+if (x3522) {
+int32_t x3523 = x3513;
+bool x3524 = x3523 == 640;
+if (x3524) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-float* x3528 = (float*)myGpuMalloc(640 * sizeof(float));
-float* x3529 = (float*)myGpuMalloc(64 * sizeof(float));
-nllLoss<<<64, 1>>>(x3507, 10, x3529, x1405);
-float* x3531 = (float*)myGpuMalloc(64 * sizeof(float));
-int32_t x3532 = 0;
-int32_t x3533 = 1;
-x3533 *= 64;
-x3533 *= 1;
-x3533 *= 1;
-x3533 *= 1;
-int32_t x3538 = x3532;
-bool x3539 = x3538 >= 2;
-if (x3539) {
+float* x3531 = (float*)myGpuMalloc(640 * sizeof(float));
+float* x3532 = (float*)myGpuMalloc(64 * sizeof(float));
+nllLoss<<<64, 1>>>(x3510, 10, x3532, x1405);
+float* x3534 = (float*)myGpuMalloc(64 * sizeof(float));
+int32_t x3535 = 0;
+int32_t x3536 = 1;
+x3536 *= 64;
+x3536 *= 1;
+x3536 *= 1;
+x3536 *= 1;
+int32_t x3541 = x3535;
+bool x3542 = x3541 >= 2;
+if (x3542) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3544 = x3538 == 0;
-if (x3544) {
-int32_t x3545 = x3533;
-bool x3546 = x3545 == 64;
-if (x3546) {
+bool x3547 = x3541 == 0;
+if (x3547) {
+int32_t x3548 = x3536;
+bool x3549 = x3548 == 64;
+if (x3549) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-float* x3553 = (float*)myGpuMalloc(1 * sizeof(float));
-float* x3554 = (float*)myMalloc(1 * sizeof(float));;
-x3554[0] = 0.0f;
-float* x3556 = (float*)myMalloc(1 * sizeof(float));;
-x3556[0] = 1.0f;
+float* x3556 = (float*)myGpuMalloc(1 * sizeof(float));
+float* x3557 = (float*)myMalloc(1 * sizeof(float));;
+x3557[0] = 0.0f;
+float* x3559 = (float*)myMalloc(1 * sizeof(float));;
+x3559[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -9703,89 +9714,89 @@ CUDNN_CALL(cudnnGetReductionWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnReduceTensor(
     cudnnHandle, reduce_desc, indices, 0, ws_data, ws_size,
-    x3556, x_desc, x3529, x3554, out_desc, x3553));
+    x3559, x_desc, x3532, x3557, out_desc, x3556));
 };
-int32_t x3559 = 0;
-int32_t x3560 = 1;
-x3560 *= 1;
-int32_t x3562 = x3559;
-bool x3563 = x3562 >= 2;
-if (x3563) {
+int32_t x3562 = 0;
+int32_t x3563 = 1;
+x3563 *= 1;
+int32_t x3565 = x3562;
+bool x3566 = x3565 >= 2;
+if (x3566) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3568 = x3562 == 0;
-if (x3568) {
-int32_t x3569 = x3560;
-bool x3570 = x3569 == 1;
-if (x3570) {
+bool x3571 = x3565 == 0;
+if (x3571) {
+int32_t x3572 = x3563;
+bool x3573 = x3572 == 1;
+if (x3573) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-float* x3577 = (float*)myGpuMalloc(1 * sizeof(float));
+float* x3580 = (float*)myGpuMalloc(1 * sizeof(float));
 // make sure the size of loss is 1
-arrayFill_greg<<<28, 512>>>(x3577, 1.0f, 1);
-// backend is lantern.TensorDslCudnn$BackendCudnn@48582d25
-CUDA_CALL(cudaMemcpy(x1410, x3553, 1 * sizeof(float), cudaMemcpyDeviceToHost));
+arrayFill<<<28, 512>>>(x3580, 1.0f, 1);
+// backend is lantern.TensorDslCudnn$BackendCudnn@7a2748b2
+CUDA_CALL(cudaMemcpy(x1410, x3556, 1 * sizeof(float), cudaMemcpyDeviceToHost));
 // 'mean' gradient
 // backprop for mean op
-int32_t x3584 = 0;
-int32_t x3585 = 1;
-x3585 *= 1;
-x3585 *= 1;
-x3585 *= 1;
-x3585 *= 1;
-int32_t x3590 = x3584;
-bool x3591 = x3590 >= 2;
-if (x3591) {
+int32_t x3587 = 0;
+int32_t x3588 = 1;
+x3588 *= 1;
+x3588 *= 1;
+x3588 *= 1;
+x3588 *= 1;
+int32_t x3593 = x3587;
+bool x3594 = x3593 >= 2;
+if (x3594) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3596 = x3590 == 0;
-if (x3596) {
-int32_t x3597 = x3585;
-bool x3598 = x3597 == 1;
-if (x3598) {
+bool x3599 = x3593 == 0;
+if (x3599) {
+int32_t x3600 = x3588;
+bool x3601 = x3600 == 1;
+if (x3601) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-int32_t x3605 = 0;
-int32_t x3606 = 1;
-x3606 *= 64;
-x3606 *= 1;
-x3606 *= 1;
-x3606 *= 1;
-int32_t x3611 = x3605;
-bool x3612 = x3611 >= 2;
-if (x3612) {
+int32_t x3608 = 0;
+int32_t x3609 = 1;
+x3609 *= 64;
+x3609 *= 1;
+x3609 *= 1;
+x3609 *= 1;
+int32_t x3614 = x3608;
+bool x3615 = x3614 >= 2;
+if (x3615) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3617 = x3611 == 0;
-if (x3617) {
-int32_t x3618 = x3606;
-bool x3619 = x3618 == 64;
-if (x3619) {
+bool x3620 = x3614 == 0;
+if (x3620) {
+int32_t x3621 = x3609;
+bool x3622 = x3621 == 64;
+if (x3622) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-if (x3631) {
+if (x3634) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(1) x Const(1) x Const(1) x Const(1), res:  x Const(64) x Const(1) x Const(1) x Const(1)");
 }
-float* x3636 = (float*)myMalloc(1 * sizeof(float));;
-x3636[0] = x3626;
-float* x3638 = (float*)myMalloc(1 * sizeof(float));;
-x3638[0] = 1.0f;
+float* x3639 = (float*)myMalloc(1 * sizeof(float));;
+x3639[0] = x3629;
+float* x3641 = (float*)myMalloc(1 * sizeof(float));;
+x3641[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -9801,104 +9812,104 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1, 1, 1));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x3636, bias_desc, x3577, x3638, out_desc, x3531));
+    cudnnHandle, x3639, bias_desc, x3580, x3641, out_desc, x3534));
 };
 // 'nllLossB' gradient.
-nllLoss_grad<<<64, 1>>>(10, x3531, x1405, x3528);
-int32_t x3643 = 0;
-int32_t x3644 = 1;
-x3644 *= 64;
-x3644 *= 10;
-x3644 *= 1;
-x3644 *= 1;
-int32_t x3649 = x3643;
-bool x3650 = x3649 >= 2;
-if (x3650) {
+nllLoss_grad<<<64, 1>>>(10, x3534, x1405, x3531);
+int32_t x3646 = 0;
+int32_t x3647 = 1;
+x3647 *= 64;
+x3647 *= 10;
+x3647 *= 1;
+x3647 *= 1;
+int32_t x3652 = x3646;
+bool x3653 = x3652 >= 2;
+if (x3653) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3655 = x3649 == 0;
-if (x3655) {
-int32_t x3656 = x3644;
-bool x3657 = x3656 == 640;
-if (x3657) {
+bool x3658 = x3652 == 0;
+if (x3658) {
+int32_t x3659 = x3647;
+bool x3660 = x3659 == 640;
+if (x3660) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-int32_t x3664 = 0;
-int32_t x3665 = 1;
-x3665 *= 64;
-x3665 *= 10;
-x3665 *= 1;
-x3665 *= 1;
-int32_t x3670 = x3664;
-bool x3671 = x3670 >= 2;
-if (x3671) {
+int32_t x3667 = 0;
+int32_t x3668 = 1;
+x3668 *= 64;
+x3668 *= 10;
+x3668 *= 1;
+x3668 *= 1;
+int32_t x3673 = x3667;
+bool x3674 = x3673 >= 2;
+if (x3674) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3676 = x3670 == 0;
-if (x3676) {
-int32_t x3677 = x3665;
-bool x3678 = x3677 == 640;
-if (x3678) {
+bool x3679 = x3673 == 0;
+if (x3679) {
+int32_t x3680 = x3668;
+bool x3681 = x3680 == 640;
+if (x3681) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-int32_t x3685 = 0;
-int32_t x3686 = 1;
-x3686 *= 64;
-x3686 *= 10;
-x3686 *= 1;
-x3686 *= 1;
-int32_t x3691 = x3685;
-bool x3692 = x3691 >= 2;
-if (x3692) {
+int32_t x3688 = 0;
+int32_t x3689 = 1;
+x3689 *= 64;
+x3689 *= 10;
+x3689 *= 1;
+x3689 *= 1;
+int32_t x3694 = x3688;
+bool x3695 = x3694 >= 2;
+if (x3695) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3697 = x3691 == 0;
-if (x3697) {
-int32_t x3698 = x3686;
-bool x3699 = x3698 == 640;
-if (x3699) {
+bool x3700 = x3694 == 0;
+if (x3700) {
+int32_t x3701 = x3689;
+bool x3702 = x3701 == 640;
+if (x3702) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-int32_t x3706 = 0;
-int32_t x3707 = 1;
-x3707 *= 64;
-x3707 *= 10;
-x3707 *= 1;
-x3707 *= 1;
-int32_t x3712 = x3706;
-bool x3713 = x3712 >= 2;
-if (x3713) {
+int32_t x3709 = 0;
+int32_t x3710 = 1;
+x3710 *= 64;
+x3710 *= 10;
+x3710 *= 1;
+x3710 *= 1;
+int32_t x3715 = x3709;
+bool x3716 = x3715 >= 2;
+if (x3716) {
 printf("cannot have 2 or more -1s in resize!!\n");
 assert(false && "");
 } else {
 }
-bool x3718 = x3712 == 0;
-if (x3718) {
-int32_t x3719 = x3707;
-bool x3720 = x3719 == 640;
-if (x3720) {
+bool x3721 = x3715 == 0;
+if (x3721) {
+int32_t x3722 = x3710;
+bool x3723 = x3722 == 640;
+if (x3723) {
 } else {
 assert(false && "must same size!!");
 }
 } else {
 }
-float* x3727 = (float*)myMalloc(1 * sizeof(float));;
-x3727[0] = 1.0f;
+float* x3730 = (float*)myMalloc(1 * sizeof(float));;
+x3730[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -9908,11 +9919,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 10, 1, 1));
 CUDNN_CALL(cudnnSoftmaxBackward(
     cudnnHandle, CUDNN_SOFTMAX_LOG, CUDNN_SOFTMAX_MODE_CHANNEL,
-    x3727, x_desc, x3507, x_desc, x3528,
-    x3727, x_desc, x3476));
+    x3730, x_desc, x3510, x_desc, x3531,
+    x3730, x_desc, x3479));
 };
-float* x3730 = (float*)myMalloc(1 * sizeof(float));;
-x3730[0] = 1.0f;
+float* x3733 = (float*)myMalloc(1 * sizeof(float));;
+x3733[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -9928,21 +9939,22 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 10, 1, 1));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x3730, grad_out_desc, x3476,
-    x3730, grad_bias_desc, x1155));
+    cudnnHandle, x3733, grad_out_desc, x3479,
+    x3733, grad_bias_desc, x1155));
 };
-// backprop for gemm List(Const(64), Const(2048)), Vector(Const(10), Const(2048))
-float* x3734 = (float*)myMalloc(1 * sizeof(float));;
-x3734[0] = 1.0f;
-float* x3736 = (float*)myMalloc(1 * sizeof(float));;
-x3736[0] = 1.0f;
+// backprop for gemm List(Const(64), Sym(3469)), Vector(Const(10), Const(2048))
+float* x3737 = (float*)myMalloc(1 * sizeof(float));;
+x3737[0] = 1.0f;
+float* x3739 = (float*)myMalloc(1 * sizeof(float));;
+x3739[0] = 1.0f;
 // backprop of gemm
-CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2048,64,10,x3734,x976,2048,x3476,10,x3736,x3447,2048));
-CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, 2048,10,64,x3734,x3445,2048,x3476,10,x3736,x1334,2048));
-float* x3741 = (float*)myMalloc(1 * sizeof(float));;
-x3741[0] = 0.0f;
-float* x3743 = (float*)myMalloc(1 * sizeof(float));;
-x3743[0] = 1.0f;
+int32_t x3469 = x3442 / x3468;
+CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, x3469,64,10,x3737,x976,x3469,x3479,10,x3739,x3447,x3469));
+CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, x3469,10,64,x3737,x3445,x3469,x3479,10,x3739,x1334,x3469));
+float* x3744 = (float*)myMalloc(1 * sizeof(float));;
+x3744[0] = 0.0f;
+float* x3746 = (float*)myMalloc(1 * sizeof(float));;
+x3746[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -9967,12 +9979,12 @@ CUDNN_CALL(cudnnSetPooling2dDescriptor(
 CUDNN_CALL(cudnnPoolingBackward(
     cudnnHandle, 
     poolingDesc, 
-    x3743, out_desc, x3445, out_desc, x3447, in_desc, x3400  , x3741, in_desc, x3408));
+    x3746, out_desc, x3445, out_desc, x3447, in_desc, x3400  , x3744, in_desc, x3408));
 };
-float* x3746 = (float*)myMalloc(1 * sizeof(float));;
-x3746[0] = 1.0f;
-float* x3748 = (float*)myMalloc(1 * sizeof(float));;
-x3748[0] = 0.0f;
+float* x3749 = (float*)myMalloc(1 * sizeof(float));;
+x3749[0] = 1.0f;
+float* x3751 = (float*)myMalloc(1 * sizeof(float));;
+x3751[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -9989,18 +10001,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3746, x_desc, x3400, x_desc, x3408, x_desc, x3400,
-    x3748, x_desc, x3408));
+    x3749, x_desc, x3400, x_desc, x3408, x_desc, x3400,
+    x3751, x_desc, x3408));
 };
-if (x3752) {
 if (x3755) {
+if (x3758) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(2048) x Sym(3387) x Sym(3387), res:  x Const(64) x Const(2048) x Sym(3270) x Sym(3270)");
 }
-float* x3760 = (float*)myMalloc(1 * sizeof(float));;
-x3760[0] = 1.0f;
-float* x3762 = (float*)myMalloc(1 * sizeof(float));;
-x3762[0] = 1.0f;
+float* x3763 = (float*)myMalloc(1 * sizeof(float));;
+x3763[0] = 1.0f;
+float* x3765 = (float*)myMalloc(1 * sizeof(float));;
+x3765[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -10016,11 +10028,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, x3270, x3270));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x3760, bias_desc, x3408, x3762, out_desc, x3291));
+    cudnnHandle, x3763, bias_desc, x3408, x3765, out_desc, x3291));
 };
 } else {
-float* x3766 = (float*)myMalloc(1 * sizeof(float));;
-x3766[0] = 1.0f;
+float* x3769 = (float*)myMalloc(1 * sizeof(float));;
+x3769[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -10036,14 +10048,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, x3387, x3387));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x3766, grad_out_desc, x3408,
-    x3766, grad_bias_desc, x3291));
+    cudnnHandle, x3769, grad_out_desc, x3408,
+    x3769, grad_bias_desc, x3291));
 };
 }
-float* x3771 = (float*)myMalloc(1 * sizeof(float));;
-x3771[0] = 0.0f;
-float* x3773 = (float*)myMalloc(1 * sizeof(float));;
-x3773[0] = 1.0f;
+float* x3774 = (float*)myMalloc(1 * sizeof(float));;
+x3774[0] = 0.0f;
+float* x3776 = (float*)myMalloc(1 * sizeof(float));;
+x3776[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -10066,62 +10078,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3773, x3773, x3773, x3773, in_desc, x3393,
+    x3776, x3776, x3776, x3776, in_desc, x3393,
     out_desc, x3408, in_desc, x3399, sbmv_desc, x604,
     x1210,x1288, 1.0E-5, x3401, x3402));
 };
 // conv2D back-propagate
-float* x3777 = (float*)myMalloc(1 * sizeof(float));;
-x3777[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    2048, 512, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3353, x3353));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 2048, x3387, x3387));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3777, filt_desc, x394, grad_out_desc, x3399,
-    conv_desc, algo, ws_data, ws_size,
-    x3777, grad_in_desc, x3374));
-};
 float* x3780 = (float*)myMalloc(1 * sizeof(float));;
 x3780[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    2048, 512, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3353, x3353));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 2048, x3387, x3387));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3780, filt_desc, x394, grad_out_desc, x3399,
+    conv_desc, algo, ws_data, ws_size,
+    x3780, grad_in_desc, x3374));
+};
+float* x3783 = (float*)myMalloc(1 * sizeof(float));;
+x3783[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -10161,14 +10173,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3780, in_desc, x3366, grad_out_desc, x3399,
+    x3783, in_desc, x3366, grad_out_desc, x3399,
     conv_desc, algo, ws_data, ws_size,
-    x3780, grad_filt_desc, x1140));
+    x3783, grad_filt_desc, x1140));
 };
-float* x3783 = (float*)myMalloc(1 * sizeof(float));;
-x3783[0] = 1.0f;
-float* x3785 = (float*)myMalloc(1 * sizeof(float));;
-x3785[0] = 0.0f;
+float* x3786 = (float*)myMalloc(1 * sizeof(float));;
+x3786[0] = 1.0f;
+float* x3788 = (float*)myMalloc(1 * sizeof(float));;
+x3788[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -10185,13 +10197,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3783, x_desc, x3366, x_desc, x3374, x_desc, x3366,
-    x3785, x_desc, x3374));
+    x3786, x_desc, x3366, x_desc, x3374, x_desc, x3366,
+    x3788, x_desc, x3374));
 };
-float* x3788 = (float*)myMalloc(1 * sizeof(float));;
-x3788[0] = 0.0f;
-float* x3790 = (float*)myMalloc(1 * sizeof(float));;
-x3790[0] = 1.0f;
+float* x3791 = (float*)myMalloc(1 * sizeof(float));;
+x3791[0] = 0.0f;
+float* x3793 = (float*)myMalloc(1 * sizeof(float));;
+x3793[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -10214,62 +10226,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3790, x3790, x3790, x3790, in_desc, x3359,
+    x3793, x3793, x3793, x3793, in_desc, x3359,
     out_desc, x3374, in_desc, x3365, sbmv_desc, x877,
     x1301,x1276, 1.0E-5, x3367, x3368));
 };
 // conv2D back-propagate
-float* x3794 = (float*)myMalloc(1 * sizeof(float));;
-x3794[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 512, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3317, x3317));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3353, x3353));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3794, filt_desc, x379, grad_out_desc, x3365,
-    conv_desc, algo, ws_data, ws_size,
-    x3794, grad_in_desc, x3338));
-};
 float* x3797 = (float*)myMalloc(1 * sizeof(float));;
 x3797[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 512, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3317, x3317));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3353, x3353));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3797, filt_desc, x379, grad_out_desc, x3365,
+    conv_desc, algo, ws_data, ws_size,
+    x3797, grad_in_desc, x3338));
+};
+float* x3800 = (float*)myMalloc(1 * sizeof(float));;
+x3800[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -10309,14 +10321,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3797, in_desc, x3330, grad_out_desc, x3365,
+    x3800, in_desc, x3330, grad_out_desc, x3365,
     conv_desc, algo, ws_data, ws_size,
-    x3797, grad_filt_desc, x1135));
+    x3800, grad_filt_desc, x1135));
 };
-float* x3800 = (float*)myMalloc(1 * sizeof(float));;
-x3800[0] = 1.0f;
-float* x3802 = (float*)myMalloc(1 * sizeof(float));;
-x3802[0] = 0.0f;
+float* x3803 = (float*)myMalloc(1 * sizeof(float));;
+x3803[0] = 1.0f;
+float* x3805 = (float*)myMalloc(1 * sizeof(float));;
+x3805[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -10333,13 +10345,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3800, x_desc, x3330, x_desc, x3338, x_desc, x3330,
-    x3802, x_desc, x3338));
+    x3803, x_desc, x3330, x_desc, x3338, x_desc, x3330,
+    x3805, x_desc, x3338));
 };
-float* x3805 = (float*)myMalloc(1 * sizeof(float));;
-x3805[0] = 0.0f;
-float* x3807 = (float*)myMalloc(1 * sizeof(float));;
-x3807[0] = 1.0f;
+float* x3808 = (float*)myMalloc(1 * sizeof(float));;
+x3808[0] = 0.0f;
+float* x3810 = (float*)myMalloc(1 * sizeof(float));;
+x3810[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -10362,62 +10374,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3807, x3807, x3807, x3807, in_desc, x3323,
+    x3810, x3810, x3810, x3810, in_desc, x3323,
     out_desc, x3338, in_desc, x3329, sbmv_desc, x340,
     x1122,x1185, 1.0E-5, x3331, x3332));
 };
 // conv2D back-propagate
-float* x3811 = (float*)myMalloc(1 * sizeof(float));;
-x3811[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 2048, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 2048, x3270, x3270));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3317, x3317));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3811, filt_desc, x1090, grad_out_desc, x3329,
-    conv_desc, algo, ws_data, ws_size,
-    x3811, grad_in_desc, x3291));
-};
 float* x3814 = (float*)myMalloc(1 * sizeof(float));;
 x3814[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 2048, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 2048, x3270, x3270));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3317, x3317));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3814, filt_desc, x1090, grad_out_desc, x3329,
+    conv_desc, algo, ws_data, ws_size,
+    x3814, grad_in_desc, x3291));
+};
+float* x3817 = (float*)myMalloc(1 * sizeof(float));;
+x3817[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -10457,14 +10469,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3814, in_desc, x3283, grad_out_desc, x3329,
+    x3817, in_desc, x3283, grad_out_desc, x3329,
     conv_desc, algo, ws_data, ws_size,
-    x3814, grad_filt_desc, x1372));
+    x3817, grad_filt_desc, x1372));
 };
-float* x3817 = (float*)myMalloc(1 * sizeof(float));;
-x3817[0] = 1.0f;
-float* x3819 = (float*)myMalloc(1 * sizeof(float));;
-x3819[0] = 0.0f;
+float* x3820 = (float*)myMalloc(1 * sizeof(float));;
+x3820[0] = 1.0f;
+float* x3822 = (float*)myMalloc(1 * sizeof(float));;
+x3822[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -10481,18 +10493,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3817, x_desc, x3283, x_desc, x3291, x_desc, x3283,
-    x3819, x_desc, x3291));
+    x3820, x_desc, x3283, x_desc, x3291, x_desc, x3283,
+    x3822, x_desc, x3291));
 };
-if (x3823) {
-if (x3825) {
+if (x3826) {
+if (x3828) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(2048) x Sym(3270) x Sym(3270), res:  x Const(64) x Const(2048) x Sym(3127) x Sym(3127)");
 }
-float* x3830 = (float*)myMalloc(1 * sizeof(float));;
-x3830[0] = 1.0f;
-float* x3832 = (float*)myMalloc(1 * sizeof(float));;
-x3832[0] = 1.0f;
+float* x3833 = (float*)myMalloc(1 * sizeof(float));;
+x3833[0] = 1.0f;
+float* x3835 = (float*)myMalloc(1 * sizeof(float));;
+x3835[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -10508,11 +10520,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, x3127, x3127));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x3830, bias_desc, x3291, x3832, out_desc, x3148));
+    cudnnHandle, x3833, bias_desc, x3291, x3835, out_desc, x3148));
 };
 } else {
-float* x3836 = (float*)myMalloc(1 * sizeof(float));;
-x3836[0] = 1.0f;
+float* x3839 = (float*)myMalloc(1 * sizeof(float));;
+x3839[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -10528,14 +10540,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, x3270, x3270));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x3836, grad_out_desc, x3291,
-    x3836, grad_bias_desc, x3148));
+    cudnnHandle, x3839, grad_out_desc, x3291,
+    x3839, grad_bias_desc, x3148));
 };
 }
-float* x3841 = (float*)myMalloc(1 * sizeof(float));;
-x3841[0] = 0.0f;
-float* x3843 = (float*)myMalloc(1 * sizeof(float));;
-x3843[0] = 1.0f;
+float* x3844 = (float*)myMalloc(1 * sizeof(float));;
+x3844[0] = 0.0f;
+float* x3846 = (float*)myMalloc(1 * sizeof(float));;
+x3846[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -10558,62 +10570,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3843, x3843, x3843, x3843, in_desc, x3276,
+    x3846, x3846, x3846, x3846, in_desc, x3276,
     out_desc, x3291, in_desc, x3282, sbmv_desc, x577,
     x1201,x1251, 1.0E-5, x3284, x3285));
 };
 // conv2D back-propagate
-float* x3847 = (float*)myMalloc(1 * sizeof(float));;
-x3847[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    2048, 512, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3236, x3236));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 2048, x3270, x3270));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3847, filt_desc, x436, grad_out_desc, x3282,
-    conv_desc, algo, ws_data, ws_size,
-    x3847, grad_in_desc, x3257));
-};
 float* x3850 = (float*)myMalloc(1 * sizeof(float));;
 x3850[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    2048, 512, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3236, x3236));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 2048, x3270, x3270));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3850, filt_desc, x436, grad_out_desc, x3282,
+    conv_desc, algo, ws_data, ws_size,
+    x3850, grad_in_desc, x3257));
+};
+float* x3853 = (float*)myMalloc(1 * sizeof(float));;
+x3853[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -10653,14 +10665,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3850, in_desc, x3249, grad_out_desc, x3282,
+    x3853, in_desc, x3249, grad_out_desc, x3282,
     conv_desc, algo, ws_data, ws_size,
-    x3850, grad_filt_desc, x1154));
+    x3853, grad_filt_desc, x1154));
 };
-float* x3853 = (float*)myMalloc(1 * sizeof(float));;
-x3853[0] = 1.0f;
-float* x3855 = (float*)myMalloc(1 * sizeof(float));;
-x3855[0] = 0.0f;
+float* x3856 = (float*)myMalloc(1 * sizeof(float));;
+x3856[0] = 1.0f;
+float* x3858 = (float*)myMalloc(1 * sizeof(float));;
+x3858[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -10677,13 +10689,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3853, x_desc, x3249, x_desc, x3257, x_desc, x3249,
-    x3855, x_desc, x3257));
+    x3856, x_desc, x3249, x_desc, x3257, x_desc, x3249,
+    x3858, x_desc, x3257));
 };
-float* x3858 = (float*)myMalloc(1 * sizeof(float));;
-x3858[0] = 0.0f;
-float* x3860 = (float*)myMalloc(1 * sizeof(float));;
-x3860[0] = 1.0f;
+float* x3861 = (float*)myMalloc(1 * sizeof(float));;
+x3861[0] = 0.0f;
+float* x3863 = (float*)myMalloc(1 * sizeof(float));;
+x3863[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -10706,62 +10718,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3860, x3860, x3860, x3860, in_desc, x3242,
+    x3863, x3863, x3863, x3863, in_desc, x3242,
     out_desc, x3257, in_desc, x3248, sbmv_desc, x775,
     x1267,x1173, 1.0E-5, x3250, x3251));
 };
 // conv2D back-propagate
-float* x3864 = (float*)myMalloc(1 * sizeof(float));;
-x3864[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 512, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3200, x3200));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3236, x3236));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3864, filt_desc, x760, grad_out_desc, x3248,
-    conv_desc, algo, ws_data, ws_size,
-    x3864, grad_in_desc, x3221));
-};
 float* x3867 = (float*)myMalloc(1 * sizeof(float));;
 x3867[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 512, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3200, x3200));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3236, x3236));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3867, filt_desc, x760, grad_out_desc, x3248,
+    conv_desc, algo, ws_data, ws_size,
+    x3867, grad_in_desc, x3221));
+};
+float* x3870 = (float*)myMalloc(1 * sizeof(float));;
+x3870[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -10801,14 +10813,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3867, in_desc, x3213, grad_out_desc, x3248,
+    x3870, in_desc, x3213, grad_out_desc, x3248,
     conv_desc, algo, ws_data, ws_size,
-    x3867, grad_filt_desc, x1262));
+    x3870, grad_filt_desc, x1262));
 };
-float* x3870 = (float*)myMalloc(1 * sizeof(float));;
-x3870[0] = 1.0f;
-float* x3872 = (float*)myMalloc(1 * sizeof(float));;
-x3872[0] = 0.0f;
+float* x3873 = (float*)myMalloc(1 * sizeof(float));;
+x3873[0] = 1.0f;
+float* x3875 = (float*)myMalloc(1 * sizeof(float));;
+x3875[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -10825,13 +10837,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3870, x_desc, x3213, x_desc, x3221, x_desc, x3213,
-    x3872, x_desc, x3221));
+    x3873, x_desc, x3213, x_desc, x3221, x_desc, x3213,
+    x3875, x_desc, x3221));
 };
-float* x3875 = (float*)myMalloc(1 * sizeof(float));;
-x3875[0] = 0.0f;
-float* x3877 = (float*)myMalloc(1 * sizeof(float));;
-x3877[0] = 1.0f;
+float* x3878 = (float*)myMalloc(1 * sizeof(float));;
+x3878[0] = 0.0f;
+float* x3880 = (float*)myMalloc(1 * sizeof(float));;
+x3880[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -10854,62 +10866,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3877, x3877, x3877, x3877, in_desc, x3206,
+    x3880, x3880, x3880, x3880, in_desc, x3206,
     out_desc, x3221, in_desc, x3212, sbmv_desc, x433,
     x1153,x1244, 1.0E-5, x3214, x3215));
 };
 // conv2D back-propagate
-float* x3881 = (float*)myMalloc(1 * sizeof(float));;
-x3881[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 2048, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 2048, x3127, x3127));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3200, x3200));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3881, filt_desc, x940, grad_out_desc, x3212,
-    conv_desc, algo, ws_data, ws_size,
-    x3881, grad_in_desc, x3148));
-};
 float* x3884 = (float*)myMalloc(1 * sizeof(float));;
 x3884[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 2048, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 2048, x3127, x3127));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3200, x3200));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3884, filt_desc, x940, grad_out_desc, x3212,
+    conv_desc, algo, ws_data, ws_size,
+    x3884, grad_in_desc, x3148));
+};
+float* x3887 = (float*)myMalloc(1 * sizeof(float));;
+x3887[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -10949,14 +10961,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3884, in_desc, x3140, grad_out_desc, x3212,
+    x3887, in_desc, x3140, grad_out_desc, x3212,
     conv_desc, algo, ws_data, ws_size,
-    x3884, grad_filt_desc, x1322));
+    x3887, grad_filt_desc, x1322));
 };
-float* x3887 = (float*)myMalloc(1 * sizeof(float));;
-x3887[0] = 1.0f;
-float* x3889 = (float*)myMalloc(1 * sizeof(float));;
-x3889[0] = 0.0f;
+float* x3890 = (float*)myMalloc(1 * sizeof(float));;
+x3890[0] = 1.0f;
+float* x3892 = (float*)myMalloc(1 * sizeof(float));;
+x3892[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -10973,18 +10985,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3887, x_desc, x3140, x_desc, x3148, x_desc, x3140,
-    x3889, x_desc, x3148));
+    x3890, x_desc, x3140, x_desc, x3148, x_desc, x3140,
+    x3892, x_desc, x3148));
 };
-if (x3893) {
-if (x3895) {
+if (x3896) {
+if (x3898) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(2048) x Sym(3127) x Sym(3127), res:  x Const(64) x Const(2048) x Sym(3153) x Sym(3153)");
 }
-float* x3900 = (float*)myMalloc(1 * sizeof(float));;
-x3900[0] = 1.0f;
-float* x3902 = (float*)myMalloc(1 * sizeof(float));;
-x3902[0] = 1.0f;
+float* x3903 = (float*)myMalloc(1 * sizeof(float));;
+x3903[0] = 1.0f;
+float* x3905 = (float*)myMalloc(1 * sizeof(float));;
+x3905[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -11000,11 +11012,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, x3153, x3153));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x3900, bias_desc, x3148, x3902, out_desc, x3174));
+    cudnnHandle, x3903, bias_desc, x3148, x3905, out_desc, x3174));
 };
 } else {
-float* x3906 = (float*)myMalloc(1 * sizeof(float));;
-x3906[0] = 1.0f;
+float* x3909 = (float*)myMalloc(1 * sizeof(float));;
+x3909[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -11020,14 +11032,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 2048, x3127, x3127));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x3906, grad_out_desc, x3148,
-    x3906, grad_bias_desc, x3174));
+    cudnnHandle, x3909, grad_out_desc, x3148,
+    x3909, grad_bias_desc, x3174));
 };
 }
-float* x3911 = (float*)myMalloc(1 * sizeof(float));;
-x3911[0] = 0.0f;
-float* x3913 = (float*)myMalloc(1 * sizeof(float));;
-x3913[0] = 1.0f;
+float* x3914 = (float*)myMalloc(1 * sizeof(float));;
+x3914[0] = 0.0f;
+float* x3916 = (float*)myMalloc(1 * sizeof(float));;
+x3916[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -11050,13 +11062,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3913, x3913, x3913, x3913, in_desc, x3159,
+    x3916, x3916, x3916, x3916, in_desc, x3159,
     out_desc, x3174, in_desc, x3165, sbmv_desc, x814,
     x1280,x1214, 1.0E-5, x3167, x3168));
 };
 // conv2D back-propagate
-float* x3917 = (float*)myMalloc(1 * sizeof(float));;
-x3917[0] = 1.0f;
+float* x3920 = (float*)myMalloc(1 * sizeof(float));;
+x3920[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -11098,12 +11110,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x3917, filt_desc, x937, grad_out_desc, x3165,
+    x3920, filt_desc, x937, grad_out_desc, x3165,
     conv_desc, algo, ws_data, ws_size,
-    x3917, grad_in_desc, x3031));
+    x3920, grad_in_desc, x3031));
 };
-float* x3920 = (float*)myMalloc(1 * sizeof(float));;
-x3920[0] = 1.0f;
+float* x3923 = (float*)myMalloc(1 * sizeof(float));;
+x3923[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -11145,14 +11157,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3920, in_desc, x3023, grad_out_desc, x3165,
+    x3923, in_desc, x3023, grad_out_desc, x3165,
     conv_desc, algo, ws_data, ws_size,
-    x3920, grad_filt_desc, x1321));
+    x3923, grad_filt_desc, x1321));
 };
-float* x3923 = (float*)myMalloc(1 * sizeof(float));;
-x3923[0] = 0.0f;
-float* x3925 = (float*)myMalloc(1 * sizeof(float));;
-x3925[0] = 1.0f;
+float* x3926 = (float*)myMalloc(1 * sizeof(float));;
+x3926[0] = 0.0f;
+float* x3928 = (float*)myMalloc(1 * sizeof(float));;
+x3928[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -11175,62 +11187,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3925, x3925, x3925, x3925, in_desc, x3133,
+    x3928, x3928, x3928, x3928, in_desc, x3133,
     out_desc, x3148, in_desc, x3139, sbmv_desc, x1012,
     x1346,x1169, 1.0E-5, x3141, x3142));
 };
 // conv2D back-propagate
-float* x3929 = (float*)myMalloc(1 * sizeof(float));;
-x3929[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    2048, 512, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3093, x3093));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 2048, x3127, x3127));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3929, filt_desc, x931, grad_out_desc, x3139,
-    conv_desc, algo, ws_data, ws_size,
-    x3929, grad_in_desc, x3114));
-};
 float* x3932 = (float*)myMalloc(1 * sizeof(float));;
 x3932[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    2048, 512, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3093, x3093));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 2048, x3127, x3127));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3932, filt_desc, x931, grad_out_desc, x3139,
+    conv_desc, algo, ws_data, ws_size,
+    x3932, grad_in_desc, x3114));
+};
+float* x3935 = (float*)myMalloc(1 * sizeof(float));;
+x3935[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -11270,14 +11282,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3932, in_desc, x3106, grad_out_desc, x3139,
+    x3935, in_desc, x3106, grad_out_desc, x3139,
     conv_desc, algo, ws_data, ws_size,
-    x3932, grad_filt_desc, x1319));
+    x3935, grad_filt_desc, x1319));
 };
-float* x3935 = (float*)myMalloc(1 * sizeof(float));;
-x3935[0] = 1.0f;
-float* x3937 = (float*)myMalloc(1 * sizeof(float));;
-x3937[0] = 0.0f;
+float* x3938 = (float*)myMalloc(1 * sizeof(float));;
+x3938[0] = 1.0f;
+float* x3940 = (float*)myMalloc(1 * sizeof(float));;
+x3940[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -11294,13 +11306,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3935, x_desc, x3106, x_desc, x3114, x_desc, x3106,
-    x3937, x_desc, x3114));
+    x3938, x_desc, x3106, x_desc, x3114, x_desc, x3106,
+    x3940, x_desc, x3114));
 };
-float* x3940 = (float*)myMalloc(1 * sizeof(float));;
-x3940[0] = 0.0f;
-float* x3942 = (float*)myMalloc(1 * sizeof(float));;
-x3942[0] = 1.0f;
+float* x3943 = (float*)myMalloc(1 * sizeof(float));;
+x3943[0] = 0.0f;
+float* x3945 = (float*)myMalloc(1 * sizeof(float));;
+x3945[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -11323,62 +11335,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3942, x3942, x3942, x3942, in_desc, x3099,
+    x3945, x3945, x3945, x3945, in_desc, x3099,
     out_desc, x3114, in_desc, x3105, sbmv_desc, x910,
     x1312,x1266, 1.0E-5, x3107, x3108));
 };
 // conv2D back-propagate
-float* x3946 = (float*)myMalloc(1 * sizeof(float));;
-x3946[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 512, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3057, x3057));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3093, x3093));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 2, 2, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3946, filt_desc, x397, grad_out_desc, x3105,
-    conv_desc, algo, ws_data, ws_size,
-    x3946, grad_in_desc, x3078));
-};
 float* x3949 = (float*)myMalloc(1 * sizeof(float));;
 x3949[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 512, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3057, x3057));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3093, x3093));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 2, 2, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3949, filt_desc, x397, grad_out_desc, x3105,
+    conv_desc, algo, ws_data, ws_size,
+    x3949, grad_in_desc, x3078));
+};
+float* x3952 = (float*)myMalloc(1 * sizeof(float));;
+x3952[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -11418,14 +11430,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3949, in_desc, x3070, grad_out_desc, x3105,
+    x3952, in_desc, x3070, grad_out_desc, x3105,
     conv_desc, algo, ws_data, ws_size,
-    x3949, grad_filt_desc, x1141));
+    x3952, grad_filt_desc, x1141));
 };
-float* x3952 = (float*)myMalloc(1 * sizeof(float));;
-x3952[0] = 1.0f;
-float* x3954 = (float*)myMalloc(1 * sizeof(float));;
-x3954[0] = 0.0f;
+float* x3955 = (float*)myMalloc(1 * sizeof(float));;
+x3955[0] = 1.0f;
+float* x3957 = (float*)myMalloc(1 * sizeof(float));;
+x3957[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -11442,13 +11454,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3952, x_desc, x3070, x_desc, x3078, x_desc, x3070,
-    x3954, x_desc, x3078));
+    x3955, x_desc, x3070, x_desc, x3078, x_desc, x3070,
+    x3957, x_desc, x3078));
 };
-float* x3957 = (float*)myMalloc(1 * sizeof(float));;
-x3957[0] = 0.0f;
-float* x3959 = (float*)myMalloc(1 * sizeof(float));;
-x3959[0] = 1.0f;
+float* x3960 = (float*)myMalloc(1 * sizeof(float));;
+x3960[0] = 0.0f;
+float* x3962 = (float*)myMalloc(1 * sizeof(float));;
+x3962[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -11471,62 +11483,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3959, x3959, x3959, x3959, in_desc, x3063,
+    x3962, x3962, x3962, x3962, in_desc, x3063,
     out_desc, x3078, in_desc, x3069, sbmv_desc, x898,
     x1308,x1331, 1.0E-5, x3071, x3072));
 };
 // conv2D back-propagate
-float* x3963 = (float*)myMalloc(1 * sizeof(float));;
-x3963[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 1024, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x3010, x3010));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x3057, x3057));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x3963, filt_desc, x712, grad_out_desc, x3069,
-    conv_desc, algo, ws_data, ws_size,
-    x3963, grad_in_desc, x3031));
-};
 float* x3966 = (float*)myMalloc(1 * sizeof(float));;
 x3966[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 1024, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x3010, x3010));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x3057, x3057));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x3966, filt_desc, x712, grad_out_desc, x3069,
+    conv_desc, algo, ws_data, ws_size,
+    x3966, grad_in_desc, x3031));
+};
+float* x3969 = (float*)myMalloc(1 * sizeof(float));;
+x3969[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -11566,14 +11578,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x3966, in_desc, x3023, grad_out_desc, x3069,
+    x3969, in_desc, x3023, grad_out_desc, x3069,
     conv_desc, algo, ws_data, ws_size,
-    x3966, grad_filt_desc, x1246));
+    x3969, grad_filt_desc, x1246));
 };
-float* x3969 = (float*)myMalloc(1 * sizeof(float));;
-x3969[0] = 1.0f;
-float* x3971 = (float*)myMalloc(1 * sizeof(float));;
-x3971[0] = 0.0f;
+float* x3972 = (float*)myMalloc(1 * sizeof(float));;
+x3972[0] = 1.0f;
+float* x3974 = (float*)myMalloc(1 * sizeof(float));;
+x3974[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -11590,18 +11602,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x3969, x_desc, x3023, x_desc, x3031, x_desc, x3023,
-    x3971, x_desc, x3031));
+    x3972, x_desc, x3023, x_desc, x3031, x_desc, x3023,
+    x3974, x_desc, x3031));
 };
-if (x3975) {
 if (x3978) {
+if (x3981) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(1024) x Sym(3010) x Sym(3010), res:  x Const(64) x Const(1024) x Sym(2893) x Sym(2893)");
 }
-float* x3983 = (float*)myMalloc(1 * sizeof(float));;
-x3983[0] = 1.0f;
-float* x3985 = (float*)myMalloc(1 * sizeof(float));;
-x3985[0] = 1.0f;
+float* x3986 = (float*)myMalloc(1 * sizeof(float));;
+x3986[0] = 1.0f;
+float* x3988 = (float*)myMalloc(1 * sizeof(float));;
+x3988[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -11617,11 +11629,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2893, x2893));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x3983, bias_desc, x3031, x3985, out_desc, x2914));
+    cudnnHandle, x3986, bias_desc, x3031, x3988, out_desc, x2914));
 };
 } else {
-float* x3989 = (float*)myMalloc(1 * sizeof(float));;
-x3989[0] = 1.0f;
+float* x3992 = (float*)myMalloc(1 * sizeof(float));;
+x3992[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -11637,14 +11649,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x3010, x3010));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x3989, grad_out_desc, x3031,
-    x3989, grad_bias_desc, x2914));
+    cudnnHandle, x3992, grad_out_desc, x3031,
+    x3992, grad_bias_desc, x2914));
 };
 }
-float* x3994 = (float*)myMalloc(1 * sizeof(float));;
-x3994[0] = 0.0f;
-float* x3996 = (float*)myMalloc(1 * sizeof(float));;
-x3996[0] = 1.0f;
+float* x3997 = (float*)myMalloc(1 * sizeof(float));;
+x3997[0] = 0.0f;
+float* x3999 = (float*)myMalloc(1 * sizeof(float));;
+x3999[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -11667,62 +11679,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x3996, x3996, x3996, x3996, in_desc, x3016,
+    x3999, x3999, x3999, x3999, in_desc, x3016,
     out_desc, x3031, in_desc, x3022, sbmv_desc, x1039,
     x1355,x1200, 1.0E-5, x3024, x3025));
 };
 // conv2D back-propagate
-float* x4000 = (float*)myMalloc(1 * sizeof(float));;
-x4000[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    1024, 256, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2976, x2976));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x3010, x3010));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4000, filt_desc, x586, grad_out_desc, x3022,
-    conv_desc, algo, ws_data, ws_size,
-    x4000, grad_in_desc, x2997));
-};
 float* x4003 = (float*)myMalloc(1 * sizeof(float));;
 x4003[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    1024, 256, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2976, x2976));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x3010, x3010));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4003, filt_desc, x586, grad_out_desc, x3022,
+    conv_desc, algo, ws_data, ws_size,
+    x4003, grad_in_desc, x2997));
+};
+float* x4006 = (float*)myMalloc(1 * sizeof(float));;
+x4006[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -11762,14 +11774,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4003, in_desc, x2989, grad_out_desc, x3022,
+    x4006, in_desc, x2989, grad_out_desc, x3022,
     conv_desc, algo, ws_data, ws_size,
-    x4003, grad_filt_desc, x1204));
+    x4006, grad_filt_desc, x1204));
 };
-float* x4006 = (float*)myMalloc(1 * sizeof(float));;
-x4006[0] = 1.0f;
-float* x4008 = (float*)myMalloc(1 * sizeof(float));;
-x4008[0] = 0.0f;
+float* x4009 = (float*)myMalloc(1 * sizeof(float));;
+x4009[0] = 1.0f;
+float* x4011 = (float*)myMalloc(1 * sizeof(float));;
+x4011[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -11786,13 +11798,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4006, x_desc, x2989, x_desc, x2997, x_desc, x2989,
-    x4008, x_desc, x2997));
+    x4009, x_desc, x2989, x_desc, x2997, x_desc, x2989,
+    x4011, x_desc, x2997));
 };
-float* x4011 = (float*)myMalloc(1 * sizeof(float));;
-x4011[0] = 0.0f;
-float* x4013 = (float*)myMalloc(1 * sizeof(float));;
-x4013[0] = 1.0f;
+float* x4014 = (float*)myMalloc(1 * sizeof(float));;
+x4014[0] = 0.0f;
+float* x4016 = (float*)myMalloc(1 * sizeof(float));;
+x4016[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -11815,62 +11827,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4013, x4013, x4013, x4013, in_desc, x2982,
+    x4016, x4016, x4016, x4016, in_desc, x2982,
     out_desc, x2997, in_desc, x2988, sbmv_desc, x718,
     x1248,x1296, 1.0E-5, x2990, x2991));
 };
 // conv2D back-propagate
-float* x4017 = (float*)myMalloc(1 * sizeof(float));;
-x4017[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 256, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2940, x2940));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2976, x2976));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4017, filt_desc, x973, grad_out_desc, x2988,
-    conv_desc, algo, ws_data, ws_size,
-    x4017, grad_in_desc, x2961));
-};
 float* x4020 = (float*)myMalloc(1 * sizeof(float));;
 x4020[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 256, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2940, x2940));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2976, x2976));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4020, filt_desc, x973, grad_out_desc, x2988,
+    conv_desc, algo, ws_data, ws_size,
+    x4020, grad_in_desc, x2961));
+};
+float* x4023 = (float*)myMalloc(1 * sizeof(float));;
+x4023[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -11910,14 +11922,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4020, in_desc, x2953, grad_out_desc, x2988,
+    x4023, in_desc, x2953, grad_out_desc, x2988,
     conv_desc, algo, ws_data, ws_size,
-    x4020, grad_filt_desc, x1333));
+    x4023, grad_filt_desc, x1333));
 };
-float* x4023 = (float*)myMalloc(1 * sizeof(float));;
-x4023[0] = 1.0f;
-float* x4025 = (float*)myMalloc(1 * sizeof(float));;
-x4025[0] = 0.0f;
+float* x4026 = (float*)myMalloc(1 * sizeof(float));;
+x4026[0] = 1.0f;
+float* x4028 = (float*)myMalloc(1 * sizeof(float));;
+x4028[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -11934,13 +11946,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4023, x_desc, x2953, x_desc, x2961, x_desc, x2953,
-    x4025, x_desc, x2961));
+    x4026, x_desc, x2953, x_desc, x2961, x_desc, x2953,
+    x4028, x_desc, x2961));
 };
-float* x4028 = (float*)myMalloc(1 * sizeof(float));;
-x4028[0] = 0.0f;
-float* x4030 = (float*)myMalloc(1 * sizeof(float));;
-x4030[0] = 1.0f;
+float* x4031 = (float*)myMalloc(1 * sizeof(float));;
+x4031[0] = 0.0f;
+float* x4033 = (float*)myMalloc(1 * sizeof(float));;
+x4033[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -11963,62 +11975,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4030, x4030, x4030, x4030, in_desc, x2946,
+    x4033, x4033, x4033, x4033, in_desc, x2946,
     out_desc, x2961, in_desc, x2952, sbmv_desc, x550,
     x1192,x1360, 1.0E-5, x2954, x2955));
 };
 // conv2D back-propagate
-float* x4034 = (float*)myMalloc(1 * sizeof(float));;
-x4034[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 1024, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2893, x2893));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2940, x2940));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4034, filt_desc, x748, grad_out_desc, x2952,
-    conv_desc, algo, ws_data, ws_size,
-    x4034, grad_in_desc, x2914));
-};
 float* x4037 = (float*)myMalloc(1 * sizeof(float));;
 x4037[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 1024, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2893, x2893));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2940, x2940));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4037, filt_desc, x748, grad_out_desc, x2952,
+    conv_desc, algo, ws_data, ws_size,
+    x4037, grad_in_desc, x2914));
+};
+float* x4040 = (float*)myMalloc(1 * sizeof(float));;
+x4040[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -12058,14 +12070,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4037, in_desc, x2906, grad_out_desc, x2952,
+    x4040, in_desc, x2906, grad_out_desc, x2952,
     conv_desc, algo, ws_data, ws_size,
-    x4037, grad_filt_desc, x1258));
+    x4040, grad_filt_desc, x1258));
 };
-float* x4040 = (float*)myMalloc(1 * sizeof(float));;
-x4040[0] = 1.0f;
-float* x4042 = (float*)myMalloc(1 * sizeof(float));;
-x4042[0] = 0.0f;
+float* x4043 = (float*)myMalloc(1 * sizeof(float));;
+x4043[0] = 1.0f;
+float* x4045 = (float*)myMalloc(1 * sizeof(float));;
+x4045[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -12082,18 +12094,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4040, x_desc, x2906, x_desc, x2914, x_desc, x2906,
-    x4042, x_desc, x2914));
+    x4043, x_desc, x2906, x_desc, x2914, x_desc, x2906,
+    x4045, x_desc, x2914));
 };
-if (x4046) {
-if (x4048) {
+if (x4049) {
+if (x4051) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(1024) x Sym(2893) x Sym(2893), res:  x Const(64) x Const(1024) x Sym(2776) x Sym(2776)");
 }
-float* x4053 = (float*)myMalloc(1 * sizeof(float));;
-x4053[0] = 1.0f;
-float* x4055 = (float*)myMalloc(1 * sizeof(float));;
-x4055[0] = 1.0f;
+float* x4056 = (float*)myMalloc(1 * sizeof(float));;
+x4056[0] = 1.0f;
+float* x4058 = (float*)myMalloc(1 * sizeof(float));;
+x4058[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -12109,11 +12121,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2776, x2776));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4053, bias_desc, x2914, x4055, out_desc, x2797));
+    cudnnHandle, x4056, bias_desc, x2914, x4058, out_desc, x2797));
 };
 } else {
-float* x4059 = (float*)myMalloc(1 * sizeof(float));;
-x4059[0] = 1.0f;
+float* x4062 = (float*)myMalloc(1 * sizeof(float));;
+x4062[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -12129,14 +12141,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2893, x2893));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4059, grad_out_desc, x2914,
-    x4059, grad_bias_desc, x2797));
+    cudnnHandle, x4062, grad_out_desc, x2914,
+    x4062, grad_bias_desc, x2797));
 };
 }
-float* x4064 = (float*)myMalloc(1 * sizeof(float));;
-x4064[0] = 0.0f;
-float* x4066 = (float*)myMalloc(1 * sizeof(float));;
-x4066[0] = 1.0f;
+float* x4067 = (float*)myMalloc(1 * sizeof(float));;
+x4067[0] = 0.0f;
+float* x4069 = (float*)myMalloc(1 * sizeof(float));;
+x4069[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -12159,62 +12171,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4066, x4066, x4066, x4066, in_desc, x2899,
+    x4069, x4069, x4069, x4069, in_desc, x2899,
     out_desc, x2914, in_desc, x2905, sbmv_desc, x472,
     x1166,x1227, 1.0E-5, x2907, x2908));
 };
 // conv2D back-propagate
-float* x4070 = (float*)myMalloc(1 * sizeof(float));;
-x4070[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    1024, 256, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2859, x2859));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2893, x2893));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4070, filt_desc, x958, grad_out_desc, x2905,
-    conv_desc, algo, ws_data, ws_size,
-    x4070, grad_in_desc, x2880));
-};
 float* x4073 = (float*)myMalloc(1 * sizeof(float));;
 x4073[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    1024, 256, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2859, x2859));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2893, x2893));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4073, filt_desc, x958, grad_out_desc, x2905,
+    conv_desc, algo, ws_data, ws_size,
+    x4073, grad_in_desc, x2880));
+};
+float* x4076 = (float*)myMalloc(1 * sizeof(float));;
+x4076[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -12254,14 +12266,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4073, in_desc, x2872, grad_out_desc, x2905,
+    x4076, in_desc, x2872, grad_out_desc, x2905,
     conv_desc, algo, ws_data, ws_size,
-    x4073, grad_filt_desc, x1328));
+    x4076, grad_filt_desc, x1328));
 };
-float* x4076 = (float*)myMalloc(1 * sizeof(float));;
-x4076[0] = 1.0f;
-float* x4078 = (float*)myMalloc(1 * sizeof(float));;
-x4078[0] = 0.0f;
+float* x4079 = (float*)myMalloc(1 * sizeof(float));;
+x4079[0] = 1.0f;
+float* x4081 = (float*)myMalloc(1 * sizeof(float));;
+x4081[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -12278,13 +12290,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4076, x_desc, x2872, x_desc, x2880, x_desc, x2872,
-    x4078, x_desc, x2880));
+    x4079, x_desc, x2872, x_desc, x2880, x_desc, x2872,
+    x4081, x_desc, x2880));
 };
-float* x4081 = (float*)myMalloc(1 * sizeof(float));;
-x4081[0] = 0.0f;
-float* x4083 = (float*)myMalloc(1 * sizeof(float));;
-x4083[0] = 1.0f;
+float* x4084 = (float*)myMalloc(1 * sizeof(float));;
+x4084[0] = 0.0f;
+float* x4086 = (float*)myMalloc(1 * sizeof(float));;
+x4086[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -12307,62 +12319,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4083, x4083, x4083, x4083, in_desc, x2865,
+    x4086, x4086, x4086, x4086, in_desc, x2865,
     out_desc, x2880, in_desc, x2871, sbmv_desc, x799,
     x1275,x1216, 1.0E-5, x2873, x2874));
 };
 // conv2D back-propagate
-float* x4087 = (float*)myMalloc(1 * sizeof(float));;
-x4087[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 256, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2823, x2823));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2859, x2859));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4087, filt_desc, x1081, grad_out_desc, x2871,
-    conv_desc, algo, ws_data, ws_size,
-    x4087, grad_in_desc, x2844));
-};
 float* x4090 = (float*)myMalloc(1 * sizeof(float));;
 x4090[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 256, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2823, x2823));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2859, x2859));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4090, filt_desc, x1081, grad_out_desc, x2871,
+    conv_desc, algo, ws_data, ws_size,
+    x4090, grad_in_desc, x2844));
+};
+float* x4093 = (float*)myMalloc(1 * sizeof(float));;
+x4093[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -12402,14 +12414,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4090, in_desc, x2836, grad_out_desc, x2871,
+    x4093, in_desc, x2836, grad_out_desc, x2871,
     conv_desc, algo, ws_data, ws_size,
-    x4090, grad_filt_desc, x1369));
+    x4093, grad_filt_desc, x1369));
 };
-float* x4093 = (float*)myMalloc(1 * sizeof(float));;
-x4093[0] = 1.0f;
-float* x4095 = (float*)myMalloc(1 * sizeof(float));;
-x4095[0] = 0.0f;
+float* x4096 = (float*)myMalloc(1 * sizeof(float));;
+x4096[0] = 1.0f;
+float* x4098 = (float*)myMalloc(1 * sizeof(float));;
+x4098[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -12426,13 +12438,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4093, x_desc, x2836, x_desc, x2844, x_desc, x2836,
-    x4095, x_desc, x2844));
+    x4096, x_desc, x2836, x_desc, x2844, x_desc, x2836,
+    x4098, x_desc, x2844));
 };
-float* x4098 = (float*)myMalloc(1 * sizeof(float));;
-x4098[0] = 0.0f;
-float* x4100 = (float*)myMalloc(1 * sizeof(float));;
-x4100[0] = 1.0f;
+float* x4101 = (float*)myMalloc(1 * sizeof(float));;
+x4101[0] = 0.0f;
+float* x4103 = (float*)myMalloc(1 * sizeof(float));;
+x4103[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -12455,62 +12467,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4100, x4100, x4100, x4100, in_desc, x2829,
+    x4103, x4103, x4103, x4103, in_desc, x2829,
     out_desc, x2844, in_desc, x2835, sbmv_desc, x526,
     x1184,x1292, 1.0E-5, x2837, x2838));
 };
 // conv2D back-propagate
-float* x4104 = (float*)myMalloc(1 * sizeof(float));;
-x4104[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 1024, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2776, x2776));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2823, x2823));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4104, filt_desc, x361, grad_out_desc, x2835,
-    conv_desc, algo, ws_data, ws_size,
-    x4104, grad_in_desc, x2797));
-};
 float* x4107 = (float*)myMalloc(1 * sizeof(float));;
 x4107[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 1024, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2776, x2776));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2823, x2823));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4107, filt_desc, x361, grad_out_desc, x2835,
+    conv_desc, algo, ws_data, ws_size,
+    x4107, grad_in_desc, x2797));
+};
+float* x4110 = (float*)myMalloc(1 * sizeof(float));;
+x4110[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -12550,14 +12562,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4107, in_desc, x2789, grad_out_desc, x2835,
+    x4110, in_desc, x2789, grad_out_desc, x2835,
     conv_desc, algo, ws_data, ws_size,
-    x4107, grad_filt_desc, x1129));
+    x4110, grad_filt_desc, x1129));
 };
-float* x4110 = (float*)myMalloc(1 * sizeof(float));;
-x4110[0] = 1.0f;
-float* x4112 = (float*)myMalloc(1 * sizeof(float));;
-x4112[0] = 0.0f;
+float* x4113 = (float*)myMalloc(1 * sizeof(float));;
+x4113[0] = 1.0f;
+float* x4115 = (float*)myMalloc(1 * sizeof(float));;
+x4115[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -12574,18 +12586,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4110, x_desc, x2789, x_desc, x2797, x_desc, x2789,
-    x4112, x_desc, x2797));
+    x4113, x_desc, x2789, x_desc, x2797, x_desc, x2789,
+    x4115, x_desc, x2797));
 };
-if (x4116) {
-if (x4118) {
+if (x4119) {
+if (x4121) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(1024) x Sym(2776) x Sym(2776), res:  x Const(64) x Const(1024) x Sym(2659) x Sym(2659)");
 }
-float* x4123 = (float*)myMalloc(1 * sizeof(float));;
-x4123[0] = 1.0f;
-float* x4125 = (float*)myMalloc(1 * sizeof(float));;
-x4125[0] = 1.0f;
+float* x4126 = (float*)myMalloc(1 * sizeof(float));;
+x4126[0] = 1.0f;
+float* x4128 = (float*)myMalloc(1 * sizeof(float));;
+x4128[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -12601,11 +12613,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2659, x2659));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4123, bias_desc, x2797, x4125, out_desc, x2680));
+    cudnnHandle, x4126, bias_desc, x2797, x4128, out_desc, x2680));
 };
 } else {
-float* x4129 = (float*)myMalloc(1 * sizeof(float));;
-x4129[0] = 1.0f;
+float* x4132 = (float*)myMalloc(1 * sizeof(float));;
+x4132[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -12621,14 +12633,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2776, x2776));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4129, grad_out_desc, x2797,
-    x4129, grad_bias_desc, x2680));
+    cudnnHandle, x4132, grad_out_desc, x2797,
+    x4132, grad_bias_desc, x2680));
 };
 }
-float* x4134 = (float*)myMalloc(1 * sizeof(float));;
-x4134[0] = 0.0f;
-float* x4136 = (float*)myMalloc(1 * sizeof(float));;
-x4136[0] = 1.0f;
+float* x4137 = (float*)myMalloc(1 * sizeof(float));;
+x4137[0] = 0.0f;
+float* x4139 = (float*)myMalloc(1 * sizeof(float));;
+x4139[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -12651,62 +12663,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4136, x4136, x4136, x4136, in_desc, x2782,
+    x4139, x4139, x4139, x4139, in_desc, x2782,
     out_desc, x2797, in_desc, x2788, sbmv_desc, x1009,
     x1345,x1253, 1.0E-5, x2790, x2791));
 };
 // conv2D back-propagate
-float* x4140 = (float*)myMalloc(1 * sizeof(float));;
-x4140[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    1024, 256, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2742, x2742));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2776, x2776));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4140, filt_desc, x562, grad_out_desc, x2788,
-    conv_desc, algo, ws_data, ws_size,
-    x4140, grad_in_desc, x2763));
-};
 float* x4143 = (float*)myMalloc(1 * sizeof(float));;
 x4143[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    1024, 256, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2742, x2742));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2776, x2776));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4143, filt_desc, x562, grad_out_desc, x2788,
+    conv_desc, algo, ws_data, ws_size,
+    x4143, grad_in_desc, x2763));
+};
+float* x4146 = (float*)myMalloc(1 * sizeof(float));;
+x4146[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -12746,14 +12758,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4143, in_desc, x2755, grad_out_desc, x2788,
+    x4146, in_desc, x2755, grad_out_desc, x2788,
     conv_desc, algo, ws_data, ws_size,
-    x4143, grad_filt_desc, x1196));
+    x4146, grad_filt_desc, x1196));
 };
-float* x4146 = (float*)myMalloc(1 * sizeof(float));;
-x4146[0] = 1.0f;
-float* x4148 = (float*)myMalloc(1 * sizeof(float));;
-x4148[0] = 0.0f;
+float* x4149 = (float*)myMalloc(1 * sizeof(float));;
+x4149[0] = 1.0f;
+float* x4151 = (float*)myMalloc(1 * sizeof(float));;
+x4151[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -12770,13 +12782,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4146, x_desc, x2755, x_desc, x2763, x_desc, x2755,
-    x4148, x_desc, x2763));
+    x4149, x_desc, x2755, x_desc, x2763, x_desc, x2755,
+    x4151, x_desc, x2763));
 };
-float* x4151 = (float*)myMalloc(1 * sizeof(float));;
-x4151[0] = 0.0f;
-float* x4153 = (float*)myMalloc(1 * sizeof(float));;
-x4153[0] = 1.0f;
+float* x4154 = (float*)myMalloc(1 * sizeof(float));;
+x4154[0] = 0.0f;
+float* x4156 = (float*)myMalloc(1 * sizeof(float));;
+x4156[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -12799,62 +12811,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4153, x4153, x4153, x4153, in_desc, x2748,
+    x4156, x4156, x4156, x4156, in_desc, x2748,
     out_desc, x2763, in_desc, x2754, sbmv_desc, x517,
     x1181,x1243, 1.0E-5, x2756, x2757));
 };
 // conv2D back-propagate
-float* x4157 = (float*)myMalloc(1 * sizeof(float));;
-x4157[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 256, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2706, x2706));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2742, x2742));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4157, filt_desc, x1042, grad_out_desc, x2754,
-    conv_desc, algo, ws_data, ws_size,
-    x4157, grad_in_desc, x2727));
-};
 float* x4160 = (float*)myMalloc(1 * sizeof(float));;
 x4160[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 256, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2706, x2706));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2742, x2742));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4160, filt_desc, x1042, grad_out_desc, x2754,
+    conv_desc, algo, ws_data, ws_size,
+    x4160, grad_in_desc, x2727));
+};
+float* x4163 = (float*)myMalloc(1 * sizeof(float));;
+x4163[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -12894,14 +12906,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4160, in_desc, x2719, grad_out_desc, x2754,
+    x4163, in_desc, x2719, grad_out_desc, x2754,
     conv_desc, algo, ws_data, ws_size,
-    x4160, grad_filt_desc, x1356));
+    x4163, grad_filt_desc, x1356));
 };
-float* x4163 = (float*)myMalloc(1 * sizeof(float));;
-x4163[0] = 1.0f;
-float* x4165 = (float*)myMalloc(1 * sizeof(float));;
-x4165[0] = 0.0f;
+float* x4166 = (float*)myMalloc(1 * sizeof(float));;
+x4166[0] = 1.0f;
+float* x4168 = (float*)myMalloc(1 * sizeof(float));;
+x4168[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -12918,13 +12930,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4163, x_desc, x2719, x_desc, x2727, x_desc, x2719,
-    x4165, x_desc, x2727));
+    x4166, x_desc, x2719, x_desc, x2727, x_desc, x2719,
+    x4168, x_desc, x2727));
 };
-float* x4168 = (float*)myMalloc(1 * sizeof(float));;
-x4168[0] = 0.0f;
-float* x4170 = (float*)myMalloc(1 * sizeof(float));;
-x4170[0] = 1.0f;
+float* x4171 = (float*)myMalloc(1 * sizeof(float));;
+x4171[0] = 0.0f;
+float* x4173 = (float*)myMalloc(1 * sizeof(float));;
+x4173[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -12947,62 +12959,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4170, x4170, x4170, x4170, in_desc, x2712,
+    x4173, x4173, x4173, x4173, in_desc, x2712,
     out_desc, x2727, in_desc, x2718, sbmv_desc, x571,
     x1199,x1348, 1.0E-5, x2720, x2721));
 };
 // conv2D back-propagate
-float* x4174 = (float*)myMalloc(1 * sizeof(float));;
-x4174[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 1024, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2659, x2659));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2706, x2706));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4174, filt_desc, x313, grad_out_desc, x2718,
-    conv_desc, algo, ws_data, ws_size,
-    x4174, grad_in_desc, x2680));
-};
 float* x4177 = (float*)myMalloc(1 * sizeof(float));;
 x4177[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 1024, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2659, x2659));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2706, x2706));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4177, filt_desc, x313, grad_out_desc, x2718,
+    conv_desc, algo, ws_data, ws_size,
+    x4177, grad_in_desc, x2680));
+};
+float* x4180 = (float*)myMalloc(1 * sizeof(float));;
+x4180[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -13042,14 +13054,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4177, in_desc, x2672, grad_out_desc, x2718,
+    x4180, in_desc, x2672, grad_out_desc, x2718,
     conv_desc, algo, ws_data, ws_size,
-    x4177, grad_filt_desc, x1113));
+    x4180, grad_filt_desc, x1113));
 };
-float* x4180 = (float*)myMalloc(1 * sizeof(float));;
-x4180[0] = 1.0f;
-float* x4182 = (float*)myMalloc(1 * sizeof(float));;
-x4182[0] = 0.0f;
+float* x4183 = (float*)myMalloc(1 * sizeof(float));;
+x4183[0] = 1.0f;
+float* x4185 = (float*)myMalloc(1 * sizeof(float));;
+x4185[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -13066,18 +13078,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4180, x_desc, x2672, x_desc, x2680, x_desc, x2672,
-    x4182, x_desc, x2680));
+    x4183, x_desc, x2672, x_desc, x2680, x_desc, x2672,
+    x4185, x_desc, x2680));
 };
-if (x4186) {
-if (x4188) {
+if (x4189) {
+if (x4191) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(1024) x Sym(2659) x Sym(2659), res:  x Const(64) x Const(1024) x Sym(2542) x Sym(2542)");
 }
-float* x4193 = (float*)myMalloc(1 * sizeof(float));;
-x4193[0] = 1.0f;
-float* x4195 = (float*)myMalloc(1 * sizeof(float));;
-x4195[0] = 1.0f;
+float* x4196 = (float*)myMalloc(1 * sizeof(float));;
+x4196[0] = 1.0f;
+float* x4198 = (float*)myMalloc(1 * sizeof(float));;
+x4198[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -13093,11 +13105,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2542, x2542));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4193, bias_desc, x2680, x4195, out_desc, x2563));
+    cudnnHandle, x4196, bias_desc, x2680, x4198, out_desc, x2563));
 };
 } else {
-float* x4199 = (float*)myMalloc(1 * sizeof(float));;
-x4199[0] = 1.0f;
+float* x4202 = (float*)myMalloc(1 * sizeof(float));;
+x4202[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -13113,14 +13125,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2659, x2659));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4199, grad_out_desc, x2680,
-    x4199, grad_bias_desc, x2563));
+    cudnnHandle, x4202, grad_out_desc, x2680,
+    x4202, grad_bias_desc, x2563));
 };
 }
-float* x4204 = (float*)myMalloc(1 * sizeof(float));;
-x4204[0] = 0.0f;
-float* x4206 = (float*)myMalloc(1 * sizeof(float));;
-x4206[0] = 1.0f;
+float* x4207 = (float*)myMalloc(1 * sizeof(float));;
+x4207[0] = 0.0f;
+float* x4209 = (float*)myMalloc(1 * sizeof(float));;
+x4209[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -13143,62 +13155,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4206, x4206, x4206, x4206, in_desc, x2665,
+    x4209, x4209, x4209, x4209, in_desc, x2665,
     out_desc, x2680, in_desc, x2671, sbmv_desc, x1084,
     x1370,x1164, 1.0E-5, x2673, x2674));
 };
 // conv2D back-propagate
-float* x4210 = (float*)myMalloc(1 * sizeof(float));;
-x4210[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    1024, 256, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2625, x2625));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2659, x2659));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4210, filt_desc, x643, grad_out_desc, x2671,
-    conv_desc, algo, ws_data, ws_size,
-    x4210, grad_in_desc, x2646));
-};
 float* x4213 = (float*)myMalloc(1 * sizeof(float));;
 x4213[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    1024, 256, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2625, x2625));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2659, x2659));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4213, filt_desc, x643, grad_out_desc, x2671,
+    conv_desc, algo, ws_data, ws_size,
+    x4213, grad_in_desc, x2646));
+};
+float* x4216 = (float*)myMalloc(1 * sizeof(float));;
+x4216[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -13238,14 +13250,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4213, in_desc, x2638, grad_out_desc, x2671,
+    x4216, in_desc, x2638, grad_out_desc, x2671,
     conv_desc, algo, ws_data, ws_size,
-    x4213, grad_filt_desc, x1223));
+    x4216, grad_filt_desc, x1223));
 };
-float* x4216 = (float*)myMalloc(1 * sizeof(float));;
-x4216[0] = 1.0f;
-float* x4218 = (float*)myMalloc(1 * sizeof(float));;
-x4218[0] = 0.0f;
+float* x4219 = (float*)myMalloc(1 * sizeof(float));;
+x4219[0] = 1.0f;
+float* x4221 = (float*)myMalloc(1 * sizeof(float));;
+x4221[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -13262,13 +13274,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4216, x_desc, x2638, x_desc, x2646, x_desc, x2638,
-    x4218, x_desc, x2646));
+    x4219, x_desc, x2638, x_desc, x2646, x_desc, x2638,
+    x4221, x_desc, x2646));
 };
-float* x4221 = (float*)myMalloc(1 * sizeof(float));;
-x4221[0] = 0.0f;
-float* x4223 = (float*)myMalloc(1 * sizeof(float));;
-x4223[0] = 1.0f;
+float* x4224 = (float*)myMalloc(1 * sizeof(float));;
+x4224[0] = 0.0f;
+float* x4226 = (float*)myMalloc(1 * sizeof(float));;
+x4226[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -13291,62 +13303,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4223, x4223, x4223, x4223, in_desc, x2631,
+    x4226, x4226, x4226, x4226, in_desc, x2631,
     out_desc, x2646, in_desc, x2637, sbmv_desc, x979,
     x1335,x1299, 1.0E-5, x2639, x2640));
 };
 // conv2D back-propagate
-float* x4227 = (float*)myMalloc(1 * sizeof(float));;
-x4227[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 256, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2589, x2589));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2625, x2625));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4227, filt_desc, x337, grad_out_desc, x2637,
-    conv_desc, algo, ws_data, ws_size,
-    x4227, grad_in_desc, x2610));
-};
 float* x4230 = (float*)myMalloc(1 * sizeof(float));;
 x4230[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 256, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2589, x2589));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2625, x2625));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4230, filt_desc, x337, grad_out_desc, x2637,
+    conv_desc, algo, ws_data, ws_size,
+    x4230, grad_in_desc, x2610));
+};
+float* x4233 = (float*)myMalloc(1 * sizeof(float));;
+x4233[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -13386,14 +13398,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4230, in_desc, x2602, grad_out_desc, x2637,
+    x4233, in_desc, x2602, grad_out_desc, x2637,
     conv_desc, algo, ws_data, ws_size,
-    x4230, grad_filt_desc, x1121));
+    x4233, grad_filt_desc, x1121));
 };
-float* x4233 = (float*)myMalloc(1 * sizeof(float));;
-x4233[0] = 1.0f;
-float* x4235 = (float*)myMalloc(1 * sizeof(float));;
-x4235[0] = 0.0f;
+float* x4236 = (float*)myMalloc(1 * sizeof(float));;
+x4236[0] = 1.0f;
+float* x4238 = (float*)myMalloc(1 * sizeof(float));;
+x4238[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -13410,13 +13422,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4233, x_desc, x2602, x_desc, x2610, x_desc, x2602,
-    x4235, x_desc, x2610));
+    x4236, x_desc, x2602, x_desc, x2610, x_desc, x2602,
+    x4238, x_desc, x2610));
 };
-float* x4238 = (float*)myMalloc(1 * sizeof(float));;
-x4238[0] = 0.0f;
-float* x4240 = (float*)myMalloc(1 * sizeof(float));;
-x4240[0] = 1.0f;
+float* x4241 = (float*)myMalloc(1 * sizeof(float));;
+x4241[0] = 0.0f;
+float* x4243 = (float*)myMalloc(1 * sizeof(float));;
+x4243[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -13439,62 +13451,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4240, x4240, x4240, x4240, in_desc, x2595,
+    x4243, x4243, x4243, x4243, in_desc, x2595,
     out_desc, x2610, in_desc, x2601, sbmv_desc, x682,
     x1236,x1304, 1.0E-5, x2603, x2604));
 };
 // conv2D back-propagate
-float* x4244 = (float*)myMalloc(1 * sizeof(float));;
-x4244[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 1024, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2542, x2542));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2589, x2589));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4244, filt_desc, x949, grad_out_desc, x2601,
-    conv_desc, algo, ws_data, ws_size,
-    x4244, grad_in_desc, x2563));
-};
 float* x4247 = (float*)myMalloc(1 * sizeof(float));;
 x4247[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 1024, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2542, x2542));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2589, x2589));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4247, filt_desc, x949, grad_out_desc, x2601,
+    conv_desc, algo, ws_data, ws_size,
+    x4247, grad_in_desc, x2563));
+};
+float* x4250 = (float*)myMalloc(1 * sizeof(float));;
+x4250[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -13534,14 +13546,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4247, in_desc, x2555, grad_out_desc, x2601,
+    x4250, in_desc, x2555, grad_out_desc, x2601,
     conv_desc, algo, ws_data, ws_size,
-    x4247, grad_filt_desc, x1325));
+    x4250, grad_filt_desc, x1325));
 };
-float* x4250 = (float*)myMalloc(1 * sizeof(float));;
-x4250[0] = 1.0f;
-float* x4252 = (float*)myMalloc(1 * sizeof(float));;
-x4252[0] = 0.0f;
+float* x4253 = (float*)myMalloc(1 * sizeof(float));;
+x4253[0] = 1.0f;
+float* x4255 = (float*)myMalloc(1 * sizeof(float));;
+x4255[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -13558,18 +13570,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4250, x_desc, x2555, x_desc, x2563, x_desc, x2555,
-    x4252, x_desc, x2563));
+    x4253, x_desc, x2555, x_desc, x2563, x_desc, x2555,
+    x4255, x_desc, x2563));
 };
-if (x4256) {
-if (x4258) {
+if (x4259) {
+if (x4261) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(1024) x Sym(2542) x Sym(2542), res:  x Const(64) x Const(1024) x Sym(2399) x Sym(2399)");
 }
-float* x4263 = (float*)myMalloc(1 * sizeof(float));;
-x4263[0] = 1.0f;
-float* x4265 = (float*)myMalloc(1 * sizeof(float));;
-x4265[0] = 1.0f;
+float* x4266 = (float*)myMalloc(1 * sizeof(float));;
+x4266[0] = 1.0f;
+float* x4268 = (float*)myMalloc(1 * sizeof(float));;
+x4268[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -13585,11 +13597,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2399, x2399));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4263, bias_desc, x2563, x4265, out_desc, x2420));
+    cudnnHandle, x4266, bias_desc, x2563, x4268, out_desc, x2420));
 };
 } else {
-float* x4269 = (float*)myMalloc(1 * sizeof(float));;
-x4269[0] = 1.0f;
+float* x4272 = (float*)myMalloc(1 * sizeof(float));;
+x4272[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -13605,14 +13617,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2542, x2542));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4269, grad_out_desc, x2563,
-    x4269, grad_bias_desc, x2420));
+    cudnnHandle, x4272, grad_out_desc, x2563,
+    x4272, grad_bias_desc, x2420));
 };
 }
-float* x4274 = (float*)myMalloc(1 * sizeof(float));;
-x4274[0] = 0.0f;
-float* x4276 = (float*)myMalloc(1 * sizeof(float));;
-x4276[0] = 1.0f;
+float* x4277 = (float*)myMalloc(1 * sizeof(float));;
+x4277[0] = 0.0f;
+float* x4279 = (float*)myMalloc(1 * sizeof(float));;
+x4279[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -13635,62 +13647,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4276, x4276, x4276, x4276, in_desc, x2548,
+    x4279, x4279, x4279, x4279, in_desc, x2548,
     out_desc, x2563, in_desc, x2554, sbmv_desc, x355,
     x1127,x1339, 1.0E-5, x2556, x2557));
 };
 // conv2D back-propagate
-float* x4280 = (float*)myMalloc(1 * sizeof(float));;
-x4280[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    1024, 256, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2508, x2508));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2542, x2542));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4280, filt_desc, x463, grad_out_desc, x2554,
-    conv_desc, algo, ws_data, ws_size,
-    x4280, grad_in_desc, x2529));
-};
 float* x4283 = (float*)myMalloc(1 * sizeof(float));;
 x4283[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    1024, 256, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2508, x2508));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2542, x2542));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4283, filt_desc, x463, grad_out_desc, x2554,
+    conv_desc, algo, ws_data, ws_size,
+    x4283, grad_in_desc, x2529));
+};
+float* x4286 = (float*)myMalloc(1 * sizeof(float));;
+x4286[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -13730,14 +13742,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4283, in_desc, x2521, grad_out_desc, x2554,
+    x4286, in_desc, x2521, grad_out_desc, x2554,
     conv_desc, algo, ws_data, ws_size,
-    x4283, grad_filt_desc, x1163));
+    x4286, grad_filt_desc, x1163));
 };
-float* x4286 = (float*)myMalloc(1 * sizeof(float));;
-x4286[0] = 1.0f;
-float* x4288 = (float*)myMalloc(1 * sizeof(float));;
-x4288[0] = 0.0f;
+float* x4289 = (float*)myMalloc(1 * sizeof(float));;
+x4289[0] = 1.0f;
+float* x4291 = (float*)myMalloc(1 * sizeof(float));;
+x4291[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -13754,13 +13766,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4286, x_desc, x2521, x_desc, x2529, x_desc, x2521,
-    x4288, x_desc, x2529));
+    x4289, x_desc, x2521, x_desc, x2529, x_desc, x2521,
+    x4291, x_desc, x2529));
 };
-float* x4291 = (float*)myMalloc(1 * sizeof(float));;
-x4291[0] = 0.0f;
-float* x4293 = (float*)myMalloc(1 * sizeof(float));;
-x4293[0] = 1.0f;
+float* x4294 = (float*)myMalloc(1 * sizeof(float));;
+x4294[0] = 0.0f;
+float* x4296 = (float*)myMalloc(1 * sizeof(float));;
+x4296[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -13783,62 +13795,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4293, x4293, x4293, x4293, in_desc, x2514,
+    x4296, x4296, x4296, x4296, in_desc, x2514,
     out_desc, x2529, in_desc, x2520, sbmv_desc, x1108,
     x1378,x1203, 1.0E-5, x2522, x2523));
 };
 // conv2D back-propagate
-float* x4297 = (float*)myMalloc(1 * sizeof(float));;
-x4297[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 256, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2472, x2472));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2508, x2508));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4297, filt_desc, x388, grad_out_desc, x2520,
-    conv_desc, algo, ws_data, ws_size,
-    x4297, grad_in_desc, x2493));
-};
 float* x4300 = (float*)myMalloc(1 * sizeof(float));;
 x4300[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 256, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2472, x2472));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2508, x2508));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4300, filt_desc, x388, grad_out_desc, x2520,
+    conv_desc, algo, ws_data, ws_size,
+    x4300, grad_in_desc, x2493));
+};
+float* x4303 = (float*)myMalloc(1 * sizeof(float));;
+x4303[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -13878,14 +13890,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4300, in_desc, x2485, grad_out_desc, x2520,
+    x4303, in_desc, x2485, grad_out_desc, x2520,
     conv_desc, algo, ws_data, ws_size,
-    x4300, grad_filt_desc, x1138));
+    x4303, grad_filt_desc, x1138));
 };
-float* x4303 = (float*)myMalloc(1 * sizeof(float));;
-x4303[0] = 1.0f;
-float* x4305 = (float*)myMalloc(1 * sizeof(float));;
-x4305[0] = 0.0f;
+float* x4306 = (float*)myMalloc(1 * sizeof(float));;
+x4306[0] = 1.0f;
+float* x4308 = (float*)myMalloc(1 * sizeof(float));;
+x4308[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -13902,13 +13914,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4303, x_desc, x2485, x_desc, x2493, x_desc, x2485,
-    x4305, x_desc, x2493));
+    x4306, x_desc, x2485, x_desc, x2493, x_desc, x2485,
+    x4308, x_desc, x2493));
 };
-float* x4308 = (float*)myMalloc(1 * sizeof(float));;
-x4308[0] = 0.0f;
-float* x4310 = (float*)myMalloc(1 * sizeof(float));;
-x4310[0] = 1.0f;
+float* x4311 = (float*)myMalloc(1 * sizeof(float));;
+x4311[0] = 0.0f;
+float* x4313 = (float*)myMalloc(1 * sizeof(float));;
+x4313[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -13931,62 +13943,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4310, x4310, x4310, x4310, in_desc, x2478,
+    x4313, x4313, x4313, x4313, in_desc, x2478,
     out_desc, x2493, in_desc, x2484, sbmv_desc, x385,
     x1137,x1326, 1.0E-5, x2486, x2487));
 };
 // conv2D back-propagate
-float* x4314 = (float*)myMalloc(1 * sizeof(float));;
-x4314[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 1024, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2399, x2399));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2472, x2472));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4314, filt_desc, x334, grad_out_desc, x2484,
-    conv_desc, algo, ws_data, ws_size,
-    x4314, grad_in_desc, x2420));
-};
 float* x4317 = (float*)myMalloc(1 * sizeof(float));;
 x4317[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 1024, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2399, x2399));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2472, x2472));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4317, filt_desc, x334, grad_out_desc, x2484,
+    conv_desc, algo, ws_data, ws_size,
+    x4317, grad_in_desc, x2420));
+};
+float* x4320 = (float*)myMalloc(1 * sizeof(float));;
+x4320[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -14026,14 +14038,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4317, in_desc, x2412, grad_out_desc, x2484,
+    x4320, in_desc, x2412, grad_out_desc, x2484,
     conv_desc, algo, ws_data, ws_size,
-    x4317, grad_filt_desc, x1120));
+    x4320, grad_filt_desc, x1120));
 };
-float* x4320 = (float*)myMalloc(1 * sizeof(float));;
-x4320[0] = 1.0f;
-float* x4322 = (float*)myMalloc(1 * sizeof(float));;
-x4322[0] = 0.0f;
+float* x4323 = (float*)myMalloc(1 * sizeof(float));;
+x4323[0] = 1.0f;
+float* x4325 = (float*)myMalloc(1 * sizeof(float));;
+x4325[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -14050,18 +14062,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4320, x_desc, x2412, x_desc, x2420, x_desc, x2412,
-    x4322, x_desc, x2420));
+    x4323, x_desc, x2412, x_desc, x2420, x_desc, x2412,
+    x4325, x_desc, x2420));
 };
-if (x4326) {
-if (x4328) {
+if (x4329) {
+if (x4331) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(1024) x Sym(2399) x Sym(2399), res:  x Const(64) x Const(1024) x Sym(2425) x Sym(2425)");
 }
-float* x4333 = (float*)myMalloc(1 * sizeof(float));;
-x4333[0] = 1.0f;
-float* x4335 = (float*)myMalloc(1 * sizeof(float));;
-x4335[0] = 1.0f;
+float* x4336 = (float*)myMalloc(1 * sizeof(float));;
+x4336[0] = 1.0f;
+float* x4338 = (float*)myMalloc(1 * sizeof(float));;
+x4338[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -14077,11 +14089,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2425, x2425));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4333, bias_desc, x2420, x4335, out_desc, x2446));
+    cudnnHandle, x4336, bias_desc, x2420, x4338, out_desc, x2446));
 };
 } else {
-float* x4339 = (float*)myMalloc(1 * sizeof(float));;
-x4339[0] = 1.0f;
+float* x4342 = (float*)myMalloc(1 * sizeof(float));;
+x4342[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -14097,14 +14109,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 1024, x2399, x2399));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4339, grad_out_desc, x2420,
-    x4339, grad_bias_desc, x2446));
+    cudnnHandle, x4342, grad_out_desc, x2420,
+    x4342, grad_bias_desc, x2446));
 };
 }
-float* x4344 = (float*)myMalloc(1 * sizeof(float));;
-x4344[0] = 0.0f;
-float* x4346 = (float*)myMalloc(1 * sizeof(float));;
-x4346[0] = 1.0f;
+float* x4347 = (float*)myMalloc(1 * sizeof(float));;
+x4347[0] = 0.0f;
+float* x4349 = (float*)myMalloc(1 * sizeof(float));;
+x4349[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -14127,13 +14139,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4346, x4346, x4346, x4346, in_desc, x2431,
+    x4349, x4349, x4349, x4349, in_desc, x2431,
     out_desc, x2446, in_desc, x2437, sbmv_desc, x382,
     x1136,x1327, 1.0E-5, x2439, x2440));
 };
 // conv2D back-propagate
-float* x4350 = (float*)myMalloc(1 * sizeof(float));;
-x4350[0] = 1.0f;
+float* x4353 = (float*)myMalloc(1 * sizeof(float));;
+x4353[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -14175,12 +14187,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x4350, filt_desc, x520, grad_out_desc, x2437,
+    x4353, filt_desc, x520, grad_out_desc, x2437,
     conv_desc, algo, ws_data, ws_size,
-    x4350, grad_in_desc, x2303));
+    x4353, grad_in_desc, x2303));
 };
-float* x4353 = (float*)myMalloc(1 * sizeof(float));;
-x4353[0] = 1.0f;
+float* x4356 = (float*)myMalloc(1 * sizeof(float));;
+x4356[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -14222,14 +14234,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4353, in_desc, x2295, grad_out_desc, x2437,
+    x4356, in_desc, x2295, grad_out_desc, x2437,
     conv_desc, algo, ws_data, ws_size,
-    x4353, grad_filt_desc, x1182));
+    x4356, grad_filt_desc, x1182));
 };
-float* x4356 = (float*)myMalloc(1 * sizeof(float));;
-x4356[0] = 0.0f;
-float* x4358 = (float*)myMalloc(1 * sizeof(float));;
-x4358[0] = 1.0f;
+float* x4359 = (float*)myMalloc(1 * sizeof(float));;
+x4359[0] = 0.0f;
+float* x4361 = (float*)myMalloc(1 * sizeof(float));;
+x4361[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -14252,62 +14264,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4358, x4358, x4358, x4358, in_desc, x2405,
+    x4361, x4361, x4361, x4361, in_desc, x2405,
     out_desc, x2420, in_desc, x2411, sbmv_desc, x349,
     x1125,x1224, 1.0E-5, x2413, x2414));
 };
 // conv2D back-propagate
-float* x4362 = (float*)myMalloc(1 * sizeof(float));;
-x4362[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    1024, 256, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2365, x2365));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 1024, x2399, x2399));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4362, filt_desc, x1102, grad_out_desc, x2411,
-    conv_desc, algo, ws_data, ws_size,
-    x4362, grad_in_desc, x2386));
-};
 float* x4365 = (float*)myMalloc(1 * sizeof(float));;
 x4365[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    1024, 256, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2365, x2365));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 1024, x2399, x2399));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4365, filt_desc, x1102, grad_out_desc, x2411,
+    conv_desc, algo, ws_data, ws_size,
+    x4365, grad_in_desc, x2386));
+};
+float* x4368 = (float*)myMalloc(1 * sizeof(float));;
+x4368[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -14347,14 +14359,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4365, in_desc, x2378, grad_out_desc, x2411,
+    x4368, in_desc, x2378, grad_out_desc, x2411,
     conv_desc, algo, ws_data, ws_size,
-    x4365, grad_filt_desc, x1376));
+    x4368, grad_filt_desc, x1376));
 };
-float* x4368 = (float*)myMalloc(1 * sizeof(float));;
-x4368[0] = 1.0f;
-float* x4370 = (float*)myMalloc(1 * sizeof(float));;
-x4370[0] = 0.0f;
+float* x4371 = (float*)myMalloc(1 * sizeof(float));;
+x4371[0] = 1.0f;
+float* x4373 = (float*)myMalloc(1 * sizeof(float));;
+x4373[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -14371,13 +14383,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4368, x_desc, x2378, x_desc, x2386, x_desc, x2378,
-    x4370, x_desc, x2386));
+    x4371, x_desc, x2378, x_desc, x2386, x_desc, x2378,
+    x4373, x_desc, x2386));
 };
-float* x4373 = (float*)myMalloc(1 * sizeof(float));;
-x4373[0] = 0.0f;
-float* x4375 = (float*)myMalloc(1 * sizeof(float));;
-x4375[0] = 1.0f;
+float* x4376 = (float*)myMalloc(1 * sizeof(float));;
+x4376[0] = 0.0f;
+float* x4378 = (float*)myMalloc(1 * sizeof(float));;
+x4378[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -14400,62 +14412,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4375, x4375, x4375, x4375, in_desc, x2371,
+    x4378, x4378, x4378, x4378, in_desc, x2371,
     out_desc, x2386, in_desc, x2377, sbmv_desc, x619,
     x1215,x1123, 1.0E-5, x2379, x2380));
 };
 // conv2D back-propagate
-float* x4379 = (float*)myMalloc(1 * sizeof(float));;
-x4379[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 256, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2329, x2329));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2365, x2365));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 2, 2, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4379, filt_desc, x820, grad_out_desc, x2377,
-    conv_desc, algo, ws_data, ws_size,
-    x4379, grad_in_desc, x2350));
-};
 float* x4382 = (float*)myMalloc(1 * sizeof(float));;
 x4382[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 256, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2329, x2329));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2365, x2365));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 2, 2, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4382, filt_desc, x820, grad_out_desc, x2377,
+    conv_desc, algo, ws_data, ws_size,
+    x4382, grad_in_desc, x2350));
+};
+float* x4385 = (float*)myMalloc(1 * sizeof(float));;
+x4385[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -14495,14 +14507,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4382, in_desc, x2342, grad_out_desc, x2377,
+    x4385, in_desc, x2342, grad_out_desc, x2377,
     conv_desc, algo, ws_data, ws_size,
-    x4382, grad_filt_desc, x1282));
+    x4385, grad_filt_desc, x1282));
 };
-float* x4385 = (float*)myMalloc(1 * sizeof(float));;
-x4385[0] = 1.0f;
-float* x4387 = (float*)myMalloc(1 * sizeof(float));;
-x4387[0] = 0.0f;
+float* x4388 = (float*)myMalloc(1 * sizeof(float));;
+x4388[0] = 1.0f;
+float* x4390 = (float*)myMalloc(1 * sizeof(float));;
+x4390[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -14519,13 +14531,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4385, x_desc, x2342, x_desc, x2350, x_desc, x2342,
-    x4387, x_desc, x2350));
+    x4388, x_desc, x2342, x_desc, x2350, x_desc, x2342,
+    x4390, x_desc, x2350));
 };
-float* x4390 = (float*)myMalloc(1 * sizeof(float));;
-x4390[0] = 0.0f;
-float* x4392 = (float*)myMalloc(1 * sizeof(float));;
-x4392[0] = 1.0f;
+float* x4393 = (float*)myMalloc(1 * sizeof(float));;
+x4393[0] = 0.0f;
+float* x4395 = (float*)myMalloc(1 * sizeof(float));;
+x4395[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -14548,62 +14560,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4392, x4392, x4392, x4392, in_desc, x2335,
+    x4395, x4395, x4395, x4395, in_desc, x2335,
     out_desc, x2350, in_desc, x2341, sbmv_desc, x1105,
     x1377,x1128, 1.0E-5, x2343, x2344));
 };
 // conv2D back-propagate
-float* x4396 = (float*)myMalloc(1 * sizeof(float));;
-x4396[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 512, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x2282, x2282));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x2329, x2329));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4396, filt_desc, x835, grad_out_desc, x2341,
-    conv_desc, algo, ws_data, ws_size,
-    x4396, grad_in_desc, x2303));
-};
 float* x4399 = (float*)myMalloc(1 * sizeof(float));;
 x4399[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 512, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x2282, x2282));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x2329, x2329));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4399, filt_desc, x835, grad_out_desc, x2341,
+    conv_desc, algo, ws_data, ws_size,
+    x4399, grad_in_desc, x2303));
+};
+float* x4402 = (float*)myMalloc(1 * sizeof(float));;
+x4402[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -14643,14 +14655,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4399, in_desc, x2295, grad_out_desc, x2341,
+    x4402, in_desc, x2295, grad_out_desc, x2341,
     conv_desc, algo, ws_data, ws_size,
-    x4399, grad_filt_desc, x1287));
+    x4402, grad_filt_desc, x1287));
 };
-float* x4402 = (float*)myMalloc(1 * sizeof(float));;
-x4402[0] = 1.0f;
-float* x4404 = (float*)myMalloc(1 * sizeof(float));;
-x4404[0] = 0.0f;
+float* x4405 = (float*)myMalloc(1 * sizeof(float));;
+x4405[0] = 1.0f;
+float* x4407 = (float*)myMalloc(1 * sizeof(float));;
+x4407[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -14667,18 +14679,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4402, x_desc, x2295, x_desc, x2303, x_desc, x2295,
-    x4404, x_desc, x2303));
+    x4405, x_desc, x2295, x_desc, x2303, x_desc, x2295,
+    x4407, x_desc, x2303));
 };
-if (x4408) {
 if (x4411) {
+if (x4414) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(512) x Sym(2282) x Sym(2282), res:  x Const(64) x Const(512) x Sym(2165) x Sym(2165)");
 }
-float* x4416 = (float*)myMalloc(1 * sizeof(float));;
-x4416[0] = 1.0f;
-float* x4418 = (float*)myMalloc(1 * sizeof(float));;
-x4418[0] = 1.0f;
+float* x4419 = (float*)myMalloc(1 * sizeof(float));;
+x4419[0] = 1.0f;
+float* x4421 = (float*)myMalloc(1 * sizeof(float));;
+x4421[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -14694,11 +14706,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, x2165, x2165));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4416, bias_desc, x2303, x4418, out_desc, x2186));
+    cudnnHandle, x4419, bias_desc, x2303, x4421, out_desc, x2186));
 };
 } else {
-float* x4422 = (float*)myMalloc(1 * sizeof(float));;
-x4422[0] = 1.0f;
+float* x4425 = (float*)myMalloc(1 * sizeof(float));;
+x4425[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -14714,14 +14726,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, x2282, x2282));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4422, grad_out_desc, x2303,
-    x4422, grad_bias_desc, x2186));
+    cudnnHandle, x4425, grad_out_desc, x2303,
+    x4425, grad_bias_desc, x2186));
 };
 }
-float* x4427 = (float*)myMalloc(1 * sizeof(float));;
-x4427[0] = 0.0f;
-float* x4429 = (float*)myMalloc(1 * sizeof(float));;
-x4429[0] = 1.0f;
+float* x4430 = (float*)myMalloc(1 * sizeof(float));;
+x4430[0] = 0.0f;
+float* x4432 = (float*)myMalloc(1 * sizeof(float));;
+x4432[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -14744,62 +14756,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4429, x4429, x4429, x4429, in_desc, x2288,
+    x4432, x4432, x4432, x4432, in_desc, x2288,
     out_desc, x2303, in_desc, x2294, sbmv_desc, x763,
     x1263,x1161, 1.0E-5, x2296, x2297));
 };
 // conv2D back-propagate
-float* x4433 = (float*)myMalloc(1 * sizeof(float));;
-x4433[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 128, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2248, x2248));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x2282, x2282));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4433, filt_desc, x460, grad_out_desc, x2294,
-    conv_desc, algo, ws_data, ws_size,
-    x4433, grad_in_desc, x2269));
-};
 float* x4436 = (float*)myMalloc(1 * sizeof(float));;
 x4436[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 128, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2248, x2248));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x2282, x2282));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4436, filt_desc, x460, grad_out_desc, x2294,
+    conv_desc, algo, ws_data, ws_size,
+    x4436, grad_in_desc, x2269));
+};
+float* x4439 = (float*)myMalloc(1 * sizeof(float));;
+x4439[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -14839,14 +14851,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4436, in_desc, x2261, grad_out_desc, x2294,
+    x4439, in_desc, x2261, grad_out_desc, x2294,
     conv_desc, algo, ws_data, ws_size,
-    x4436, grad_filt_desc, x1162));
+    x4439, grad_filt_desc, x1162));
 };
-float* x4439 = (float*)myMalloc(1 * sizeof(float));;
-x4439[0] = 1.0f;
-float* x4441 = (float*)myMalloc(1 * sizeof(float));;
-x4441[0] = 0.0f;
+float* x4442 = (float*)myMalloc(1 * sizeof(float));;
+x4442[0] = 1.0f;
+float* x4444 = (float*)myMalloc(1 * sizeof(float));;
+x4444[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -14863,13 +14875,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4439, x_desc, x2261, x_desc, x2269, x_desc, x2261,
-    x4441, x_desc, x2269));
+    x4442, x_desc, x2261, x_desc, x2269, x_desc, x2261,
+    x4444, x_desc, x2269));
 };
-float* x4444 = (float*)myMalloc(1 * sizeof(float));;
-x4444[0] = 0.0f;
-float* x4446 = (float*)myMalloc(1 * sizeof(float));;
-x4446[0] = 1.0f;
+float* x4447 = (float*)myMalloc(1 * sizeof(float));;
+x4447[0] = 0.0f;
+float* x4449 = (float*)myMalloc(1 * sizeof(float));;
+x4449[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -14892,62 +14904,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4446, x4446, x4446, x4446, in_desc, x2254,
+    x4449, x4449, x4449, x4449, in_desc, x2254,
     out_desc, x2269, in_desc, x2260, sbmv_desc, x532,
     x1186,x1145, 1.0E-5, x2262, x2263));
 };
 // conv2D back-propagate
-float* x4450 = (float*)myMalloc(1 * sizeof(float));;
-x4450[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    128, 128, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2212, x2212));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2248, x2248));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4450, filt_desc, x790, grad_out_desc, x2260,
-    conv_desc, algo, ws_data, ws_size,
-    x4450, grad_in_desc, x2233));
-};
 float* x4453 = (float*)myMalloc(1 * sizeof(float));;
 x4453[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    128, 128, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2212, x2212));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2248, x2248));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4453, filt_desc, x790, grad_out_desc, x2260,
+    conv_desc, algo, ws_data, ws_size,
+    x4453, grad_in_desc, x2233));
+};
+float* x4456 = (float*)myMalloc(1 * sizeof(float));;
+x4456[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -14987,14 +14999,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4453, in_desc, x2225, grad_out_desc, x2260,
+    x4456, in_desc, x2225, grad_out_desc, x2260,
     conv_desc, algo, ws_data, ws_size,
-    x4453, grad_filt_desc, x1272));
+    x4456, grad_filt_desc, x1272));
 };
-float* x4456 = (float*)myMalloc(1 * sizeof(float));;
-x4456[0] = 1.0f;
-float* x4458 = (float*)myMalloc(1 * sizeof(float));;
-x4458[0] = 0.0f;
+float* x4459 = (float*)myMalloc(1 * sizeof(float));;
+x4459[0] = 1.0f;
+float* x4461 = (float*)myMalloc(1 * sizeof(float));;
+x4461[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -15011,13 +15023,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4456, x_desc, x2225, x_desc, x2233, x_desc, x2225,
-    x4458, x_desc, x2233));
+    x4459, x_desc, x2225, x_desc, x2233, x_desc, x2225,
+    x4461, x_desc, x2233));
 };
-float* x4461 = (float*)myMalloc(1 * sizeof(float));;
-x4461[0] = 0.0f;
-float* x4463 = (float*)myMalloc(1 * sizeof(float));;
-x4463[0] = 1.0f;
+float* x4464 = (float*)myMalloc(1 * sizeof(float));;
+x4464[0] = 0.0f;
+float* x4466 = (float*)myMalloc(1 * sizeof(float));;
+x4466[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -15040,62 +15052,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4463, x4463, x4463, x4463, in_desc, x2218,
+    x4466, x4466, x4466, x4466, in_desc, x2218,
     out_desc, x2233, in_desc, x2224, sbmv_desc, x412,
     x1146,x1349, 1.0E-5, x2226, x2227));
 };
 // conv2D back-propagate
-float* x4467 = (float*)myMalloc(1 * sizeof(float));;
-x4467[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    128, 512, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x2165, x2165));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2212, x2212));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4467, filt_desc, x691, grad_out_desc, x2224,
-    conv_desc, algo, ws_data, ws_size,
-    x4467, grad_in_desc, x2186));
-};
 float* x4470 = (float*)myMalloc(1 * sizeof(float));;
 x4470[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    128, 512, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x2165, x2165));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2212, x2212));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4470, filt_desc, x691, grad_out_desc, x2224,
+    conv_desc, algo, ws_data, ws_size,
+    x4470, grad_in_desc, x2186));
+};
+float* x4473 = (float*)myMalloc(1 * sizeof(float));;
+x4473[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -15135,14 +15147,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4470, in_desc, x2178, grad_out_desc, x2224,
+    x4473, in_desc, x2178, grad_out_desc, x2224,
     conv_desc, algo, ws_data, ws_size,
-    x4470, grad_filt_desc, x1239));
+    x4473, grad_filt_desc, x1239));
 };
-float* x4473 = (float*)myMalloc(1 * sizeof(float));;
-x4473[0] = 1.0f;
-float* x4475 = (float*)myMalloc(1 * sizeof(float));;
-x4475[0] = 0.0f;
+float* x4476 = (float*)myMalloc(1 * sizeof(float));;
+x4476[0] = 1.0f;
+float* x4478 = (float*)myMalloc(1 * sizeof(float));;
+x4478[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -15159,18 +15171,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4473, x_desc, x2178, x_desc, x2186, x_desc, x2178,
-    x4475, x_desc, x2186));
+    x4476, x_desc, x2178, x_desc, x2186, x_desc, x2178,
+    x4478, x_desc, x2186));
 };
-if (x4479) {
-if (x4481) {
+if (x4482) {
+if (x4484) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(512) x Sym(2165) x Sym(2165), res:  x Const(64) x Const(512) x Sym(2048) x Sym(2048)");
 }
-float* x4486 = (float*)myMalloc(1 * sizeof(float));;
-x4486[0] = 1.0f;
-float* x4488 = (float*)myMalloc(1 * sizeof(float));;
-x4488[0] = 1.0f;
+float* x4489 = (float*)myMalloc(1 * sizeof(float));;
+x4489[0] = 1.0f;
+float* x4491 = (float*)myMalloc(1 * sizeof(float));;
+x4491[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -15186,11 +15198,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, x2048, x2048));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4486, bias_desc, x2186, x4488, out_desc, x2069));
+    cudnnHandle, x4489, bias_desc, x2186, x4491, out_desc, x2069));
 };
 } else {
-float* x4492 = (float*)myMalloc(1 * sizeof(float));;
-x4492[0] = 1.0f;
+float* x4495 = (float*)myMalloc(1 * sizeof(float));;
+x4495[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -15206,14 +15218,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, x2165, x2165));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4492, grad_out_desc, x2186,
-    x4492, grad_bias_desc, x2069));
+    cudnnHandle, x4495, grad_out_desc, x2186,
+    x4495, grad_bias_desc, x2069));
 };
 }
-float* x4497 = (float*)myMalloc(1 * sizeof(float));;
-x4497[0] = 0.0f;
-float* x4499 = (float*)myMalloc(1 * sizeof(float));;
-x4499[0] = 1.0f;
+float* x4500 = (float*)myMalloc(1 * sizeof(float));;
+x4500[0] = 0.0f;
+float* x4502 = (float*)myMalloc(1 * sizeof(float));;
+x4502[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -15236,62 +15248,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4499, x4499, x4499, x4499, in_desc, x2171,
+    x4502, x4502, x4502, x4502, in_desc, x2171,
     out_desc, x2186, in_desc, x2177, sbmv_desc, x796,
     x1274,x1189, 1.0E-5, x2179, x2180));
 };
 // conv2D back-propagate
-float* x4503 = (float*)myMalloc(1 * sizeof(float));;
-x4503[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 128, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2131, x2131));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x2165, x2165));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4503, filt_desc, x418, grad_out_desc, x2177,
-    conv_desc, algo, ws_data, ws_size,
-    x4503, grad_in_desc, x2152));
-};
 float* x4506 = (float*)myMalloc(1 * sizeof(float));;
 x4506[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 128, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2131, x2131));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x2165, x2165));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4506, filt_desc, x418, grad_out_desc, x2177,
+    conv_desc, algo, ws_data, ws_size,
+    x4506, grad_in_desc, x2152));
+};
+float* x4509 = (float*)myMalloc(1 * sizeof(float));;
+x4509[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -15331,14 +15343,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4506, in_desc, x2144, grad_out_desc, x2177,
+    x4509, in_desc, x2144, grad_out_desc, x2177,
     conv_desc, algo, ws_data, ws_size,
-    x4506, grad_filt_desc, x1148));
+    x4509, grad_filt_desc, x1148));
 };
-float* x4509 = (float*)myMalloc(1 * sizeof(float));;
-x4509[0] = 1.0f;
-float* x4511 = (float*)myMalloc(1 * sizeof(float));;
-x4511[0] = 0.0f;
+float* x4512 = (float*)myMalloc(1 * sizeof(float));;
+x4512[0] = 1.0f;
+float* x4514 = (float*)myMalloc(1 * sizeof(float));;
+x4514[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -15355,13 +15367,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4509, x_desc, x2144, x_desc, x2152, x_desc, x2144,
-    x4511, x_desc, x2152));
+    x4512, x_desc, x2144, x_desc, x2152, x_desc, x2144,
+    x4514, x_desc, x2152));
 };
-float* x4514 = (float*)myMalloc(1 * sizeof(float));;
-x4514[0] = 0.0f;
-float* x4516 = (float*)myMalloc(1 * sizeof(float));;
-x4516[0] = 1.0f;
+float* x4517 = (float*)myMalloc(1 * sizeof(float));;
+x4517[0] = 0.0f;
+float* x4519 = (float*)myMalloc(1 * sizeof(float));;
+x4519[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -15384,62 +15396,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4516, x4516, x4516, x4516, in_desc, x2137,
+    x4519, x4519, x4519, x4519, in_desc, x2137,
     out_desc, x2152, in_desc, x2143, sbmv_desc, x676,
     x1234,x1168, 1.0E-5, x2145, x2146));
 };
 // conv2D back-propagate
-float* x4520 = (float*)myMalloc(1 * sizeof(float));;
-x4520[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    128, 128, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2095, x2095));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2131, x2131));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4520, filt_desc, x868, grad_out_desc, x2143,
-    conv_desc, algo, ws_data, ws_size,
-    x4520, grad_in_desc, x2116));
-};
 float* x4523 = (float*)myMalloc(1 * sizeof(float));;
 x4523[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    128, 128, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2095, x2095));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2131, x2131));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4523, filt_desc, x868, grad_out_desc, x2143,
+    conv_desc, algo, ws_data, ws_size,
+    x4523, grad_in_desc, x2116));
+};
+float* x4526 = (float*)myMalloc(1 * sizeof(float));;
+x4526[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -15479,14 +15491,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4523, in_desc, x2108, grad_out_desc, x2143,
+    x4526, in_desc, x2108, grad_out_desc, x2143,
     conv_desc, algo, ws_data, ws_size,
-    x4523, grad_filt_desc, x1298));
+    x4526, grad_filt_desc, x1298));
 };
-float* x4526 = (float*)myMalloc(1 * sizeof(float));;
-x4526[0] = 1.0f;
-float* x4528 = (float*)myMalloc(1 * sizeof(float));;
-x4528[0] = 0.0f;
+float* x4529 = (float*)myMalloc(1 * sizeof(float));;
+x4529[0] = 1.0f;
+float* x4531 = (float*)myMalloc(1 * sizeof(float));;
+x4531[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -15503,13 +15515,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4526, x_desc, x2108, x_desc, x2116, x_desc, x2108,
-    x4528, x_desc, x2116));
+    x4529, x_desc, x2108, x_desc, x2116, x_desc, x2108,
+    x4531, x_desc, x2116));
 };
-float* x4531 = (float*)myMalloc(1 * sizeof(float));;
-x4531[0] = 0.0f;
-float* x4533 = (float*)myMalloc(1 * sizeof(float));;
-x4533[0] = 1.0f;
+float* x4534 = (float*)myMalloc(1 * sizeof(float));;
+x4534[0] = 0.0f;
+float* x4536 = (float*)myMalloc(1 * sizeof(float));;
+x4536[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -15532,62 +15544,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4533, x4533, x4533, x4533, in_desc, x2101,
+    x4536, x4536, x4536, x4536, in_desc, x2101,
     out_desc, x2116, in_desc, x2107, sbmv_desc, x430,
     x1152,x1277, 1.0E-5, x2109, x2110));
 };
 // conv2D back-propagate
-float* x4537 = (float*)myMalloc(1 * sizeof(float));;
-x4537[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    128, 512, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x2048, x2048));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2095, x2095));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4537, filt_desc, x883, grad_out_desc, x2107,
-    conv_desc, algo, ws_data, ws_size,
-    x4537, grad_in_desc, x2069));
-};
 float* x4540 = (float*)myMalloc(1 * sizeof(float));;
 x4540[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    128, 512, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x2048, x2048));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2095, x2095));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4540, filt_desc, x883, grad_out_desc, x2107,
+    conv_desc, algo, ws_data, ws_size,
+    x4540, grad_in_desc, x2069));
+};
+float* x4543 = (float*)myMalloc(1 * sizeof(float));;
+x4543[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -15627,14 +15639,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4540, in_desc, x2061, grad_out_desc, x2107,
+    x4543, in_desc, x2061, grad_out_desc, x2107,
     conv_desc, algo, ws_data, ws_size,
-    x4540, grad_filt_desc, x1303));
+    x4543, grad_filt_desc, x1303));
 };
-float* x4543 = (float*)myMalloc(1 * sizeof(float));;
-x4543[0] = 1.0f;
-float* x4545 = (float*)myMalloc(1 * sizeof(float));;
-x4545[0] = 0.0f;
+float* x4546 = (float*)myMalloc(1 * sizeof(float));;
+x4546[0] = 1.0f;
+float* x4548 = (float*)myMalloc(1 * sizeof(float));;
+x4548[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -15651,18 +15663,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4543, x_desc, x2061, x_desc, x2069, x_desc, x2061,
-    x4545, x_desc, x2069));
+    x4546, x_desc, x2061, x_desc, x2069, x_desc, x2061,
+    x4548, x_desc, x2069));
 };
-if (x4549) {
-if (x4551) {
+if (x4552) {
+if (x4554) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(512) x Sym(2048) x Sym(2048), res:  x Const(64) x Const(512) x Sym(1905) x Sym(1905)");
 }
-float* x4556 = (float*)myMalloc(1 * sizeof(float));;
-x4556[0] = 1.0f;
-float* x4558 = (float*)myMalloc(1 * sizeof(float));;
-x4558[0] = 1.0f;
+float* x4559 = (float*)myMalloc(1 * sizeof(float));;
+x4559[0] = 1.0f;
+float* x4561 = (float*)myMalloc(1 * sizeof(float));;
+x4561[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -15678,11 +15690,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, x1905, x1905));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4556, bias_desc, x2069, x4558, out_desc, x1926));
+    cudnnHandle, x4559, bias_desc, x2069, x4561, out_desc, x1926));
 };
 } else {
-float* x4562 = (float*)myMalloc(1 * sizeof(float));;
-x4562[0] = 1.0f;
+float* x4565 = (float*)myMalloc(1 * sizeof(float));;
+x4565[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -15698,14 +15710,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, x2048, x2048));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4562, grad_out_desc, x2069,
-    x4562, grad_bias_desc, x1926));
+    cudnnHandle, x4565, grad_out_desc, x2069,
+    x4565, grad_bias_desc, x1926));
 };
 }
-float* x4567 = (float*)myMalloc(1 * sizeof(float));;
-x4567[0] = 0.0f;
-float* x4569 = (float*)myMalloc(1 * sizeof(float));;
-x4569[0] = 1.0f;
+float* x4570 = (float*)myMalloc(1 * sizeof(float));;
+x4570[0] = 0.0f;
+float* x4572 = (float*)myMalloc(1 * sizeof(float));;
+x4572[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -15728,62 +15740,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4569, x4569, x4569, x4569, in_desc, x2054,
+    x4572, x4572, x4572, x4572, in_desc, x2054,
     out_desc, x2069, in_desc, x2060, sbmv_desc, x451,
     x1159,x1353, 1.0E-5, x2062, x2063));
 };
 // conv2D back-propagate
-float* x4573 = (float*)myMalloc(1 * sizeof(float));;
-x4573[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 128, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2014, x2014));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x2048, x2048));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4573, filt_desc, x628, grad_out_desc, x2060,
-    conv_desc, algo, ws_data, ws_size,
-    x4573, grad_in_desc, x2035));
-};
 float* x4576 = (float*)myMalloc(1 * sizeof(float));;
 x4576[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 128, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2014, x2014));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x2048, x2048));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4576, filt_desc, x628, grad_out_desc, x2060,
+    conv_desc, algo, ws_data, ws_size,
+    x4576, grad_in_desc, x2035));
+};
+float* x4579 = (float*)myMalloc(1 * sizeof(float));;
+x4579[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -15823,14 +15835,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4576, in_desc, x2027, grad_out_desc, x2060,
+    x4579, in_desc, x2027, grad_out_desc, x2060,
     conv_desc, algo, ws_data, ws_size,
-    x4576, grad_filt_desc, x1218));
+    x4579, grad_filt_desc, x1218));
 };
-float* x4579 = (float*)myMalloc(1 * sizeof(float));;
-x4579[0] = 1.0f;
-float* x4581 = (float*)myMalloc(1 * sizeof(float));;
-x4581[0] = 0.0f;
+float* x4582 = (float*)myMalloc(1 * sizeof(float));;
+x4582[0] = 1.0f;
+float* x4584 = (float*)myMalloc(1 * sizeof(float));;
+x4584[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -15847,13 +15859,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4579, x_desc, x2027, x_desc, x2035, x_desc, x2027,
-    x4581, x_desc, x2035));
+    x4582, x_desc, x2027, x_desc, x2035, x_desc, x2027,
+    x4584, x_desc, x2035));
 };
-float* x4584 = (float*)myMalloc(1 * sizeof(float));;
-x4584[0] = 0.0f;
-float* x4586 = (float*)myMalloc(1 * sizeof(float));;
-x4586[0] = 1.0f;
+float* x4587 = (float*)myMalloc(1 * sizeof(float));;
+x4587[0] = 0.0f;
+float* x4589 = (float*)myMalloc(1 * sizeof(float));;
+x4589[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -15876,62 +15888,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4586, x4586, x4586, x4586, in_desc, x2020,
+    x4589, x4589, x4589, x4589, in_desc, x2020,
     out_desc, x2035, in_desc, x2026, sbmv_desc, x319,
     x1115,x1202, 1.0E-5, x2028, x2029));
 };
 // conv2D back-propagate
-float* x4590 = (float*)myMalloc(1 * sizeof(float));;
-x4590[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    128, 128, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x1978, x1978));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x2014, x2014));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4590, filt_desc, x1000, grad_out_desc, x2026,
-    conv_desc, algo, ws_data, ws_size,
-    x4590, grad_in_desc, x1999));
-};
 float* x4593 = (float*)myMalloc(1 * sizeof(float));;
 x4593[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    128, 128, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x1978, x1978));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x2014, x2014));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4593, filt_desc, x1000, grad_out_desc, x2026,
+    conv_desc, algo, ws_data, ws_size,
+    x4593, grad_in_desc, x1999));
+};
+float* x4596 = (float*)myMalloc(1 * sizeof(float));;
+x4596[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -15971,14 +15983,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4593, in_desc, x1991, grad_out_desc, x2026,
+    x4596, in_desc, x1991, grad_out_desc, x2026,
     conv_desc, algo, ws_data, ws_size,
-    x4593, grad_filt_desc, x1342));
+    x4596, grad_filt_desc, x1342));
 };
-float* x4596 = (float*)myMalloc(1 * sizeof(float));;
-x4596[0] = 1.0f;
-float* x4598 = (float*)myMalloc(1 * sizeof(float));;
-x4598[0] = 0.0f;
+float* x4599 = (float*)myMalloc(1 * sizeof(float));;
+x4599[0] = 1.0f;
+float* x4601 = (float*)myMalloc(1 * sizeof(float));;
+x4601[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -15995,13 +16007,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4596, x_desc, x1991, x_desc, x1999, x_desc, x1991,
-    x4598, x_desc, x1999));
+    x4599, x_desc, x1991, x_desc, x1999, x_desc, x1991,
+    x4601, x_desc, x1999));
 };
-float* x4601 = (float*)myMalloc(1 * sizeof(float));;
-x4601[0] = 0.0f;
-float* x4603 = (float*)myMalloc(1 * sizeof(float));;
-x4603[0] = 1.0f;
+float* x4604 = (float*)myMalloc(1 * sizeof(float));;
+x4604[0] = 0.0f;
+float* x4606 = (float*)myMalloc(1 * sizeof(float));;
+x4606[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -16024,62 +16036,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4603, x4603, x4603, x4603, in_desc, x1984,
+    x4606, x4606, x4606, x4606, in_desc, x1984,
     out_desc, x1999, in_desc, x1990, sbmv_desc, x961,
     x1329,x1124, 1.0E-5, x1992, x1993));
 };
 // conv2D back-propagate
-float* x4607 = (float*)myMalloc(1 * sizeof(float));;
-x4607[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    128, 512, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x1905, x1905));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x1978, x1978));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4607, filt_desc, x1063, grad_out_desc, x1990,
-    conv_desc, algo, ws_data, ws_size,
-    x4607, grad_in_desc, x1926));
-};
 float* x4610 = (float*)myMalloc(1 * sizeof(float));;
 x4610[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    128, 512, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x1905, x1905));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x1978, x1978));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4610, filt_desc, x1063, grad_out_desc, x1990,
+    conv_desc, algo, ws_data, ws_size,
+    x4610, grad_in_desc, x1926));
+};
+float* x4613 = (float*)myMalloc(1 * sizeof(float));;
+x4613[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -16119,14 +16131,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4610, in_desc, x1918, grad_out_desc, x1990,
+    x4613, in_desc, x1918, grad_out_desc, x1990,
     conv_desc, algo, ws_data, ws_size,
-    x4610, grad_filt_desc, x1363));
+    x4613, grad_filt_desc, x1363));
 };
-float* x4613 = (float*)myMalloc(1 * sizeof(float));;
-x4613[0] = 1.0f;
-float* x4615 = (float*)myMalloc(1 * sizeof(float));;
-x4615[0] = 0.0f;
+float* x4616 = (float*)myMalloc(1 * sizeof(float));;
+x4616[0] = 1.0f;
+float* x4618 = (float*)myMalloc(1 * sizeof(float));;
+x4618[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -16143,18 +16155,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4613, x_desc, x1918, x_desc, x1926, x_desc, x1918,
-    x4615, x_desc, x1926));
+    x4616, x_desc, x1918, x_desc, x1926, x_desc, x1918,
+    x4618, x_desc, x1926));
 };
-if (x4619) {
-if (x4621) {
+if (x4622) {
+if (x4624) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(512) x Sym(1905) x Sym(1905), res:  x Const(64) x Const(512) x Sym(1931) x Sym(1931)");
 }
-float* x4626 = (float*)myMalloc(1 * sizeof(float));;
-x4626[0] = 1.0f;
-float* x4628 = (float*)myMalloc(1 * sizeof(float));;
-x4628[0] = 1.0f;
+float* x4629 = (float*)myMalloc(1 * sizeof(float));;
+x4629[0] = 1.0f;
+float* x4631 = (float*)myMalloc(1 * sizeof(float));;
+x4631[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -16170,11 +16182,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, x1931, x1931));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4626, bias_desc, x1926, x4628, out_desc, x1952));
+    cudnnHandle, x4629, bias_desc, x1926, x4631, out_desc, x1952));
 };
 } else {
-float* x4632 = (float*)myMalloc(1 * sizeof(float));;
-x4632[0] = 1.0f;
+float* x4635 = (float*)myMalloc(1 * sizeof(float));;
+x4635[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -16190,14 +16202,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 512, x1905, x1905));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4632, grad_out_desc, x1926,
-    x4632, grad_bias_desc, x1952));
+    cudnnHandle, x4635, grad_out_desc, x1926,
+    x4635, grad_bias_desc, x1952));
 };
 }
-float* x4637 = (float*)myMalloc(1 * sizeof(float));;
-x4637[0] = 0.0f;
-float* x4639 = (float*)myMalloc(1 * sizeof(float));;
-x4639[0] = 1.0f;
+float* x4640 = (float*)myMalloc(1 * sizeof(float));;
+x4640[0] = 0.0f;
+float* x4642 = (float*)myMalloc(1 * sizeof(float));;
+x4642[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -16220,13 +16232,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4639, x4639, x4639, x4639, in_desc, x1937,
+    x4642, x4642, x4642, x4642, in_desc, x1937,
     out_desc, x1952, in_desc, x1943, sbmv_desc, x916,
     x1314,x1226, 1.0E-5, x1945, x1946));
 };
 // conv2D back-propagate
-float* x4643 = (float*)myMalloc(1 * sizeof(float));;
-x4643[0] = 1.0f;
+float* x4646 = (float*)myMalloc(1 * sizeof(float));;
+x4646[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -16268,12 +16280,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x4643, filt_desc, x1069, grad_out_desc, x1943,
+    x4646, filt_desc, x1069, grad_out_desc, x1943,
     conv_desc, algo, ws_data, ws_size,
-    x4643, grad_in_desc, x1809));
+    x4646, grad_in_desc, x1809));
 };
-float* x4646 = (float*)myMalloc(1 * sizeof(float));;
-x4646[0] = 1.0f;
+float* x4649 = (float*)myMalloc(1 * sizeof(float));;
+x4649[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -16315,14 +16327,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4646, in_desc, x1801, grad_out_desc, x1943,
+    x4649, in_desc, x1801, grad_out_desc, x1943,
     conv_desc, algo, ws_data, ws_size,
-    x4646, grad_filt_desc, x1365));
+    x4649, grad_filt_desc, x1365));
 };
-float* x4649 = (float*)myMalloc(1 * sizeof(float));;
-x4649[0] = 0.0f;
-float* x4651 = (float*)myMalloc(1 * sizeof(float));;
-x4651[0] = 1.0f;
+float* x4652 = (float*)myMalloc(1 * sizeof(float));;
+x4652[0] = 0.0f;
+float* x4654 = (float*)myMalloc(1 * sizeof(float));;
+x4654[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -16345,62 +16357,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4651, x4651, x4651, x4651, in_desc, x1911,
+    x4654, x4654, x4654, x4654, in_desc, x1911,
     out_desc, x1926, in_desc, x1917, sbmv_desc, x730,
     x1252,x1317, 1.0E-5, x1919, x1920));
 };
 // conv2D back-propagate
-float* x4655 = (float*)myMalloc(1 * sizeof(float));;
-x4655[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    512, 128, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x1871, x1871));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 512, x1905, x1905));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4655, filt_desc, x613, grad_out_desc, x1917,
-    conv_desc, algo, ws_data, ws_size,
-    x4655, grad_in_desc, x1892));
-};
 float* x4658 = (float*)myMalloc(1 * sizeof(float));;
 x4658[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    512, 128, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x1871, x1871));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 512, x1905, x1905));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4658, filt_desc, x613, grad_out_desc, x1917,
+    conv_desc, algo, ws_data, ws_size,
+    x4658, grad_in_desc, x1892));
+};
+float* x4661 = (float*)myMalloc(1 * sizeof(float));;
+x4661[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -16440,14 +16452,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4658, in_desc, x1884, grad_out_desc, x1917,
+    x4661, in_desc, x1884, grad_out_desc, x1917,
     conv_desc, algo, ws_data, ws_size,
-    x4658, grad_filt_desc, x1213));
+    x4661, grad_filt_desc, x1213));
 };
-float* x4661 = (float*)myMalloc(1 * sizeof(float));;
-x4661[0] = 1.0f;
-float* x4663 = (float*)myMalloc(1 * sizeof(float));;
-x4663[0] = 0.0f;
+float* x4664 = (float*)myMalloc(1 * sizeof(float));;
+x4664[0] = 1.0f;
+float* x4666 = (float*)myMalloc(1 * sizeof(float));;
+x4666[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -16464,13 +16476,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4661, x_desc, x1884, x_desc, x1892, x_desc, x1884,
-    x4663, x_desc, x1892));
+    x4664, x_desc, x1884, x_desc, x1892, x_desc, x1884,
+    x4666, x_desc, x1892));
 };
-float* x4666 = (float*)myMalloc(1 * sizeof(float));;
-x4666[0] = 0.0f;
-float* x4668 = (float*)myMalloc(1 * sizeof(float));;
-x4668[0] = 1.0f;
+float* x4669 = (float*)myMalloc(1 * sizeof(float));;
+x4669[0] = 0.0f;
+float* x4671 = (float*)myMalloc(1 * sizeof(float));;
+x4671[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -16493,13 +16505,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4668, x4668, x4668, x4668, in_desc, x1877,
+    x4671, x4671, x4671, x4671, in_desc, x1877,
     out_desc, x1892, in_desc, x1883, sbmv_desc, x1051,
     x1359,x1297, 1.0E-5, x1885, x1886));
 };
 // conv2D back-propagate
-float* x4672 = (float*)myMalloc(1 * sizeof(float));;
-x4672[0] = 1.0f;
+float* x4675 = (float*)myMalloc(1 * sizeof(float));;
+x4675[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -16541,12 +16553,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x4672, filt_desc, x376, grad_out_desc, x1883,
+    x4675, filt_desc, x376, grad_out_desc, x1883,
     conv_desc, algo, ws_data, ws_size,
-    x4672, grad_in_desc, x1856));
+    x4675, grad_in_desc, x1856));
 };
-float* x4675 = (float*)myMalloc(1 * sizeof(float));;
-x4675[0] = 1.0f;
+float* x4678 = (float*)myMalloc(1 * sizeof(float));;
+x4678[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -16588,14 +16600,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4675, in_desc, x1848, grad_out_desc, x1883,
+    x4678, in_desc, x1848, grad_out_desc, x1883,
     conv_desc, algo, ws_data, ws_size,
-    x4675, grad_filt_desc, x1134));
+    x4678, grad_filt_desc, x1134));
 };
-float* x4678 = (float*)myMalloc(1 * sizeof(float));;
-x4678[0] = 1.0f;
-float* x4680 = (float*)myMalloc(1 * sizeof(float));;
-x4680[0] = 0.0f;
+float* x4681 = (float*)myMalloc(1 * sizeof(float));;
+x4681[0] = 1.0f;
+float* x4683 = (float*)myMalloc(1 * sizeof(float));;
+x4683[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -16612,13 +16624,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4678, x_desc, x1848, x_desc, x1856, x_desc, x1848,
-    x4680, x_desc, x1856));
+    x4681, x_desc, x1848, x_desc, x1856, x_desc, x1848,
+    x4683, x_desc, x1856));
 };
-float* x4683 = (float*)myMalloc(1 * sizeof(float));;
-x4683[0] = 0.0f;
-float* x4685 = (float*)myMalloc(1 * sizeof(float));;
-x4685[0] = 1.0f;
+float* x4686 = (float*)myMalloc(1 * sizeof(float));;
+x4686[0] = 0.0f;
+float* x4688 = (float*)myMalloc(1 * sizeof(float));;
+x4688[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -16641,62 +16653,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4685, x4685, x4685, x4685, in_desc, x1841,
+    x4688, x4688, x4688, x4688, in_desc, x1841,
     out_desc, x1856, in_desc, x1847, sbmv_desc, x547,
     x1191,x1279, 1.0E-5, x1849, x1850));
 };
 // conv2D back-propagate
-float* x4689 = (float*)myMalloc(1 * sizeof(float));;
-x4689[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    128, 256, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x1788, x1788));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 128, x1835, x1835));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4689, filt_desc, x328, grad_out_desc, x1847,
-    conv_desc, algo, ws_data, ws_size,
-    x4689, grad_in_desc, x1809));
-};
 float* x4692 = (float*)myMalloc(1 * sizeof(float));;
 x4692[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    128, 256, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x1788, x1788));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 128, x1835, x1835));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4692, filt_desc, x328, grad_out_desc, x1847,
+    conv_desc, algo, ws_data, ws_size,
+    x4692, grad_in_desc, x1809));
+};
+float* x4695 = (float*)myMalloc(1 * sizeof(float));;
+x4695[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -16736,14 +16748,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4692, in_desc, x1801, grad_out_desc, x1847,
+    x4695, in_desc, x1801, grad_out_desc, x1847,
     conv_desc, algo, ws_data, ws_size,
-    x4692, grad_filt_desc, x1118));
+    x4695, grad_filt_desc, x1118));
 };
-float* x4695 = (float*)myMalloc(1 * sizeof(float));;
-x4695[0] = 1.0f;
-float* x4697 = (float*)myMalloc(1 * sizeof(float));;
-x4697[0] = 0.0f;
+float* x4698 = (float*)myMalloc(1 * sizeof(float));;
+x4698[0] = 1.0f;
+float* x4700 = (float*)myMalloc(1 * sizeof(float));;
+x4700[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -16760,18 +16772,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4695, x_desc, x1801, x_desc, x1809, x_desc, x1801,
-    x4697, x_desc, x1809));
+    x4698, x_desc, x1801, x_desc, x1809, x_desc, x1801,
+    x4700, x_desc, x1809));
 };
-if (x4701) {
 if (x4704) {
+if (x4707) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(256) x Sym(1788) x Sym(1788), res:  x Const(64) x Const(256) x Sym(1671) x Sym(1671)");
 }
-float* x4709 = (float*)myMalloc(1 * sizeof(float));;
-x4709[0] = 1.0f;
-float* x4711 = (float*)myMalloc(1 * sizeof(float));;
-x4711[0] = 1.0f;
+float* x4712 = (float*)myMalloc(1 * sizeof(float));;
+x4712[0] = 1.0f;
+float* x4714 = (float*)myMalloc(1 * sizeof(float));;
+x4714[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -16787,11 +16799,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, x1671, x1671));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4709, bias_desc, x1809, x4711, out_desc, x1692));
+    cudnnHandle, x4712, bias_desc, x1809, x4714, out_desc, x1692));
 };
 } else {
-float* x4715 = (float*)myMalloc(1 * sizeof(float));;
-x4715[0] = 1.0f;
+float* x4718 = (float*)myMalloc(1 * sizeof(float));;
+x4718[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -16807,14 +16819,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, x1788, x1788));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4715, grad_out_desc, x1809,
-    x4715, grad_bias_desc, x1692));
+    cudnnHandle, x4718, grad_out_desc, x1809,
+    x4718, grad_bias_desc, x1692));
 };
 }
-float* x4720 = (float*)myMalloc(1 * sizeof(float));;
-x4720[0] = 0.0f;
-float* x4722 = (float*)myMalloc(1 * sizeof(float));;
-x4722[0] = 1.0f;
+float* x4723 = (float*)myMalloc(1 * sizeof(float));;
+x4723[0] = 0.0f;
+float* x4725 = (float*)myMalloc(1 * sizeof(float));;
+x4725[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -16837,62 +16849,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4722, x4722, x4722, x4722, in_desc, x1794,
+    x4725, x4725, x4725, x4725, in_desc, x1794,
     out_desc, x1809, in_desc, x1800, sbmv_desc, x406,
     x1144,x1354, 1.0E-5, x1802, x1803));
 };
 // conv2D back-propagate
-float* x4726 = (float*)myMalloc(1 * sizeof(float));;
-x4726[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 64, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 64, x1754, x1754));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x1788, x1788));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4726, filt_desc, x556, grad_out_desc, x1800,
-    conv_desc, algo, ws_data, ws_size,
-    x4726, grad_in_desc, x1775));
-};
 float* x4729 = (float*)myMalloc(1 * sizeof(float));;
 x4729[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 64, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 64, x1754, x1754));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x1788, x1788));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4729, filt_desc, x556, grad_out_desc, x1800,
+    conv_desc, algo, ws_data, ws_size,
+    x4729, grad_in_desc, x1775));
+};
+float* x4732 = (float*)myMalloc(1 * sizeof(float));;
+x4732[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -16932,14 +16944,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4729, in_desc, x1767, grad_out_desc, x1800,
+    x4732, in_desc, x1767, grad_out_desc, x1800,
     conv_desc, algo, ws_data, ws_size,
-    x4729, grad_filt_desc, x1194));
+    x4732, grad_filt_desc, x1194));
 };
-float* x4732 = (float*)myMalloc(1 * sizeof(float));;
-x4732[0] = 1.0f;
-float* x4734 = (float*)myMalloc(1 * sizeof(float));;
-x4734[0] = 0.0f;
+float* x4735 = (float*)myMalloc(1 * sizeof(float));;
+x4735[0] = 1.0f;
+float* x4737 = (float*)myMalloc(1 * sizeof(float));;
+x4737[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -16956,13 +16968,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4732, x_desc, x1767, x_desc, x1775, x_desc, x1767,
-    x4734, x_desc, x1775));
+    x4735, x_desc, x1767, x_desc, x1775, x_desc, x1767,
+    x4737, x_desc, x1775));
 };
-float* x4737 = (float*)myMalloc(1 * sizeof(float));;
-x4737[0] = 0.0f;
-float* x4739 = (float*)myMalloc(1 * sizeof(float));;
-x4739[0] = 1.0f;
+float* x4740 = (float*)myMalloc(1 * sizeof(float));;
+x4740[0] = 0.0f;
+float* x4742 = (float*)myMalloc(1 * sizeof(float));;
+x4742[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -16985,62 +16997,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4739, x4739, x4739, x4739, in_desc, x1760,
+    x4742, x4742, x4742, x4742, in_desc, x1760,
     out_desc, x1775, in_desc, x1766, sbmv_desc, x511,
     x1179,x1242, 1.0E-5, x1768, x1769));
 };
 // conv2D back-propagate
-float* x4743 = (float*)myMalloc(1 * sizeof(float));;
-x4743[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    64, 64, 3, 3));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 64, x1718, x1718));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 64, x1754, x1754));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    1, 1, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4743, filt_desc, x514, grad_out_desc, x1766,
-    conv_desc, algo, ws_data, ws_size,
-    x4743, grad_in_desc, x1739));
-};
 float* x4746 = (float*)myMalloc(1 * sizeof(float));;
 x4746[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    64, 64, 3, 3));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 64, x1718, x1718));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 64, x1754, x1754));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    1, 1, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4746, filt_desc, x514, grad_out_desc, x1766,
+    conv_desc, algo, ws_data, ws_size,
+    x4746, grad_in_desc, x1739));
+};
+float* x4749 = (float*)myMalloc(1 * sizeof(float));;
+x4749[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -17080,14 +17092,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4746, in_desc, x1731, grad_out_desc, x1766,
+    x4749, in_desc, x1731, grad_out_desc, x1766,
     conv_desc, algo, ws_data, ws_size,
-    x4746, grad_filt_desc, x1180));
+    x4749, grad_filt_desc, x1180));
 };
-float* x4749 = (float*)myMalloc(1 * sizeof(float));;
-x4749[0] = 1.0f;
-float* x4751 = (float*)myMalloc(1 * sizeof(float));;
-x4751[0] = 0.0f;
+float* x4752 = (float*)myMalloc(1 * sizeof(float));;
+x4752[0] = 1.0f;
+float* x4754 = (float*)myMalloc(1 * sizeof(float));;
+x4754[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -17104,13 +17116,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4749, x_desc, x1731, x_desc, x1739, x_desc, x1731,
-    x4751, x_desc, x1739));
+    x4752, x_desc, x1731, x_desc, x1739, x_desc, x1731,
+    x4754, x_desc, x1739));
 };
-float* x4754 = (float*)myMalloc(1 * sizeof(float));;
-x4754[0] = 0.0f;
-float* x4756 = (float*)myMalloc(1 * sizeof(float));;
-x4756[0] = 1.0f;
+float* x4757 = (float*)myMalloc(1 * sizeof(float));;
+x4757[0] = 0.0f;
+float* x4759 = (float*)myMalloc(1 * sizeof(float));;
+x4759[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -17133,62 +17145,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4756, x4756, x4756, x4756, in_desc, x1724,
+    x4759, x4759, x4759, x4759, in_desc, x1724,
     out_desc, x1739, in_desc, x1730, sbmv_desc, x538,
     x1188,x1131, 1.0E-5, x1732, x1733));
 };
 // conv2D back-propagate
-float* x4760 = (float*)myMalloc(1 * sizeof(float));;
-x4760[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    64, 256, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x1671, x1671));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 64, x1718, x1718));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4760, filt_desc, x745, grad_out_desc, x1730,
-    conv_desc, algo, ws_data, ws_size,
-    x4760, grad_in_desc, x1692));
-};
 float* x4763 = (float*)myMalloc(1 * sizeof(float));;
 x4763[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    64, 256, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x1671, x1671));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 64, x1718, x1718));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4763, filt_desc, x745, grad_out_desc, x1730,
+    conv_desc, algo, ws_data, ws_size,
+    x4763, grad_in_desc, x1692));
+};
+float* x4766 = (float*)myMalloc(1 * sizeof(float));;
+x4766[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -17228,14 +17240,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4763, in_desc, x1684, grad_out_desc, x1730,
+    x4766, in_desc, x1684, grad_out_desc, x1730,
     conv_desc, algo, ws_data, ws_size,
-    x4763, grad_filt_desc, x1257));
+    x4766, grad_filt_desc, x1257));
 };
-float* x4766 = (float*)myMalloc(1 * sizeof(float));;
-x4766[0] = 1.0f;
-float* x4768 = (float*)myMalloc(1 * sizeof(float));;
-x4768[0] = 0.0f;
+float* x4769 = (float*)myMalloc(1 * sizeof(float));;
+x4769[0] = 1.0f;
+float* x4771 = (float*)myMalloc(1 * sizeof(float));;
+x4771[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -17252,18 +17264,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4766, x_desc, x1684, x_desc, x1692, x_desc, x1684,
-    x4768, x_desc, x1692));
+    x4769, x_desc, x1684, x_desc, x1692, x_desc, x1684,
+    x4771, x_desc, x1692));
 };
-if (x4772) {
-if (x4774) {
+if (x4775) {
+if (x4777) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(256) x Sym(1671) x Sym(1671), res:  x Const(64) x Const(256) x Sym(1531) x Sym(1531)");
 }
-float* x4779 = (float*)myMalloc(1 * sizeof(float));;
-x4779[0] = 1.0f;
-float* x4781 = (float*)myMalloc(1 * sizeof(float));;
-x4781[0] = 1.0f;
+float* x4782 = (float*)myMalloc(1 * sizeof(float));;
+x4782[0] = 1.0f;
+float* x4784 = (float*)myMalloc(1 * sizeof(float));;
+x4784[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -17279,11 +17291,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, x1531, x1531));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4779, bias_desc, x1692, x4781, out_desc, x1552));
+    cudnnHandle, x4782, bias_desc, x1692, x4784, out_desc, x1552));
 };
 } else {
-float* x4785 = (float*)myMalloc(1 * sizeof(float));;
-x4785[0] = 1.0f;
+float* x4788 = (float*)myMalloc(1 * sizeof(float));;
+x4788[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -17299,14 +17311,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, x1671, x1671));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4785, grad_out_desc, x1692,
-    x4785, grad_bias_desc, x1552));
+    cudnnHandle, x4788, grad_out_desc, x1692,
+    x4788, grad_bias_desc, x1552));
 };
 }
-float* x4790 = (float*)myMalloc(1 * sizeof(float));;
-x4790[0] = 0.0f;
-float* x4792 = (float*)myMalloc(1 * sizeof(float));;
-x4792[0] = 1.0f;
+float* x4793 = (float*)myMalloc(1 * sizeof(float));;
+x4793[0] = 0.0f;
+float* x4795 = (float*)myMalloc(1 * sizeof(float));;
+x4795[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -17329,62 +17341,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4792, x4792, x4792, x4792, in_desc, x1677,
+    x4795, x4795, x4795, x4795, in_desc, x1677,
     out_desc, x1692, in_desc, x1683, sbmv_desc, x469,
     x1165,x1114, 1.0E-5, x1685, x1686));
 };
 // conv2D back-propagate
-float* x4796 = (float*)myMalloc(1 * sizeof(float));;
-x4796[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 64, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 64, x1637, x1637));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x1671, x1671));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4796, filt_desc, x685, grad_out_desc, x1683,
-    conv_desc, algo, ws_data, ws_size,
-    x4796, grad_in_desc, x1658));
-};
 float* x4799 = (float*)myMalloc(1 * sizeof(float));;
 x4799[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 64, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 64, x1637, x1637));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x1671, x1671));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4799, filt_desc, x685, grad_out_desc, x1683,
+    conv_desc, algo, ws_data, ws_size,
+    x4799, grad_in_desc, x1658));
+};
+float* x4802 = (float*)myMalloc(1 * sizeof(float));;
+x4802[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -17424,14 +17436,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4799, in_desc, x1650, grad_out_desc, x1683,
+    x4802, in_desc, x1650, grad_out_desc, x1683,
     conv_desc, algo, ws_data, ws_size,
-    x4799, grad_filt_desc, x1237));
+    x4802, grad_filt_desc, x1237));
 };
-float* x4802 = (float*)myMalloc(1 * sizeof(float));;
-x4802[0] = 1.0f;
-float* x4804 = (float*)myMalloc(1 * sizeof(float));;
-x4804[0] = 0.0f;
+float* x4805 = (float*)myMalloc(1 * sizeof(float));;
+x4805[0] = 1.0f;
+float* x4807 = (float*)myMalloc(1 * sizeof(float));;
+x4807[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -17448,13 +17460,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4802, x_desc, x1650, x_desc, x1658, x_desc, x1650,
-    x4804, x_desc, x1658));
+    x4805, x_desc, x1650, x_desc, x1658, x_desc, x1650,
+    x4807, x_desc, x1658));
 };
-float* x4807 = (float*)myMalloc(1 * sizeof(float));;
-x4807[0] = 0.0f;
-float* x4809 = (float*)myMalloc(1 * sizeof(float));;
-x4809[0] = 1.0f;
+float* x4810 = (float*)myMalloc(1 * sizeof(float));;
+x4810[0] = 0.0f;
+float* x4812 = (float*)myMalloc(1 * sizeof(float));;
+x4812[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -17477,13 +17489,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4809, x4809, x4809, x4809, in_desc, x1643,
+    x4812, x4812, x4812, x4812, in_desc, x1643,
     out_desc, x1658, in_desc, x1649, sbmv_desc, x919,
     x1315,x1260, 1.0E-5, x1651, x1652));
 };
 // conv2D back-propagate
-float* x4813 = (float*)myMalloc(1 * sizeof(float));;
-x4813[0] = 1.0f;
+float* x4816 = (float*)myMalloc(1 * sizeof(float));;
+x4816[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -17525,12 +17537,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x4813, filt_desc, x544, grad_out_desc, x1649,
+    x4816, filt_desc, x544, grad_out_desc, x1649,
     conv_desc, algo, ws_data, ws_size,
-    x4813, grad_in_desc, x1622));
+    x4816, grad_in_desc, x1622));
 };
-float* x4816 = (float*)myMalloc(1 * sizeof(float));;
-x4816[0] = 1.0f;
+float* x4819 = (float*)myMalloc(1 * sizeof(float));;
+x4819[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -17572,14 +17584,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4816, in_desc, x1614, grad_out_desc, x1649,
+    x4819, in_desc, x1614, grad_out_desc, x1649,
     conv_desc, algo, ws_data, ws_size,
-    x4816, grad_filt_desc, x1190));
+    x4819, grad_filt_desc, x1190));
 };
-float* x4819 = (float*)myMalloc(1 * sizeof(float));;
-x4819[0] = 1.0f;
-float* x4821 = (float*)myMalloc(1 * sizeof(float));;
-x4821[0] = 0.0f;
+float* x4822 = (float*)myMalloc(1 * sizeof(float));;
+x4822[0] = 1.0f;
+float* x4824 = (float*)myMalloc(1 * sizeof(float));;
+x4824[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -17596,13 +17608,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4819, x_desc, x1614, x_desc, x1622, x_desc, x1614,
-    x4821, x_desc, x1622));
+    x4822, x_desc, x1614, x_desc, x1622, x_desc, x1614,
+    x4824, x_desc, x1622));
 };
-float* x4824 = (float*)myMalloc(1 * sizeof(float));;
-x4824[0] = 0.0f;
-float* x4826 = (float*)myMalloc(1 * sizeof(float));;
-x4826[0] = 1.0f;
+float* x4827 = (float*)myMalloc(1 * sizeof(float));;
+x4827[0] = 0.0f;
+float* x4829 = (float*)myMalloc(1 * sizeof(float));;
+x4829[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -17625,13 +17637,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4826, x4826, x4826, x4826, in_desc, x1607,
+    x4829, x4829, x4829, x4829, in_desc, x1607,
     out_desc, x1622, in_desc, x1613, sbmv_desc, x721,
     x1249,x1167, 1.0E-5, x1615, x1616));
 };
 // conv2D back-propagate
-float* x4830 = (float*)myMalloc(1 * sizeof(float));;
-x4830[0] = 1.0f;
+float* x4833 = (float*)myMalloc(1 * sizeof(float));;
+x4833[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -17673,12 +17685,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x4830, filt_desc, x808, grad_out_desc, x1613,
+    x4833, filt_desc, x808, grad_out_desc, x1613,
     conv_desc, algo, ws_data, ws_size,
-    x4830, grad_in_desc, x1552));
+    x4833, grad_in_desc, x1552));
 };
-float* x4833 = (float*)myMalloc(1 * sizeof(float));;
-x4833[0] = 1.0f;
+float* x4836 = (float*)myMalloc(1 * sizeof(float));;
+x4836[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -17720,14 +17732,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4833, in_desc, x1544, grad_out_desc, x1613,
+    x4836, in_desc, x1544, grad_out_desc, x1613,
     conv_desc, algo, ws_data, ws_size,
-    x4833, grad_filt_desc, x1278));
+    x4836, grad_filt_desc, x1278));
 };
-float* x4836 = (float*)myMalloc(1 * sizeof(float));;
-x4836[0] = 1.0f;
-float* x4838 = (float*)myMalloc(1 * sizeof(float));;
-x4838[0] = 0.0f;
+float* x4839 = (float*)myMalloc(1 * sizeof(float));;
+x4839[0] = 1.0f;
+float* x4841 = (float*)myMalloc(1 * sizeof(float));;
+x4841[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -17744,18 +17756,18 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4836, x_desc, x1544, x_desc, x1552, x_desc, x1544,
-    x4838, x_desc, x1552));
+    x4839, x_desc, x1544, x_desc, x1552, x_desc, x1544,
+    x4841, x_desc, x1552));
 };
-if (x4842) {
-if (x4844) {
+if (x4845) {
+if (x4847) {
 } else {
 assert(false && "bias shape should be equal to res or be 1, got bias:  x Const(64) x Const(256) x Sym(1531) x Sym(1531), res:  x Const(64) x Const(256) x Sym(1461) x Sym(1461)");
 }
-float* x4849 = (float*)myMalloc(1 * sizeof(float));;
-x4849[0] = 1.0f;
-float* x4851 = (float*)myMalloc(1 * sizeof(float));;
-x4851[0] = 1.0f;
+float* x4852 = (float*)myMalloc(1 * sizeof(float));;
+x4852[0] = 1.0f;
+float* x4854 = (float*)myMalloc(1 * sizeof(float));;
+x4854[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t bias_desc;
@@ -17771,11 +17783,11 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, x1461, x1461));
 
 CUDNN_CALL(cudnnAddTensor(
-    cudnnHandle, x4849, bias_desc, x1552, x4851, out_desc, x1575));
+    cudnnHandle, x4852, bias_desc, x1552, x4854, out_desc, x1575));
 };
 } else {
-float* x4855 = (float*)myMalloc(1 * sizeof(float));;
-x4855[0] = 1.0f;
+float* x4858 = (float*)myMalloc(1 * sizeof(float));;
+x4858[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t grad_bias_desc;
@@ -17791,14 +17803,14 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
     64, 256, x1531, x1531));
 
 CUDNN_CALL(cudnnConvolutionBackwardBias(
-    cudnnHandle, x4855, grad_out_desc, x1552,
-    x4855, grad_bias_desc, x1575));
+    cudnnHandle, x4858, grad_out_desc, x1552,
+    x4858, grad_bias_desc, x1575));
 };
 }
-float* x4860 = (float*)myMalloc(1 * sizeof(float));;
-x4860[0] = 0.0f;
-float* x4862 = (float*)myMalloc(1 * sizeof(float));;
-x4862[0] = 1.0f;
+float* x4863 = (float*)myMalloc(1 * sizeof(float));;
+x4863[0] = 0.0f;
+float* x4865 = (float*)myMalloc(1 * sizeof(float));;
+x4865[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -17821,13 +17833,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4862, x4862, x4862, x4862, in_desc, x1560,
+    x4865, x4865, x4865, x4865, in_desc, x1560,
     out_desc, x1575, in_desc, x1566, sbmv_desc, x523,
     x1183,x1310, 1.0E-5, x1568, x1569));
 };
 // conv2D back-propagate
-float* x4866 = (float*)myMalloc(1 * sizeof(float));;
-x4866[0] = 1.0f;
+float* x4869 = (float*)myMalloc(1 * sizeof(float));;
+x4869[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -17869,12 +17881,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x4866, filt_desc, x781, grad_out_desc, x1566,
+    x4869, filt_desc, x781, grad_out_desc, x1566,
     conv_desc, algo, ws_data, ws_size,
-    x4866, grad_in_desc, x1453));
+    x4869, grad_in_desc, x1453));
 };
-float* x4869 = (float*)myMalloc(1 * sizeof(float));;
-x4869[0] = 1.0f;
+float* x4872 = (float*)myMalloc(1 * sizeof(float));;
+x4872[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -17916,14 +17928,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4869, in_desc, x1451, grad_out_desc, x1566,
+    x4872, in_desc, x1451, grad_out_desc, x1566,
     conv_desc, algo, ws_data, ws_size,
-    x4869, grad_filt_desc, x1269));
+    x4872, grad_filt_desc, x1269));
 };
-float* x4872 = (float*)myMalloc(1 * sizeof(float));;
-x4872[0] = 0.0f;
-float* x4874 = (float*)myMalloc(1 * sizeof(float));;
-x4874[0] = 1.0f;
+float* x4875 = (float*)myMalloc(1 * sizeof(float));;
+x4875[0] = 0.0f;
+float* x4877 = (float*)myMalloc(1 * sizeof(float));;
+x4877[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -17946,62 +17958,62 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4874, x4874, x4874, x4874, in_desc, x1537,
+    x4877, x4877, x4877, x4877, in_desc, x1537,
     out_desc, x1552, in_desc, x1543, sbmv_desc, x892,
     x1306,x1233, 1.0E-5, x1545, x1546));
 };
 // conv2D back-propagate
-float* x4878 = (float*)myMalloc(1 * sizeof(float));;
-x4878[0] = 1.0f;
-
-{
-cudnnFilterDescriptor_t filt_desc;
-CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-CUDNN_CALL(cudnnSetFilter4dDescriptor(
-    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-    256, 64, 1, 1));
-
-cudnnTensorDescriptor_t grad_in_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 64, x1497, x1497));
-
-cudnnTensorDescriptor_t grad_out_desc;
-CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-CUDNN_CALL(cudnnSetTensor4dDescriptor(
-    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-    64, 256, x1531, x1531));
-
-cudnnConvolutionDescriptor_t conv_desc;
-CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-    conv_desc,
-    0, 0, 1, 1, 1, 1,
-    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
-// Algorithm.
-cudnnConvolutionBwdDataAlgo_t algo;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
-    cudnnHandle,
-    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
-    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-// Workspace.
-size_t ws_size;
-CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
-void *ws_data = myGpuMalloc(ws_size);
-CUDNN_CALL(cudnnConvolutionBackwardData(
-    cudnnHandle,
-    x4878, filt_desc, x391, grad_out_desc, x1543,
-    conv_desc, algo, ws_data, ws_size,
-    x4878, grad_in_desc, x1518));
-};
 float* x4881 = (float*)myMalloc(1 * sizeof(float));;
 x4881[0] = 1.0f;
 
 {
+cudnnFilterDescriptor_t filt_desc;
+CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+CUDNN_CALL(cudnnSetFilter4dDescriptor(
+    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+    256, 64, 1, 1));
+
+cudnnTensorDescriptor_t grad_in_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 64, x1497, x1497));
+
+cudnnTensorDescriptor_t grad_out_desc;
+CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+CUDNN_CALL(cudnnSetTensor4dDescriptor(
+    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    64, 256, x1531, x1531));
+
+cudnnConvolutionDescriptor_t conv_desc;
+CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+    conv_desc,
+    0, 0, 1, 1, 1, 1,
+    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, CUDNN_TENSOR_OP_MATH));
+// Algorithm.
+cudnnConvolutionBwdDataAlgo_t algo;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+    cudnnHandle,
+    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
+// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+// Workspace.
+size_t ws_size;
+CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
+    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+void *ws_data = myGpuMalloc(ws_size);
+CUDNN_CALL(cudnnConvolutionBackwardData(
+    cudnnHandle,
+    x4881, filt_desc, x391, grad_out_desc, x1543,
+    conv_desc, algo, ws_data, ws_size,
+    x4881, grad_in_desc, x1518));
+};
+float* x4884 = (float*)myMalloc(1 * sizeof(float));;
+x4884[0] = 1.0f;
+
+{
 cudnnFilterDescriptor_t grad_filt_desc;
 CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
 CUDNN_CALL(cudnnSetFilter4dDescriptor(
@@ -18041,14 +18053,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4881, in_desc, x1510, grad_out_desc, x1543,
+    x4884, in_desc, x1510, grad_out_desc, x1543,
     conv_desc, algo, ws_data, ws_size,
-    x4881, grad_filt_desc, x1139));
+    x4884, grad_filt_desc, x1139));
 };
-float* x4884 = (float*)myMalloc(1 * sizeof(float));;
-x4884[0] = 1.0f;
-float* x4886 = (float*)myMalloc(1 * sizeof(float));;
-x4886[0] = 0.0f;
+float* x4887 = (float*)myMalloc(1 * sizeof(float));;
+x4887[0] = 1.0f;
+float* x4889 = (float*)myMalloc(1 * sizeof(float));;
+x4889[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -18065,13 +18077,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4884, x_desc, x1510, x_desc, x1518, x_desc, x1510,
-    x4886, x_desc, x1518));
+    x4887, x_desc, x1510, x_desc, x1518, x_desc, x1510,
+    x4889, x_desc, x1518));
 };
-float* x4889 = (float*)myMalloc(1 * sizeof(float));;
-x4889[0] = 0.0f;
-float* x4891 = (float*)myMalloc(1 * sizeof(float));;
-x4891[0] = 1.0f;
+float* x4892 = (float*)myMalloc(1 * sizeof(float));;
+x4892[0] = 0.0f;
+float* x4894 = (float*)myMalloc(1 * sizeof(float));;
+x4894[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -18094,13 +18106,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4891, x4891, x4891, x4891, in_desc, x1503,
+    x4894, x4894, x4894, x4894, in_desc, x1503,
     out_desc, x1518, in_desc, x1509, sbmv_desc, x787,
     x1271,x1156, 1.0E-5, x1511, x1512));
 };
 // conv2D back-propagate
-float* x4895 = (float*)myMalloc(1 * sizeof(float));;
-x4895[0] = 1.0f;
+float* x4898 = (float*)myMalloc(1 * sizeof(float));;
+x4898[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -18142,12 +18154,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x4895, filt_desc, x565, grad_out_desc, x1509,
+    x4898, filt_desc, x565, grad_out_desc, x1509,
     conv_desc, algo, ws_data, ws_size,
-    x4895, grad_in_desc, x1482));
+    x4898, grad_in_desc, x1482));
 };
-float* x4898 = (float*)myMalloc(1 * sizeof(float));;
-x4898[0] = 1.0f;
+float* x4901 = (float*)myMalloc(1 * sizeof(float));;
+x4901[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -18189,14 +18201,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4898, in_desc, x1474, grad_out_desc, x1509,
+    x4901, in_desc, x1474, grad_out_desc, x1509,
     conv_desc, algo, ws_data, ws_size,
-    x4898, grad_filt_desc, x1197));
+    x4901, grad_filt_desc, x1197));
 };
-float* x4901 = (float*)myMalloc(1 * sizeof(float));;
-x4901[0] = 1.0f;
-float* x4903 = (float*)myMalloc(1 * sizeof(float));;
-x4903[0] = 0.0f;
+float* x4904 = (float*)myMalloc(1 * sizeof(float));;
+x4904[0] = 1.0f;
+float* x4906 = (float*)myMalloc(1 * sizeof(float));;
+x4906[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -18213,13 +18225,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4901, x_desc, x1474, x_desc, x1482, x_desc, x1474,
-    x4903, x_desc, x1482));
+    x4904, x_desc, x1474, x_desc, x1482, x_desc, x1474,
+    x4906, x_desc, x1482));
 };
-float* x4906 = (float*)myMalloc(1 * sizeof(float));;
-x4906[0] = 0.0f;
-float* x4908 = (float*)myMalloc(1 * sizeof(float));;
-x4908[0] = 1.0f;
+float* x4909 = (float*)myMalloc(1 * sizeof(float));;
+x4909[0] = 0.0f;
+float* x4911 = (float*)myMalloc(1 * sizeof(float));;
+x4911[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -18242,13 +18254,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4908, x4908, x4908, x4908, in_desc, x1467,
+    x4911, x4911, x4911, x4911, in_desc, x1467,
     out_desc, x1482, in_desc, x1473, sbmv_desc, x373,
     x1133,x1160, 1.0E-5, x1475, x1476));
 };
 // conv2D back-propagate
-float* x4912 = (float*)myMalloc(1 * sizeof(float));;
-x4912[0] = 1.0f;
+float* x4915 = (float*)myMalloc(1 * sizeof(float));;
+x4915[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t filt_desc;
@@ -18290,12 +18302,12 @@ CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardData(
     cudnnHandle,
-    x4912, filt_desc, x994, grad_out_desc, x1473,
+    x4915, filt_desc, x994, grad_out_desc, x1473,
     conv_desc, algo, ws_data, ws_size,
-    x4912, grad_in_desc, x1453));
+    x4915, grad_in_desc, x1453));
 };
-float* x4915 = (float*)myMalloc(1 * sizeof(float));;
-x4915[0] = 1.0f;
+float* x4918 = (float*)myMalloc(1 * sizeof(float));;
+x4918[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -18337,14 +18349,14 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4915, in_desc, x1451, grad_out_desc, x1473,
+    x4918, in_desc, x1451, grad_out_desc, x1473,
     conv_desc, algo, ws_data, ws_size,
-    x4915, grad_filt_desc, x1340));
+    x4918, grad_filt_desc, x1340));
 };
-float* x4918 = (float*)myMalloc(1 * sizeof(float));;
-x4918[0] = 0.0f;
-float* x4920 = (float*)myMalloc(1 * sizeof(float));;
-x4920[0] = 1.0f;
+float* x4921 = (float*)myMalloc(1 * sizeof(float));;
+x4921[0] = 0.0f;
+float* x4923 = (float*)myMalloc(1 * sizeof(float));;
+x4923[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -18369,12 +18381,12 @@ CUDNN_CALL(cudnnSetPooling2dDescriptor(
 CUDNN_CALL(cudnnPoolingBackward(
     cudnnHandle, 
     poolingDesc, 
-    x4920, out_desc, x1451, out_desc, x1453, in_desc, x1425  , x4918, in_desc, x1433));
+    x4923, out_desc, x1451, out_desc, x1453, in_desc, x1425  , x4921, in_desc, x1433));
 };
-float* x4923 = (float*)myMalloc(1 * sizeof(float));;
-x4923[0] = 1.0f;
-float* x4925 = (float*)myMalloc(1 * sizeof(float));;
-x4925[0] = 0.0f;
+float* x4926 = (float*)myMalloc(1 * sizeof(float));;
+x4926[0] = 1.0f;
+float* x4928 = (float*)myMalloc(1 * sizeof(float));;
+x4928[0] = 0.0f;
 
 {
 cudnnTensorDescriptor_t x_desc;
@@ -18391,13 +18403,13 @@ CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
                                         /*relu_coef=*/ 0));
 CUDNN_CALL(cudnnActivationBackward(
     cudnnHandle, act_desc,
-    x4923, x_desc, x1425, x_desc, x1433, x_desc, x1425,
-    x4925, x_desc, x1433));
+    x4926, x_desc, x1425, x_desc, x1433, x_desc, x1425,
+    x4928, x_desc, x1433));
 };
-float* x4928 = (float*)myMalloc(1 * sizeof(float));;
-x4928[0] = 0.0f;
-float* x4930 = (float*)myMalloc(1 * sizeof(float));;
-x4930[0] = 1.0f;
+float* x4931 = (float*)myMalloc(1 * sizeof(float));;
+x4931[0] = 0.0f;
+float* x4933 = (float*)myMalloc(1 * sizeof(float));;
+x4933[0] = 1.0f;
 
 {
 cudnnTensorDescriptor_t in_desc;
@@ -18420,13 +18432,13 @@ CUDNN_CALL(cudnnSetTensor4dDescriptor(
 
 CUDNN_CALL(cudnnBatchNormalizationBackward(
     cudnnHandle, CUDNN_BATCHNORM_SPATIAL,
-    x4930, x4930, x4930, x4930, in_desc, x1418,
+    x4933, x4933, x4933, x4933, in_desc, x1418,
     out_desc, x1433, in_desc, x1424, sbmv_desc, x913,
     x1313,x1358, 1.0E-5, x1426, x1427));
 };
 // conv2D back-propagate
-float* x4934 = (float*)myMalloc(1 * sizeof(float));;
-x4934[0] = 1.0f;
+float* x4937 = (float*)myMalloc(1 * sizeof(float));;
+x4937[0] = 1.0f;
 
 {
 cudnnFilterDescriptor_t grad_filt_desc;
@@ -18468,1667 +18480,1667 @@ CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
 void *ws_data = myGpuMalloc(ws_size);
 CUDNN_CALL(cudnnConvolutionBackwardFilter(
     cudnnHandle,
-    x4934, in_desc, x1402, grad_out_desc, x1424,
+    x4937, in_desc, x1402, grad_out_desc, x1424,
     conv_desc, algo, ws_data, ws_size,
-    x4934, grad_filt_desc, x1259));
+    x4937, grad_filt_desc, x1259));
 };
-float x4937 = x1410[0];
-x1390 += x4937;
-float* x4939 = (float*)myMalloc(1 * sizeof(float));;
-x4939[0] = 1.0f;
-float* x4941 = (float*)myMalloc(1 * sizeof(float));;
-x4941[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x4939,x313,1024,x4941, x1113, 1024, x313,1024));
-arrayFill_greg<<<28, 512>>>(x1113, 0.0f, 262144);
-float* x4945 = (float*)myMalloc(1 * sizeof(float));;
-x4945[0] = 1.0f;
-float* x4947 = (float*)myMalloc(1 * sizeof(float));;
-x4947[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x4945,x316,1,x4947, x1114, 1, x316,1));
-arrayFill_greg<<<28, 512>>>(x1114, 0.0f, 256);
-float* x4951 = (float*)myMalloc(1 * sizeof(float));;
-x4951[0] = 1.0f;
-float* x4953 = (float*)myMalloc(1 * sizeof(float));;
-x4953[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x4951,x319,1,x4953, x1115, 1, x319,1));
-arrayFill_greg<<<28, 512>>>(x1115, 0.0f, 128);
-float* x4957 = (float*)myMalloc(1 * sizeof(float));;
-x4957[0] = 1.0f;
-float* x4959 = (float*)myMalloc(1 * sizeof(float));;
-x4959[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x4957,x322,1,x4959, x1116, 1, x322,1));
-arrayFill_greg<<<28, 512>>>(x1116, 0.0f, 128);
-float* x4963 = (float*)myMalloc(1 * sizeof(float));;
-x4963[0] = 1.0f;
-float* x4965 = (float*)myMalloc(1 * sizeof(float));;
-x4965[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x4963,x325,1,x4965, x1117, 1, x325,1));
-arrayFill_greg<<<28, 512>>>(x1117, 0.0f, 64);
-float* x4969 = (float*)myMalloc(1 * sizeof(float));;
-x4969[0] = 1.0f;
-float* x4971 = (float*)myMalloc(1 * sizeof(float));;
-x4971[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,128,x4969,x328,256,x4971, x1118, 256, x328,256));
-arrayFill_greg<<<28, 512>>>(x1118, 0.0f, 32768);
-float* x4975 = (float*)myMalloc(1 * sizeof(float));;
-x4975[0] = 1.0f;
-float* x4977 = (float*)myMalloc(1 * sizeof(float));;
-x4977[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x4975,x331,1,x4977, x1119, 1, x331,1));
-arrayFill_greg<<<28, 512>>>(x1119, 0.0f, 512);
-float* x4981 = (float*)myMalloc(1 * sizeof(float));;
-x4981[0] = 1.0f;
-float* x4983 = (float*)myMalloc(1 * sizeof(float));;
-x4983[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x4981,x334,1024,x4983, x1120, 1024, x334,1024));
-arrayFill_greg<<<28, 512>>>(x1120, 0.0f, 262144);
-float* x4987 = (float*)myMalloc(1 * sizeof(float));;
-x4987[0] = 1.0f;
-float* x4989 = (float*)myMalloc(1 * sizeof(float));;
-x4989[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x4987,x337,2304,x4989, x1121, 2304, x337,2304));
-arrayFill_greg<<<28, 512>>>(x1121, 0.0f, 589824);
-float* x4993 = (float*)myMalloc(1 * sizeof(float));;
-x4993[0] = 1.0f;
-float* x4995 = (float*)myMalloc(1 * sizeof(float));;
-x4995[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x4993,x340,1,x4995, x1122, 1, x340,1));
-arrayFill_greg<<<28, 512>>>(x1122, 0.0f, 512);
-float* x4999 = (float*)myMalloc(1 * sizeof(float));;
-x4999[0] = 1.0f;
-float* x5001 = (float*)myMalloc(1 * sizeof(float));;
-x5001[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x4999,x343,1,x5001, x1123, 1, x343,1));
-arrayFill_greg<<<28, 512>>>(x1123, 0.0f, 256);
-float* x5005 = (float*)myMalloc(1 * sizeof(float));;
-x5005[0] = 1.0f;
-float* x5007 = (float*)myMalloc(1 * sizeof(float));;
-x5007[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5005,x346,1,x5007, x1124, 1, x346,1));
-arrayFill_greg<<<28, 512>>>(x1124, 0.0f, 128);
-float* x5011 = (float*)myMalloc(1 * sizeof(float));;
-x5011[0] = 1.0f;
-float* x5013 = (float*)myMalloc(1 * sizeof(float));;
-x5013[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5011,x349,1,x5013, x1125, 1, x349,1));
-arrayFill_greg<<<28, 512>>>(x1125, 0.0f, 1024);
-float* x5017 = (float*)myMalloc(1 * sizeof(float));;
-x5017[0] = 1.0f;
-float* x5019 = (float*)myMalloc(1 * sizeof(float));;
-x5019[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5017,x352,1,x5019, x1126, 1, x352,1));
-arrayFill_greg<<<28, 512>>>(x1126, 0.0f, 512);
-float* x5023 = (float*)myMalloc(1 * sizeof(float));;
-x5023[0] = 1.0f;
-float* x5025 = (float*)myMalloc(1 * sizeof(float));;
-x5025[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5023,x355,1,x5025, x1127, 1, x355,1));
-arrayFill_greg<<<28, 512>>>(x1127, 0.0f, 1024);
-float* x5029 = (float*)myMalloc(1 * sizeof(float));;
-x5029[0] = 1.0f;
-float* x5031 = (float*)myMalloc(1 * sizeof(float));;
-x5031[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5029,x358,1,x5031, x1128, 1, x358,1));
-arrayFill_greg<<<28, 512>>>(x1128, 0.0f, 256);
-float* x5035 = (float*)myMalloc(1 * sizeof(float));;
-x5035[0] = 1.0f;
-float* x5037 = (float*)myMalloc(1 * sizeof(float));;
-x5037[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x5035,x361,1024,x5037, x1129, 1024, x361,1024));
-arrayFill_greg<<<28, 512>>>(x1129, 0.0f, 262144);
-float* x5041 = (float*)myMalloc(1 * sizeof(float));;
-x5041[0] = 1.0f;
-float* x5043 = (float*)myMalloc(1 * sizeof(float));;
-x5043[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5041,x364,1,x5043, x1130, 1, x364,1));
-arrayFill_greg<<<28, 512>>>(x1130, 0.0f, 512);
-float* x5047 = (float*)myMalloc(1 * sizeof(float));;
-x5047[0] = 1.0f;
-float* x5049 = (float*)myMalloc(1 * sizeof(float));;
-x5049[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5047,x367,1,x5049, x1131, 1, x367,1));
-arrayFill_greg<<<28, 512>>>(x1131, 0.0f, 64);
-float* x5053 = (float*)myMalloc(1 * sizeof(float));;
-x5053[0] = 1.0f;
-float* x5055 = (float*)myMalloc(1 * sizeof(float));;
-x5055[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5053,x370,1,x5055, x1132, 1, x370,1));
-arrayFill_greg<<<28, 512>>>(x1132, 0.0f, 512);
-float* x5059 = (float*)myMalloc(1 * sizeof(float));;
-x5059[0] = 1.0f;
-float* x5061 = (float*)myMalloc(1 * sizeof(float));;
-x5061[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5059,x373,1,x5061, x1133, 1, x373,1));
-arrayFill_greg<<<28, 512>>>(x1133, 0.0f, 64);
-float* x5065 = (float*)myMalloc(1 * sizeof(float));;
-x5065[0] = 1.0f;
-float* x5067 = (float*)myMalloc(1 * sizeof(float));;
-x5067[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1152,128,x5065,x376,1152,x5067, x1134, 1152, x376,1152));
-arrayFill_greg<<<28, 512>>>(x1134, 0.0f, 147456);
-float* x5071 = (float*)myMalloc(1 * sizeof(float));;
-x5071[0] = 1.0f;
-float* x5073 = (float*)myMalloc(1 * sizeof(float));;
-x5073[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 4608,512,x5071,x379,4608,x5073, x1135, 4608, x379,4608));
-arrayFill_greg<<<28, 512>>>(x1135, 0.0f, 2359296);
-float* x5077 = (float*)myMalloc(1 * sizeof(float));;
-x5077[0] = 1.0f;
-float* x5079 = (float*)myMalloc(1 * sizeof(float));;
-x5079[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5077,x382,1,x5079, x1136, 1, x382,1));
-arrayFill_greg<<<28, 512>>>(x1136, 0.0f, 1024);
-float* x5083 = (float*)myMalloc(1 * sizeof(float));;
-x5083[0] = 1.0f;
-float* x5085 = (float*)myMalloc(1 * sizeof(float));;
-x5085[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5083,x385,1,x5085, x1137, 1, x385,1));
-arrayFill_greg<<<28, 512>>>(x1137, 0.0f, 256);
-float* x5089 = (float*)myMalloc(1 * sizeof(float));;
-x5089[0] = 1.0f;
-float* x5091 = (float*)myMalloc(1 * sizeof(float));;
-x5091[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x5089,x388,2304,x5091, x1138, 2304, x388,2304));
-arrayFill_greg<<<28, 512>>>(x1138, 0.0f, 589824);
-float* x5095 = (float*)myMalloc(1 * sizeof(float));;
-x5095[0] = 1.0f;
-float* x5097 = (float*)myMalloc(1 * sizeof(float));;
-x5097[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,256,x5095,x391,64,x5097, x1139, 64, x391,64));
-arrayFill_greg<<<28, 512>>>(x1139, 0.0f, 16384);
-float* x5101 = (float*)myMalloc(1 * sizeof(float));;
-x5101[0] = 1.0f;
-float* x5103 = (float*)myMalloc(1 * sizeof(float));;
-x5103[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,2048,x5101,x394,512,x5103, x1140, 512, x394,512));
-arrayFill_greg<<<28, 512>>>(x1140, 0.0f, 1048576);
-float* x5107 = (float*)myMalloc(1 * sizeof(float));;
-x5107[0] = 1.0f;
-float* x5109 = (float*)myMalloc(1 * sizeof(float));;
-x5109[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 4608,512,x5107,x397,4608,x5109, x1141, 4608, x397,4608));
-arrayFill_greg<<<28, 512>>>(x1141, 0.0f, 2359296);
-float* x5113 = (float*)myMalloc(1 * sizeof(float));;
-x5113[0] = 1.0f;
-float* x5115 = (float*)myMalloc(1 * sizeof(float));;
-x5115[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5113,x400,1,x5115, x1142, 1, x400,1));
-arrayFill_greg<<<28, 512>>>(x1142, 0.0f, 128);
-float* x5119 = (float*)myMalloc(1 * sizeof(float));;
-x5119[0] = 1.0f;
-float* x5121 = (float*)myMalloc(1 * sizeof(float));;
-x5121[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5119,x403,1,x5121, x1143, 1, x403,1));
-arrayFill_greg<<<28, 512>>>(x1143, 0.0f, 256);
-float* x5125 = (float*)myMalloc(1 * sizeof(float));;
-x5125[0] = 1.0f;
-float* x5127 = (float*)myMalloc(1 * sizeof(float));;
-x5127[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5125,x406,1,x5127, x1144, 1, x406,1));
-arrayFill_greg<<<28, 512>>>(x1144, 0.0f, 256);
-float* x5131 = (float*)myMalloc(1 * sizeof(float));;
-x5131[0] = 1.0f;
-float* x5133 = (float*)myMalloc(1 * sizeof(float));;
-x5133[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5131,x409,1,x5133, x1145, 1, x409,1));
-arrayFill_greg<<<28, 512>>>(x1145, 0.0f, 128);
-float* x5137 = (float*)myMalloc(1 * sizeof(float));;
-x5137[0] = 1.0f;
-float* x5139 = (float*)myMalloc(1 * sizeof(float));;
-x5139[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5137,x412,1,x5139, x1146, 1, x412,1));
-arrayFill_greg<<<28, 512>>>(x1146, 0.0f, 128);
-float* x5143 = (float*)myMalloc(1 * sizeof(float));;
-x5143[0] = 1.0f;
-float* x5145 = (float*)myMalloc(1 * sizeof(float));;
-x5145[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5143,x415,1,x5145, x1147, 1, x415,1));
-arrayFill_greg<<<28, 512>>>(x1147, 0.0f, 64);
-float* x5149 = (float*)myMalloc(1 * sizeof(float));;
-x5149[0] = 1.0f;
-float* x5151 = (float*)myMalloc(1 * sizeof(float));;
-x5151[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 128,512,x5149,x418,128,x5151, x1148, 128, x418,128));
-arrayFill_greg<<<28, 512>>>(x1148, 0.0f, 65536);
-float* x5155 = (float*)myMalloc(1 * sizeof(float));;
-x5155[0] = 1.0f;
-float* x5157 = (float*)myMalloc(1 * sizeof(float));;
-x5157[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5155,x421,1,x5157, x1149, 1, x421,1));
-arrayFill_greg<<<28, 512>>>(x1149, 0.0f, 512);
-float* x5161 = (float*)myMalloc(1 * sizeof(float));;
-x5161[0] = 1.0f;
-float* x5163 = (float*)myMalloc(1 * sizeof(float));;
-x5163[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5161,x424,1,x5163, x1150, 1, x424,1));
-arrayFill_greg<<<28, 512>>>(x1150, 0.0f, 128);
-float* x5167 = (float*)myMalloc(1 * sizeof(float));;
-x5167[0] = 1.0f;
-float* x5169 = (float*)myMalloc(1 * sizeof(float));;
-x5169[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5167,x427,1,x5169, x1151, 1, x427,1));
-arrayFill_greg<<<28, 512>>>(x1151, 0.0f, 64);
-float* x5173 = (float*)myMalloc(1 * sizeof(float));;
-x5173[0] = 1.0f;
-float* x5175 = (float*)myMalloc(1 * sizeof(float));;
-x5175[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5173,x430,1,x5175, x1152, 1, x430,1));
-arrayFill_greg<<<28, 512>>>(x1152, 0.0f, 128);
-float* x5179 = (float*)myMalloc(1 * sizeof(float));;
-x5179[0] = 1.0f;
-float* x5181 = (float*)myMalloc(1 * sizeof(float));;
-x5181[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5179,x433,1,x5181, x1153, 1, x433,1));
-arrayFill_greg<<<28, 512>>>(x1153, 0.0f, 512);
-float* x5185 = (float*)myMalloc(1 * sizeof(float));;
-x5185[0] = 1.0f;
-float* x5187 = (float*)myMalloc(1 * sizeof(float));;
-x5187[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,2048,x5185,x436,512,x5187, x1154, 512, x436,512));
-arrayFill_greg<<<28, 512>>>(x1154, 0.0f, 1048576);
-float* x5191 = (float*)myMalloc(1 * sizeof(float));;
-x5191[0] = 1.0f;
-float* x5193 = (float*)myMalloc(1 * sizeof(float));;
-x5193[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,10,x5191,x439,1,x5193, x1155, 1, x439,1));
-arrayFill_greg<<<28, 512>>>(x1155, 0.0f, 10);
-float* x5197 = (float*)myMalloc(1 * sizeof(float));;
-x5197[0] = 1.0f;
-float* x5199 = (float*)myMalloc(1 * sizeof(float));;
-x5199[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5197,x442,1,x5199, x1156, 1, x442,1));
-arrayFill_greg<<<28, 512>>>(x1156, 0.0f, 64);
-float* x5203 = (float*)myMalloc(1 * sizeof(float));;
-x5203[0] = 1.0f;
-float* x5205 = (float*)myMalloc(1 * sizeof(float));;
-x5205[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5203,x445,1,x5205, x1157, 1, x445,1));
-arrayFill_greg<<<28, 512>>>(x1157, 0.0f, 512);
-float* x5209 = (float*)myMalloc(1 * sizeof(float));;
-x5209[0] = 1.0f;
-float* x5211 = (float*)myMalloc(1 * sizeof(float));;
-x5211[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5209,x448,1,x5211, x1158, 1, x448,1));
-arrayFill_greg<<<28, 512>>>(x1158, 0.0f, 64);
-float* x5215 = (float*)myMalloc(1 * sizeof(float));;
-x5215[0] = 1.0f;
-float* x5217 = (float*)myMalloc(1 * sizeof(float));;
-x5217[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5215,x451,1,x5217, x1159, 1, x451,1));
-arrayFill_greg<<<28, 512>>>(x1159, 0.0f, 512);
-float* x5221 = (float*)myMalloc(1 * sizeof(float));;
-x5221[0] = 1.0f;
-float* x5223 = (float*)myMalloc(1 * sizeof(float));;
-x5223[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5221,x454,1,x5223, x1160, 1, x454,1));
-arrayFill_greg<<<28, 512>>>(x1160, 0.0f, 64);
-float* x5227 = (float*)myMalloc(1 * sizeof(float));;
-x5227[0] = 1.0f;
-float* x5229 = (float*)myMalloc(1 * sizeof(float));;
-x5229[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5227,x457,1,x5229, x1161, 1, x457,1));
-arrayFill_greg<<<28, 512>>>(x1161, 0.0f, 512);
-float* x5233 = (float*)myMalloc(1 * sizeof(float));;
-x5233[0] = 1.0f;
-float* x5235 = (float*)myMalloc(1 * sizeof(float));;
-x5235[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 128,512,x5233,x460,128,x5235, x1162, 128, x460,128));
-arrayFill_greg<<<28, 512>>>(x1162, 0.0f, 65536);
-float* x5239 = (float*)myMalloc(1 * sizeof(float));;
-x5239[0] = 1.0f;
-float* x5241 = (float*)myMalloc(1 * sizeof(float));;
-x5241[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x5239,x463,256,x5241, x1163, 256, x463,256));
-arrayFill_greg<<<28, 512>>>(x1163, 0.0f, 262144);
-float* x5245 = (float*)myMalloc(1 * sizeof(float));;
-x5245[0] = 1.0f;
-float* x5247 = (float*)myMalloc(1 * sizeof(float));;
-x5247[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5245,x466,1,x5247, x1164, 1, x466,1));
-arrayFill_greg<<<28, 512>>>(x1164, 0.0f, 1024);
-float* x5251 = (float*)myMalloc(1 * sizeof(float));;
-x5251[0] = 1.0f;
-float* x5253 = (float*)myMalloc(1 * sizeof(float));;
-x5253[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5251,x469,1,x5253, x1165, 1, x469,1));
-arrayFill_greg<<<28, 512>>>(x1165, 0.0f, 256);
-float* x5257 = (float*)myMalloc(1 * sizeof(float));;
-x5257[0] = 1.0f;
-float* x5259 = (float*)myMalloc(1 * sizeof(float));;
-x5259[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5257,x472,1,x5259, x1166, 1, x472,1));
-arrayFill_greg<<<28, 512>>>(x1166, 0.0f, 1024);
-float* x5263 = (float*)myMalloc(1 * sizeof(float));;
-x5263[0] = 1.0f;
-float* x5265 = (float*)myMalloc(1 * sizeof(float));;
-x5265[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5263,x475,1,x5265, x1167, 1, x475,1));
-arrayFill_greg<<<28, 512>>>(x1167, 0.0f, 64);
-float* x5269 = (float*)myMalloc(1 * sizeof(float));;
-x5269[0] = 1.0f;
-float* x5271 = (float*)myMalloc(1 * sizeof(float));;
-x5271[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5269,x478,1,x5271, x1168, 1, x478,1));
-arrayFill_greg<<<28, 512>>>(x1168, 0.0f, 128);
-float* x5275 = (float*)myMalloc(1 * sizeof(float));;
-x5275[0] = 1.0f;
-float* x5277 = (float*)myMalloc(1 * sizeof(float));;
-x5277[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5275,x481,1,x5277, x1169, 1, x481,1));
-arrayFill_greg<<<28, 512>>>(x1169, 0.0f, 2048);
-float* x5281 = (float*)myMalloc(1 * sizeof(float));;
-x5281[0] = 1.0f;
-float* x5283 = (float*)myMalloc(1 * sizeof(float));;
-x5283[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5281,x484,1,x5283, x1170, 1, x484,1));
-arrayFill_greg<<<28, 512>>>(x1170, 0.0f, 256);
-float* x5287 = (float*)myMalloc(1 * sizeof(float));;
-x5287[0] = 1.0f;
-float* x5289 = (float*)myMalloc(1 * sizeof(float));;
-x5289[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5287,x487,1,x5289, x1171, 1, x487,1));
-arrayFill_greg<<<28, 512>>>(x1171, 0.0f, 2048);
-float* x5293 = (float*)myMalloc(1 * sizeof(float));;
-x5293[0] = 1.0f;
-float* x5295 = (float*)myMalloc(1 * sizeof(float));;
-x5295[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5293,x490,1,x5295, x1172, 1, x490,1));
-arrayFill_greg<<<28, 512>>>(x1172, 0.0f, 512);
-float* x5299 = (float*)myMalloc(1 * sizeof(float));;
-x5299[0] = 1.0f;
-float* x5301 = (float*)myMalloc(1 * sizeof(float));;
-x5301[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5299,x493,1,x5301, x1173, 1, x493,1));
-arrayFill_greg<<<28, 512>>>(x1173, 0.0f, 512);
-float* x5305 = (float*)myMalloc(1 * sizeof(float));;
-x5305[0] = 1.0f;
-float* x5307 = (float*)myMalloc(1 * sizeof(float));;
-x5307[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5305,x496,1,x5307, x1174, 1, x496,1));
-arrayFill_greg<<<28, 512>>>(x1174, 0.0f, 512);
-float* x5311 = (float*)myMalloc(1 * sizeof(float));;
-x5311[0] = 1.0f;
-float* x5313 = (float*)myMalloc(1 * sizeof(float));;
-x5313[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5311,x499,1,x5313, x1175, 1, x499,1));
-arrayFill_greg<<<28, 512>>>(x1175, 0.0f, 2048);
-float* x5317 = (float*)myMalloc(1 * sizeof(float));;
-x5317[0] = 1.0f;
-float* x5319 = (float*)myMalloc(1 * sizeof(float));;
-x5319[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5317,x502,1,x5319, x1176, 1, x502,1));
-arrayFill_greg<<<28, 512>>>(x1176, 0.0f, 256);
-float* x5323 = (float*)myMalloc(1 * sizeof(float));;
-x5323[0] = 1.0f;
-float* x5325 = (float*)myMalloc(1 * sizeof(float));;
-x5325[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5323,x505,1,x5325, x1177, 1, x505,1));
-arrayFill_greg<<<28, 512>>>(x1177, 0.0f, 256);
-float* x5329 = (float*)myMalloc(1 * sizeof(float));;
-x5329[0] = 1.0f;
-float* x5331 = (float*)myMalloc(1 * sizeof(float));;
-x5331[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5329,x508,1,x5331, x1178, 1, x508,1));
-arrayFill_greg<<<28, 512>>>(x1178, 0.0f, 256);
-float* x5335 = (float*)myMalloc(1 * sizeof(float));;
-x5335[0] = 1.0f;
-float* x5337 = (float*)myMalloc(1 * sizeof(float));;
-x5337[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5335,x511,1,x5337, x1179, 1, x511,1));
-arrayFill_greg<<<28, 512>>>(x1179, 0.0f, 64);
-float* x5341 = (float*)myMalloc(1 * sizeof(float));;
-x5341[0] = 1.0f;
-float* x5343 = (float*)myMalloc(1 * sizeof(float));;
-x5343[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 576,64,x5341,x514,576,x5343, x1180, 576, x514,576));
-arrayFill_greg<<<28, 512>>>(x1180, 0.0f, 36864);
-float* x5347 = (float*)myMalloc(1 * sizeof(float));;
-x5347[0] = 1.0f;
-float* x5349 = (float*)myMalloc(1 * sizeof(float));;
-x5349[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5347,x517,1,x5349, x1181, 1, x517,1));
-arrayFill_greg<<<28, 512>>>(x1181, 0.0f, 256);
-float* x5353 = (float*)myMalloc(1 * sizeof(float));;
-x5353[0] = 1.0f;
-float* x5355 = (float*)myMalloc(1 * sizeof(float));;
-x5355[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,1024,x5353,x520,512,x5355, x1182, 512, x520,512));
-arrayFill_greg<<<28, 512>>>(x1182, 0.0f, 524288);
-float* x5359 = (float*)myMalloc(1 * sizeof(float));;
-x5359[0] = 1.0f;
-float* x5361 = (float*)myMalloc(1 * sizeof(float));;
-x5361[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5359,x523,1,x5361, x1183, 1, x523,1));
-arrayFill_greg<<<28, 512>>>(x1183, 0.0f, 256);
-float* x5365 = (float*)myMalloc(1 * sizeof(float));;
-x5365[0] = 1.0f;
-float* x5367 = (float*)myMalloc(1 * sizeof(float));;
-x5367[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5365,x526,1,x5367, x1184, 1, x526,1));
-arrayFill_greg<<<28, 512>>>(x1184, 0.0f, 256);
-float* x5371 = (float*)myMalloc(1 * sizeof(float));;
-x5371[0] = 1.0f;
-float* x5373 = (float*)myMalloc(1 * sizeof(float));;
-x5373[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5371,x529,1,x5373, x1185, 1, x529,1));
-arrayFill_greg<<<28, 512>>>(x1185, 0.0f, 512);
-float* x5377 = (float*)myMalloc(1 * sizeof(float));;
-x5377[0] = 1.0f;
-float* x5379 = (float*)myMalloc(1 * sizeof(float));;
-x5379[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5377,x532,1,x5379, x1186, 1, x532,1));
-arrayFill_greg<<<28, 512>>>(x1186, 0.0f, 128);
-float* x5383 = (float*)myMalloc(1 * sizeof(float));;
-x5383[0] = 1.0f;
-float* x5385 = (float*)myMalloc(1 * sizeof(float));;
-x5385[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5383,x535,1,x5385, x1187, 1, x535,1));
-arrayFill_greg<<<28, 512>>>(x1187, 0.0f, 256);
-float* x5389 = (float*)myMalloc(1 * sizeof(float));;
-x5389[0] = 1.0f;
-float* x5391 = (float*)myMalloc(1 * sizeof(float));;
-x5391[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5389,x538,1,x5391, x1188, 1, x538,1));
-arrayFill_greg<<<28, 512>>>(x1188, 0.0f, 64);
-float* x5395 = (float*)myMalloc(1 * sizeof(float));;
-x5395[0] = 1.0f;
-float* x5397 = (float*)myMalloc(1 * sizeof(float));;
-x5397[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5395,x541,1,x5397, x1189, 1, x541,1));
-arrayFill_greg<<<28, 512>>>(x1189, 0.0f, 512);
-float* x5401 = (float*)myMalloc(1 * sizeof(float));;
-x5401[0] = 1.0f;
-float* x5403 = (float*)myMalloc(1 * sizeof(float));;
-x5403[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 576,64,x5401,x544,576,x5403, x1190, 576, x544,576));
-arrayFill_greg<<<28, 512>>>(x1190, 0.0f, 36864);
-float* x5407 = (float*)myMalloc(1 * sizeof(float));;
-x5407[0] = 1.0f;
-float* x5409 = (float*)myMalloc(1 * sizeof(float));;
-x5409[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5407,x547,1,x5409, x1191, 1, x547,1));
-arrayFill_greg<<<28, 512>>>(x1191, 0.0f, 128);
-float* x5413 = (float*)myMalloc(1 * sizeof(float));;
-x5413[0] = 1.0f;
-float* x5415 = (float*)myMalloc(1 * sizeof(float));;
-x5415[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5413,x550,1,x5415, x1192, 1, x550,1));
-arrayFill_greg<<<28, 512>>>(x1192, 0.0f, 256);
-float* x5419 = (float*)myMalloc(1 * sizeof(float));;
-x5419[0] = 1.0f;
-float* x5421 = (float*)myMalloc(1 * sizeof(float));;
-x5421[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5419,x553,1,x5421, x1193, 1, x553,1));
-arrayFill_greg<<<28, 512>>>(x1193, 0.0f, 1024);
-float* x5425 = (float*)myMalloc(1 * sizeof(float));;
-x5425[0] = 1.0f;
-float* x5427 = (float*)myMalloc(1 * sizeof(float));;
-x5427[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,256,x5425,x556,64,x5427, x1194, 64, x556,64));
-arrayFill_greg<<<28, 512>>>(x1194, 0.0f, 16384);
-float* x5431 = (float*)myMalloc(1 * sizeof(float));;
-x5431[0] = 1.0f;
-float* x5433 = (float*)myMalloc(1 * sizeof(float));;
-x5433[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5431,x559,1,x5433, x1195, 1, x559,1));
-arrayFill_greg<<<28, 512>>>(x1195, 0.0f, 512);
-float* x5437 = (float*)myMalloc(1 * sizeof(float));;
-x5437[0] = 1.0f;
-float* x5439 = (float*)myMalloc(1 * sizeof(float));;
-x5439[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x5437,x562,256,x5439, x1196, 256, x562,256));
-arrayFill_greg<<<28, 512>>>(x1196, 0.0f, 262144);
-float* x5443 = (float*)myMalloc(1 * sizeof(float));;
-x5443[0] = 1.0f;
-float* x5445 = (float*)myMalloc(1 * sizeof(float));;
-x5445[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 576,64,x5443,x565,576,x5445, x1197, 576, x565,576));
-arrayFill_greg<<<28, 512>>>(x1197, 0.0f, 36864);
-float* x5449 = (float*)myMalloc(1 * sizeof(float));;
-x5449[0] = 1.0f;
-float* x5451 = (float*)myMalloc(1 * sizeof(float));;
-x5451[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5449,x568,1,x5451, x1198, 1, x568,1));
-arrayFill_greg<<<28, 512>>>(x1198, 0.0f, 256);
-float* x5455 = (float*)myMalloc(1 * sizeof(float));;
-x5455[0] = 1.0f;
-float* x5457 = (float*)myMalloc(1 * sizeof(float));;
-x5457[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5455,x571,1,x5457, x1199, 1, x571,1));
-arrayFill_greg<<<28, 512>>>(x1199, 0.0f, 256);
-float* x5461 = (float*)myMalloc(1 * sizeof(float));;
-x5461[0] = 1.0f;
-float* x5463 = (float*)myMalloc(1 * sizeof(float));;
-x5463[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5461,x574,1,x5463, x1200, 1, x574,1));
-arrayFill_greg<<<28, 512>>>(x1200, 0.0f, 1024);
-float* x5467 = (float*)myMalloc(1 * sizeof(float));;
-x5467[0] = 1.0f;
-float* x5469 = (float*)myMalloc(1 * sizeof(float));;
-x5469[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5467,x577,1,x5469, x1201, 1, x577,1));
-arrayFill_greg<<<28, 512>>>(x1201, 0.0f, 2048);
-float* x5473 = (float*)myMalloc(1 * sizeof(float));;
-x5473[0] = 1.0f;
-float* x5475 = (float*)myMalloc(1 * sizeof(float));;
-x5475[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5473,x580,1,x5475, x1202, 1, x580,1));
-arrayFill_greg<<<28, 512>>>(x1202, 0.0f, 128);
-float* x5479 = (float*)myMalloc(1 * sizeof(float));;
-x5479[0] = 1.0f;
-float* x5481 = (float*)myMalloc(1 * sizeof(float));;
-x5481[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5479,x583,1,x5481, x1203, 1, x583,1));
-arrayFill_greg<<<28, 512>>>(x1203, 0.0f, 256);
-float* x5485 = (float*)myMalloc(1 * sizeof(float));;
-x5485[0] = 1.0f;
-float* x5487 = (float*)myMalloc(1 * sizeof(float));;
-x5487[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x5485,x586,256,x5487, x1204, 256, x586,256));
-arrayFill_greg<<<28, 512>>>(x1204, 0.0f, 262144);
-float* x5491 = (float*)myMalloc(1 * sizeof(float));;
-x5491[0] = 1.0f;
-float* x5493 = (float*)myMalloc(1 * sizeof(float));;
-x5493[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5491,x589,1,x5493, x1205, 1, x589,1));
-arrayFill_greg<<<28, 512>>>(x1205, 0.0f, 256);
-float* x5497 = (float*)myMalloc(1 * sizeof(float));;
-x5497[0] = 1.0f;
-float* x5499 = (float*)myMalloc(1 * sizeof(float));;
-x5499[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5497,x592,1,x5499, x1206, 1, x592,1));
-arrayFill_greg<<<28, 512>>>(x1206, 0.0f, 256);
-float* x5503 = (float*)myMalloc(1 * sizeof(float));;
-x5503[0] = 1.0f;
-float* x5505 = (float*)myMalloc(1 * sizeof(float));;
-x5505[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5503,x595,1,x5505, x1207, 1, x595,1));
-arrayFill_greg<<<28, 512>>>(x1207, 0.0f, 128);
-float* x5509 = (float*)myMalloc(1 * sizeof(float));;
-x5509[0] = 1.0f;
-float* x5511 = (float*)myMalloc(1 * sizeof(float));;
-x5511[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5509,x598,1,x5511, x1208, 1, x598,1));
-arrayFill_greg<<<28, 512>>>(x1208, 0.0f, 512);
-float* x5515 = (float*)myMalloc(1 * sizeof(float));;
-x5515[0] = 1.0f;
-float* x5517 = (float*)myMalloc(1 * sizeof(float));;
-x5517[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5515,x601,1,x5517, x1209, 1, x601,1));
-arrayFill_greg<<<28, 512>>>(x1209, 0.0f, 64);
-float* x5521 = (float*)myMalloc(1 * sizeof(float));;
-x5521[0] = 1.0f;
-float* x5523 = (float*)myMalloc(1 * sizeof(float));;
-x5523[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5521,x604,1,x5523, x1210, 1, x604,1));
-arrayFill_greg<<<28, 512>>>(x1210, 0.0f, 2048);
-float* x5527 = (float*)myMalloc(1 * sizeof(float));;
-x5527[0] = 1.0f;
-float* x5529 = (float*)myMalloc(1 * sizeof(float));;
-x5529[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5527,x607,1,x5529, x1211, 1, x607,1));
-arrayFill_greg<<<28, 512>>>(x1211, 0.0f, 256);
-float* x5533 = (float*)myMalloc(1 * sizeof(float));;
-x5533[0] = 1.0f;
-float* x5535 = (float*)myMalloc(1 * sizeof(float));;
-x5535[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5533,x610,1,x5535, x1212, 1, x610,1));
-arrayFill_greg<<<28, 512>>>(x1212, 0.0f, 64);
-float* x5539 = (float*)myMalloc(1 * sizeof(float));;
-x5539[0] = 1.0f;
-float* x5541 = (float*)myMalloc(1 * sizeof(float));;
-x5541[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 128,512,x5539,x613,128,x5541, x1213, 128, x613,128));
-arrayFill_greg<<<28, 512>>>(x1213, 0.0f, 65536);
-float* x5545 = (float*)myMalloc(1 * sizeof(float));;
-x5545[0] = 1.0f;
-float* x5547 = (float*)myMalloc(1 * sizeof(float));;
-x5547[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5545,x616,1,x5547, x1214, 1, x616,1));
-arrayFill_greg<<<28, 512>>>(x1214, 0.0f, 2048);
-float* x5551 = (float*)myMalloc(1 * sizeof(float));;
-x5551[0] = 1.0f;
-float* x5553 = (float*)myMalloc(1 * sizeof(float));;
-x5553[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5551,x619,1,x5553, x1215, 1, x619,1));
-arrayFill_greg<<<28, 512>>>(x1215, 0.0f, 256);
-float* x5557 = (float*)myMalloc(1 * sizeof(float));;
-x5557[0] = 1.0f;
-float* x5559 = (float*)myMalloc(1 * sizeof(float));;
-x5559[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5557,x622,1,x5559, x1216, 1, x622,1));
-arrayFill_greg<<<28, 512>>>(x1216, 0.0f, 256);
-float* x5563 = (float*)myMalloc(1 * sizeof(float));;
-x5563[0] = 1.0f;
-float* x5565 = (float*)myMalloc(1 * sizeof(float));;
-x5565[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5563,x625,1,x5565, x1217, 1, x625,1));
-arrayFill_greg<<<28, 512>>>(x1217, 0.0f, 64);
-float* x5569 = (float*)myMalloc(1 * sizeof(float));;
-x5569[0] = 1.0f;
-float* x5571 = (float*)myMalloc(1 * sizeof(float));;
-x5571[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 128,512,x5569,x628,128,x5571, x1218, 128, x628,128));
-arrayFill_greg<<<28, 512>>>(x1218, 0.0f, 65536);
-float* x5575 = (float*)myMalloc(1 * sizeof(float));;
-x5575[0] = 1.0f;
-float* x5577 = (float*)myMalloc(1 * sizeof(float));;
-x5577[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5575,x631,1,x5577, x1219, 1, x631,1));
-arrayFill_greg<<<28, 512>>>(x1219, 0.0f, 128);
-float* x5581 = (float*)myMalloc(1 * sizeof(float));;
-x5581[0] = 1.0f;
-float* x5583 = (float*)myMalloc(1 * sizeof(float));;
-x5583[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5581,x634,1,x5583, x1220, 1, x634,1));
-arrayFill_greg<<<28, 512>>>(x1220, 0.0f, 512);
-float* x5587 = (float*)myMalloc(1 * sizeof(float));;
-x5587[0] = 1.0f;
-float* x5589 = (float*)myMalloc(1 * sizeof(float));;
-x5589[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5587,x637,1,x5589, x1221, 1, x637,1));
-arrayFill_greg<<<28, 512>>>(x1221, 0.0f, 64);
-float* x5593 = (float*)myMalloc(1 * sizeof(float));;
-x5593[0] = 1.0f;
-float* x5595 = (float*)myMalloc(1 * sizeof(float));;
-x5595[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5593,x640,1,x5595, x1222, 1, x640,1));
-arrayFill_greg<<<28, 512>>>(x1222, 0.0f, 2048);
-float* x5599 = (float*)myMalloc(1 * sizeof(float));;
-x5599[0] = 1.0f;
-float* x5601 = (float*)myMalloc(1 * sizeof(float));;
-x5601[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x5599,x643,256,x5601, x1223, 256, x643,256));
-arrayFill_greg<<<28, 512>>>(x1223, 0.0f, 262144);
-float* x5605 = (float*)myMalloc(1 * sizeof(float));;
-x5605[0] = 1.0f;
-float* x5607 = (float*)myMalloc(1 * sizeof(float));;
-x5607[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5605,x646,1,x5607, x1224, 1, x646,1));
-arrayFill_greg<<<28, 512>>>(x1224, 0.0f, 1024);
-float* x5611 = (float*)myMalloc(1 * sizeof(float));;
-x5611[0] = 1.0f;
-float* x5613 = (float*)myMalloc(1 * sizeof(float));;
-x5613[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5611,x649,1,x5613, x1225, 1, x649,1));
-arrayFill_greg<<<28, 512>>>(x1225, 0.0f, 64);
-float* x5617 = (float*)myMalloc(1 * sizeof(float));;
-x5617[0] = 1.0f;
-float* x5619 = (float*)myMalloc(1 * sizeof(float));;
-x5619[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5617,x652,1,x5619, x1226, 1, x652,1));
-arrayFill_greg<<<28, 512>>>(x1226, 0.0f, 512);
-float* x5623 = (float*)myMalloc(1 * sizeof(float));;
-x5623[0] = 1.0f;
-float* x5625 = (float*)myMalloc(1 * sizeof(float));;
-x5625[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5623,x655,1,x5625, x1227, 1, x655,1));
-arrayFill_greg<<<28, 512>>>(x1227, 0.0f, 1024);
-float* x5629 = (float*)myMalloc(1 * sizeof(float));;
-x5629[0] = 1.0f;
-float* x5631 = (float*)myMalloc(1 * sizeof(float));;
-x5631[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5629,x658,1,x5631, x1228, 1, x658,1));
-arrayFill_greg<<<28, 512>>>(x1228, 0.0f, 512);
-float* x5635 = (float*)myMalloc(1 * sizeof(float));;
-x5635[0] = 1.0f;
-float* x5637 = (float*)myMalloc(1 * sizeof(float));;
-x5637[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5635,x661,1,x5637, x1229, 1, x661,1));
-arrayFill_greg<<<28, 512>>>(x1229, 0.0f, 1024);
-float* x5641 = (float*)myMalloc(1 * sizeof(float));;
-x5641[0] = 1.0f;
-float* x5643 = (float*)myMalloc(1 * sizeof(float));;
-x5643[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5641,x664,1,x5643, x1230, 1, x664,1));
-arrayFill_greg<<<28, 512>>>(x1230, 0.0f, 2048);
-float* x5647 = (float*)myMalloc(1 * sizeof(float));;
-x5647[0] = 1.0f;
-float* x5649 = (float*)myMalloc(1 * sizeof(float));;
-x5649[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5647,x667,1,x5649, x1231, 1, x667,1));
-arrayFill_greg<<<28, 512>>>(x1231, 0.0f, 256);
-float* x5653 = (float*)myMalloc(1 * sizeof(float));;
-x5653[0] = 1.0f;
-float* x5655 = (float*)myMalloc(1 * sizeof(float));;
-x5655[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5653,x670,1,x5655, x1232, 1, x670,1));
-arrayFill_greg<<<28, 512>>>(x1232, 0.0f, 2048);
-float* x5659 = (float*)myMalloc(1 * sizeof(float));;
-x5659[0] = 1.0f;
-float* x5661 = (float*)myMalloc(1 * sizeof(float));;
-x5661[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5659,x673,1,x5661, x1233, 1, x673,1));
-arrayFill_greg<<<28, 512>>>(x1233, 0.0f, 256);
-float* x5665 = (float*)myMalloc(1 * sizeof(float));;
-x5665[0] = 1.0f;
-float* x5667 = (float*)myMalloc(1 * sizeof(float));;
-x5667[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5665,x676,1,x5667, x1234, 1, x676,1));
-arrayFill_greg<<<28, 512>>>(x1234, 0.0f, 128);
-float* x5671 = (float*)myMalloc(1 * sizeof(float));;
-x5671[0] = 1.0f;
-float* x5673 = (float*)myMalloc(1 * sizeof(float));;
-x5673[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5671,x679,1,x5673, x1235, 1, x679,1));
-arrayFill_greg<<<28, 512>>>(x1235, 0.0f, 128);
-float* x5677 = (float*)myMalloc(1 * sizeof(float));;
-x5677[0] = 1.0f;
-float* x5679 = (float*)myMalloc(1 * sizeof(float));;
-x5679[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5677,x682,1,x5679, x1236, 1, x682,1));
-arrayFill_greg<<<28, 512>>>(x1236, 0.0f, 256);
-float* x5683 = (float*)myMalloc(1 * sizeof(float));;
-x5683[0] = 1.0f;
-float* x5685 = (float*)myMalloc(1 * sizeof(float));;
-x5685[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,256,x5683,x685,64,x5685, x1237, 64, x685,64));
-arrayFill_greg<<<28, 512>>>(x1237, 0.0f, 16384);
-float* x5689 = (float*)myMalloc(1 * sizeof(float));;
-x5689[0] = 1.0f;
-float* x5691 = (float*)myMalloc(1 * sizeof(float));;
-x5691[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5689,x688,1,x5691, x1238, 1, x688,1));
-arrayFill_greg<<<28, 512>>>(x1238, 0.0f, 256);
-float* x5695 = (float*)myMalloc(1 * sizeof(float));;
-x5695[0] = 1.0f;
-float* x5697 = (float*)myMalloc(1 * sizeof(float));;
-x5697[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,128,x5695,x691,512,x5697, x1239, 512, x691,512));
-arrayFill_greg<<<28, 512>>>(x1239, 0.0f, 65536);
-float* x5701 = (float*)myMalloc(1 * sizeof(float));;
-x5701[0] = 1.0f;
-float* x5703 = (float*)myMalloc(1 * sizeof(float));;
-x5703[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5701,x694,1,x5703, x1240, 1, x694,1));
-arrayFill_greg<<<28, 512>>>(x1240, 0.0f, 256);
-float* x5707 = (float*)myMalloc(1 * sizeof(float));;
-x5707[0] = 1.0f;
-float* x5709 = (float*)myMalloc(1 * sizeof(float));;
-x5709[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5707,x697,1,x5709, x1241, 1, x697,1));
-arrayFill_greg<<<28, 512>>>(x1241, 0.0f, 128);
-float* x5713 = (float*)myMalloc(1 * sizeof(float));;
-x5713[0] = 1.0f;
-float* x5715 = (float*)myMalloc(1 * sizeof(float));;
-x5715[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5713,x700,1,x5715, x1242, 1, x700,1));
-arrayFill_greg<<<28, 512>>>(x1242, 0.0f, 64);
-float* x5719 = (float*)myMalloc(1 * sizeof(float));;
-x5719[0] = 1.0f;
-float* x5721 = (float*)myMalloc(1 * sizeof(float));;
-x5721[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5719,x703,1,x5721, x1243, 1, x703,1));
-arrayFill_greg<<<28, 512>>>(x1243, 0.0f, 256);
-float* x5725 = (float*)myMalloc(1 * sizeof(float));;
-x5725[0] = 1.0f;
-float* x5727 = (float*)myMalloc(1 * sizeof(float));;
-x5727[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5725,x706,1,x5727, x1244, 1, x706,1));
-arrayFill_greg<<<28, 512>>>(x1244, 0.0f, 512);
-float* x5731 = (float*)myMalloc(1 * sizeof(float));;
-x5731[0] = 1.0f;
-float* x5733 = (float*)myMalloc(1 * sizeof(float));;
-x5733[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5731,x709,1,x5733, x1245, 1, x709,1));
-arrayFill_greg<<<28, 512>>>(x1245, 0.0f, 512);
-float* x5737 = (float*)myMalloc(1 * sizeof(float));;
-x5737[0] = 1.0f;
-float* x5739 = (float*)myMalloc(1 * sizeof(float));;
-x5739[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,512,x5737,x712,1024,x5739, x1246, 1024, x712,1024));
-arrayFill_greg<<<28, 512>>>(x1246, 0.0f, 524288);
-float* x5743 = (float*)myMalloc(1 * sizeof(float));;
-x5743[0] = 1.0f;
-float* x5745 = (float*)myMalloc(1 * sizeof(float));;
-x5745[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5743,x715,1,x5745, x1247, 1, x715,1));
-arrayFill_greg<<<28, 512>>>(x1247, 0.0f, 1024);
-float* x5749 = (float*)myMalloc(1 * sizeof(float));;
-x5749[0] = 1.0f;
-float* x5751 = (float*)myMalloc(1 * sizeof(float));;
-x5751[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5749,x718,1,x5751, x1248, 1, x718,1));
-arrayFill_greg<<<28, 512>>>(x1248, 0.0f, 256);
-float* x5755 = (float*)myMalloc(1 * sizeof(float));;
-x5755[0] = 1.0f;
-float* x5757 = (float*)myMalloc(1 * sizeof(float));;
-x5757[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5755,x721,1,x5757, x1249, 1, x721,1));
-arrayFill_greg<<<28, 512>>>(x1249, 0.0f, 64);
-float* x5761 = (float*)myMalloc(1 * sizeof(float));;
-x5761[0] = 1.0f;
-float* x5763 = (float*)myMalloc(1 * sizeof(float));;
-x5763[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5761,x724,1,x5763, x1250, 1, x724,1));
-arrayFill_greg<<<28, 512>>>(x1250, 0.0f, 1024);
-float* x5767 = (float*)myMalloc(1 * sizeof(float));;
-x5767[0] = 1.0f;
-float* x5769 = (float*)myMalloc(1 * sizeof(float));;
-x5769[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5767,x727,1,x5769, x1251, 1, x727,1));
-arrayFill_greg<<<28, 512>>>(x1251, 0.0f, 2048);
-float* x5773 = (float*)myMalloc(1 * sizeof(float));;
-x5773[0] = 1.0f;
-float* x5775 = (float*)myMalloc(1 * sizeof(float));;
-x5775[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5773,x730,1,x5775, x1252, 1, x730,1));
-arrayFill_greg<<<28, 512>>>(x1252, 0.0f, 512);
-float* x5779 = (float*)myMalloc(1 * sizeof(float));;
-x5779[0] = 1.0f;
-float* x5781 = (float*)myMalloc(1 * sizeof(float));;
-x5781[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5779,x733,1,x5781, x1253, 1, x733,1));
-arrayFill_greg<<<28, 512>>>(x1253, 0.0f, 1024);
-float* x5785 = (float*)myMalloc(1 * sizeof(float));;
-x5785[0] = 1.0f;
-float* x5787 = (float*)myMalloc(1 * sizeof(float));;
-x5787[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5785,x736,1,x5787, x1254, 1, x736,1));
-arrayFill_greg<<<28, 512>>>(x1254, 0.0f, 512);
-float* x5791 = (float*)myMalloc(1 * sizeof(float));;
-x5791[0] = 1.0f;
-float* x5793 = (float*)myMalloc(1 * sizeof(float));;
-x5793[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5791,x739,1,x5793, x1255, 1, x739,1));
-arrayFill_greg<<<28, 512>>>(x1255, 0.0f, 128);
-float* x5797 = (float*)myMalloc(1 * sizeof(float));;
-x5797[0] = 1.0f;
-float* x5799 = (float*)myMalloc(1 * sizeof(float));;
-x5799[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5797,x742,1,x5799, x1256, 1, x742,1));
-arrayFill_greg<<<28, 512>>>(x1256, 0.0f, 512);
-float* x5803 = (float*)myMalloc(1 * sizeof(float));;
-x5803[0] = 1.0f;
-float* x5805 = (float*)myMalloc(1 * sizeof(float));;
-x5805[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,64,x5803,x745,256,x5805, x1257, 256, x745,256));
-arrayFill_greg<<<28, 512>>>(x1257, 0.0f, 16384);
-float* x5809 = (float*)myMalloc(1 * sizeof(float));;
-x5809[0] = 1.0f;
-float* x5811 = (float*)myMalloc(1 * sizeof(float));;
-x5811[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x5809,x748,1024,x5811, x1258, 1024, x748,1024));
-arrayFill_greg<<<28, 512>>>(x1258, 0.0f, 262144);
-float* x5815 = (float*)myMalloc(1 * sizeof(float));;
-x5815[0] = 1.0f;
-float* x5817 = (float*)myMalloc(1 * sizeof(float));;
-x5817[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 27,64,x5815,x751,27,x5817, x1259, 27, x751,27));
-arrayFill_greg<<<28, 512>>>(x1259, 0.0f, 1728);
-float* x5821 = (float*)myMalloc(1 * sizeof(float));;
-x5821[0] = 1.0f;
-float* x5823 = (float*)myMalloc(1 * sizeof(float));;
-x5823[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5821,x754,1,x5823, x1260, 1, x754,1));
-arrayFill_greg<<<28, 512>>>(x1260, 0.0f, 64);
-float* x5827 = (float*)myMalloc(1 * sizeof(float));;
-x5827[0] = 1.0f;
-float* x5829 = (float*)myMalloc(1 * sizeof(float));;
-x5829[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5827,x757,1,x5829, x1261, 1, x757,1));
-arrayFill_greg<<<28, 512>>>(x1261, 0.0f, 512);
-float* x5833 = (float*)myMalloc(1 * sizeof(float));;
-x5833[0] = 1.0f;
-float* x5835 = (float*)myMalloc(1 * sizeof(float));;
-x5835[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 4608,512,x5833,x760,4608,x5835, x1262, 4608, x760,4608));
-arrayFill_greg<<<28, 512>>>(x1262, 0.0f, 2359296);
-float* x5839 = (float*)myMalloc(1 * sizeof(float));;
-x5839[0] = 1.0f;
-float* x5841 = (float*)myMalloc(1 * sizeof(float));;
-x5841[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5839,x763,1,x5841, x1263, 1, x763,1));
-arrayFill_greg<<<28, 512>>>(x1263, 0.0f, 512);
-float* x5845 = (float*)myMalloc(1 * sizeof(float));;
-x5845[0] = 1.0f;
-float* x5847 = (float*)myMalloc(1 * sizeof(float));;
-x5847[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5845,x766,1,x5847, x1264, 1, x766,1));
-arrayFill_greg<<<28, 512>>>(x1264, 0.0f, 256);
-float* x5851 = (float*)myMalloc(1 * sizeof(float));;
-x5851[0] = 1.0f;
-float* x5853 = (float*)myMalloc(1 * sizeof(float));;
-x5853[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5851,x769,1,x5853, x1265, 1, x769,1));
-arrayFill_greg<<<28, 512>>>(x1265, 0.0f, 64);
-float* x5857 = (float*)myMalloc(1 * sizeof(float));;
-x5857[0] = 1.0f;
-float* x5859 = (float*)myMalloc(1 * sizeof(float));;
-x5859[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5857,x772,1,x5859, x1266, 1, x772,1));
-arrayFill_greg<<<28, 512>>>(x1266, 0.0f, 512);
-float* x5863 = (float*)myMalloc(1 * sizeof(float));;
-x5863[0] = 1.0f;
-float* x5865 = (float*)myMalloc(1 * sizeof(float));;
-x5865[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5863,x775,1,x5865, x1267, 1, x775,1));
-arrayFill_greg<<<28, 512>>>(x1267, 0.0f, 512);
-float* x5869 = (float*)myMalloc(1 * sizeof(float));;
-x5869[0] = 1.0f;
-float* x5871 = (float*)myMalloc(1 * sizeof(float));;
-x5871[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5869,x778,1,x5871, x1268, 1, x778,1));
-arrayFill_greg<<<28, 512>>>(x1268, 0.0f, 1024);
-float* x5875 = (float*)myMalloc(1 * sizeof(float));;
-x5875[0] = 1.0f;
-float* x5877 = (float*)myMalloc(1 * sizeof(float));;
-x5877[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,256,x5875,x781,64,x5877, x1269, 64, x781,64));
-arrayFill_greg<<<28, 512>>>(x1269, 0.0f, 16384);
-float* x5881 = (float*)myMalloc(1 * sizeof(float));;
-x5881[0] = 1.0f;
-float* x5883 = (float*)myMalloc(1 * sizeof(float));;
-x5883[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5881,x784,1,x5883, x1270, 1, x784,1));
-arrayFill_greg<<<28, 512>>>(x1270, 0.0f, 256);
-float* x5887 = (float*)myMalloc(1 * sizeof(float));;
-x5887[0] = 1.0f;
-float* x5889 = (float*)myMalloc(1 * sizeof(float));;
-x5889[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5887,x787,1,x5889, x1271, 1, x787,1));
-arrayFill_greg<<<28, 512>>>(x1271, 0.0f, 64);
-float* x5893 = (float*)myMalloc(1 * sizeof(float));;
-x5893[0] = 1.0f;
-float* x5895 = (float*)myMalloc(1 * sizeof(float));;
-x5895[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1152,128,x5893,x790,1152,x5895, x1272, 1152, x790,1152));
-arrayFill_greg<<<28, 512>>>(x1272, 0.0f, 147456);
-float* x5899 = (float*)myMalloc(1 * sizeof(float));;
-x5899[0] = 1.0f;
-float* x5901 = (float*)myMalloc(1 * sizeof(float));;
-x5901[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5899,x793,1,x5901, x1273, 1, x793,1));
-arrayFill_greg<<<28, 512>>>(x1273, 0.0f, 256);
-float* x5905 = (float*)myMalloc(1 * sizeof(float));;
-x5905[0] = 1.0f;
-float* x5907 = (float*)myMalloc(1 * sizeof(float));;
-x5907[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5905,x796,1,x5907, x1274, 1, x796,1));
-arrayFill_greg<<<28, 512>>>(x1274, 0.0f, 512);
-float* x5911 = (float*)myMalloc(1 * sizeof(float));;
-x5911[0] = 1.0f;
-float* x5913 = (float*)myMalloc(1 * sizeof(float));;
-x5913[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5911,x799,1,x5913, x1275, 1, x799,1));
-arrayFill_greg<<<28, 512>>>(x1275, 0.0f, 256);
-float* x5917 = (float*)myMalloc(1 * sizeof(float));;
-x5917[0] = 1.0f;
-float* x5919 = (float*)myMalloc(1 * sizeof(float));;
-x5919[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5917,x802,1,x5919, x1276, 1, x802,1));
-arrayFill_greg<<<28, 512>>>(x1276, 0.0f, 512);
-float* x5923 = (float*)myMalloc(1 * sizeof(float));;
-x5923[0] = 1.0f;
-float* x5925 = (float*)myMalloc(1 * sizeof(float));;
-x5925[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5923,x805,1,x5925, x1277, 1, x805,1));
-arrayFill_greg<<<28, 512>>>(x1277, 0.0f, 128);
-float* x5929 = (float*)myMalloc(1 * sizeof(float));;
-x5929[0] = 1.0f;
-float* x5931 = (float*)myMalloc(1 * sizeof(float));;
-x5931[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,64,x5929,x808,256,x5931, x1278, 256, x808,256));
-arrayFill_greg<<<28, 512>>>(x1278, 0.0f, 16384);
-float* x5935 = (float*)myMalloc(1 * sizeof(float));;
-x5935[0] = 1.0f;
-float* x5937 = (float*)myMalloc(1 * sizeof(float));;
-x5937[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5935,x811,1,x5937, x1279, 1, x811,1));
-arrayFill_greg<<<28, 512>>>(x1279, 0.0f, 128);
-float* x5941 = (float*)myMalloc(1 * sizeof(float));;
-x5941[0] = 1.0f;
-float* x5943 = (float*)myMalloc(1 * sizeof(float));;
-x5943[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5941,x814,1,x5943, x1280, 1, x814,1));
-arrayFill_greg<<<28, 512>>>(x1280, 0.0f, 2048);
-float* x5947 = (float*)myMalloc(1 * sizeof(float));;
-x5947[0] = 1.0f;
-float* x5949 = (float*)myMalloc(1 * sizeof(float));;
-x5949[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5947,x817,1,x5949, x1281, 1, x817,1));
-arrayFill_greg<<<28, 512>>>(x1281, 0.0f, 256);
-float* x5953 = (float*)myMalloc(1 * sizeof(float));;
-x5953[0] = 1.0f;
-float* x5955 = (float*)myMalloc(1 * sizeof(float));;
-x5955[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x5953,x820,2304,x5955, x1282, 2304, x820,2304));
-arrayFill_greg<<<28, 512>>>(x1282, 0.0f, 589824);
-float* x5959 = (float*)myMalloc(1 * sizeof(float));;
-x5959[0] = 1.0f;
-float* x5961 = (float*)myMalloc(1 * sizeof(float));;
-x5961[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5959,x823,1,x5961, x1283, 1, x823,1));
-arrayFill_greg<<<28, 512>>>(x1283, 0.0f, 256);
-float* x5965 = (float*)myMalloc(1 * sizeof(float));;
-x5965[0] = 1.0f;
-float* x5967 = (float*)myMalloc(1 * sizeof(float));;
-x5967[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5965,x826,1,x5967, x1284, 1, x826,1));
-arrayFill_greg<<<28, 512>>>(x1284, 0.0f, 128);
-float* x5971 = (float*)myMalloc(1 * sizeof(float));;
-x5971[0] = 1.0f;
-float* x5973 = (float*)myMalloc(1 * sizeof(float));;
-x5973[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5971,x829,1,x5973, x1285, 1, x829,1));
-arrayFill_greg<<<28, 512>>>(x1285, 0.0f, 256);
-float* x5977 = (float*)myMalloc(1 * sizeof(float));;
-x5977[0] = 1.0f;
-float* x5979 = (float*)myMalloc(1 * sizeof(float));;
-x5979[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5977,x832,1,x5979, x1286, 1, x832,1));
-arrayFill_greg<<<28, 512>>>(x1286, 0.0f, 64);
-float* x5983 = (float*)myMalloc(1 * sizeof(float));;
-x5983[0] = 1.0f;
-float* x5985 = (float*)myMalloc(1 * sizeof(float));;
-x5985[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,256,x5983,x835,512,x5985, x1287, 512, x835,512));
-arrayFill_greg<<<28, 512>>>(x1287, 0.0f, 131072);
-float* x5989 = (float*)myMalloc(1 * sizeof(float));;
-x5989[0] = 1.0f;
-float* x5991 = (float*)myMalloc(1 * sizeof(float));;
-x5991[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5989,x838,1,x5991, x1288, 1, x838,1));
-arrayFill_greg<<<28, 512>>>(x1288, 0.0f, 2048);
-float* x5995 = (float*)myMalloc(1 * sizeof(float));;
-x5995[0] = 1.0f;
-float* x5997 = (float*)myMalloc(1 * sizeof(float));;
-x5997[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5995,x841,1,x5997, x1289, 1, x841,1));
-arrayFill_greg<<<28, 512>>>(x1289, 0.0f, 1024);
-float* x6001 = (float*)myMalloc(1 * sizeof(float));;
-x6001[0] = 1.0f;
-float* x6003 = (float*)myMalloc(1 * sizeof(float));;
-x6003[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6001,x844,1,x6003, x1290, 1, x844,1));
-arrayFill_greg<<<28, 512>>>(x1290, 0.0f, 1024);
-float* x6007 = (float*)myMalloc(1 * sizeof(float));;
-x6007[0] = 1.0f;
-float* x6009 = (float*)myMalloc(1 * sizeof(float));;
-x6009[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6007,x847,1,x6009, x1291, 1, x847,1));
-arrayFill_greg<<<28, 512>>>(x1291, 0.0f, 256);
-float* x6013 = (float*)myMalloc(1 * sizeof(float));;
-x6013[0] = 1.0f;
-float* x6015 = (float*)myMalloc(1 * sizeof(float));;
-x6015[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6013,x850,1,x6015, x1292, 1, x850,1));
-arrayFill_greg<<<28, 512>>>(x1292, 0.0f, 256);
-float* x6019 = (float*)myMalloc(1 * sizeof(float));;
-x6019[0] = 1.0f;
-float* x6021 = (float*)myMalloc(1 * sizeof(float));;
-x6021[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6019,x853,1,x6021, x1293, 1, x853,1));
-arrayFill_greg<<<28, 512>>>(x1293, 0.0f, 256);
-float* x6025 = (float*)myMalloc(1 * sizeof(float));;
-x6025[0] = 1.0f;
-float* x6027 = (float*)myMalloc(1 * sizeof(float));;
-x6027[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6025,x856,1,x6027, x1294, 1, x856,1));
-arrayFill_greg<<<28, 512>>>(x1294, 0.0f, 64);
-float* x6031 = (float*)myMalloc(1 * sizeof(float));;
-x6031[0] = 1.0f;
-float* x6033 = (float*)myMalloc(1 * sizeof(float));;
-x6033[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6031,x859,1,x6033, x1295, 1, x859,1));
-arrayFill_greg<<<28, 512>>>(x1295, 0.0f, 1024);
-float* x6037 = (float*)myMalloc(1 * sizeof(float));;
-x6037[0] = 1.0f;
-float* x6039 = (float*)myMalloc(1 * sizeof(float));;
-x6039[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6037,x862,1,x6039, x1296, 1, x862,1));
-arrayFill_greg<<<28, 512>>>(x1296, 0.0f, 256);
-float* x6043 = (float*)myMalloc(1 * sizeof(float));;
-x6043[0] = 1.0f;
-float* x6045 = (float*)myMalloc(1 * sizeof(float));;
-x6045[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6043,x865,1,x6045, x1297, 1, x865,1));
-arrayFill_greg<<<28, 512>>>(x1297, 0.0f, 128);
-float* x6049 = (float*)myMalloc(1 * sizeof(float));;
-x6049[0] = 1.0f;
-float* x6051 = (float*)myMalloc(1 * sizeof(float));;
-x6051[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1152,128,x6049,x868,1152,x6051, x1298, 1152, x868,1152));
-arrayFill_greg<<<28, 512>>>(x1298, 0.0f, 147456);
-float* x6055 = (float*)myMalloc(1 * sizeof(float));;
-x6055[0] = 1.0f;
-float* x6057 = (float*)myMalloc(1 * sizeof(float));;
-x6057[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6055,x871,1,x6057, x1299, 1, x871,1));
-arrayFill_greg<<<28, 512>>>(x1299, 0.0f, 256);
-float* x6061 = (float*)myMalloc(1 * sizeof(float));;
-x6061[0] = 1.0f;
-float* x6063 = (float*)myMalloc(1 * sizeof(float));;
-x6063[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x6061,x874,1,x6063, x1300, 1, x874,1));
-arrayFill_greg<<<28, 512>>>(x1300, 0.0f, 2048);
-float* x6067 = (float*)myMalloc(1 * sizeof(float));;
-x6067[0] = 1.0f;
-float* x6069 = (float*)myMalloc(1 * sizeof(float));;
-x6069[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6067,x877,1,x6069, x1301, 1, x877,1));
-arrayFill_greg<<<28, 512>>>(x1301, 0.0f, 512);
-float* x6073 = (float*)myMalloc(1 * sizeof(float));;
-x6073[0] = 1.0f;
-float* x6075 = (float*)myMalloc(1 * sizeof(float));;
-x6075[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6073,x880,1,x6075, x1302, 1, x880,1));
-arrayFill_greg<<<28, 512>>>(x1302, 0.0f, 512);
-float* x6079 = (float*)myMalloc(1 * sizeof(float));;
-x6079[0] = 1.0f;
-float* x6081 = (float*)myMalloc(1 * sizeof(float));;
-x6081[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,128,x6079,x883,512,x6081, x1303, 512, x883,512));
-arrayFill_greg<<<28, 512>>>(x1303, 0.0f, 65536);
-float* x6085 = (float*)myMalloc(1 * sizeof(float));;
-x6085[0] = 1.0f;
-float* x6087 = (float*)myMalloc(1 * sizeof(float));;
-x6087[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6085,x886,1,x6087, x1304, 1, x886,1));
-arrayFill_greg<<<28, 512>>>(x1304, 0.0f, 256);
-float* x6091 = (float*)myMalloc(1 * sizeof(float));;
-x6091[0] = 1.0f;
-float* x6093 = (float*)myMalloc(1 * sizeof(float));;
-x6093[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6091,x889,1,x6093, x1305, 1, x889,1));
-arrayFill_greg<<<28, 512>>>(x1305, 0.0f, 256);
-float* x6097 = (float*)myMalloc(1 * sizeof(float));;
-x6097[0] = 1.0f;
-float* x6099 = (float*)myMalloc(1 * sizeof(float));;
-x6099[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6097,x892,1,x6099, x1306, 1, x892,1));
-arrayFill_greg<<<28, 512>>>(x1306, 0.0f, 256);
-float* x6103 = (float*)myMalloc(1 * sizeof(float));;
-x6103[0] = 1.0f;
-float* x6105 = (float*)myMalloc(1 * sizeof(float));;
-x6105[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6103,x895,1,x6105, x1307, 1, x895,1));
-arrayFill_greg<<<28, 512>>>(x1307, 0.0f, 256);
-float* x6109 = (float*)myMalloc(1 * sizeof(float));;
-x6109[0] = 1.0f;
-float* x6111 = (float*)myMalloc(1 * sizeof(float));;
-x6111[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6109,x898,1,x6111, x1308, 1, x898,1));
-arrayFill_greg<<<28, 512>>>(x1308, 0.0f, 512);
-float* x6115 = (float*)myMalloc(1 * sizeof(float));;
-x6115[0] = 1.0f;
-float* x6117 = (float*)myMalloc(1 * sizeof(float));;
-x6117[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6115,x901,1,x6117, x1309, 1, x901,1));
-arrayFill_greg<<<28, 512>>>(x1309, 0.0f, 512);
-float* x6121 = (float*)myMalloc(1 * sizeof(float));;
-x6121[0] = 1.0f;
-float* x6123 = (float*)myMalloc(1 * sizeof(float));;
-x6123[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6121,x904,1,x6123, x1310, 1, x904,1));
-arrayFill_greg<<<28, 512>>>(x1310, 0.0f, 256);
-float* x6127 = (float*)myMalloc(1 * sizeof(float));;
-x6127[0] = 1.0f;
-float* x6129 = (float*)myMalloc(1 * sizeof(float));;
-x6129[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6127,x907,1,x6129, x1311, 1, x907,1));
-arrayFill_greg<<<28, 512>>>(x1311, 0.0f, 128);
-float* x6133 = (float*)myMalloc(1 * sizeof(float));;
-x6133[0] = 1.0f;
-float* x6135 = (float*)myMalloc(1 * sizeof(float));;
-x6135[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6133,x910,1,x6135, x1312, 1, x910,1));
-arrayFill_greg<<<28, 512>>>(x1312, 0.0f, 512);
-float* x6139 = (float*)myMalloc(1 * sizeof(float));;
-x6139[0] = 1.0f;
-float* x6141 = (float*)myMalloc(1 * sizeof(float));;
-x6141[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6139,x913,1,x6141, x1313, 1, x913,1));
-arrayFill_greg<<<28, 512>>>(x1313, 0.0f, 64);
-float* x6145 = (float*)myMalloc(1 * sizeof(float));;
-x6145[0] = 1.0f;
-float* x6147 = (float*)myMalloc(1 * sizeof(float));;
-x6147[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6145,x916,1,x6147, x1314, 1, x916,1));
-arrayFill_greg<<<28, 512>>>(x1314, 0.0f, 512);
-float* x6151 = (float*)myMalloc(1 * sizeof(float));;
-x6151[0] = 1.0f;
-float* x6153 = (float*)myMalloc(1 * sizeof(float));;
-x6153[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6151,x919,1,x6153, x1315, 1, x919,1));
-arrayFill_greg<<<28, 512>>>(x1315, 0.0f, 64);
-float* x6157 = (float*)myMalloc(1 * sizeof(float));;
-x6157[0] = 1.0f;
-float* x6159 = (float*)myMalloc(1 * sizeof(float));;
-x6159[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6157,x922,1,x6159, x1316, 1, x922,1));
-arrayFill_greg<<<28, 512>>>(x1316, 0.0f, 1024);
-float* x6163 = (float*)myMalloc(1 * sizeof(float));;
-x6163[0] = 1.0f;
-float* x6165 = (float*)myMalloc(1 * sizeof(float));;
-x6165[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6163,x925,1,x6165, x1317, 1, x925,1));
-arrayFill_greg<<<28, 512>>>(x1317, 0.0f, 512);
-float* x6169 = (float*)myMalloc(1 * sizeof(float));;
-x6169[0] = 1.0f;
-float* x6171 = (float*)myMalloc(1 * sizeof(float));;
-x6171[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6169,x928,1,x6171, x1318, 1, x928,1));
-arrayFill_greg<<<28, 512>>>(x1318, 0.0f, 1024);
-float* x6175 = (float*)myMalloc(1 * sizeof(float));;
-x6175[0] = 1.0f;
-float* x6177 = (float*)myMalloc(1 * sizeof(float));;
-x6177[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,2048,x6175,x931,512,x6177, x1319, 512, x931,512));
-arrayFill_greg<<<28, 512>>>(x1319, 0.0f, 1048576);
-float* x6181 = (float*)myMalloc(1 * sizeof(float));;
-x6181[0] = 1.0f;
-float* x6183 = (float*)myMalloc(1 * sizeof(float));;
-x6183[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6181,x934,1,x6183, x1320, 1, x934,1));
-arrayFill_greg<<<28, 512>>>(x1320, 0.0f, 512);
-float* x6187 = (float*)myMalloc(1 * sizeof(float));;
-x6187[0] = 1.0f;
-float* x6189 = (float*)myMalloc(1 * sizeof(float));;
-x6189[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,2048,x6187,x937,1024,x6189, x1321, 1024, x937,1024));
-arrayFill_greg<<<28, 512>>>(x1321, 0.0f, 2097152);
-float* x6193 = (float*)myMalloc(1 * sizeof(float));;
-x6193[0] = 1.0f;
-float* x6195 = (float*)myMalloc(1 * sizeof(float));;
-x6195[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2048,512,x6193,x940,2048,x6195, x1322, 2048, x940,2048));
-arrayFill_greg<<<28, 512>>>(x1322, 0.0f, 1048576);
-float* x6199 = (float*)myMalloc(1 * sizeof(float));;
-x6199[0] = 1.0f;
-float* x6201 = (float*)myMalloc(1 * sizeof(float));;
-x6201[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6199,x943,1,x6201, x1323, 1, x943,1));
-arrayFill_greg<<<28, 512>>>(x1323, 0.0f, 1024);
-float* x6205 = (float*)myMalloc(1 * sizeof(float));;
-x6205[0] = 1.0f;
-float* x6207 = (float*)myMalloc(1 * sizeof(float));;
-x6207[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6205,x946,1,x6207, x1324, 1, x946,1));
-arrayFill_greg<<<28, 512>>>(x1324, 0.0f, 128);
-float* x6211 = (float*)myMalloc(1 * sizeof(float));;
-x6211[0] = 1.0f;
-float* x6213 = (float*)myMalloc(1 * sizeof(float));;
-x6213[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x6211,x949,1024,x6213, x1325, 1024, x949,1024));
-arrayFill_greg<<<28, 512>>>(x1325, 0.0f, 262144);
-float* x6217 = (float*)myMalloc(1 * sizeof(float));;
-x6217[0] = 1.0f;
-float* x6219 = (float*)myMalloc(1 * sizeof(float));;
-x6219[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6217,x952,1,x6219, x1326, 1, x952,1));
-arrayFill_greg<<<28, 512>>>(x1326, 0.0f, 256);
-float* x6223 = (float*)myMalloc(1 * sizeof(float));;
-x6223[0] = 1.0f;
-float* x6225 = (float*)myMalloc(1 * sizeof(float));;
-x6225[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6223,x955,1,x6225, x1327, 1, x955,1));
-arrayFill_greg<<<28, 512>>>(x1327, 0.0f, 1024);
-float* x6229 = (float*)myMalloc(1 * sizeof(float));;
-x6229[0] = 1.0f;
-float* x6231 = (float*)myMalloc(1 * sizeof(float));;
-x6231[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x6229,x958,256,x6231, x1328, 256, x958,256));
-arrayFill_greg<<<28, 512>>>(x1328, 0.0f, 262144);
-float* x6235 = (float*)myMalloc(1 * sizeof(float));;
-x6235[0] = 1.0f;
-float* x6237 = (float*)myMalloc(1 * sizeof(float));;
-x6237[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6235,x961,1,x6237, x1329, 1, x961,1));
-arrayFill_greg<<<28, 512>>>(x1329, 0.0f, 128);
-float* x6241 = (float*)myMalloc(1 * sizeof(float));;
-x6241[0] = 1.0f;
-float* x6243 = (float*)myMalloc(1 * sizeof(float));;
-x6243[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6241,x964,1,x6243, x1330, 1, x964,1));
-arrayFill_greg<<<28, 512>>>(x1330, 0.0f, 512);
-float* x6247 = (float*)myMalloc(1 * sizeof(float));;
-x6247[0] = 1.0f;
-float* x6249 = (float*)myMalloc(1 * sizeof(float));;
-x6249[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6247,x967,1,x6249, x1331, 1, x967,1));
-arrayFill_greg<<<28, 512>>>(x1331, 0.0f, 512);
-float* x6253 = (float*)myMalloc(1 * sizeof(float));;
-x6253[0] = 1.0f;
-float* x6255 = (float*)myMalloc(1 * sizeof(float));;
-x6255[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6253,x970,1,x6255, x1332, 1, x970,1));
-arrayFill_greg<<<28, 512>>>(x1332, 0.0f, 128);
-float* x6259 = (float*)myMalloc(1 * sizeof(float));;
-x6259[0] = 1.0f;
-float* x6261 = (float*)myMalloc(1 * sizeof(float));;
-x6261[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x6259,x973,2304,x6261, x1333, 2304, x973,2304));
-arrayFill_greg<<<28, 512>>>(x1333, 0.0f, 589824);
-float* x6265 = (float*)myMalloc(1 * sizeof(float));;
-x6265[0] = 1.0f;
-float* x6267 = (float*)myMalloc(1 * sizeof(float));;
-x6267[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2048,10,x6265,x976,2048,x6267, x1334, 2048, x976,2048));
-arrayFill_greg<<<28, 512>>>(x1334, 0.0f, 20480);
-float* x6271 = (float*)myMalloc(1 * sizeof(float));;
-x6271[0] = 1.0f;
-float* x6273 = (float*)myMalloc(1 * sizeof(float));;
-x6273[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6271,x979,1,x6273, x1335, 1, x979,1));
-arrayFill_greg<<<28, 512>>>(x1335, 0.0f, 256);
-float* x6277 = (float*)myMalloc(1 * sizeof(float));;
-x6277[0] = 1.0f;
-float* x6279 = (float*)myMalloc(1 * sizeof(float));;
-x6279[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6277,x982,1,x6279, x1336, 1, x982,1));
-arrayFill_greg<<<28, 512>>>(x1336, 0.0f, 256);
-float* x6283 = (float*)myMalloc(1 * sizeof(float));;
-x6283[0] = 1.0f;
-float* x6285 = (float*)myMalloc(1 * sizeof(float));;
-x6285[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6283,x985,1,x6285, x1337, 1, x985,1));
-arrayFill_greg<<<28, 512>>>(x1337, 0.0f, 256);
-float* x6289 = (float*)myMalloc(1 * sizeof(float));;
-x6289[0] = 1.0f;
-float* x6291 = (float*)myMalloc(1 * sizeof(float));;
-x6291[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6289,x988,1,x6291, x1338, 1, x988,1));
-arrayFill_greg<<<28, 512>>>(x1338, 0.0f, 1024);
-float* x6295 = (float*)myMalloc(1 * sizeof(float));;
-x6295[0] = 1.0f;
-float* x6297 = (float*)myMalloc(1 * sizeof(float));;
-x6297[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6295,x991,1,x6297, x1339, 1, x991,1));
-arrayFill_greg<<<28, 512>>>(x1339, 0.0f, 1024);
-float* x6301 = (float*)myMalloc(1 * sizeof(float));;
-x6301[0] = 1.0f;
-float* x6303 = (float*)myMalloc(1 * sizeof(float));;
-x6303[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,64,x6301,x994,64,x6303, x1340, 64, x994,64));
-arrayFill_greg<<<28, 512>>>(x1340, 0.0f, 4096);
-float* x6307 = (float*)myMalloc(1 * sizeof(float));;
-x6307[0] = 1.0f;
-float* x6309 = (float*)myMalloc(1 * sizeof(float));;
-x6309[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6307,x997,1,x6309, x1341, 1, x997,1));
-arrayFill_greg<<<28, 512>>>(x1341, 0.0f, 512);
-float* x6313 = (float*)myMalloc(1 * sizeof(float));;
-x6313[0] = 1.0f;
-float* x6315 = (float*)myMalloc(1 * sizeof(float));;
-x6315[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1152,128,x6313,x1000,1152,x6315, x1342, 1152, x1000,1152));
-arrayFill_greg<<<28, 512>>>(x1342, 0.0f, 147456);
-float* x6319 = (float*)myMalloc(1 * sizeof(float));;
-x6319[0] = 1.0f;
-float* x6321 = (float*)myMalloc(1 * sizeof(float));;
-x6321[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6319,x1003,1,x6321, x1343, 1, x1003,1));
-arrayFill_greg<<<28, 512>>>(x1343, 0.0f, 128);
-float* x6325 = (float*)myMalloc(1 * sizeof(float));;
-x6325[0] = 1.0f;
-float* x6327 = (float*)myMalloc(1 * sizeof(float));;
-x6327[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6325,x1006,1,x6327, x1344, 1, x1006,1));
-arrayFill_greg<<<28, 512>>>(x1344, 0.0f, 256);
-float* x6331 = (float*)myMalloc(1 * sizeof(float));;
-x6331[0] = 1.0f;
-float* x6333 = (float*)myMalloc(1 * sizeof(float));;
-x6333[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6331,x1009,1,x6333, x1345, 1, x1009,1));
-arrayFill_greg<<<28, 512>>>(x1345, 0.0f, 1024);
-float* x6337 = (float*)myMalloc(1 * sizeof(float));;
-x6337[0] = 1.0f;
-float* x6339 = (float*)myMalloc(1 * sizeof(float));;
-x6339[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x6337,x1012,1,x6339, x1346, 1, x1012,1));
-arrayFill_greg<<<28, 512>>>(x1346, 0.0f, 2048);
-float* x6343 = (float*)myMalloc(1 * sizeof(float));;
-x6343[0] = 1.0f;
-float* x6345 = (float*)myMalloc(1 * sizeof(float));;
-x6345[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6343,x1015,1,x6345, x1347, 1, x1015,1));
-arrayFill_greg<<<28, 512>>>(x1347, 0.0f, 256);
-float* x6349 = (float*)myMalloc(1 * sizeof(float));;
-x6349[0] = 1.0f;
-float* x6351 = (float*)myMalloc(1 * sizeof(float));;
-x6351[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6349,x1018,1,x6351, x1348, 1, x1018,1));
-arrayFill_greg<<<28, 512>>>(x1348, 0.0f, 256);
-float* x6355 = (float*)myMalloc(1 * sizeof(float));;
-x6355[0] = 1.0f;
-float* x6357 = (float*)myMalloc(1 * sizeof(float));;
-x6357[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6355,x1021,1,x6357, x1349, 1, x1021,1));
-arrayFill_greg<<<28, 512>>>(x1349, 0.0f, 128);
-float* x6361 = (float*)myMalloc(1 * sizeof(float));;
-x6361[0] = 1.0f;
-float* x6363 = (float*)myMalloc(1 * sizeof(float));;
-x6363[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6361,x1024,1,x6363, x1350, 1, x1024,1));
-arrayFill_greg<<<28, 512>>>(x1350, 0.0f, 256);
-float* x6367 = (float*)myMalloc(1 * sizeof(float));;
-x6367[0] = 1.0f;
-float* x6369 = (float*)myMalloc(1 * sizeof(float));;
-x6369[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6367,x1027,1,x6369, x1351, 1, x1027,1));
-arrayFill_greg<<<28, 512>>>(x1351, 0.0f, 64);
-float* x6373 = (float*)myMalloc(1 * sizeof(float));;
-x6373[0] = 1.0f;
-float* x6375 = (float*)myMalloc(1 * sizeof(float));;
-x6375[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x6373,x1030,1,x6375, x1352, 1, x1030,1));
-arrayFill_greg<<<28, 512>>>(x1352, 0.0f, 2048);
-float* x6379 = (float*)myMalloc(1 * sizeof(float));;
-x6379[0] = 1.0f;
-float* x6381 = (float*)myMalloc(1 * sizeof(float));;
-x6381[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6379,x1033,1,x6381, x1353, 1, x1033,1));
-arrayFill_greg<<<28, 512>>>(x1353, 0.0f, 512);
-float* x6385 = (float*)myMalloc(1 * sizeof(float));;
-x6385[0] = 1.0f;
-float* x6387 = (float*)myMalloc(1 * sizeof(float));;
-x6387[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6385,x1036,1,x6387, x1354, 1, x1036,1));
-arrayFill_greg<<<28, 512>>>(x1354, 0.0f, 256);
-float* x6391 = (float*)myMalloc(1 * sizeof(float));;
-x6391[0] = 1.0f;
-float* x6393 = (float*)myMalloc(1 * sizeof(float));;
-x6393[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6391,x1039,1,x6393, x1355, 1, x1039,1));
-arrayFill_greg<<<28, 512>>>(x1355, 0.0f, 1024);
-float* x6397 = (float*)myMalloc(1 * sizeof(float));;
-x6397[0] = 1.0f;
-float* x6399 = (float*)myMalloc(1 * sizeof(float));;
-x6399[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x6397,x1042,2304,x6399, x1356, 2304, x1042,2304));
-arrayFill_greg<<<28, 512>>>(x1356, 0.0f, 589824);
-float* x6403 = (float*)myMalloc(1 * sizeof(float));;
-x6403[0] = 1.0f;
-float* x6405 = (float*)myMalloc(1 * sizeof(float));;
-x6405[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6403,x1045,1,x6405, x1357, 1, x1045,1));
-arrayFill_greg<<<28, 512>>>(x1357, 0.0f, 256);
-float* x6409 = (float*)myMalloc(1 * sizeof(float));;
-x6409[0] = 1.0f;
-float* x6411 = (float*)myMalloc(1 * sizeof(float));;
-x6411[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6409,x1048,1,x6411, x1358, 1, x1048,1));
-arrayFill_greg<<<28, 512>>>(x1358, 0.0f, 64);
-float* x6415 = (float*)myMalloc(1 * sizeof(float));;
-x6415[0] = 1.0f;
-float* x6417 = (float*)myMalloc(1 * sizeof(float));;
-x6417[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6415,x1051,1,x6417, x1359, 1, x1051,1));
-arrayFill_greg<<<28, 512>>>(x1359, 0.0f, 128);
-float* x6421 = (float*)myMalloc(1 * sizeof(float));;
-x6421[0] = 1.0f;
-float* x6423 = (float*)myMalloc(1 * sizeof(float));;
-x6423[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6421,x1054,1,x6423, x1360, 1, x1054,1));
-arrayFill_greg<<<28, 512>>>(x1360, 0.0f, 256);
-float* x6427 = (float*)myMalloc(1 * sizeof(float));;
-x6427[0] = 1.0f;
-float* x6429 = (float*)myMalloc(1 * sizeof(float));;
-x6429[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6427,x1057,1,x6429, x1361, 1, x1057,1));
-arrayFill_greg<<<28, 512>>>(x1361, 0.0f, 256);
-float* x6433 = (float*)myMalloc(1 * sizeof(float));;
-x6433[0] = 1.0f;
-float* x6435 = (float*)myMalloc(1 * sizeof(float));;
-x6435[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6433,x1060,1,x6435, x1362, 1, x1060,1));
-arrayFill_greg<<<28, 512>>>(x1362, 0.0f, 512);
-float* x6439 = (float*)myMalloc(1 * sizeof(float));;
-x6439[0] = 1.0f;
-float* x6441 = (float*)myMalloc(1 * sizeof(float));;
-x6441[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,128,x6439,x1063,512,x6441, x1363, 512, x1063,512));
-arrayFill_greg<<<28, 512>>>(x1363, 0.0f, 65536);
-float* x6445 = (float*)myMalloc(1 * sizeof(float));;
-x6445[0] = 1.0f;
-float* x6447 = (float*)myMalloc(1 * sizeof(float));;
-x6447[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6445,x1066,1,x6447, x1364, 1, x1066,1));
-arrayFill_greg<<<28, 512>>>(x1364, 0.0f, 64);
-float* x6451 = (float*)myMalloc(1 * sizeof(float));;
-x6451[0] = 1.0f;
-float* x6453 = (float*)myMalloc(1 * sizeof(float));;
-x6453[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,512,x6451,x1069,256,x6453, x1365, 256, x1069,256));
-arrayFill_greg<<<28, 512>>>(x1365, 0.0f, 131072);
-float* x6457 = (float*)myMalloc(1 * sizeof(float));;
-x6457[0] = 1.0f;
-float* x6459 = (float*)myMalloc(1 * sizeof(float));;
-x6459[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6457,x1072,1,x6459, x1366, 1, x1072,1));
-arrayFill_greg<<<28, 512>>>(x1366, 0.0f, 256);
-float* x6463 = (float*)myMalloc(1 * sizeof(float));;
-x6463[0] = 1.0f;
-float* x6465 = (float*)myMalloc(1 * sizeof(float));;
-x6465[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x6463,x1075,1,x6465, x1367, 1, x1075,1));
-arrayFill_greg<<<28, 512>>>(x1367, 0.0f, 2048);
-float* x6469 = (float*)myMalloc(1 * sizeof(float));;
-x6469[0] = 1.0f;
-float* x6471 = (float*)myMalloc(1 * sizeof(float));;
-x6471[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6469,x1078,1,x6471, x1368, 1, x1078,1));
-arrayFill_greg<<<28, 512>>>(x1368, 0.0f, 128);
-float* x6475 = (float*)myMalloc(1 * sizeof(float));;
-x6475[0] = 1.0f;
-float* x6477 = (float*)myMalloc(1 * sizeof(float));;
-x6477[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x6475,x1081,2304,x6477, x1369, 2304, x1081,2304));
-arrayFill_greg<<<28, 512>>>(x1369, 0.0f, 589824);
-float* x6481 = (float*)myMalloc(1 * sizeof(float));;
-x6481[0] = 1.0f;
-float* x6483 = (float*)myMalloc(1 * sizeof(float));;
-x6483[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6481,x1084,1,x6483, x1370, 1, x1084,1));
-arrayFill_greg<<<28, 512>>>(x1370, 0.0f, 1024);
-float* x6487 = (float*)myMalloc(1 * sizeof(float));;
-x6487[0] = 1.0f;
-float* x6489 = (float*)myMalloc(1 * sizeof(float));;
-x6489[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6487,x1087,1,x6489, x1371, 1, x1087,1));
-arrayFill_greg<<<28, 512>>>(x1371, 0.0f, 256);
-float* x6493 = (float*)myMalloc(1 * sizeof(float));;
-x6493[0] = 1.0f;
-float* x6495 = (float*)myMalloc(1 * sizeof(float));;
-x6495[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2048,512,x6493,x1090,2048,x6495, x1372, 2048, x1090,2048));
-arrayFill_greg<<<28, 512>>>(x1372, 0.0f, 1048576);
-float* x6499 = (float*)myMalloc(1 * sizeof(float));;
-x6499[0] = 1.0f;
-float* x6501 = (float*)myMalloc(1 * sizeof(float));;
-x6501[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6499,x1093,1,x6501, x1373, 1, x1093,1));
-arrayFill_greg<<<28, 512>>>(x1373, 0.0f, 128);
-float* x6505 = (float*)myMalloc(1 * sizeof(float));;
-x6505[0] = 1.0f;
-float* x6507 = (float*)myMalloc(1 * sizeof(float));;
-x6507[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6505,x1096,1,x6507, x1374, 1, x1096,1));
-arrayFill_greg<<<28, 512>>>(x1374, 0.0f, 1024);
-float* x6511 = (float*)myMalloc(1 * sizeof(float));;
-x6511[0] = 1.0f;
-float* x6513 = (float*)myMalloc(1 * sizeof(float));;
-x6513[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6511,x1099,1,x6513, x1375, 1, x1099,1));
-arrayFill_greg<<<28, 512>>>(x1375, 0.0f, 128);
-float* x6517 = (float*)myMalloc(1 * sizeof(float));;
-x6517[0] = 1.0f;
-float* x6519 = (float*)myMalloc(1 * sizeof(float));;
-x6519[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x6517,x1102,256,x6519, x1376, 256, x1102,256));
-arrayFill_greg<<<28, 512>>>(x1376, 0.0f, 262144);
-float* x6523 = (float*)myMalloc(1 * sizeof(float));;
-x6523[0] = 1.0f;
-float* x6525 = (float*)myMalloc(1 * sizeof(float));;
-x6525[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6523,x1105,1,x6525, x1377, 1, x1105,1));
-arrayFill_greg<<<28, 512>>>(x1377, 0.0f, 256);
-float* x6529 = (float*)myMalloc(1 * sizeof(float));;
-x6529[0] = 1.0f;
-float* x6531 = (float*)myMalloc(1 * sizeof(float));;
-x6531[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6529,x1108,1,x6531, x1378, 1, x1108,1));
-arrayFill_greg<<<28, 512>>>(x1378, 0.0f, 256);
-float* x6535 = (float*)myMalloc(1 * sizeof(float));;
-x6535[0] = 1.0f;
-float* x6537 = (float*)myMalloc(1 * sizeof(float));;
-x6537[0] = -0.005f;
-CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6535,x1111,1,x6537, x1379, 1, x1111,1));
-arrayFill_greg<<<28, 512>>>(x1379, 0.0f, 1024);
-int32_t x6541 = x1396 + 1;
-int32_t x6543 = x6541 % x6542;
-bool x6544 = x6543 == 0;
-if (x6544) {
-float x6549 = x1390;
-double x6545 = (double)x1397;
-double x6546 = 100.0 * x6545;
-double x6548 = x6546 / x6547;
-float x6550 = (float)x1396;
-float x6551 = x6549 / x6550;
-printf("Train epoch %d: [%d/%d (%.0f%%)] Average Loss: %.6f\n",x1386,x1397,x11,x6548,x6551);
+float x4940 = x1410[0];
+x1390 += x4940;
+float* x4942 = (float*)myMalloc(1 * sizeof(float));;
+x4942[0] = 1.0f;
+float* x4944 = (float*)myMalloc(1 * sizeof(float));;
+x4944[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x4942,x313,1024,x4944, x1113, 1024, x313,1024));
+arrayFill<<<28, 512>>>(x1113, 0.0f, 262144);
+float* x4948 = (float*)myMalloc(1 * sizeof(float));;
+x4948[0] = 1.0f;
+float* x4950 = (float*)myMalloc(1 * sizeof(float));;
+x4950[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x4948,x316,1,x4950, x1114, 1, x316,1));
+arrayFill<<<28, 512>>>(x1114, 0.0f, 256);
+float* x4954 = (float*)myMalloc(1 * sizeof(float));;
+x4954[0] = 1.0f;
+float* x4956 = (float*)myMalloc(1 * sizeof(float));;
+x4956[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x4954,x319,1,x4956, x1115, 1, x319,1));
+arrayFill<<<28, 512>>>(x1115, 0.0f, 128);
+float* x4960 = (float*)myMalloc(1 * sizeof(float));;
+x4960[0] = 1.0f;
+float* x4962 = (float*)myMalloc(1 * sizeof(float));;
+x4962[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x4960,x322,1,x4962, x1116, 1, x322,1));
+arrayFill<<<28, 512>>>(x1116, 0.0f, 128);
+float* x4966 = (float*)myMalloc(1 * sizeof(float));;
+x4966[0] = 1.0f;
+float* x4968 = (float*)myMalloc(1 * sizeof(float));;
+x4968[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x4966,x325,1,x4968, x1117, 1, x325,1));
+arrayFill<<<28, 512>>>(x1117, 0.0f, 64);
+float* x4972 = (float*)myMalloc(1 * sizeof(float));;
+x4972[0] = 1.0f;
+float* x4974 = (float*)myMalloc(1 * sizeof(float));;
+x4974[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,128,x4972,x328,256,x4974, x1118, 256, x328,256));
+arrayFill<<<28, 512>>>(x1118, 0.0f, 32768);
+float* x4978 = (float*)myMalloc(1 * sizeof(float));;
+x4978[0] = 1.0f;
+float* x4980 = (float*)myMalloc(1 * sizeof(float));;
+x4980[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x4978,x331,1,x4980, x1119, 1, x331,1));
+arrayFill<<<28, 512>>>(x1119, 0.0f, 512);
+float* x4984 = (float*)myMalloc(1 * sizeof(float));;
+x4984[0] = 1.0f;
+float* x4986 = (float*)myMalloc(1 * sizeof(float));;
+x4986[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x4984,x334,1024,x4986, x1120, 1024, x334,1024));
+arrayFill<<<28, 512>>>(x1120, 0.0f, 262144);
+float* x4990 = (float*)myMalloc(1 * sizeof(float));;
+x4990[0] = 1.0f;
+float* x4992 = (float*)myMalloc(1 * sizeof(float));;
+x4992[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x4990,x337,2304,x4992, x1121, 2304, x337,2304));
+arrayFill<<<28, 512>>>(x1121, 0.0f, 589824);
+float* x4996 = (float*)myMalloc(1 * sizeof(float));;
+x4996[0] = 1.0f;
+float* x4998 = (float*)myMalloc(1 * sizeof(float));;
+x4998[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x4996,x340,1,x4998, x1122, 1, x340,1));
+arrayFill<<<28, 512>>>(x1122, 0.0f, 512);
+float* x5002 = (float*)myMalloc(1 * sizeof(float));;
+x5002[0] = 1.0f;
+float* x5004 = (float*)myMalloc(1 * sizeof(float));;
+x5004[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5002,x343,1,x5004, x1123, 1, x343,1));
+arrayFill<<<28, 512>>>(x1123, 0.0f, 256);
+float* x5008 = (float*)myMalloc(1 * sizeof(float));;
+x5008[0] = 1.0f;
+float* x5010 = (float*)myMalloc(1 * sizeof(float));;
+x5010[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5008,x346,1,x5010, x1124, 1, x346,1));
+arrayFill<<<28, 512>>>(x1124, 0.0f, 128);
+float* x5014 = (float*)myMalloc(1 * sizeof(float));;
+x5014[0] = 1.0f;
+float* x5016 = (float*)myMalloc(1 * sizeof(float));;
+x5016[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5014,x349,1,x5016, x1125, 1, x349,1));
+arrayFill<<<28, 512>>>(x1125, 0.0f, 1024);
+float* x5020 = (float*)myMalloc(1 * sizeof(float));;
+x5020[0] = 1.0f;
+float* x5022 = (float*)myMalloc(1 * sizeof(float));;
+x5022[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5020,x352,1,x5022, x1126, 1, x352,1));
+arrayFill<<<28, 512>>>(x1126, 0.0f, 512);
+float* x5026 = (float*)myMalloc(1 * sizeof(float));;
+x5026[0] = 1.0f;
+float* x5028 = (float*)myMalloc(1 * sizeof(float));;
+x5028[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5026,x355,1,x5028, x1127, 1, x355,1));
+arrayFill<<<28, 512>>>(x1127, 0.0f, 1024);
+float* x5032 = (float*)myMalloc(1 * sizeof(float));;
+x5032[0] = 1.0f;
+float* x5034 = (float*)myMalloc(1 * sizeof(float));;
+x5034[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5032,x358,1,x5034, x1128, 1, x358,1));
+arrayFill<<<28, 512>>>(x1128, 0.0f, 256);
+float* x5038 = (float*)myMalloc(1 * sizeof(float));;
+x5038[0] = 1.0f;
+float* x5040 = (float*)myMalloc(1 * sizeof(float));;
+x5040[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x5038,x361,1024,x5040, x1129, 1024, x361,1024));
+arrayFill<<<28, 512>>>(x1129, 0.0f, 262144);
+float* x5044 = (float*)myMalloc(1 * sizeof(float));;
+x5044[0] = 1.0f;
+float* x5046 = (float*)myMalloc(1 * sizeof(float));;
+x5046[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5044,x364,1,x5046, x1130, 1, x364,1));
+arrayFill<<<28, 512>>>(x1130, 0.0f, 512);
+float* x5050 = (float*)myMalloc(1 * sizeof(float));;
+x5050[0] = 1.0f;
+float* x5052 = (float*)myMalloc(1 * sizeof(float));;
+x5052[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5050,x367,1,x5052, x1131, 1, x367,1));
+arrayFill<<<28, 512>>>(x1131, 0.0f, 64);
+float* x5056 = (float*)myMalloc(1 * sizeof(float));;
+x5056[0] = 1.0f;
+float* x5058 = (float*)myMalloc(1 * sizeof(float));;
+x5058[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5056,x370,1,x5058, x1132, 1, x370,1));
+arrayFill<<<28, 512>>>(x1132, 0.0f, 512);
+float* x5062 = (float*)myMalloc(1 * sizeof(float));;
+x5062[0] = 1.0f;
+float* x5064 = (float*)myMalloc(1 * sizeof(float));;
+x5064[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5062,x373,1,x5064, x1133, 1, x373,1));
+arrayFill<<<28, 512>>>(x1133, 0.0f, 64);
+float* x5068 = (float*)myMalloc(1 * sizeof(float));;
+x5068[0] = 1.0f;
+float* x5070 = (float*)myMalloc(1 * sizeof(float));;
+x5070[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1152,128,x5068,x376,1152,x5070, x1134, 1152, x376,1152));
+arrayFill<<<28, 512>>>(x1134, 0.0f, 147456);
+float* x5074 = (float*)myMalloc(1 * sizeof(float));;
+x5074[0] = 1.0f;
+float* x5076 = (float*)myMalloc(1 * sizeof(float));;
+x5076[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 4608,512,x5074,x379,4608,x5076, x1135, 4608, x379,4608));
+arrayFill<<<28, 512>>>(x1135, 0.0f, 2359296);
+float* x5080 = (float*)myMalloc(1 * sizeof(float));;
+x5080[0] = 1.0f;
+float* x5082 = (float*)myMalloc(1 * sizeof(float));;
+x5082[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5080,x382,1,x5082, x1136, 1, x382,1));
+arrayFill<<<28, 512>>>(x1136, 0.0f, 1024);
+float* x5086 = (float*)myMalloc(1 * sizeof(float));;
+x5086[0] = 1.0f;
+float* x5088 = (float*)myMalloc(1 * sizeof(float));;
+x5088[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5086,x385,1,x5088, x1137, 1, x385,1));
+arrayFill<<<28, 512>>>(x1137, 0.0f, 256);
+float* x5092 = (float*)myMalloc(1 * sizeof(float));;
+x5092[0] = 1.0f;
+float* x5094 = (float*)myMalloc(1 * sizeof(float));;
+x5094[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x5092,x388,2304,x5094, x1138, 2304, x388,2304));
+arrayFill<<<28, 512>>>(x1138, 0.0f, 589824);
+float* x5098 = (float*)myMalloc(1 * sizeof(float));;
+x5098[0] = 1.0f;
+float* x5100 = (float*)myMalloc(1 * sizeof(float));;
+x5100[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,256,x5098,x391,64,x5100, x1139, 64, x391,64));
+arrayFill<<<28, 512>>>(x1139, 0.0f, 16384);
+float* x5104 = (float*)myMalloc(1 * sizeof(float));;
+x5104[0] = 1.0f;
+float* x5106 = (float*)myMalloc(1 * sizeof(float));;
+x5106[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,2048,x5104,x394,512,x5106, x1140, 512, x394,512));
+arrayFill<<<28, 512>>>(x1140, 0.0f, 1048576);
+float* x5110 = (float*)myMalloc(1 * sizeof(float));;
+x5110[0] = 1.0f;
+float* x5112 = (float*)myMalloc(1 * sizeof(float));;
+x5112[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 4608,512,x5110,x397,4608,x5112, x1141, 4608, x397,4608));
+arrayFill<<<28, 512>>>(x1141, 0.0f, 2359296);
+float* x5116 = (float*)myMalloc(1 * sizeof(float));;
+x5116[0] = 1.0f;
+float* x5118 = (float*)myMalloc(1 * sizeof(float));;
+x5118[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5116,x400,1,x5118, x1142, 1, x400,1));
+arrayFill<<<28, 512>>>(x1142, 0.0f, 128);
+float* x5122 = (float*)myMalloc(1 * sizeof(float));;
+x5122[0] = 1.0f;
+float* x5124 = (float*)myMalloc(1 * sizeof(float));;
+x5124[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5122,x403,1,x5124, x1143, 1, x403,1));
+arrayFill<<<28, 512>>>(x1143, 0.0f, 256);
+float* x5128 = (float*)myMalloc(1 * sizeof(float));;
+x5128[0] = 1.0f;
+float* x5130 = (float*)myMalloc(1 * sizeof(float));;
+x5130[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5128,x406,1,x5130, x1144, 1, x406,1));
+arrayFill<<<28, 512>>>(x1144, 0.0f, 256);
+float* x5134 = (float*)myMalloc(1 * sizeof(float));;
+x5134[0] = 1.0f;
+float* x5136 = (float*)myMalloc(1 * sizeof(float));;
+x5136[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5134,x409,1,x5136, x1145, 1, x409,1));
+arrayFill<<<28, 512>>>(x1145, 0.0f, 128);
+float* x5140 = (float*)myMalloc(1 * sizeof(float));;
+x5140[0] = 1.0f;
+float* x5142 = (float*)myMalloc(1 * sizeof(float));;
+x5142[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5140,x412,1,x5142, x1146, 1, x412,1));
+arrayFill<<<28, 512>>>(x1146, 0.0f, 128);
+float* x5146 = (float*)myMalloc(1 * sizeof(float));;
+x5146[0] = 1.0f;
+float* x5148 = (float*)myMalloc(1 * sizeof(float));;
+x5148[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5146,x415,1,x5148, x1147, 1, x415,1));
+arrayFill<<<28, 512>>>(x1147, 0.0f, 64);
+float* x5152 = (float*)myMalloc(1 * sizeof(float));;
+x5152[0] = 1.0f;
+float* x5154 = (float*)myMalloc(1 * sizeof(float));;
+x5154[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 128,512,x5152,x418,128,x5154, x1148, 128, x418,128));
+arrayFill<<<28, 512>>>(x1148, 0.0f, 65536);
+float* x5158 = (float*)myMalloc(1 * sizeof(float));;
+x5158[0] = 1.0f;
+float* x5160 = (float*)myMalloc(1 * sizeof(float));;
+x5160[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5158,x421,1,x5160, x1149, 1, x421,1));
+arrayFill<<<28, 512>>>(x1149, 0.0f, 512);
+float* x5164 = (float*)myMalloc(1 * sizeof(float));;
+x5164[0] = 1.0f;
+float* x5166 = (float*)myMalloc(1 * sizeof(float));;
+x5166[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5164,x424,1,x5166, x1150, 1, x424,1));
+arrayFill<<<28, 512>>>(x1150, 0.0f, 128);
+float* x5170 = (float*)myMalloc(1 * sizeof(float));;
+x5170[0] = 1.0f;
+float* x5172 = (float*)myMalloc(1 * sizeof(float));;
+x5172[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5170,x427,1,x5172, x1151, 1, x427,1));
+arrayFill<<<28, 512>>>(x1151, 0.0f, 64);
+float* x5176 = (float*)myMalloc(1 * sizeof(float));;
+x5176[0] = 1.0f;
+float* x5178 = (float*)myMalloc(1 * sizeof(float));;
+x5178[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5176,x430,1,x5178, x1152, 1, x430,1));
+arrayFill<<<28, 512>>>(x1152, 0.0f, 128);
+float* x5182 = (float*)myMalloc(1 * sizeof(float));;
+x5182[0] = 1.0f;
+float* x5184 = (float*)myMalloc(1 * sizeof(float));;
+x5184[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5182,x433,1,x5184, x1153, 1, x433,1));
+arrayFill<<<28, 512>>>(x1153, 0.0f, 512);
+float* x5188 = (float*)myMalloc(1 * sizeof(float));;
+x5188[0] = 1.0f;
+float* x5190 = (float*)myMalloc(1 * sizeof(float));;
+x5190[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,2048,x5188,x436,512,x5190, x1154, 512, x436,512));
+arrayFill<<<28, 512>>>(x1154, 0.0f, 1048576);
+float* x5194 = (float*)myMalloc(1 * sizeof(float));;
+x5194[0] = 1.0f;
+float* x5196 = (float*)myMalloc(1 * sizeof(float));;
+x5196[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,10,x5194,x439,1,x5196, x1155, 1, x439,1));
+arrayFill<<<28, 512>>>(x1155, 0.0f, 10);
+float* x5200 = (float*)myMalloc(1 * sizeof(float));;
+x5200[0] = 1.0f;
+float* x5202 = (float*)myMalloc(1 * sizeof(float));;
+x5202[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5200,x442,1,x5202, x1156, 1, x442,1));
+arrayFill<<<28, 512>>>(x1156, 0.0f, 64);
+float* x5206 = (float*)myMalloc(1 * sizeof(float));;
+x5206[0] = 1.0f;
+float* x5208 = (float*)myMalloc(1 * sizeof(float));;
+x5208[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5206,x445,1,x5208, x1157, 1, x445,1));
+arrayFill<<<28, 512>>>(x1157, 0.0f, 512);
+float* x5212 = (float*)myMalloc(1 * sizeof(float));;
+x5212[0] = 1.0f;
+float* x5214 = (float*)myMalloc(1 * sizeof(float));;
+x5214[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5212,x448,1,x5214, x1158, 1, x448,1));
+arrayFill<<<28, 512>>>(x1158, 0.0f, 64);
+float* x5218 = (float*)myMalloc(1 * sizeof(float));;
+x5218[0] = 1.0f;
+float* x5220 = (float*)myMalloc(1 * sizeof(float));;
+x5220[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5218,x451,1,x5220, x1159, 1, x451,1));
+arrayFill<<<28, 512>>>(x1159, 0.0f, 512);
+float* x5224 = (float*)myMalloc(1 * sizeof(float));;
+x5224[0] = 1.0f;
+float* x5226 = (float*)myMalloc(1 * sizeof(float));;
+x5226[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5224,x454,1,x5226, x1160, 1, x454,1));
+arrayFill<<<28, 512>>>(x1160, 0.0f, 64);
+float* x5230 = (float*)myMalloc(1 * sizeof(float));;
+x5230[0] = 1.0f;
+float* x5232 = (float*)myMalloc(1 * sizeof(float));;
+x5232[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5230,x457,1,x5232, x1161, 1, x457,1));
+arrayFill<<<28, 512>>>(x1161, 0.0f, 512);
+float* x5236 = (float*)myMalloc(1 * sizeof(float));;
+x5236[0] = 1.0f;
+float* x5238 = (float*)myMalloc(1 * sizeof(float));;
+x5238[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 128,512,x5236,x460,128,x5238, x1162, 128, x460,128));
+arrayFill<<<28, 512>>>(x1162, 0.0f, 65536);
+float* x5242 = (float*)myMalloc(1 * sizeof(float));;
+x5242[0] = 1.0f;
+float* x5244 = (float*)myMalloc(1 * sizeof(float));;
+x5244[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x5242,x463,256,x5244, x1163, 256, x463,256));
+arrayFill<<<28, 512>>>(x1163, 0.0f, 262144);
+float* x5248 = (float*)myMalloc(1 * sizeof(float));;
+x5248[0] = 1.0f;
+float* x5250 = (float*)myMalloc(1 * sizeof(float));;
+x5250[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5248,x466,1,x5250, x1164, 1, x466,1));
+arrayFill<<<28, 512>>>(x1164, 0.0f, 1024);
+float* x5254 = (float*)myMalloc(1 * sizeof(float));;
+x5254[0] = 1.0f;
+float* x5256 = (float*)myMalloc(1 * sizeof(float));;
+x5256[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5254,x469,1,x5256, x1165, 1, x469,1));
+arrayFill<<<28, 512>>>(x1165, 0.0f, 256);
+float* x5260 = (float*)myMalloc(1 * sizeof(float));;
+x5260[0] = 1.0f;
+float* x5262 = (float*)myMalloc(1 * sizeof(float));;
+x5262[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5260,x472,1,x5262, x1166, 1, x472,1));
+arrayFill<<<28, 512>>>(x1166, 0.0f, 1024);
+float* x5266 = (float*)myMalloc(1 * sizeof(float));;
+x5266[0] = 1.0f;
+float* x5268 = (float*)myMalloc(1 * sizeof(float));;
+x5268[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5266,x475,1,x5268, x1167, 1, x475,1));
+arrayFill<<<28, 512>>>(x1167, 0.0f, 64);
+float* x5272 = (float*)myMalloc(1 * sizeof(float));;
+x5272[0] = 1.0f;
+float* x5274 = (float*)myMalloc(1 * sizeof(float));;
+x5274[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5272,x478,1,x5274, x1168, 1, x478,1));
+arrayFill<<<28, 512>>>(x1168, 0.0f, 128);
+float* x5278 = (float*)myMalloc(1 * sizeof(float));;
+x5278[0] = 1.0f;
+float* x5280 = (float*)myMalloc(1 * sizeof(float));;
+x5280[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5278,x481,1,x5280, x1169, 1, x481,1));
+arrayFill<<<28, 512>>>(x1169, 0.0f, 2048);
+float* x5284 = (float*)myMalloc(1 * sizeof(float));;
+x5284[0] = 1.0f;
+float* x5286 = (float*)myMalloc(1 * sizeof(float));;
+x5286[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5284,x484,1,x5286, x1170, 1, x484,1));
+arrayFill<<<28, 512>>>(x1170, 0.0f, 256);
+float* x5290 = (float*)myMalloc(1 * sizeof(float));;
+x5290[0] = 1.0f;
+float* x5292 = (float*)myMalloc(1 * sizeof(float));;
+x5292[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5290,x487,1,x5292, x1171, 1, x487,1));
+arrayFill<<<28, 512>>>(x1171, 0.0f, 2048);
+float* x5296 = (float*)myMalloc(1 * sizeof(float));;
+x5296[0] = 1.0f;
+float* x5298 = (float*)myMalloc(1 * sizeof(float));;
+x5298[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5296,x490,1,x5298, x1172, 1, x490,1));
+arrayFill<<<28, 512>>>(x1172, 0.0f, 512);
+float* x5302 = (float*)myMalloc(1 * sizeof(float));;
+x5302[0] = 1.0f;
+float* x5304 = (float*)myMalloc(1 * sizeof(float));;
+x5304[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5302,x493,1,x5304, x1173, 1, x493,1));
+arrayFill<<<28, 512>>>(x1173, 0.0f, 512);
+float* x5308 = (float*)myMalloc(1 * sizeof(float));;
+x5308[0] = 1.0f;
+float* x5310 = (float*)myMalloc(1 * sizeof(float));;
+x5310[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5308,x496,1,x5310, x1174, 1, x496,1));
+arrayFill<<<28, 512>>>(x1174, 0.0f, 512);
+float* x5314 = (float*)myMalloc(1 * sizeof(float));;
+x5314[0] = 1.0f;
+float* x5316 = (float*)myMalloc(1 * sizeof(float));;
+x5316[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5314,x499,1,x5316, x1175, 1, x499,1));
+arrayFill<<<28, 512>>>(x1175, 0.0f, 2048);
+float* x5320 = (float*)myMalloc(1 * sizeof(float));;
+x5320[0] = 1.0f;
+float* x5322 = (float*)myMalloc(1 * sizeof(float));;
+x5322[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5320,x502,1,x5322, x1176, 1, x502,1));
+arrayFill<<<28, 512>>>(x1176, 0.0f, 256);
+float* x5326 = (float*)myMalloc(1 * sizeof(float));;
+x5326[0] = 1.0f;
+float* x5328 = (float*)myMalloc(1 * sizeof(float));;
+x5328[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5326,x505,1,x5328, x1177, 1, x505,1));
+arrayFill<<<28, 512>>>(x1177, 0.0f, 256);
+float* x5332 = (float*)myMalloc(1 * sizeof(float));;
+x5332[0] = 1.0f;
+float* x5334 = (float*)myMalloc(1 * sizeof(float));;
+x5334[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5332,x508,1,x5334, x1178, 1, x508,1));
+arrayFill<<<28, 512>>>(x1178, 0.0f, 256);
+float* x5338 = (float*)myMalloc(1 * sizeof(float));;
+x5338[0] = 1.0f;
+float* x5340 = (float*)myMalloc(1 * sizeof(float));;
+x5340[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5338,x511,1,x5340, x1179, 1, x511,1));
+arrayFill<<<28, 512>>>(x1179, 0.0f, 64);
+float* x5344 = (float*)myMalloc(1 * sizeof(float));;
+x5344[0] = 1.0f;
+float* x5346 = (float*)myMalloc(1 * sizeof(float));;
+x5346[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 576,64,x5344,x514,576,x5346, x1180, 576, x514,576));
+arrayFill<<<28, 512>>>(x1180, 0.0f, 36864);
+float* x5350 = (float*)myMalloc(1 * sizeof(float));;
+x5350[0] = 1.0f;
+float* x5352 = (float*)myMalloc(1 * sizeof(float));;
+x5352[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5350,x517,1,x5352, x1181, 1, x517,1));
+arrayFill<<<28, 512>>>(x1181, 0.0f, 256);
+float* x5356 = (float*)myMalloc(1 * sizeof(float));;
+x5356[0] = 1.0f;
+float* x5358 = (float*)myMalloc(1 * sizeof(float));;
+x5358[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,1024,x5356,x520,512,x5358, x1182, 512, x520,512));
+arrayFill<<<28, 512>>>(x1182, 0.0f, 524288);
+float* x5362 = (float*)myMalloc(1 * sizeof(float));;
+x5362[0] = 1.0f;
+float* x5364 = (float*)myMalloc(1 * sizeof(float));;
+x5364[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5362,x523,1,x5364, x1183, 1, x523,1));
+arrayFill<<<28, 512>>>(x1183, 0.0f, 256);
+float* x5368 = (float*)myMalloc(1 * sizeof(float));;
+x5368[0] = 1.0f;
+float* x5370 = (float*)myMalloc(1 * sizeof(float));;
+x5370[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5368,x526,1,x5370, x1184, 1, x526,1));
+arrayFill<<<28, 512>>>(x1184, 0.0f, 256);
+float* x5374 = (float*)myMalloc(1 * sizeof(float));;
+x5374[0] = 1.0f;
+float* x5376 = (float*)myMalloc(1 * sizeof(float));;
+x5376[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5374,x529,1,x5376, x1185, 1, x529,1));
+arrayFill<<<28, 512>>>(x1185, 0.0f, 512);
+float* x5380 = (float*)myMalloc(1 * sizeof(float));;
+x5380[0] = 1.0f;
+float* x5382 = (float*)myMalloc(1 * sizeof(float));;
+x5382[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5380,x532,1,x5382, x1186, 1, x532,1));
+arrayFill<<<28, 512>>>(x1186, 0.0f, 128);
+float* x5386 = (float*)myMalloc(1 * sizeof(float));;
+x5386[0] = 1.0f;
+float* x5388 = (float*)myMalloc(1 * sizeof(float));;
+x5388[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5386,x535,1,x5388, x1187, 1, x535,1));
+arrayFill<<<28, 512>>>(x1187, 0.0f, 256);
+float* x5392 = (float*)myMalloc(1 * sizeof(float));;
+x5392[0] = 1.0f;
+float* x5394 = (float*)myMalloc(1 * sizeof(float));;
+x5394[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5392,x538,1,x5394, x1188, 1, x538,1));
+arrayFill<<<28, 512>>>(x1188, 0.0f, 64);
+float* x5398 = (float*)myMalloc(1 * sizeof(float));;
+x5398[0] = 1.0f;
+float* x5400 = (float*)myMalloc(1 * sizeof(float));;
+x5400[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5398,x541,1,x5400, x1189, 1, x541,1));
+arrayFill<<<28, 512>>>(x1189, 0.0f, 512);
+float* x5404 = (float*)myMalloc(1 * sizeof(float));;
+x5404[0] = 1.0f;
+float* x5406 = (float*)myMalloc(1 * sizeof(float));;
+x5406[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 576,64,x5404,x544,576,x5406, x1190, 576, x544,576));
+arrayFill<<<28, 512>>>(x1190, 0.0f, 36864);
+float* x5410 = (float*)myMalloc(1 * sizeof(float));;
+x5410[0] = 1.0f;
+float* x5412 = (float*)myMalloc(1 * sizeof(float));;
+x5412[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5410,x547,1,x5412, x1191, 1, x547,1));
+arrayFill<<<28, 512>>>(x1191, 0.0f, 128);
+float* x5416 = (float*)myMalloc(1 * sizeof(float));;
+x5416[0] = 1.0f;
+float* x5418 = (float*)myMalloc(1 * sizeof(float));;
+x5418[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5416,x550,1,x5418, x1192, 1, x550,1));
+arrayFill<<<28, 512>>>(x1192, 0.0f, 256);
+float* x5422 = (float*)myMalloc(1 * sizeof(float));;
+x5422[0] = 1.0f;
+float* x5424 = (float*)myMalloc(1 * sizeof(float));;
+x5424[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5422,x553,1,x5424, x1193, 1, x553,1));
+arrayFill<<<28, 512>>>(x1193, 0.0f, 1024);
+float* x5428 = (float*)myMalloc(1 * sizeof(float));;
+x5428[0] = 1.0f;
+float* x5430 = (float*)myMalloc(1 * sizeof(float));;
+x5430[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,256,x5428,x556,64,x5430, x1194, 64, x556,64));
+arrayFill<<<28, 512>>>(x1194, 0.0f, 16384);
+float* x5434 = (float*)myMalloc(1 * sizeof(float));;
+x5434[0] = 1.0f;
+float* x5436 = (float*)myMalloc(1 * sizeof(float));;
+x5436[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5434,x559,1,x5436, x1195, 1, x559,1));
+arrayFill<<<28, 512>>>(x1195, 0.0f, 512);
+float* x5440 = (float*)myMalloc(1 * sizeof(float));;
+x5440[0] = 1.0f;
+float* x5442 = (float*)myMalloc(1 * sizeof(float));;
+x5442[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x5440,x562,256,x5442, x1196, 256, x562,256));
+arrayFill<<<28, 512>>>(x1196, 0.0f, 262144);
+float* x5446 = (float*)myMalloc(1 * sizeof(float));;
+x5446[0] = 1.0f;
+float* x5448 = (float*)myMalloc(1 * sizeof(float));;
+x5448[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 576,64,x5446,x565,576,x5448, x1197, 576, x565,576));
+arrayFill<<<28, 512>>>(x1197, 0.0f, 36864);
+float* x5452 = (float*)myMalloc(1 * sizeof(float));;
+x5452[0] = 1.0f;
+float* x5454 = (float*)myMalloc(1 * sizeof(float));;
+x5454[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5452,x568,1,x5454, x1198, 1, x568,1));
+arrayFill<<<28, 512>>>(x1198, 0.0f, 256);
+float* x5458 = (float*)myMalloc(1 * sizeof(float));;
+x5458[0] = 1.0f;
+float* x5460 = (float*)myMalloc(1 * sizeof(float));;
+x5460[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5458,x571,1,x5460, x1199, 1, x571,1));
+arrayFill<<<28, 512>>>(x1199, 0.0f, 256);
+float* x5464 = (float*)myMalloc(1 * sizeof(float));;
+x5464[0] = 1.0f;
+float* x5466 = (float*)myMalloc(1 * sizeof(float));;
+x5466[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5464,x574,1,x5466, x1200, 1, x574,1));
+arrayFill<<<28, 512>>>(x1200, 0.0f, 1024);
+float* x5470 = (float*)myMalloc(1 * sizeof(float));;
+x5470[0] = 1.0f;
+float* x5472 = (float*)myMalloc(1 * sizeof(float));;
+x5472[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5470,x577,1,x5472, x1201, 1, x577,1));
+arrayFill<<<28, 512>>>(x1201, 0.0f, 2048);
+float* x5476 = (float*)myMalloc(1 * sizeof(float));;
+x5476[0] = 1.0f;
+float* x5478 = (float*)myMalloc(1 * sizeof(float));;
+x5478[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5476,x580,1,x5478, x1202, 1, x580,1));
+arrayFill<<<28, 512>>>(x1202, 0.0f, 128);
+float* x5482 = (float*)myMalloc(1 * sizeof(float));;
+x5482[0] = 1.0f;
+float* x5484 = (float*)myMalloc(1 * sizeof(float));;
+x5484[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5482,x583,1,x5484, x1203, 1, x583,1));
+arrayFill<<<28, 512>>>(x1203, 0.0f, 256);
+float* x5488 = (float*)myMalloc(1 * sizeof(float));;
+x5488[0] = 1.0f;
+float* x5490 = (float*)myMalloc(1 * sizeof(float));;
+x5490[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x5488,x586,256,x5490, x1204, 256, x586,256));
+arrayFill<<<28, 512>>>(x1204, 0.0f, 262144);
+float* x5494 = (float*)myMalloc(1 * sizeof(float));;
+x5494[0] = 1.0f;
+float* x5496 = (float*)myMalloc(1 * sizeof(float));;
+x5496[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5494,x589,1,x5496, x1205, 1, x589,1));
+arrayFill<<<28, 512>>>(x1205, 0.0f, 256);
+float* x5500 = (float*)myMalloc(1 * sizeof(float));;
+x5500[0] = 1.0f;
+float* x5502 = (float*)myMalloc(1 * sizeof(float));;
+x5502[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5500,x592,1,x5502, x1206, 1, x592,1));
+arrayFill<<<28, 512>>>(x1206, 0.0f, 256);
+float* x5506 = (float*)myMalloc(1 * sizeof(float));;
+x5506[0] = 1.0f;
+float* x5508 = (float*)myMalloc(1 * sizeof(float));;
+x5508[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5506,x595,1,x5508, x1207, 1, x595,1));
+arrayFill<<<28, 512>>>(x1207, 0.0f, 128);
+float* x5512 = (float*)myMalloc(1 * sizeof(float));;
+x5512[0] = 1.0f;
+float* x5514 = (float*)myMalloc(1 * sizeof(float));;
+x5514[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5512,x598,1,x5514, x1208, 1, x598,1));
+arrayFill<<<28, 512>>>(x1208, 0.0f, 512);
+float* x5518 = (float*)myMalloc(1 * sizeof(float));;
+x5518[0] = 1.0f;
+float* x5520 = (float*)myMalloc(1 * sizeof(float));;
+x5520[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5518,x601,1,x5520, x1209, 1, x601,1));
+arrayFill<<<28, 512>>>(x1209, 0.0f, 64);
+float* x5524 = (float*)myMalloc(1 * sizeof(float));;
+x5524[0] = 1.0f;
+float* x5526 = (float*)myMalloc(1 * sizeof(float));;
+x5526[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5524,x604,1,x5526, x1210, 1, x604,1));
+arrayFill<<<28, 512>>>(x1210, 0.0f, 2048);
+float* x5530 = (float*)myMalloc(1 * sizeof(float));;
+x5530[0] = 1.0f;
+float* x5532 = (float*)myMalloc(1 * sizeof(float));;
+x5532[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5530,x607,1,x5532, x1211, 1, x607,1));
+arrayFill<<<28, 512>>>(x1211, 0.0f, 256);
+float* x5536 = (float*)myMalloc(1 * sizeof(float));;
+x5536[0] = 1.0f;
+float* x5538 = (float*)myMalloc(1 * sizeof(float));;
+x5538[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5536,x610,1,x5538, x1212, 1, x610,1));
+arrayFill<<<28, 512>>>(x1212, 0.0f, 64);
+float* x5542 = (float*)myMalloc(1 * sizeof(float));;
+x5542[0] = 1.0f;
+float* x5544 = (float*)myMalloc(1 * sizeof(float));;
+x5544[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 128,512,x5542,x613,128,x5544, x1213, 128, x613,128));
+arrayFill<<<28, 512>>>(x1213, 0.0f, 65536);
+float* x5548 = (float*)myMalloc(1 * sizeof(float));;
+x5548[0] = 1.0f;
+float* x5550 = (float*)myMalloc(1 * sizeof(float));;
+x5550[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5548,x616,1,x5550, x1214, 1, x616,1));
+arrayFill<<<28, 512>>>(x1214, 0.0f, 2048);
+float* x5554 = (float*)myMalloc(1 * sizeof(float));;
+x5554[0] = 1.0f;
+float* x5556 = (float*)myMalloc(1 * sizeof(float));;
+x5556[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5554,x619,1,x5556, x1215, 1, x619,1));
+arrayFill<<<28, 512>>>(x1215, 0.0f, 256);
+float* x5560 = (float*)myMalloc(1 * sizeof(float));;
+x5560[0] = 1.0f;
+float* x5562 = (float*)myMalloc(1 * sizeof(float));;
+x5562[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5560,x622,1,x5562, x1216, 1, x622,1));
+arrayFill<<<28, 512>>>(x1216, 0.0f, 256);
+float* x5566 = (float*)myMalloc(1 * sizeof(float));;
+x5566[0] = 1.0f;
+float* x5568 = (float*)myMalloc(1 * sizeof(float));;
+x5568[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5566,x625,1,x5568, x1217, 1, x625,1));
+arrayFill<<<28, 512>>>(x1217, 0.0f, 64);
+float* x5572 = (float*)myMalloc(1 * sizeof(float));;
+x5572[0] = 1.0f;
+float* x5574 = (float*)myMalloc(1 * sizeof(float));;
+x5574[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 128,512,x5572,x628,128,x5574, x1218, 128, x628,128));
+arrayFill<<<28, 512>>>(x1218, 0.0f, 65536);
+float* x5578 = (float*)myMalloc(1 * sizeof(float));;
+x5578[0] = 1.0f;
+float* x5580 = (float*)myMalloc(1 * sizeof(float));;
+x5580[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5578,x631,1,x5580, x1219, 1, x631,1));
+arrayFill<<<28, 512>>>(x1219, 0.0f, 128);
+float* x5584 = (float*)myMalloc(1 * sizeof(float));;
+x5584[0] = 1.0f;
+float* x5586 = (float*)myMalloc(1 * sizeof(float));;
+x5586[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5584,x634,1,x5586, x1220, 1, x634,1));
+arrayFill<<<28, 512>>>(x1220, 0.0f, 512);
+float* x5590 = (float*)myMalloc(1 * sizeof(float));;
+x5590[0] = 1.0f;
+float* x5592 = (float*)myMalloc(1 * sizeof(float));;
+x5592[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5590,x637,1,x5592, x1221, 1, x637,1));
+arrayFill<<<28, 512>>>(x1221, 0.0f, 64);
+float* x5596 = (float*)myMalloc(1 * sizeof(float));;
+x5596[0] = 1.0f;
+float* x5598 = (float*)myMalloc(1 * sizeof(float));;
+x5598[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5596,x640,1,x5598, x1222, 1, x640,1));
+arrayFill<<<28, 512>>>(x1222, 0.0f, 2048);
+float* x5602 = (float*)myMalloc(1 * sizeof(float));;
+x5602[0] = 1.0f;
+float* x5604 = (float*)myMalloc(1 * sizeof(float));;
+x5604[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x5602,x643,256,x5604, x1223, 256, x643,256));
+arrayFill<<<28, 512>>>(x1223, 0.0f, 262144);
+float* x5608 = (float*)myMalloc(1 * sizeof(float));;
+x5608[0] = 1.0f;
+float* x5610 = (float*)myMalloc(1 * sizeof(float));;
+x5610[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5608,x646,1,x5610, x1224, 1, x646,1));
+arrayFill<<<28, 512>>>(x1224, 0.0f, 1024);
+float* x5614 = (float*)myMalloc(1 * sizeof(float));;
+x5614[0] = 1.0f;
+float* x5616 = (float*)myMalloc(1 * sizeof(float));;
+x5616[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5614,x649,1,x5616, x1225, 1, x649,1));
+arrayFill<<<28, 512>>>(x1225, 0.0f, 64);
+float* x5620 = (float*)myMalloc(1 * sizeof(float));;
+x5620[0] = 1.0f;
+float* x5622 = (float*)myMalloc(1 * sizeof(float));;
+x5622[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5620,x652,1,x5622, x1226, 1, x652,1));
+arrayFill<<<28, 512>>>(x1226, 0.0f, 512);
+float* x5626 = (float*)myMalloc(1 * sizeof(float));;
+x5626[0] = 1.0f;
+float* x5628 = (float*)myMalloc(1 * sizeof(float));;
+x5628[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5626,x655,1,x5628, x1227, 1, x655,1));
+arrayFill<<<28, 512>>>(x1227, 0.0f, 1024);
+float* x5632 = (float*)myMalloc(1 * sizeof(float));;
+x5632[0] = 1.0f;
+float* x5634 = (float*)myMalloc(1 * sizeof(float));;
+x5634[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5632,x658,1,x5634, x1228, 1, x658,1));
+arrayFill<<<28, 512>>>(x1228, 0.0f, 512);
+float* x5638 = (float*)myMalloc(1 * sizeof(float));;
+x5638[0] = 1.0f;
+float* x5640 = (float*)myMalloc(1 * sizeof(float));;
+x5640[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5638,x661,1,x5640, x1229, 1, x661,1));
+arrayFill<<<28, 512>>>(x1229, 0.0f, 1024);
+float* x5644 = (float*)myMalloc(1 * sizeof(float));;
+x5644[0] = 1.0f;
+float* x5646 = (float*)myMalloc(1 * sizeof(float));;
+x5646[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5644,x664,1,x5646, x1230, 1, x664,1));
+arrayFill<<<28, 512>>>(x1230, 0.0f, 2048);
+float* x5650 = (float*)myMalloc(1 * sizeof(float));;
+x5650[0] = 1.0f;
+float* x5652 = (float*)myMalloc(1 * sizeof(float));;
+x5652[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5650,x667,1,x5652, x1231, 1, x667,1));
+arrayFill<<<28, 512>>>(x1231, 0.0f, 256);
+float* x5656 = (float*)myMalloc(1 * sizeof(float));;
+x5656[0] = 1.0f;
+float* x5658 = (float*)myMalloc(1 * sizeof(float));;
+x5658[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5656,x670,1,x5658, x1232, 1, x670,1));
+arrayFill<<<28, 512>>>(x1232, 0.0f, 2048);
+float* x5662 = (float*)myMalloc(1 * sizeof(float));;
+x5662[0] = 1.0f;
+float* x5664 = (float*)myMalloc(1 * sizeof(float));;
+x5664[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5662,x673,1,x5664, x1233, 1, x673,1));
+arrayFill<<<28, 512>>>(x1233, 0.0f, 256);
+float* x5668 = (float*)myMalloc(1 * sizeof(float));;
+x5668[0] = 1.0f;
+float* x5670 = (float*)myMalloc(1 * sizeof(float));;
+x5670[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5668,x676,1,x5670, x1234, 1, x676,1));
+arrayFill<<<28, 512>>>(x1234, 0.0f, 128);
+float* x5674 = (float*)myMalloc(1 * sizeof(float));;
+x5674[0] = 1.0f;
+float* x5676 = (float*)myMalloc(1 * sizeof(float));;
+x5676[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5674,x679,1,x5676, x1235, 1, x679,1));
+arrayFill<<<28, 512>>>(x1235, 0.0f, 128);
+float* x5680 = (float*)myMalloc(1 * sizeof(float));;
+x5680[0] = 1.0f;
+float* x5682 = (float*)myMalloc(1 * sizeof(float));;
+x5682[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5680,x682,1,x5682, x1236, 1, x682,1));
+arrayFill<<<28, 512>>>(x1236, 0.0f, 256);
+float* x5686 = (float*)myMalloc(1 * sizeof(float));;
+x5686[0] = 1.0f;
+float* x5688 = (float*)myMalloc(1 * sizeof(float));;
+x5688[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,256,x5686,x685,64,x5688, x1237, 64, x685,64));
+arrayFill<<<28, 512>>>(x1237, 0.0f, 16384);
+float* x5692 = (float*)myMalloc(1 * sizeof(float));;
+x5692[0] = 1.0f;
+float* x5694 = (float*)myMalloc(1 * sizeof(float));;
+x5694[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5692,x688,1,x5694, x1238, 1, x688,1));
+arrayFill<<<28, 512>>>(x1238, 0.0f, 256);
+float* x5698 = (float*)myMalloc(1 * sizeof(float));;
+x5698[0] = 1.0f;
+float* x5700 = (float*)myMalloc(1 * sizeof(float));;
+x5700[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,128,x5698,x691,512,x5700, x1239, 512, x691,512));
+arrayFill<<<28, 512>>>(x1239, 0.0f, 65536);
+float* x5704 = (float*)myMalloc(1 * sizeof(float));;
+x5704[0] = 1.0f;
+float* x5706 = (float*)myMalloc(1 * sizeof(float));;
+x5706[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5704,x694,1,x5706, x1240, 1, x694,1));
+arrayFill<<<28, 512>>>(x1240, 0.0f, 256);
+float* x5710 = (float*)myMalloc(1 * sizeof(float));;
+x5710[0] = 1.0f;
+float* x5712 = (float*)myMalloc(1 * sizeof(float));;
+x5712[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5710,x697,1,x5712, x1241, 1, x697,1));
+arrayFill<<<28, 512>>>(x1241, 0.0f, 128);
+float* x5716 = (float*)myMalloc(1 * sizeof(float));;
+x5716[0] = 1.0f;
+float* x5718 = (float*)myMalloc(1 * sizeof(float));;
+x5718[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5716,x700,1,x5718, x1242, 1, x700,1));
+arrayFill<<<28, 512>>>(x1242, 0.0f, 64);
+float* x5722 = (float*)myMalloc(1 * sizeof(float));;
+x5722[0] = 1.0f;
+float* x5724 = (float*)myMalloc(1 * sizeof(float));;
+x5724[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5722,x703,1,x5724, x1243, 1, x703,1));
+arrayFill<<<28, 512>>>(x1243, 0.0f, 256);
+float* x5728 = (float*)myMalloc(1 * sizeof(float));;
+x5728[0] = 1.0f;
+float* x5730 = (float*)myMalloc(1 * sizeof(float));;
+x5730[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5728,x706,1,x5730, x1244, 1, x706,1));
+arrayFill<<<28, 512>>>(x1244, 0.0f, 512);
+float* x5734 = (float*)myMalloc(1 * sizeof(float));;
+x5734[0] = 1.0f;
+float* x5736 = (float*)myMalloc(1 * sizeof(float));;
+x5736[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5734,x709,1,x5736, x1245, 1, x709,1));
+arrayFill<<<28, 512>>>(x1245, 0.0f, 512);
+float* x5740 = (float*)myMalloc(1 * sizeof(float));;
+x5740[0] = 1.0f;
+float* x5742 = (float*)myMalloc(1 * sizeof(float));;
+x5742[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,512,x5740,x712,1024,x5742, x1246, 1024, x712,1024));
+arrayFill<<<28, 512>>>(x1246, 0.0f, 524288);
+float* x5746 = (float*)myMalloc(1 * sizeof(float));;
+x5746[0] = 1.0f;
+float* x5748 = (float*)myMalloc(1 * sizeof(float));;
+x5748[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5746,x715,1,x5748, x1247, 1, x715,1));
+arrayFill<<<28, 512>>>(x1247, 0.0f, 1024);
+float* x5752 = (float*)myMalloc(1 * sizeof(float));;
+x5752[0] = 1.0f;
+float* x5754 = (float*)myMalloc(1 * sizeof(float));;
+x5754[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5752,x718,1,x5754, x1248, 1, x718,1));
+arrayFill<<<28, 512>>>(x1248, 0.0f, 256);
+float* x5758 = (float*)myMalloc(1 * sizeof(float));;
+x5758[0] = 1.0f;
+float* x5760 = (float*)myMalloc(1 * sizeof(float));;
+x5760[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5758,x721,1,x5760, x1249, 1, x721,1));
+arrayFill<<<28, 512>>>(x1249, 0.0f, 64);
+float* x5764 = (float*)myMalloc(1 * sizeof(float));;
+x5764[0] = 1.0f;
+float* x5766 = (float*)myMalloc(1 * sizeof(float));;
+x5766[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5764,x724,1,x5766, x1250, 1, x724,1));
+arrayFill<<<28, 512>>>(x1250, 0.0f, 1024);
+float* x5770 = (float*)myMalloc(1 * sizeof(float));;
+x5770[0] = 1.0f;
+float* x5772 = (float*)myMalloc(1 * sizeof(float));;
+x5772[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5770,x727,1,x5772, x1251, 1, x727,1));
+arrayFill<<<28, 512>>>(x1251, 0.0f, 2048);
+float* x5776 = (float*)myMalloc(1 * sizeof(float));;
+x5776[0] = 1.0f;
+float* x5778 = (float*)myMalloc(1 * sizeof(float));;
+x5778[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5776,x730,1,x5778, x1252, 1, x730,1));
+arrayFill<<<28, 512>>>(x1252, 0.0f, 512);
+float* x5782 = (float*)myMalloc(1 * sizeof(float));;
+x5782[0] = 1.0f;
+float* x5784 = (float*)myMalloc(1 * sizeof(float));;
+x5784[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5782,x733,1,x5784, x1253, 1, x733,1));
+arrayFill<<<28, 512>>>(x1253, 0.0f, 1024);
+float* x5788 = (float*)myMalloc(1 * sizeof(float));;
+x5788[0] = 1.0f;
+float* x5790 = (float*)myMalloc(1 * sizeof(float));;
+x5790[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5788,x736,1,x5790, x1254, 1, x736,1));
+arrayFill<<<28, 512>>>(x1254, 0.0f, 512);
+float* x5794 = (float*)myMalloc(1 * sizeof(float));;
+x5794[0] = 1.0f;
+float* x5796 = (float*)myMalloc(1 * sizeof(float));;
+x5796[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5794,x739,1,x5796, x1255, 1, x739,1));
+arrayFill<<<28, 512>>>(x1255, 0.0f, 128);
+float* x5800 = (float*)myMalloc(1 * sizeof(float));;
+x5800[0] = 1.0f;
+float* x5802 = (float*)myMalloc(1 * sizeof(float));;
+x5802[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5800,x742,1,x5802, x1256, 1, x742,1));
+arrayFill<<<28, 512>>>(x1256, 0.0f, 512);
+float* x5806 = (float*)myMalloc(1 * sizeof(float));;
+x5806[0] = 1.0f;
+float* x5808 = (float*)myMalloc(1 * sizeof(float));;
+x5808[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,64,x5806,x745,256,x5808, x1257, 256, x745,256));
+arrayFill<<<28, 512>>>(x1257, 0.0f, 16384);
+float* x5812 = (float*)myMalloc(1 * sizeof(float));;
+x5812[0] = 1.0f;
+float* x5814 = (float*)myMalloc(1 * sizeof(float));;
+x5814[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x5812,x748,1024,x5814, x1258, 1024, x748,1024));
+arrayFill<<<28, 512>>>(x1258, 0.0f, 262144);
+float* x5818 = (float*)myMalloc(1 * sizeof(float));;
+x5818[0] = 1.0f;
+float* x5820 = (float*)myMalloc(1 * sizeof(float));;
+x5820[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 27,64,x5818,x751,27,x5820, x1259, 27, x751,27));
+arrayFill<<<28, 512>>>(x1259, 0.0f, 1728);
+float* x5824 = (float*)myMalloc(1 * sizeof(float));;
+x5824[0] = 1.0f;
+float* x5826 = (float*)myMalloc(1 * sizeof(float));;
+x5826[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5824,x754,1,x5826, x1260, 1, x754,1));
+arrayFill<<<28, 512>>>(x1260, 0.0f, 64);
+float* x5830 = (float*)myMalloc(1 * sizeof(float));;
+x5830[0] = 1.0f;
+float* x5832 = (float*)myMalloc(1 * sizeof(float));;
+x5832[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5830,x757,1,x5832, x1261, 1, x757,1));
+arrayFill<<<28, 512>>>(x1261, 0.0f, 512);
+float* x5836 = (float*)myMalloc(1 * sizeof(float));;
+x5836[0] = 1.0f;
+float* x5838 = (float*)myMalloc(1 * sizeof(float));;
+x5838[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 4608,512,x5836,x760,4608,x5838, x1262, 4608, x760,4608));
+arrayFill<<<28, 512>>>(x1262, 0.0f, 2359296);
+float* x5842 = (float*)myMalloc(1 * sizeof(float));;
+x5842[0] = 1.0f;
+float* x5844 = (float*)myMalloc(1 * sizeof(float));;
+x5844[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5842,x763,1,x5844, x1263, 1, x763,1));
+arrayFill<<<28, 512>>>(x1263, 0.0f, 512);
+float* x5848 = (float*)myMalloc(1 * sizeof(float));;
+x5848[0] = 1.0f;
+float* x5850 = (float*)myMalloc(1 * sizeof(float));;
+x5850[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5848,x766,1,x5850, x1264, 1, x766,1));
+arrayFill<<<28, 512>>>(x1264, 0.0f, 256);
+float* x5854 = (float*)myMalloc(1 * sizeof(float));;
+x5854[0] = 1.0f;
+float* x5856 = (float*)myMalloc(1 * sizeof(float));;
+x5856[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5854,x769,1,x5856, x1265, 1, x769,1));
+arrayFill<<<28, 512>>>(x1265, 0.0f, 64);
+float* x5860 = (float*)myMalloc(1 * sizeof(float));;
+x5860[0] = 1.0f;
+float* x5862 = (float*)myMalloc(1 * sizeof(float));;
+x5862[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5860,x772,1,x5862, x1266, 1, x772,1));
+arrayFill<<<28, 512>>>(x1266, 0.0f, 512);
+float* x5866 = (float*)myMalloc(1 * sizeof(float));;
+x5866[0] = 1.0f;
+float* x5868 = (float*)myMalloc(1 * sizeof(float));;
+x5868[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5866,x775,1,x5868, x1267, 1, x775,1));
+arrayFill<<<28, 512>>>(x1267, 0.0f, 512);
+float* x5872 = (float*)myMalloc(1 * sizeof(float));;
+x5872[0] = 1.0f;
+float* x5874 = (float*)myMalloc(1 * sizeof(float));;
+x5874[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5872,x778,1,x5874, x1268, 1, x778,1));
+arrayFill<<<28, 512>>>(x1268, 0.0f, 1024);
+float* x5878 = (float*)myMalloc(1 * sizeof(float));;
+x5878[0] = 1.0f;
+float* x5880 = (float*)myMalloc(1 * sizeof(float));;
+x5880[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,256,x5878,x781,64,x5880, x1269, 64, x781,64));
+arrayFill<<<28, 512>>>(x1269, 0.0f, 16384);
+float* x5884 = (float*)myMalloc(1 * sizeof(float));;
+x5884[0] = 1.0f;
+float* x5886 = (float*)myMalloc(1 * sizeof(float));;
+x5886[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5884,x784,1,x5886, x1270, 1, x784,1));
+arrayFill<<<28, 512>>>(x1270, 0.0f, 256);
+float* x5890 = (float*)myMalloc(1 * sizeof(float));;
+x5890[0] = 1.0f;
+float* x5892 = (float*)myMalloc(1 * sizeof(float));;
+x5892[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5890,x787,1,x5892, x1271, 1, x787,1));
+arrayFill<<<28, 512>>>(x1271, 0.0f, 64);
+float* x5896 = (float*)myMalloc(1 * sizeof(float));;
+x5896[0] = 1.0f;
+float* x5898 = (float*)myMalloc(1 * sizeof(float));;
+x5898[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1152,128,x5896,x790,1152,x5898, x1272, 1152, x790,1152));
+arrayFill<<<28, 512>>>(x1272, 0.0f, 147456);
+float* x5902 = (float*)myMalloc(1 * sizeof(float));;
+x5902[0] = 1.0f;
+float* x5904 = (float*)myMalloc(1 * sizeof(float));;
+x5904[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5902,x793,1,x5904, x1273, 1, x793,1));
+arrayFill<<<28, 512>>>(x1273, 0.0f, 256);
+float* x5908 = (float*)myMalloc(1 * sizeof(float));;
+x5908[0] = 1.0f;
+float* x5910 = (float*)myMalloc(1 * sizeof(float));;
+x5910[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5908,x796,1,x5910, x1274, 1, x796,1));
+arrayFill<<<28, 512>>>(x1274, 0.0f, 512);
+float* x5914 = (float*)myMalloc(1 * sizeof(float));;
+x5914[0] = 1.0f;
+float* x5916 = (float*)myMalloc(1 * sizeof(float));;
+x5916[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5914,x799,1,x5916, x1275, 1, x799,1));
+arrayFill<<<28, 512>>>(x1275, 0.0f, 256);
+float* x5920 = (float*)myMalloc(1 * sizeof(float));;
+x5920[0] = 1.0f;
+float* x5922 = (float*)myMalloc(1 * sizeof(float));;
+x5922[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x5920,x802,1,x5922, x1276, 1, x802,1));
+arrayFill<<<28, 512>>>(x1276, 0.0f, 512);
+float* x5926 = (float*)myMalloc(1 * sizeof(float));;
+x5926[0] = 1.0f;
+float* x5928 = (float*)myMalloc(1 * sizeof(float));;
+x5928[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5926,x805,1,x5928, x1277, 1, x805,1));
+arrayFill<<<28, 512>>>(x1277, 0.0f, 128);
+float* x5932 = (float*)myMalloc(1 * sizeof(float));;
+x5932[0] = 1.0f;
+float* x5934 = (float*)myMalloc(1 * sizeof(float));;
+x5934[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,64,x5932,x808,256,x5934, x1278, 256, x808,256));
+arrayFill<<<28, 512>>>(x1278, 0.0f, 16384);
+float* x5938 = (float*)myMalloc(1 * sizeof(float));;
+x5938[0] = 1.0f;
+float* x5940 = (float*)myMalloc(1 * sizeof(float));;
+x5940[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5938,x811,1,x5940, x1279, 1, x811,1));
+arrayFill<<<28, 512>>>(x1279, 0.0f, 128);
+float* x5944 = (float*)myMalloc(1 * sizeof(float));;
+x5944[0] = 1.0f;
+float* x5946 = (float*)myMalloc(1 * sizeof(float));;
+x5946[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5944,x814,1,x5946, x1280, 1, x814,1));
+arrayFill<<<28, 512>>>(x1280, 0.0f, 2048);
+float* x5950 = (float*)myMalloc(1 * sizeof(float));;
+x5950[0] = 1.0f;
+float* x5952 = (float*)myMalloc(1 * sizeof(float));;
+x5952[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5950,x817,1,x5952, x1281, 1, x817,1));
+arrayFill<<<28, 512>>>(x1281, 0.0f, 256);
+float* x5956 = (float*)myMalloc(1 * sizeof(float));;
+x5956[0] = 1.0f;
+float* x5958 = (float*)myMalloc(1 * sizeof(float));;
+x5958[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x5956,x820,2304,x5958, x1282, 2304, x820,2304));
+arrayFill<<<28, 512>>>(x1282, 0.0f, 589824);
+float* x5962 = (float*)myMalloc(1 * sizeof(float));;
+x5962[0] = 1.0f;
+float* x5964 = (float*)myMalloc(1 * sizeof(float));;
+x5964[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5962,x823,1,x5964, x1283, 1, x823,1));
+arrayFill<<<28, 512>>>(x1283, 0.0f, 256);
+float* x5968 = (float*)myMalloc(1 * sizeof(float));;
+x5968[0] = 1.0f;
+float* x5970 = (float*)myMalloc(1 * sizeof(float));;
+x5970[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x5968,x826,1,x5970, x1284, 1, x826,1));
+arrayFill<<<28, 512>>>(x1284, 0.0f, 128);
+float* x5974 = (float*)myMalloc(1 * sizeof(float));;
+x5974[0] = 1.0f;
+float* x5976 = (float*)myMalloc(1 * sizeof(float));;
+x5976[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x5974,x829,1,x5976, x1285, 1, x829,1));
+arrayFill<<<28, 512>>>(x1285, 0.0f, 256);
+float* x5980 = (float*)myMalloc(1 * sizeof(float));;
+x5980[0] = 1.0f;
+float* x5982 = (float*)myMalloc(1 * sizeof(float));;
+x5982[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x5980,x832,1,x5982, x1286, 1, x832,1));
+arrayFill<<<28, 512>>>(x1286, 0.0f, 64);
+float* x5986 = (float*)myMalloc(1 * sizeof(float));;
+x5986[0] = 1.0f;
+float* x5988 = (float*)myMalloc(1 * sizeof(float));;
+x5988[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,256,x5986,x835,512,x5988, x1287, 512, x835,512));
+arrayFill<<<28, 512>>>(x1287, 0.0f, 131072);
+float* x5992 = (float*)myMalloc(1 * sizeof(float));;
+x5992[0] = 1.0f;
+float* x5994 = (float*)myMalloc(1 * sizeof(float));;
+x5994[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x5992,x838,1,x5994, x1288, 1, x838,1));
+arrayFill<<<28, 512>>>(x1288, 0.0f, 2048);
+float* x5998 = (float*)myMalloc(1 * sizeof(float));;
+x5998[0] = 1.0f;
+float* x6000 = (float*)myMalloc(1 * sizeof(float));;
+x6000[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x5998,x841,1,x6000, x1289, 1, x841,1));
+arrayFill<<<28, 512>>>(x1289, 0.0f, 1024);
+float* x6004 = (float*)myMalloc(1 * sizeof(float));;
+x6004[0] = 1.0f;
+float* x6006 = (float*)myMalloc(1 * sizeof(float));;
+x6006[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6004,x844,1,x6006, x1290, 1, x844,1));
+arrayFill<<<28, 512>>>(x1290, 0.0f, 1024);
+float* x6010 = (float*)myMalloc(1 * sizeof(float));;
+x6010[0] = 1.0f;
+float* x6012 = (float*)myMalloc(1 * sizeof(float));;
+x6012[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6010,x847,1,x6012, x1291, 1, x847,1));
+arrayFill<<<28, 512>>>(x1291, 0.0f, 256);
+float* x6016 = (float*)myMalloc(1 * sizeof(float));;
+x6016[0] = 1.0f;
+float* x6018 = (float*)myMalloc(1 * sizeof(float));;
+x6018[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6016,x850,1,x6018, x1292, 1, x850,1));
+arrayFill<<<28, 512>>>(x1292, 0.0f, 256);
+float* x6022 = (float*)myMalloc(1 * sizeof(float));;
+x6022[0] = 1.0f;
+float* x6024 = (float*)myMalloc(1 * sizeof(float));;
+x6024[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6022,x853,1,x6024, x1293, 1, x853,1));
+arrayFill<<<28, 512>>>(x1293, 0.0f, 256);
+float* x6028 = (float*)myMalloc(1 * sizeof(float));;
+x6028[0] = 1.0f;
+float* x6030 = (float*)myMalloc(1 * sizeof(float));;
+x6030[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6028,x856,1,x6030, x1294, 1, x856,1));
+arrayFill<<<28, 512>>>(x1294, 0.0f, 64);
+float* x6034 = (float*)myMalloc(1 * sizeof(float));;
+x6034[0] = 1.0f;
+float* x6036 = (float*)myMalloc(1 * sizeof(float));;
+x6036[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6034,x859,1,x6036, x1295, 1, x859,1));
+arrayFill<<<28, 512>>>(x1295, 0.0f, 1024);
+float* x6040 = (float*)myMalloc(1 * sizeof(float));;
+x6040[0] = 1.0f;
+float* x6042 = (float*)myMalloc(1 * sizeof(float));;
+x6042[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6040,x862,1,x6042, x1296, 1, x862,1));
+arrayFill<<<28, 512>>>(x1296, 0.0f, 256);
+float* x6046 = (float*)myMalloc(1 * sizeof(float));;
+x6046[0] = 1.0f;
+float* x6048 = (float*)myMalloc(1 * sizeof(float));;
+x6048[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6046,x865,1,x6048, x1297, 1, x865,1));
+arrayFill<<<28, 512>>>(x1297, 0.0f, 128);
+float* x6052 = (float*)myMalloc(1 * sizeof(float));;
+x6052[0] = 1.0f;
+float* x6054 = (float*)myMalloc(1 * sizeof(float));;
+x6054[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1152,128,x6052,x868,1152,x6054, x1298, 1152, x868,1152));
+arrayFill<<<28, 512>>>(x1298, 0.0f, 147456);
+float* x6058 = (float*)myMalloc(1 * sizeof(float));;
+x6058[0] = 1.0f;
+float* x6060 = (float*)myMalloc(1 * sizeof(float));;
+x6060[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6058,x871,1,x6060, x1299, 1, x871,1));
+arrayFill<<<28, 512>>>(x1299, 0.0f, 256);
+float* x6064 = (float*)myMalloc(1 * sizeof(float));;
+x6064[0] = 1.0f;
+float* x6066 = (float*)myMalloc(1 * sizeof(float));;
+x6066[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x6064,x874,1,x6066, x1300, 1, x874,1));
+arrayFill<<<28, 512>>>(x1300, 0.0f, 2048);
+float* x6070 = (float*)myMalloc(1 * sizeof(float));;
+x6070[0] = 1.0f;
+float* x6072 = (float*)myMalloc(1 * sizeof(float));;
+x6072[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6070,x877,1,x6072, x1301, 1, x877,1));
+arrayFill<<<28, 512>>>(x1301, 0.0f, 512);
+float* x6076 = (float*)myMalloc(1 * sizeof(float));;
+x6076[0] = 1.0f;
+float* x6078 = (float*)myMalloc(1 * sizeof(float));;
+x6078[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6076,x880,1,x6078, x1302, 1, x880,1));
+arrayFill<<<28, 512>>>(x1302, 0.0f, 512);
+float* x6082 = (float*)myMalloc(1 * sizeof(float));;
+x6082[0] = 1.0f;
+float* x6084 = (float*)myMalloc(1 * sizeof(float));;
+x6084[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,128,x6082,x883,512,x6084, x1303, 512, x883,512));
+arrayFill<<<28, 512>>>(x1303, 0.0f, 65536);
+float* x6088 = (float*)myMalloc(1 * sizeof(float));;
+x6088[0] = 1.0f;
+float* x6090 = (float*)myMalloc(1 * sizeof(float));;
+x6090[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6088,x886,1,x6090, x1304, 1, x886,1));
+arrayFill<<<28, 512>>>(x1304, 0.0f, 256);
+float* x6094 = (float*)myMalloc(1 * sizeof(float));;
+x6094[0] = 1.0f;
+float* x6096 = (float*)myMalloc(1 * sizeof(float));;
+x6096[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6094,x889,1,x6096, x1305, 1, x889,1));
+arrayFill<<<28, 512>>>(x1305, 0.0f, 256);
+float* x6100 = (float*)myMalloc(1 * sizeof(float));;
+x6100[0] = 1.0f;
+float* x6102 = (float*)myMalloc(1 * sizeof(float));;
+x6102[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6100,x892,1,x6102, x1306, 1, x892,1));
+arrayFill<<<28, 512>>>(x1306, 0.0f, 256);
+float* x6106 = (float*)myMalloc(1 * sizeof(float));;
+x6106[0] = 1.0f;
+float* x6108 = (float*)myMalloc(1 * sizeof(float));;
+x6108[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6106,x895,1,x6108, x1307, 1, x895,1));
+arrayFill<<<28, 512>>>(x1307, 0.0f, 256);
+float* x6112 = (float*)myMalloc(1 * sizeof(float));;
+x6112[0] = 1.0f;
+float* x6114 = (float*)myMalloc(1 * sizeof(float));;
+x6114[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6112,x898,1,x6114, x1308, 1, x898,1));
+arrayFill<<<28, 512>>>(x1308, 0.0f, 512);
+float* x6118 = (float*)myMalloc(1 * sizeof(float));;
+x6118[0] = 1.0f;
+float* x6120 = (float*)myMalloc(1 * sizeof(float));;
+x6120[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6118,x901,1,x6120, x1309, 1, x901,1));
+arrayFill<<<28, 512>>>(x1309, 0.0f, 512);
+float* x6124 = (float*)myMalloc(1 * sizeof(float));;
+x6124[0] = 1.0f;
+float* x6126 = (float*)myMalloc(1 * sizeof(float));;
+x6126[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6124,x904,1,x6126, x1310, 1, x904,1));
+arrayFill<<<28, 512>>>(x1310, 0.0f, 256);
+float* x6130 = (float*)myMalloc(1 * sizeof(float));;
+x6130[0] = 1.0f;
+float* x6132 = (float*)myMalloc(1 * sizeof(float));;
+x6132[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6130,x907,1,x6132, x1311, 1, x907,1));
+arrayFill<<<28, 512>>>(x1311, 0.0f, 128);
+float* x6136 = (float*)myMalloc(1 * sizeof(float));;
+x6136[0] = 1.0f;
+float* x6138 = (float*)myMalloc(1 * sizeof(float));;
+x6138[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6136,x910,1,x6138, x1312, 1, x910,1));
+arrayFill<<<28, 512>>>(x1312, 0.0f, 512);
+float* x6142 = (float*)myMalloc(1 * sizeof(float));;
+x6142[0] = 1.0f;
+float* x6144 = (float*)myMalloc(1 * sizeof(float));;
+x6144[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6142,x913,1,x6144, x1313, 1, x913,1));
+arrayFill<<<28, 512>>>(x1313, 0.0f, 64);
+float* x6148 = (float*)myMalloc(1 * sizeof(float));;
+x6148[0] = 1.0f;
+float* x6150 = (float*)myMalloc(1 * sizeof(float));;
+x6150[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6148,x916,1,x6150, x1314, 1, x916,1));
+arrayFill<<<28, 512>>>(x1314, 0.0f, 512);
+float* x6154 = (float*)myMalloc(1 * sizeof(float));;
+x6154[0] = 1.0f;
+float* x6156 = (float*)myMalloc(1 * sizeof(float));;
+x6156[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6154,x919,1,x6156, x1315, 1, x919,1));
+arrayFill<<<28, 512>>>(x1315, 0.0f, 64);
+float* x6160 = (float*)myMalloc(1 * sizeof(float));;
+x6160[0] = 1.0f;
+float* x6162 = (float*)myMalloc(1 * sizeof(float));;
+x6162[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6160,x922,1,x6162, x1316, 1, x922,1));
+arrayFill<<<28, 512>>>(x1316, 0.0f, 1024);
+float* x6166 = (float*)myMalloc(1 * sizeof(float));;
+x6166[0] = 1.0f;
+float* x6168 = (float*)myMalloc(1 * sizeof(float));;
+x6168[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6166,x925,1,x6168, x1317, 1, x925,1));
+arrayFill<<<28, 512>>>(x1317, 0.0f, 512);
+float* x6172 = (float*)myMalloc(1 * sizeof(float));;
+x6172[0] = 1.0f;
+float* x6174 = (float*)myMalloc(1 * sizeof(float));;
+x6174[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6172,x928,1,x6174, x1318, 1, x928,1));
+arrayFill<<<28, 512>>>(x1318, 0.0f, 1024);
+float* x6178 = (float*)myMalloc(1 * sizeof(float));;
+x6178[0] = 1.0f;
+float* x6180 = (float*)myMalloc(1 * sizeof(float));;
+x6180[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,2048,x6178,x931,512,x6180, x1319, 512, x931,512));
+arrayFill<<<28, 512>>>(x1319, 0.0f, 1048576);
+float* x6184 = (float*)myMalloc(1 * sizeof(float));;
+x6184[0] = 1.0f;
+float* x6186 = (float*)myMalloc(1 * sizeof(float));;
+x6186[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6184,x934,1,x6186, x1320, 1, x934,1));
+arrayFill<<<28, 512>>>(x1320, 0.0f, 512);
+float* x6190 = (float*)myMalloc(1 * sizeof(float));;
+x6190[0] = 1.0f;
+float* x6192 = (float*)myMalloc(1 * sizeof(float));;
+x6192[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,2048,x6190,x937,1024,x6192, x1321, 1024, x937,1024));
+arrayFill<<<28, 512>>>(x1321, 0.0f, 2097152);
+float* x6196 = (float*)myMalloc(1 * sizeof(float));;
+x6196[0] = 1.0f;
+float* x6198 = (float*)myMalloc(1 * sizeof(float));;
+x6198[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2048,512,x6196,x940,2048,x6198, x1322, 2048, x940,2048));
+arrayFill<<<28, 512>>>(x1322, 0.0f, 1048576);
+float* x6202 = (float*)myMalloc(1 * sizeof(float));;
+x6202[0] = 1.0f;
+float* x6204 = (float*)myMalloc(1 * sizeof(float));;
+x6204[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6202,x943,1,x6204, x1323, 1, x943,1));
+arrayFill<<<28, 512>>>(x1323, 0.0f, 1024);
+float* x6208 = (float*)myMalloc(1 * sizeof(float));;
+x6208[0] = 1.0f;
+float* x6210 = (float*)myMalloc(1 * sizeof(float));;
+x6210[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6208,x946,1,x6210, x1324, 1, x946,1));
+arrayFill<<<28, 512>>>(x1324, 0.0f, 128);
+float* x6214 = (float*)myMalloc(1 * sizeof(float));;
+x6214[0] = 1.0f;
+float* x6216 = (float*)myMalloc(1 * sizeof(float));;
+x6216[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1024,256,x6214,x949,1024,x6216, x1325, 1024, x949,1024));
+arrayFill<<<28, 512>>>(x1325, 0.0f, 262144);
+float* x6220 = (float*)myMalloc(1 * sizeof(float));;
+x6220[0] = 1.0f;
+float* x6222 = (float*)myMalloc(1 * sizeof(float));;
+x6222[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6220,x952,1,x6222, x1326, 1, x952,1));
+arrayFill<<<28, 512>>>(x1326, 0.0f, 256);
+float* x6226 = (float*)myMalloc(1 * sizeof(float));;
+x6226[0] = 1.0f;
+float* x6228 = (float*)myMalloc(1 * sizeof(float));;
+x6228[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6226,x955,1,x6228, x1327, 1, x955,1));
+arrayFill<<<28, 512>>>(x1327, 0.0f, 1024);
+float* x6232 = (float*)myMalloc(1 * sizeof(float));;
+x6232[0] = 1.0f;
+float* x6234 = (float*)myMalloc(1 * sizeof(float));;
+x6234[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x6232,x958,256,x6234, x1328, 256, x958,256));
+arrayFill<<<28, 512>>>(x1328, 0.0f, 262144);
+float* x6238 = (float*)myMalloc(1 * sizeof(float));;
+x6238[0] = 1.0f;
+float* x6240 = (float*)myMalloc(1 * sizeof(float));;
+x6240[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6238,x961,1,x6240, x1329, 1, x961,1));
+arrayFill<<<28, 512>>>(x1329, 0.0f, 128);
+float* x6244 = (float*)myMalloc(1 * sizeof(float));;
+x6244[0] = 1.0f;
+float* x6246 = (float*)myMalloc(1 * sizeof(float));;
+x6246[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6244,x964,1,x6246, x1330, 1, x964,1));
+arrayFill<<<28, 512>>>(x1330, 0.0f, 512);
+float* x6250 = (float*)myMalloc(1 * sizeof(float));;
+x6250[0] = 1.0f;
+float* x6252 = (float*)myMalloc(1 * sizeof(float));;
+x6252[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6250,x967,1,x6252, x1331, 1, x967,1));
+arrayFill<<<28, 512>>>(x1331, 0.0f, 512);
+float* x6256 = (float*)myMalloc(1 * sizeof(float));;
+x6256[0] = 1.0f;
+float* x6258 = (float*)myMalloc(1 * sizeof(float));;
+x6258[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6256,x970,1,x6258, x1332, 1, x970,1));
+arrayFill<<<28, 512>>>(x1332, 0.0f, 128);
+float* x6262 = (float*)myMalloc(1 * sizeof(float));;
+x6262[0] = 1.0f;
+float* x6264 = (float*)myMalloc(1 * sizeof(float));;
+x6264[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x6262,x973,2304,x6264, x1333, 2304, x973,2304));
+arrayFill<<<28, 512>>>(x1333, 0.0f, 589824);
+float* x6268 = (float*)myMalloc(1 * sizeof(float));;
+x6268[0] = 1.0f;
+float* x6270 = (float*)myMalloc(1 * sizeof(float));;
+x6270[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2048,10,x6268,x976,2048,x6270, x1334, 2048, x976,2048));
+arrayFill<<<28, 512>>>(x1334, 0.0f, 20480);
+float* x6274 = (float*)myMalloc(1 * sizeof(float));;
+x6274[0] = 1.0f;
+float* x6276 = (float*)myMalloc(1 * sizeof(float));;
+x6276[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6274,x979,1,x6276, x1335, 1, x979,1));
+arrayFill<<<28, 512>>>(x1335, 0.0f, 256);
+float* x6280 = (float*)myMalloc(1 * sizeof(float));;
+x6280[0] = 1.0f;
+float* x6282 = (float*)myMalloc(1 * sizeof(float));;
+x6282[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6280,x982,1,x6282, x1336, 1, x982,1));
+arrayFill<<<28, 512>>>(x1336, 0.0f, 256);
+float* x6286 = (float*)myMalloc(1 * sizeof(float));;
+x6286[0] = 1.0f;
+float* x6288 = (float*)myMalloc(1 * sizeof(float));;
+x6288[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6286,x985,1,x6288, x1337, 1, x985,1));
+arrayFill<<<28, 512>>>(x1337, 0.0f, 256);
+float* x6292 = (float*)myMalloc(1 * sizeof(float));;
+x6292[0] = 1.0f;
+float* x6294 = (float*)myMalloc(1 * sizeof(float));;
+x6294[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6292,x988,1,x6294, x1338, 1, x988,1));
+arrayFill<<<28, 512>>>(x1338, 0.0f, 1024);
+float* x6298 = (float*)myMalloc(1 * sizeof(float));;
+x6298[0] = 1.0f;
+float* x6300 = (float*)myMalloc(1 * sizeof(float));;
+x6300[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6298,x991,1,x6300, x1339, 1, x991,1));
+arrayFill<<<28, 512>>>(x1339, 0.0f, 1024);
+float* x6304 = (float*)myMalloc(1 * sizeof(float));;
+x6304[0] = 1.0f;
+float* x6306 = (float*)myMalloc(1 * sizeof(float));;
+x6306[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 64,64,x6304,x994,64,x6306, x1340, 64, x994,64));
+arrayFill<<<28, 512>>>(x1340, 0.0f, 4096);
+float* x6310 = (float*)myMalloc(1 * sizeof(float));;
+x6310[0] = 1.0f;
+float* x6312 = (float*)myMalloc(1 * sizeof(float));;
+x6312[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6310,x997,1,x6312, x1341, 1, x997,1));
+arrayFill<<<28, 512>>>(x1341, 0.0f, 512);
+float* x6316 = (float*)myMalloc(1 * sizeof(float));;
+x6316[0] = 1.0f;
+float* x6318 = (float*)myMalloc(1 * sizeof(float));;
+x6318[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1152,128,x6316,x1000,1152,x6318, x1342, 1152, x1000,1152));
+arrayFill<<<28, 512>>>(x1342, 0.0f, 147456);
+float* x6322 = (float*)myMalloc(1 * sizeof(float));;
+x6322[0] = 1.0f;
+float* x6324 = (float*)myMalloc(1 * sizeof(float));;
+x6324[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6322,x1003,1,x6324, x1343, 1, x1003,1));
+arrayFill<<<28, 512>>>(x1343, 0.0f, 128);
+float* x6328 = (float*)myMalloc(1 * sizeof(float));;
+x6328[0] = 1.0f;
+float* x6330 = (float*)myMalloc(1 * sizeof(float));;
+x6330[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6328,x1006,1,x6330, x1344, 1, x1006,1));
+arrayFill<<<28, 512>>>(x1344, 0.0f, 256);
+float* x6334 = (float*)myMalloc(1 * sizeof(float));;
+x6334[0] = 1.0f;
+float* x6336 = (float*)myMalloc(1 * sizeof(float));;
+x6336[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6334,x1009,1,x6336, x1345, 1, x1009,1));
+arrayFill<<<28, 512>>>(x1345, 0.0f, 1024);
+float* x6340 = (float*)myMalloc(1 * sizeof(float));;
+x6340[0] = 1.0f;
+float* x6342 = (float*)myMalloc(1 * sizeof(float));;
+x6342[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x6340,x1012,1,x6342, x1346, 1, x1012,1));
+arrayFill<<<28, 512>>>(x1346, 0.0f, 2048);
+float* x6346 = (float*)myMalloc(1 * sizeof(float));;
+x6346[0] = 1.0f;
+float* x6348 = (float*)myMalloc(1 * sizeof(float));;
+x6348[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6346,x1015,1,x6348, x1347, 1, x1015,1));
+arrayFill<<<28, 512>>>(x1347, 0.0f, 256);
+float* x6352 = (float*)myMalloc(1 * sizeof(float));;
+x6352[0] = 1.0f;
+float* x6354 = (float*)myMalloc(1 * sizeof(float));;
+x6354[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6352,x1018,1,x6354, x1348, 1, x1018,1));
+arrayFill<<<28, 512>>>(x1348, 0.0f, 256);
+float* x6358 = (float*)myMalloc(1 * sizeof(float));;
+x6358[0] = 1.0f;
+float* x6360 = (float*)myMalloc(1 * sizeof(float));;
+x6360[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6358,x1021,1,x6360, x1349, 1, x1021,1));
+arrayFill<<<28, 512>>>(x1349, 0.0f, 128);
+float* x6364 = (float*)myMalloc(1 * sizeof(float));;
+x6364[0] = 1.0f;
+float* x6366 = (float*)myMalloc(1 * sizeof(float));;
+x6366[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6364,x1024,1,x6366, x1350, 1, x1024,1));
+arrayFill<<<28, 512>>>(x1350, 0.0f, 256);
+float* x6370 = (float*)myMalloc(1 * sizeof(float));;
+x6370[0] = 1.0f;
+float* x6372 = (float*)myMalloc(1 * sizeof(float));;
+x6372[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6370,x1027,1,x6372, x1351, 1, x1027,1));
+arrayFill<<<28, 512>>>(x1351, 0.0f, 64);
+float* x6376 = (float*)myMalloc(1 * sizeof(float));;
+x6376[0] = 1.0f;
+float* x6378 = (float*)myMalloc(1 * sizeof(float));;
+x6378[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x6376,x1030,1,x6378, x1352, 1, x1030,1));
+arrayFill<<<28, 512>>>(x1352, 0.0f, 2048);
+float* x6382 = (float*)myMalloc(1 * sizeof(float));;
+x6382[0] = 1.0f;
+float* x6384 = (float*)myMalloc(1 * sizeof(float));;
+x6384[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6382,x1033,1,x6384, x1353, 1, x1033,1));
+arrayFill<<<28, 512>>>(x1353, 0.0f, 512);
+float* x6388 = (float*)myMalloc(1 * sizeof(float));;
+x6388[0] = 1.0f;
+float* x6390 = (float*)myMalloc(1 * sizeof(float));;
+x6390[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6388,x1036,1,x6390, x1354, 1, x1036,1));
+arrayFill<<<28, 512>>>(x1354, 0.0f, 256);
+float* x6394 = (float*)myMalloc(1 * sizeof(float));;
+x6394[0] = 1.0f;
+float* x6396 = (float*)myMalloc(1 * sizeof(float));;
+x6396[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6394,x1039,1,x6396, x1355, 1, x1039,1));
+arrayFill<<<28, 512>>>(x1355, 0.0f, 1024);
+float* x6400 = (float*)myMalloc(1 * sizeof(float));;
+x6400[0] = 1.0f;
+float* x6402 = (float*)myMalloc(1 * sizeof(float));;
+x6402[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x6400,x1042,2304,x6402, x1356, 2304, x1042,2304));
+arrayFill<<<28, 512>>>(x1356, 0.0f, 589824);
+float* x6406 = (float*)myMalloc(1 * sizeof(float));;
+x6406[0] = 1.0f;
+float* x6408 = (float*)myMalloc(1 * sizeof(float));;
+x6408[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6406,x1045,1,x6408, x1357, 1, x1045,1));
+arrayFill<<<28, 512>>>(x1357, 0.0f, 256);
+float* x6412 = (float*)myMalloc(1 * sizeof(float));;
+x6412[0] = 1.0f;
+float* x6414 = (float*)myMalloc(1 * sizeof(float));;
+x6414[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6412,x1048,1,x6414, x1358, 1, x1048,1));
+arrayFill<<<28, 512>>>(x1358, 0.0f, 64);
+float* x6418 = (float*)myMalloc(1 * sizeof(float));;
+x6418[0] = 1.0f;
+float* x6420 = (float*)myMalloc(1 * sizeof(float));;
+x6420[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6418,x1051,1,x6420, x1359, 1, x1051,1));
+arrayFill<<<28, 512>>>(x1359, 0.0f, 128);
+float* x6424 = (float*)myMalloc(1 * sizeof(float));;
+x6424[0] = 1.0f;
+float* x6426 = (float*)myMalloc(1 * sizeof(float));;
+x6426[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6424,x1054,1,x6426, x1360, 1, x1054,1));
+arrayFill<<<28, 512>>>(x1360, 0.0f, 256);
+float* x6430 = (float*)myMalloc(1 * sizeof(float));;
+x6430[0] = 1.0f;
+float* x6432 = (float*)myMalloc(1 * sizeof(float));;
+x6432[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6430,x1057,1,x6432, x1361, 1, x1057,1));
+arrayFill<<<28, 512>>>(x1361, 0.0f, 256);
+float* x6436 = (float*)myMalloc(1 * sizeof(float));;
+x6436[0] = 1.0f;
+float* x6438 = (float*)myMalloc(1 * sizeof(float));;
+x6438[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,512,x6436,x1060,1,x6438, x1362, 1, x1060,1));
+arrayFill<<<28, 512>>>(x1362, 0.0f, 512);
+float* x6442 = (float*)myMalloc(1 * sizeof(float));;
+x6442[0] = 1.0f;
+float* x6444 = (float*)myMalloc(1 * sizeof(float));;
+x6444[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 512,128,x6442,x1063,512,x6444, x1363, 512, x1063,512));
+arrayFill<<<28, 512>>>(x1363, 0.0f, 65536);
+float* x6448 = (float*)myMalloc(1 * sizeof(float));;
+x6448[0] = 1.0f;
+float* x6450 = (float*)myMalloc(1 * sizeof(float));;
+x6450[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,64,x6448,x1066,1,x6450, x1364, 1, x1066,1));
+arrayFill<<<28, 512>>>(x1364, 0.0f, 64);
+float* x6454 = (float*)myMalloc(1 * sizeof(float));;
+x6454[0] = 1.0f;
+float* x6456 = (float*)myMalloc(1 * sizeof(float));;
+x6456[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,512,x6454,x1069,256,x6456, x1365, 256, x1069,256));
+arrayFill<<<28, 512>>>(x1365, 0.0f, 131072);
+float* x6460 = (float*)myMalloc(1 * sizeof(float));;
+x6460[0] = 1.0f;
+float* x6462 = (float*)myMalloc(1 * sizeof(float));;
+x6462[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6460,x1072,1,x6462, x1366, 1, x1072,1));
+arrayFill<<<28, 512>>>(x1366, 0.0f, 256);
+float* x6466 = (float*)myMalloc(1 * sizeof(float));;
+x6466[0] = 1.0f;
+float* x6468 = (float*)myMalloc(1 * sizeof(float));;
+x6468[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,2048,x6466,x1075,1,x6468, x1367, 1, x1075,1));
+arrayFill<<<28, 512>>>(x1367, 0.0f, 2048);
+float* x6472 = (float*)myMalloc(1 * sizeof(float));;
+x6472[0] = 1.0f;
+float* x6474 = (float*)myMalloc(1 * sizeof(float));;
+x6474[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6472,x1078,1,x6474, x1368, 1, x1078,1));
+arrayFill<<<28, 512>>>(x1368, 0.0f, 128);
+float* x6478 = (float*)myMalloc(1 * sizeof(float));;
+x6478[0] = 1.0f;
+float* x6480 = (float*)myMalloc(1 * sizeof(float));;
+x6480[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2304,256,x6478,x1081,2304,x6480, x1369, 2304, x1081,2304));
+arrayFill<<<28, 512>>>(x1369, 0.0f, 589824);
+float* x6484 = (float*)myMalloc(1 * sizeof(float));;
+x6484[0] = 1.0f;
+float* x6486 = (float*)myMalloc(1 * sizeof(float));;
+x6486[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6484,x1084,1,x6486, x1370, 1, x1084,1));
+arrayFill<<<28, 512>>>(x1370, 0.0f, 1024);
+float* x6490 = (float*)myMalloc(1 * sizeof(float));;
+x6490[0] = 1.0f;
+float* x6492 = (float*)myMalloc(1 * sizeof(float));;
+x6492[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6490,x1087,1,x6492, x1371, 1, x1087,1));
+arrayFill<<<28, 512>>>(x1371, 0.0f, 256);
+float* x6496 = (float*)myMalloc(1 * sizeof(float));;
+x6496[0] = 1.0f;
+float* x6498 = (float*)myMalloc(1 * sizeof(float));;
+x6498[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 2048,512,x6496,x1090,2048,x6498, x1372, 2048, x1090,2048));
+arrayFill<<<28, 512>>>(x1372, 0.0f, 1048576);
+float* x6502 = (float*)myMalloc(1 * sizeof(float));;
+x6502[0] = 1.0f;
+float* x6504 = (float*)myMalloc(1 * sizeof(float));;
+x6504[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6502,x1093,1,x6504, x1373, 1, x1093,1));
+arrayFill<<<28, 512>>>(x1373, 0.0f, 128);
+float* x6508 = (float*)myMalloc(1 * sizeof(float));;
+x6508[0] = 1.0f;
+float* x6510 = (float*)myMalloc(1 * sizeof(float));;
+x6510[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6508,x1096,1,x6510, x1374, 1, x1096,1));
+arrayFill<<<28, 512>>>(x1374, 0.0f, 1024);
+float* x6514 = (float*)myMalloc(1 * sizeof(float));;
+x6514[0] = 1.0f;
+float* x6516 = (float*)myMalloc(1 * sizeof(float));;
+x6516[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,128,x6514,x1099,1,x6516, x1375, 1, x1099,1));
+arrayFill<<<28, 512>>>(x1375, 0.0f, 128);
+float* x6520 = (float*)myMalloc(1 * sizeof(float));;
+x6520[0] = 1.0f;
+float* x6522 = (float*)myMalloc(1 * sizeof(float));;
+x6522[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 256,1024,x6520,x1102,256,x6522, x1376, 256, x1102,256));
+arrayFill<<<28, 512>>>(x1376, 0.0f, 262144);
+float* x6526 = (float*)myMalloc(1 * sizeof(float));;
+x6526[0] = 1.0f;
+float* x6528 = (float*)myMalloc(1 * sizeof(float));;
+x6528[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6526,x1105,1,x6528, x1377, 1, x1105,1));
+arrayFill<<<28, 512>>>(x1377, 0.0f, 256);
+float* x6532 = (float*)myMalloc(1 * sizeof(float));;
+x6532[0] = 1.0f;
+float* x6534 = (float*)myMalloc(1 * sizeof(float));;
+x6534[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,256,x6532,x1108,1,x6534, x1378, 1, x1108,1));
+arrayFill<<<28, 512>>>(x1378, 0.0f, 256);
+float* x6538 = (float*)myMalloc(1 * sizeof(float));;
+x6538[0] = 1.0f;
+float* x6540 = (float*)myMalloc(1 * sizeof(float));;
+x6540[0] = -0.005f;
+CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, 1,1024,x6538,x1111,1,x6540, x1379, 1, x1111,1));
+arrayFill<<<28, 512>>>(x1379, 0.0f, 1024);
+int32_t x6544 = x1396 + 1;
+int32_t x6546 = x6544 % x6545;
+bool x6547 = x6546 == 0;
+if (x6547) {
+float x6552 = x1390;
+double x6548 = (double)x1397;
+double x6549 = 100.0 * x6548;
+double x6551 = x6549 / x6550;
+float x6553 = (float)x1396;
+float x6554 = x6552 / x6553;
+printf("Train epoch %d: [%d/%d (%.0f%%)] Average Loss: %.6f\n",x1386,x1397,x11,x6551,x6554);
 fflush(stdout);
 } else {
 }
-int64_t x6556 = (long)mallocAddr;
-int64_t x6557 = x6556 - x1382;
-memset((void*)x1382, 0, x6557);
+int64_t x6559 = (long)mallocAddr;
+int64_t x6560 = x6559 - x1382;
+memset((void*)x1382, 0, x6560);
 mallocAddr = (void*)x1382;
-int64_t x6560 = (long)gpuMallocAddr;
-int64_t x6561 = x6560 - x1383;
-cudaMemset((void*)x1383, 0, x6561);
+int64_t x6563 = (long)gpuMallocAddr;
+int64_t x6564 = x6563 - x1383;
+cudaMemset((void*)x1383, 0, x6564);
 gpuMallocAddr = (void*)x1383;
 
 }
 gettimeofday(&end_1, NULL);
 timeval_subtract(&diff_1, &end_1, &begin_1);;
-int64_t x6568 = ((diff_1.tv_sec * 1000000L) + (diff_1.tv_usec));
-double x6569 = (double)x6568;
-double x6570 = x6569 / 1000000.0;
-x1381[x1386] = x6570;
-int64_t x6572 = x6568 / 1000LL;
-int64_t x6574 = x6568 / x6573;
-printf("Training completed in %ldms (%ld us/images)\n",x6572,x6574);
-float x6576 = x1390;
-float x6578 = x6576 / x6577;
-double x6579 = (double)x6578;
-x1380[x1386] = x6579;
+int64_t x6571 = ((diff_1.tv_sec * 1000000L) + (diff_1.tv_usec));
+double x6572 = (double)x6571;
+double x6573 = x6572 / 1000000.0;
+x1381[x1386] = x6573;
+int64_t x6575 = x6571 / 1000LL;
+int64_t x6577 = x6571 / x6576;
+printf("Training completed in %ldms (%ld us/images)\n",x6575,x6577);
+float x6579 = x1390;
+float x6581 = x6579 / x6580;
+double x6582 = (double)x6581;
+x1380[x1386] = x6582;
 
 }
 gettimeofday(&end_0, NULL);
 timeval_subtract(&diff_0, &end_0, &begin_0);;
-int64_t x6585 = ((diff_0.tv_sec * 1000000L) + (diff_0.tv_usec));
+int64_t x6588 = ((diff_0.tv_sec * 1000000L) + (diff_0.tv_usec));
 sort(x1381, x1381 + 4);
-double x6591 = x1381[2];
-int64_t x6592 = (long)fopen(x0, "w");
-fprintf((FILE *)x6592, "unit: %s\n", "1 epoch");
-for(int x6594=0; x6594 < 4; x6594++) {
-double x6595 = x1380[x6594];
-fprintf((FILE *)x6592, "%lf\n", x6595);
+double x6594 = x1381[2];
+int64_t x6595 = (long)fopen(x0, "w");
+fprintf((FILE *)x6595, "unit: %s\n", "1 epoch");
+for(int x6597=0; x6597 < 4; x6597++) {
+double x6598 = x1380[x6597];
+fprintf((FILE *)x6595, "%lf\n", x6598);
 
 }
-fprintf((FILE *)x6592, "run time: %lf %lf\n", x39, x6591);
-fclose((FILE*)x6592);
+fprintf((FILE *)x6595, "run time: %lf %lf\n", x39, x6594);
+fclose((FILE*)x6595);
 // Backend cleanup.
 CUBLAS_CALL(cublasDestroy(cublasHandle));
 CUDA_CALL(cudaFree(gpuMallocBase));

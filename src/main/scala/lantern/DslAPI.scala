@@ -451,7 +451,7 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  data[index] = value;
       |}
       |
-      |__global__ void arrayFill_greg(float* data, float value, int size) {
+      |__global__ void arrayFill(float* data, float value, int size) {
       |  int stride = gridDim.x * blockDim.x;
       |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
       |  for (int i = tid; i < size; i += stride) data[i] = value;
@@ -1167,7 +1167,8 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCud
       super.templateRawCode +
       (concatMap.values mkString("\n\n")) + (mask4dKernelMap.values map(_._1) mkString("\n\n")) +
       (permuteKernelMap.values map(_._1) mkString("\n\n")) + (permuteGradKernelMap.values map(_._1) mkString("\n\n")) +
-      (mulSubKernelMap.values map(_._1) mkString("\n\n")) + (mulSubGradKernelMap.values map(_._1) mkString("\n\n"))
+      (mulSubKernelMap.values map(_._1) mkString("\n\n")) + (mulSubGradKernelMap.values map(_._1) mkString("\n\n")) +
+      (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
     }
   }
 }
