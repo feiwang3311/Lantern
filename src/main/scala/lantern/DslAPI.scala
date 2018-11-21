@@ -733,6 +733,16 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |    if (tid < size) in_d[tid] += out_d[tid] * 2 * in_x[tid];
       |}
       |
+      |__global__ void clipAt(float* in, float bound, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) {
+      |      if (in[tid] > bound) in[tid] = bound;
+      |      if (in[tid] < -bound) in[tid] = -bound;
+      |    }
+      |}
+      |
       |__global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int xstrides2, int xstrides3, int scalarCount) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  int stride = gridDim.x * blockDim.x;

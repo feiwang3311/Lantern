@@ -381,6 +381,13 @@ trait TensorDsl extends DslOps with Diff {
     // By default, the uniform distribution is over [-0.5, 0.5].
     def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor
 
+    def clipAt(x: Tensor, bound: Float): Unit
+    def mutate(x: Tensor, delta: Rep[Int] => Rep[Float]): Unit
+    def mapInPlace(x: Tensor, op: Rep[Float] => Rep[Float]): Unit
+    def changeTo(x: Tensor, gen: Rep[Int] => Rep[Float]): Unit
+    def map(x: Tensor, op: Rep[Float] => Rep[Float]): Tensor
+    def fold(init: Rep[Float])(x: Tensor, op: (Rep[Float], Rep[Float]) => Rep[Float]): Rep[Float]
+
     // Compute vector-vector dot product, i.e. inner product.
     // [V] dot [V] => [1] (scalar)
     def vectorVectorDot(x: Tensor, y: Tensor): Tensor
@@ -660,6 +667,29 @@ trait TensorDsl extends DslOps with Diff {
       new Tensor(res, dims)
     }
 
+    @virtualize
+    override def clipAt(x: Tensor, bound: Float) = {
+      for (i <- DataLoop(x.scalarCount)) {
+        val temp = x.data(i)
+        if (temp > bound) x.data(i) = bound
+        if (temp < -1.0f * bound) x.data(i) = -1.0f * bound
+      }
+    }
+
+    override def mutate(x: Tensor, delta: Rep[Int] => Rep[Float]): Unit = for (i <- DataLoop(x.scalarCount)) x.data(i) += delta(i)
+    override def mapInPlace(x: Tensor, op: Rep[Float] => Rep[Float]): Unit = for (i <- DataLoop(x.scalarCount)) x.data(i) = op(x.data(i))
+    override def changeTo(x: Tensor, gen: Rep[Int] => Rep[Float]): Unit = for (i <- DataLoop(x.scalarCount)) x.data(i) = gen(i)
+    override def map(x: Tensor, op: Rep[Float] => Rep[Float]): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      for (i <- DataLoop(x.scalarCount)) res(i) = op(x.data(i))
+      new Tensor(res, x.shape)
+    }
+    override def fold(init: Rep[Float])(x: Tensor, op: (Rep[Float], Rep[Float]) => Rep[Float]): Rep[Float] = {
+      val res = var_new[Float](init)
+      for (i <- DataLoop(x.scalarCount)) var_assign(res, op(res, x.data(i)))
+      res
+    }
+
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       assertC(x.shape(0) == y.shape(0), "vector vector dot not the same %d %d", x.shape(0), y.shape(0))
       val value = var_new(0.0f)
@@ -724,7 +754,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    // TODO (Fei Wang) need to verify the performance of this function!
     @virtualize
     def elementWiseOpWithBroadCast(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
       Tensor.dimBroadcast(x.shape, y.shape) match {
@@ -738,46 +767,6 @@ trait TensorDsl extends DslOps with Diff {
             val idxY = (yStridesShadow zip idx).foldLeft(unit(0)){case (a, (b, c)) => a + b * c}
             op(x.data(idxX), y.data(idxY))
           })
-          res
-        }
-        case _ => ???
-      }
-    }
-
-    // TODO (Fei Wang) remove after confirming the performance of the other function
-    @virtualize
-    def elementWiseOpWithBroadCast2(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])) = {
-      Tensor.dimBroadcast(x.shape, y.shape) match {
-        // this check is not longer valid because dimBroadcast never returns None
-        // case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
-        case Some((xShape, yShape, resShape)) => {
-          val resData = mallocArray[Float](resShape.scalarCount)
-          val res = new Tensor(resData, resShape)
-
-          def inplace(offX: Rep[Int], offY: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
-            val offres = var_new[Int](offRes)
-            val offx = var_new[Int](offX)
-            val offy = var_new[Int](offY)
-
-            // Handle scalar tensor case.
-            // TODO: Unify with logic below.
-            if (resShape.isEmpty) {
-              resData(offres) = op(x.data(offx), y.data(offy))
-              return
-            }
-
-            for (i <- DataLoop(resShape(dim))) {
-              if (dim == resShape.size - 1) {
-                resData(offres) = op(x.data(offx), y.data(offy))
-              } else {
-                inplace(offx, offy, offres, dim + 1)
-              }
-              offres += resShape.strides(dim)
-              if (xShape(dim) > 1) offx += xShape.strides(dim)
-              if (yShape(dim) > 1) offy += yShape.strides(dim)
-            }
-          }
-          inplace(0, 0, 0, 0)
           res
         }
         case _ => ???
@@ -803,45 +792,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    // TODO (Fei Wang) remove after confirming the performance of the other function
-    @virtualize
-    def backpropElementWiseOpWithBroadCast2(in1: TensorR, that: TensorR, y: TensorR, opThis: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float]), opThat: ((Rep[Float], Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
-      // assume y.x = elementWiseOpWithBroadCast(this.x, that.x, someOp)
-      // assume that opThis returns the increment of this.d; opThat returns the increment of that.d
-      // both opThis and opThat takes this.x, that.x, and y.d as parameters
-      Tensor.dimBroadcast(in1.x.shape, that.x.shape) match {
-        case None => throw new IllegalArgumentException(s"dimensions of tensors do not match! ${in1.x.shape.seq} != ${that.x.shape.seq}")
-        case Some((thisShape, thatShape, yShape)) => {
-          def inplace(offThis: Rep[Int], offThat: Rep[Int], offY: Rep[Int], dim: Int): Unit = {
-            val offthis = var_new[Int](offThis)
-            val offthat = var_new[Int](offThat)
-            val offy = var_new[Int](offY)
-
-            // Handle scalar tensor case.
-            // TODO: Unify with logic below.
-            if (yShape.isEmpty) {
-              in1.d.data(offthis) += opThis(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
-              that.d.data(offthat) += opThat(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
-              return
-            }
-
-            for (i <- DataLoop(yShape(dim))) {
-              if (dim == yShape.size - 1) {
-                in1.d.data(offthis) += opThis(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
-                that.d.data(offthat) += opThat(in1.x.data(offthis), that.x.data(offthat), y.d.data(offy))
-              } else {
-                inplace(offthis, offthat, offy, dim + 1)
-              }
-              offy += yShape.strides(dim)
-              if (thisShape(dim) > 1) offthis += thisShape.strides(dim)
-              if (thatShape(dim) > 1) offthat += thatShape.strides(dim)
-            }
-          }
-          inplace(0, 0, 0, 0)
-        }
-      }
-    }
-
     @virtualize
     // x += op(x, y) (with potentially broadcasting y, or reducing y (reverse of broadcasting x))
     def inplaceElementWiseOpWithBroadCastOrReduce(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
@@ -858,33 +808,6 @@ trait TensorDsl extends DslOps with Diff {
       }
     }
 
-    // TODO (Fei Wang) remove after confirming the performance of the other function
-    @virtualize
-    def inplaceElementWiseOpWithBroadCastOrReduce2(x: Tensor, y: Tensor, op: ((Rep[Float], Rep[Float]) => Rep[Float])): Unit = {
-      Tensor.dimBroadcast(x.shape, y.shape) match {
-        case None => throw new IllegalArgumentException(s"dimensions of vector do not match! ${x.shape.seq} != ${y.shape.seq}")
-        case Some((xShape, yShape, resShape)) => {
-
-          def inplace(offX: Rep[Int], offY: Rep[Int], offRes: Rep[Int], dim: Int): Unit = {
-            val offres = var_new[Int](offRes)
-            val offx = var_new[Int](offX)
-            val offy = var_new[Int](offY)
-            for (i <- DataLoop(resShape(dim))) {
-              if (dim == resShape.size - 1) {
-                x.data(offx) = op(x.data(offx), y.data(offy))
-              } else {
-                inplace(offx, offy, offres, dim + 1)
-              }
-              offres += resShape.strides(dim)
-              if (xShape(dim) > 1) offx += xShape.strides(dim)
-              if (yShape(dim) > 1) offy += yShape.strides(dim)
-            }
-          }
-          inplace(0, 0, 0, 0)
-        }
-      }
-    }
-
     override def plusBias(main: Tensor, bias: Tensor): Tensor = {
       this.inplaceElementWiseOpWithBroadCastOrReduce(main, bias, (_ + _))
       main
@@ -894,19 +817,19 @@ trait TensorDsl extends DslOps with Diff {
       if (!bias.isInput) this.inplaceElementWiseOpWithBroadCastOrReduce(bias.d, main.d, (_ + _))
     }
 
-    override def +(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s + y)
+    override def +(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s + y)
     override def +(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ + _)
 
-    override def +=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s + y)
+    override def +=(x: Tensor, y: Rep[Float]): Unit = mapInPlace(x, s => s + y)
     override def +=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ + _))
 
-    override def -(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s - y)
+    override def -(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s - y)
     override def -(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ - _)
 
-    override def -=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s - y)
+    override def -=(x: Tensor, y: Rep[Float]): Unit = mapInPlace(x, s => s - y)
     override def -=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ - _))
 
-    override def *(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s * y)
+    override def *(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s * y)
     override def *(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ * _)
 
     override def mul_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
@@ -915,13 +838,13 @@ trait TensorDsl extends DslOps with Diff {
       backpropElementWiseOpWithBroadCast(x, y, output, opThis, opThat)
     }
 
-    override def *=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s * y)
+    override def *=(x: Tensor, y: Rep[Float]): Unit = mapInPlace(x, s => s * y)
     override def *=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ * _))
 
-    override def /(x: Tensor, y: Rep[Float]): Tensor = x.map(s => s / y)
+    override def /(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s / y)
     override def /(x: Tensor, y: Tensor): Tensor = elementWiseOpWithBroadCast(x, y, _ / _)
 
-    override def /=(x: Tensor, y: Rep[Float]): Unit = x.mapInPlace(s => s / y)
+    override def /=(x: Tensor, y: Rep[Float]): Unit = mapInPlace(x, s => s / y)
     override def /=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ / _))
 
     override def mul_sub(in1: Tensor, in2: Tensor): Tensor = in1 * in2
@@ -1862,48 +1785,12 @@ trait TensorDsl extends DslOps with Diff {
     // i inclued, j excluded
     def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i) +: shape.tail)
 
-    // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
-    // OR, should we depend this function on other function such as map?
-    @virtualize
-    def clipAt(bound: Float) = {
-      for (i <- DataLoop(scalarCount)) {
-        val temp = data(i)
-        if (temp > bound) data(i) = bound
-        if (temp < -1.0f * bound) data(i) = -1.0f * bound
-      }
-    }
-
-    // OR, do we really need this function here?
-    // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
-    def mutate(delta: Rep[Int] => Rep[Float]) = {
-      for (i <- DataLoop(scalarCount)) this.data(i) += delta(i)
-    }
-
-    // OR, do we really need this function here?
-    // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
-    def mapInPlace(op: Rep[Float] => Rep[Float]) = {
-      for (i <- DataLoop(scalarCount)) this.data(i) = op(this.data(i))
-    }
-
-    // TODO (Fei Wang): This function needs to be backend dependent (GPU version needs to use user defined kernel)
-    def changeTo(gen: Rep[Int] => Rep[Float]) = {
-      for (i <- DataLoop(scalarCount)) this.data(i) = gen(i)
-    }
-
-    // OR, do we really need this function here?
-    def map(op: Rep[Float] => Rep[Float]) = {
-      val res = backend.mallocArray[Float](scalarCount)
-      // TODO (Fei Wang): This assignment needs to be backend dependent (GPU version needs to use user defined kernel)
-      for (i <- DataLoop(scalarCount)) res(i) = op(this.data(i))
-      new Tensor(res, shape)
-    }
-
-    // TODO (Fei Wang): either remove it or make it backend dependent
-    def fold(init: Rep[Float])(op: (Rep[Float], Rep[Float]) => Rep[Float]) = {
-      val res = var_new[Float](init)
-      for (i <- DataLoop(scalarCount)) var_assign(res, op(res, this.data(i)))
-      res
-    }
+    def clipAt(bound: Float) = backend.clipAt(this, bound)
+    def mutate(delta: Rep[Int] => Rep[Float]) = backend.mutate(this, delta)
+    def mapInPlace(op: Rep[Float] => Rep[Float]) = backend.mapInPlace(this, op)
+    def changeTo(gen: Rep[Int] => Rep[Float]) = backend.changeTo(this, gen)
+    def map(op: Rep[Float] => Rep[Float]) = backend.map(this, op)
+    def fold(init: Rep[Float])(op: (Rep[Float], Rep[Float]) => Rep[Float]) = backend.fold(init)(this, op)
 
     def plusBias(that: Tensor): Tensor = backend.plusBias(this, that)
 
@@ -2024,7 +1911,6 @@ trait TensorDsl extends DslOps with Diff {
     def batchNorm1DTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) =
       backend.batchNorm1DTraining(this, scale, bias, runningMean, runningVar)
 
-    // NOTE: this function has nothing to do with Batch Normalization. Sorry for the confusing name
     @virtualize
     def batchNormAv() = {
       assert(this.rank == 4, "tensor for batch normal averaging should have 4 dimensions")
@@ -2122,17 +2008,7 @@ trait TensorDsl extends DslOps with Diff {
       backend.ctcLoss(TensorR(this), inputLengths, labels, labelLengths)
 
     @virtualize
-    def resize(dims: Rep[Int]*) = {
-
-      Tensor(this.data, resizeDim(this.scalarCount, dims): _*)
-
-      // assert(SeqRBOps(dims).count(_ < 0) <= 1, s"at most one negative dimension in resize.")
-      // val new_dims: Seq[Rep[Int]] = dims.map(x => if (x > 0) x else {this.scalarCount / dims.filterProduct(_ > 0)})
-      // assert(new_dims.product1 == this.scalarCount, s"dims: $new_dims != scalarCount: $scalarCount")
-      // // Danger !!!! (Fei Wang): disabling computation for -1 size without checking!!!
-      // Tensor(this.data, new_dims : _*)
-      // // Tensor(this.data, dims : _*)
-    }
+    def resize(dims: Rep[Int]*) = Tensor(this.data, resizeDim(this.scalarCount, dims): _*)
 
     @virtualize
     def amax() = this.fold(0.0f)((agg, x) => if (Math.abs(x) > Math.abs(agg)) x else agg)
@@ -3550,6 +3426,19 @@ trait TensorDslCublas extends TensorDsl with GPUOps {
     // TODO: Implement random initialization using cuRAND API.
     override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor =
       BackendCPU().randinit(dims, scale, seed).toGPU()
+
+    override def clipAt(x: Tensor, bound: Float) = {
+      val size = x.scalarCount
+      val nGrid = 28
+      unchecked[Unit](s"clipAt<<<${nGrid}, 512>>>(", x.data, ", ", bound, ", ", size, ")")
+    }
+
+    // Cannot implement (Need kernel functions!)
+    override def mutate(x: Tensor, delta: Rep[Int] => Rep[Float]): Unit = ???
+    override def mapInPlace(x: Tensor, op: Rep[Float] => Rep[Float]): Unit = ???
+    override def changeTo(x: Tensor, gen: Rep[Int] => Rep[Float]): Unit = ???
+    override def map(x: Tensor, op: Rep[Float] => Rep[Float]): Tensor = ???
+    override def fold(init: Rep[Float])(x: Tensor, op: (Rep[Float], Rep[Float]) => Rep[Float]): Rep[Float] = ???
 
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-dot
     // NOTE: `sdot` fails when the cuBLAS pointer mode is host (as opposed to device).
