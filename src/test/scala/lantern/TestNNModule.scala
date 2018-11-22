@@ -77,7 +77,6 @@ class ModuleTest extends FunSuite {
         // check registration
         val nameSets = scala.collection.mutable.Set[String]()
         testModule.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
-        System.out.println(nameSets)
         assert(nameSets == Set("other2/bias", "bias", "weight", "other2/weight"))
       }
     }
