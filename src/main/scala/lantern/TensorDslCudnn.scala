@@ -530,18 +530,13 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     @virtualize
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = if (!bias.isInput) {
-      // WARN (Fei Wang): plusBias is abused for non-bias case as well (add residual in resnet)
-      // TODO (Fei Wang): Bandit solution: if bias and main are of the same shape, use AddTensor (by calling cudnnAddBiasTensor)
-      if (main.x.rank == bias.x.rank) {
-        if ((main.x.shape.dims zip bias.x.shape.dims).forallR{case (a, b) => a == b})
-          cudnnAddBiasTensor(main.d, bias.d)
-        else cudnnConvolutionBackwardBias(bias.d, main.d)  // add main.d into bias.d (with reduction)
-      } else cudnnConvolutionBackwardBias(bias.d, main.d)  // add main.d into bias.d (with reduction)
-
-      // if (main.x.shape == bias.x.shape) cudnnAddBiasTensor(main.d, bias.d)  // add main.d into bias.d (in place)
-      // otherwise: use BackwardBias (which may fail if bias,d is more than 1D)
-      // else cudnnConvolutionBackwardBias(bias.d, main.d)  // add main.d into bias.d (with reduction)
-      // TODO (Fei Wang): be more general, use ReduceTensor!
+      val shapeBias = Seq.fill(main.x.rank - bias.x.rank)(unit(1)) ++ bias.x.shape.dims
+      val sameBias = (shapeBias zip main.x.shape.dims).forallR{case (x, y) => x == y}
+      if (sameBias) geam(bias.d, false, 1.0f, main.d, false, 1.0f, bias.d)
+      else {
+        val one = NewArray[Float](1); one(0) = 1
+        cudnnReduceUpdateTensor(bias.d, shapeBias, main.d, main.d.shape, one, one)
+      }
     }
 
     override def plusEqual(base: Tensor, adder: Tensor): Tensor = {
@@ -1367,10 +1362,10 @@ trait TensorDslCudnn extends TensorDslCublas {
       softmaxBackwardHelper(input, res, dim, SoftmaxMode.Log)
     }
 
-    def cudnnReduceUpdateTensor(reciever: Tensor, rDim: Dimensions, provider: Tensor, pDim: Dimensions, alpha: Rep[Array[Float]], beta: Rep[Array[Float]], op: ReductionOp.Value = ReductionOp.Add): Unit = {
+    def cudnnReduceUpdateTensor(receiver: Tensor, rDim: Dimensions, provider: Tensor, pDim: Dimensions, alpha: Rep[Array[Float]], beta: Rep[Array[Float]], op: ReductionOp.Value = ReductionOp.Add): Unit = {
       val rShape: Seq[Rep[Int]] = rDim.dims.padTo(4, unit(1))
       val pShape: Seq[Rep[Int]] = pDim.dims.padTo(4, unit(1))
-      cudnnReduceTensorUnchecked(pShape, provider.data, rShape, reciever.data, op, alpha, beta)
+      cudnnReduceTensorUnchecked(pShape, provider.data, rShape, receiver.data, op, alpha, beta)
     }
 
     def cudnnReduceTensorUnchecked(xShape: Seq[Rep[Int]], xData: Rep[Array[Float]], resShape: Seq[Rep[Int]], resData: Rep[Array[Float]], op: ReductionOp.Value, alpha: Rep[Array[Float]], beta: Rep[Array[Float]]) = {
