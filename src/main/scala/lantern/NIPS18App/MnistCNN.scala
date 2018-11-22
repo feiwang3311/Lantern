@@ -61,7 +61,7 @@ object MnistCNN {
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
 
-      val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, Seq(iChan1, iRow1, iCol1))
+      val train = new DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, Seq(iChan1, iRow1, iCol1))
       train.normalize()
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f
@@ -151,7 +151,7 @@ object MnistCNN {
       val tot1 = NewArray[Long](2)
       val tot2 = NewArray[Long](2)
 
-      val train = new Dataset.DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, Seq(iChan1, iRow1, iCol1))
+      val train = new DataLoader("mnist", true, mean = 0.1307f, std = 0.3081f, Seq(iChan1, iRow1, iCol1))
       train.normalize()
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f

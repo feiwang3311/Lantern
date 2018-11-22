@@ -34,7 +34,7 @@ object Resnet50Onnx {
       val (func, x_dims, y_dims) = (model.inference_func(model.initializer_map_tensor), model.x_dims, model.y_dims)
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
         input.printHead(10, "input")
@@ -54,7 +54,7 @@ object Resnet50Onnx {
       val (func, x_dims, y_dims) = (model.inference_func(initMap), model.x_dims, model.y_dims)
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       train.foreachBatch(batchSize) { (batchIndex: Rep[Int], input: Tensor, target: Rep[Array[Int]]) =>
         input.printHead(10, "input")
@@ -82,7 +82,7 @@ object Resnet50Onnx {
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
       val learning_rate = 0.005f
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
@@ -138,7 +138,7 @@ object Resnet50Onnx {
 
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
       val learning_rate = 0.005f
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data normalized (all prepare time) in %lf sec\\n", prepareTime)
 

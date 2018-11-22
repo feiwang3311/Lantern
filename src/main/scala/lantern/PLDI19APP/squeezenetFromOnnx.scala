@@ -37,7 +37,7 @@ object SqueezeNetOnnx {
 
       // set up data
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data reading in %lf sec\\n", prepareTime)
 
@@ -75,7 +75,7 @@ object SqueezeNetOnnx {
 
       // set up data
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data reading in %lf sec\\n", prepareTime)
 
@@ -118,7 +118,7 @@ object SqueezeNetOnnx {
 
       // set up data
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data reading in %lf sec\\n", prepareTime)
 
@@ -184,7 +184,7 @@ object SqueezeNetOnnx {
 
       // set up data
       val (batchSize, iChan1, iRow1, iCol1) = (64, 3, 32, 32)
-      val train = new Dataset.Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
+      val train = new Cifar10DataLoader(relative_data_dir, true, Seq(iChan1, iRow1, iCol1))
       val prepareTime = dataTimer.getElapsedTime / 1e6f
       printf("Data reading in %lf sec\\n", prepareTime)
 

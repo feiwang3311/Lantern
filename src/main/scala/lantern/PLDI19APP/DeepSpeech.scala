@@ -175,7 +175,7 @@ object DeepSpeech {
       val nbEpoch = 1
 
       // TODO: Replace with real data loader.
-      val data = new Dataset.DeepSpeechDataLoader(data_dir, true)
+      val data = new DeepSpeechDataLoader(data_dir, true)
       val batchSize = data.batchSize
 
       val prepareTime = dataTimer.getElapsedTime / 1e6f

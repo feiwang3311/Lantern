@@ -1168,12 +1168,12 @@ trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorDsl with DslExp
   }
 }
 
-abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with TensorDslCPU with NNModule { self =>
+abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with TensorDslCPU with NNModule with Dataset { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
 }
 
-abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCublas[A, B] with LanternDriver[A, B] with TensorDslCublas with NNModuleCublas { self =>
+abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCublas[A, B] with LanternDriver[A, B] with TensorDslCublas with NNModuleCublas with Dataset { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
   override val codegen = new DslGenCudnn {
@@ -1188,7 +1188,7 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCu
   }
 }
 
-abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] with TensorDslCudnn with NNModuleCudnn { self =>
+abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCudnn[A, B] with LanternDriver[A, B] with TensorDslCudnn with NNModuleCudnn  with Dataset { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
 
