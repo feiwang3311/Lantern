@@ -1436,7 +1436,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for sum op")
       assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
-      +=(input.d, res.d.data(0))
+      unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", input.d.scalarCount, ")")
     }
 
     override def mean(x: Tensor): Tensor = {
