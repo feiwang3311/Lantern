@@ -19,48 +19,6 @@ trait TensorDsl extends DslOps with Diff {
       By using getAllocMem and setAllocMem, we can selectively return a big trunk of memory after one iteration of training.
    **/
 
-  class Timer (val index: Int){
-    unchecked[Unit](s"clock_t begin_$index, end_$index; double time_spent_$index")
-    def startTimer = { unchecked[Unit](s"begin_$index = clock()") }
-    def stopTimer = { unchecked[Unit](s"end_$index = clock()") }
-    def printElapsedTime = {
-      unchecked[Unit](
-        s"end_$index = clock(); printf(",
-        "\"Time elapsed: %f\\n\", ",
-        s"(double)(end_$index - begin_$index) / CLOCKS_PER_SEC)")
-    }
-  }
-
-  object Timer {
-    var index: Int = 0
-    def apply(): Timer = {
-      val timer = new Timer(index)
-      index += 1
-      timer
-    }
-  }
-
-  def get_time() = unchecked[Double]("((double)clock() / CLOCKS_PER_SEC)")
-
-  class Timer2 (index: Int) {
-    unchecked[Unit](s"struct timeval begin_$index, end_$index, diff_$index")
-    def startTimer = { unchecked[Unit](s"gettimeofday(&begin_$index, NULL)") }
-    def getElapsedTime: Rep[Long] = {
-      unchecked[Unit](s"gettimeofday(&end_$index, NULL)")
-      unchecked[Unit](s"timeval_subtract(&diff_$index, &end_$index, &begin_$index);")
-      unchecked[Long](s"((diff_$index.tv_sec * 1000000L) + (diff_$index.tv_usec))")
-    }
-  }
-
-  object Timer2 {
-    var index: Int = 0
-    def apply(): Timer2 = {
-      val timer = new Timer2(index)
-      index += 1
-      timer
-    }
-  }
-
   implicit def Seq2SeqRep(x: Seq[Int]) = x map (unit(_))
   implicit def SeqRB2SeqRBOps[T](s: Seq[T]): SeqRBOps[T] = SeqRBOps(s)
   @virtualize
@@ -101,12 +59,11 @@ trait TensorDsl extends DslOps with Diff {
   def assert(b: Rep[Boolean]) = if (!b) error("ERROR not specified")
   @virtualize
   def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = if (!cond) {printf(msg + "\\n", args : _*); error("")} else {}
+  def exit() = unchecked[Unit]("exit(0)")
 
-  object Encoding {
-    val ix_a = 96  // index starts from 1
-
-    def char_to_ix(ch: Rep[Char]): Rep[Int] = ch.AsInstanceOf[Int] - ix_a
-    def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix + ix_a).AsInstanceOf[Char]
+  object Random {
+    def rand() = unchecked[Float]("(float)rand()/RAND_MAX")
+    def srand(seed: Option[Int] = None) = unchecked[Unit]("srand(",seed.map(_.toString).getOrElse("time(NULL)"),")")
   }
 
   case class Dimensions(val dims: Seq[Rep[Int]], broadcasted: Rep[Boolean] = unit(false)) {
@@ -118,7 +75,7 @@ trait TensorDsl extends DslOps with Diff {
     def head: Rep[Int] = dims.headOption.getOrElse(1)
     def last: Rep[Int] = dims.lastOption.getOrElse(1)
     def get(idx: Int): Rep[Int] = if (!dims.indices.contains(idx)) 1 else dims(idx)
-    def reverse: Seq[Rep[Int]] = Dimensions(dims.reverse)
+    def reverse: Seq[Rep[Int]] = dims.reverse
 
     val (scalarCount +: strides): Seq[Rep[Int]] = (dims :\ Seq[Rep[Int]](1)) {
       case (dim, seq@(t +: q)) => (dim * t) +: seq
@@ -137,13 +94,6 @@ trait TensorDsl extends DslOps with Diff {
 
   implicit def Dimensions2Seq(x: Dimensions) = x.dims
   implicit def Seq2Dimensions(x: Seq[Rep[Int]]) = Dimensions(x)
-
-  object Random {
-    def rand() = unchecked[Float]("(float)rand()/RAND_MAX")
-    def srand(seed: Option[Int] = None) = unchecked[Unit]("srand(",seed.map(_.toString).getOrElse("time(NULL)"),")")
-  }
-
-  def exit() = unchecked[Unit]("exit(0)")
 
   abstract class DataLoop {
     def foreach(f: Rep[Int] => Unit): Unit
@@ -252,11 +202,14 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
+    // Return dimensions as well to track whether broadcasting happened for the two operands
     def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions)
+    // back prop for + (may fuse the gradient of the two operands for efficiency)
     def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit
 
     // In-place elementwise addition.
     def +=(x: Tensor, y: Rep[Float]): Unit
+    // Flexible broadcasting and/or reducing of y to fit into the shape of x.
     def +=(x: Tensor, y: Tensor): Unit
 
     // Elementwise subtraction.
@@ -286,6 +239,7 @@ trait TensorDsl extends DslOps with Diff {
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
 
+    // TODO (Fei Wang): should remove, now that elementWiseOPWithBroadCasting is working for cudnn
     // in2 has less rank than in1, and the shape of in2 matches with the last ${in2.rank} shapes of in1
     // i.e. in1.shape = (4 , 5, 6, 7), and in2.shape = (6, 7)
     // mul is done elementwise for each sub tensor of in1
@@ -389,19 +343,6 @@ trait TensorDsl extends DslOps with Diff {
     def sum_grad(input: TensorR, res: TensorR): Unit
     def mean(x: Tensor): Tensor
     def mean_grad(input: TensorR, res: TensorR): Unit
-
-    // Reduction on one dimension
-    def sum(x: Tensor, dim: Int): Tensor
-    def sum_grad(input: TensorR, output: TensorR, dim: Int): Unit
-
-    // concatenate and split
-    def concat(dim: Int, tensors: Seq[Tensor]): Tensor
-    def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit
-
-    // repeat on the first dimension
-    def repeat0(in: Tensor, context: Int): Tensor
-    def repeat0_grad(in: TensorR, out: TensorR, context: Int): Unit
-
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -409,6 +350,19 @@ trait TensorDsl extends DslOps with Diff {
     //   - Use thrust library reduction ops? Need to consider device_vector initialization overhead.
     // - Fused multiply add operations?
 
+    // Reduction on one dimension
+    def sum(x: Tensor, dim: Int): Tensor
+    def sum_grad(input: TensorR, output: TensorR, dim: Int): Unit
+
+    // concatenate
+    def concat(dim: Int, tensors: Seq[Tensor]): Tensor
+    def concat_grad(dim: Int, tensorRs: Seq[TensorR], output: TensorR): Unit
+
+    // repeat on the first dimension with some number of context
+    def repeat0(in: Tensor, context: Int): Tensor
+    def repeat0_grad(in: TensorR, out: TensorR, context: Int): Unit
+
+    // various kinds of gradient descent
     def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit
     def momentum_update(tr: TensorR, t: Tensor, learning_rate: Float, momentum: Float, gradClip: Float, nesterov: Boolean, descent: Boolean): Unit
   }
@@ -509,22 +463,6 @@ trait TensorDsl extends DslOps with Diff {
       backend.gemm(this, transX, that, transY, alpha)
     }
 
-    // NOTE: only handles (Vector Cartesian Vector)
-    // limited support for GPU backend. Do not recommend using this function
-    @deprecated
-    def cart(that: Tensor) = {
-      assert(this.rank == 1 && that.rank == 1, "cartesian product is only for 1d vectors")
-      val res = backend.mallocArray[Float](this.shape(0) * that.shape(0))
-      val off = var_new(0)
-      for (i <- DataLoop(this.shape(0))) {
-        for (j <- DataLoop(that.shape(0))) {
-          res(off) = data(i) * that.data(j)
-          off += 1
-        }
-      }
-      Tensor(res, this.shape(0), that.shape(0))
-    }
-
     def trans() = backend.trans(this)
     def permute(dims: Int*) = backend.permute(this, dims: _*)
 
@@ -541,11 +479,9 @@ trait TensorDsl extends DslOps with Diff {
     def hardTanh(min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace : Boolean = false) = backend.hardTanh(this, min_val, max_val, inPlace)
 
     // NOTE: sum all elements
-    // TODO (Fei Wang): prefer to have a general reduce function, and depend sum() to that function
     def sum() = backend.sum(this)
 
     // sum over one dimension
-    // TODO (Fei Wang): prefer to have a general reduce over given dimension function, and depend sum(dim) to that function
     def sum(dim: Int) = backend.sum(this, dim)
 
     def mean() = backend.mean(this)
@@ -589,6 +525,22 @@ trait TensorDsl extends DslOps with Diff {
         idx += 1
       }
       idx != this.scalarCount
+    }
+
+    // NOTE: only handles (Vector Cartesian Vector)
+    // limited support for GPU backend. Do not recommend using this function
+    @deprecated
+    def cart(that: Tensor) = {
+      assert(this.rank == 1 && that.rank == 1, "cartesian product is only for 1d vectors")
+      val res = backend.mallocArray[Float](this.shape(0) * that.shape(0))
+      val off = var_new(0)
+      for (i <- DataLoop(this.shape(0))) {
+        for (j <- DataLoop(that.shape(0))) {
+          res(off) = data(i) * that.data(j)
+          off += 1
+        }
+      }
+      Tensor(res, this.shape(0), that.shape(0))
     }
 
     @virtualize

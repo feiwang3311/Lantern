@@ -511,59 +511,43 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |}
       |
       |//following - https://github.com/torch/cutorch/blob/master/lib/THC/THCTensorMath.cuh#L49
-      |static inline __device__ int compute(int outputSize0, int outputSize1, int outputSize2, int outputSize3,
-      |                                     int outputStride0, int outputStride1, int outputStride2, int outputStride3,
+      |template <int Dims>
+      |static inline __device__ int compute(const int outputSizes[Dims], const int outputStrides[Dims],
       |                                     const int dimSize, const int concatDim, int linearIndex) {
       |  int offset = 0;
-      |  int curDimSize = 3 == concatDim ? dimSize : outputSize3;
-      |  int nextDimIndex = linearIndex / curDimSize;
-      |  int curDimIndex = linearIndex - curDimSize * nextDimIndex;
-      |  int curDimOffset = curDimIndex * outputStride3;
-      |  offset += curDimOffset;
-      |  linearIndex = nextDimIndex;
-      |  curDimSize = 2 == concatDim ? dimSize : outputSize2;
-      |  nextDimIndex = linearIndex / curDimSize;
-      |  curDimIndex = linearIndex - curDimSize * nextDimIndex;
-      |  curDimOffset = curDimIndex * outputStride2;
-      |  offset += curDimOffset;
-      |  linearIndex = nextDimIndex;
-      |  curDimSize = 1 == concatDim ? dimSize : outputSize1;
-      |  nextDimIndex = linearIndex / curDimSize;
-      |  curDimIndex = linearIndex - curDimSize * nextDimIndex;
-      |  curDimOffset = curDimIndex * outputStride1;
-      |  offset += curDimOffset;
-      |  linearIndex = nextDimIndex;
-      |  return offset + linearIndex * outputStride0;
-      |//  for (int i = 3; i >= 1; i--) {
-      |//    int curDimSize = i == concatDim ? dimSize : outputSize[i];
-      |//    int nextDimIndex = linearIndex / curDimSize;
-      |//    int curDimIndex = linearIndex - curDimSize * nextDimIndex;
-      |//    int curDimOffset = curDimIndex * outputStride[i];
-      |//    offset += curDimOffset;
-      |//    linearIndex = nextDimIndex;
-      |//  }
-      |//  return offset + linearIndex * outputStride[0];
+      |  #pragma unroll
+      |  for (int i = Dims - 1; i >= 1; --i) {
+      |    int curDimSize = i == concatDim? dimSize : outputSizes[i];
+      |    int nextDimIndex = linearIndex / curDimSize;
+      |    int curDimIndex = linearIndex - curDimSize * nextDimIndex;
+      |    int curDimOffset = curDimIndex * outputStrides[i];
+      |    offset += curDimOffset;
+      |    linearIndex = nextDimIndex;
+      |  }
+      |  return offset + linearIndex * outputStrides[0];
       |}
       |
-      |// TODO: Only for Dim of rank 4, and only for 2 inputs, and only for concat at dim = 1
+      |// TODO: Only for Dim of rank 4, and only for 2 inputs
       |__global__ void concat2D_1D_greg(float* in1, int dimSize1, int nElement1,
       |                                 float* in2, int dimSize2, int nElement2,
       |                                 float* out, int concatDim,
       |                                 int outSize0, int outSize1, int outSize2, int outSize3,
       |                                 int outStride0, int outStride1, int outStride2, int outStride3) {
+      |  int[] outSizes = {outSize0, outSize1, outSize2, outSize3};
+      |  int[] outStrides = {outStride0, outStride1, outStride2, outStride3};
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
       |  if (tid >= nElement) return;
       |  float* data = blockIdx.y == 0 ? in1 : in2;
       |  int offset = blockIdx.y == 0 ? 0 : dimSize1;
       |  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
-      |  int dataOffset = offset * outStride1;
+      |  int dataOffset = offset * outStrides[concatDim];
       |  int stride = gridDim.x * blockDim.x;
-      |  while (tid < nElement) {
-      |    int elementOffset = compute(outSize0, outSize1, outSize2, outSize3,
-      |                                outStride0, outStride1, outStride2, outStride3, dimSize, concatDim, tid);
+      |  for (; tid < nElement; tid += stride) {
+      |    int elementOffset = compute<4>(outSizes, //0, outSize1, outSize2, outSize3,
+      |                                   outStrides, //0, outStride1, outStride2, outStride3,
+      |                                   dimSize, concatDim, tid);
       |    out[dataOffset + elementOffset] = data[tid];
-      |    tid += stride;
       |  }
       |}
       |
@@ -573,6 +557,8 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |                                      float* out, int concatDim,
       |                                      int outSize0, int outSize1, int outSize2, int outSize3,
       |                                      int outStride0, int outStride1, int outStride2, int outStride3) {
+      |  int[] outSizes = {outSize0, outSize1, outSize2, outSize3};
+      |  int[] outStrides = {outStride0, outStride1, outStride2, outStride3};
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
       |  if (tid >= nElement) return;
@@ -581,11 +567,11 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  int dimSize = blockIdx.y == 0 ? dimSize1 : dimSize2;
       |  int dataOffset = offset * outStride1;
       |  int stride = gridDim.x * blockDim.x;
-      |  while (tid < nElement) {
-      |    int elementOffset = compute(outSize0, outSize1, outSize2, outSize3,
-      |                                outStride0, outStride1, outStride2, outStride3, dimSize, concatDim, tid);
+      |  for (; tid < nElement; tid += stride) {
+      |    int elementOffset = compute<4>(outSizes, //0, outSize1, outSize2, outSize3,
+      |                                   outStrides, //0, outStride1, outStride2, outStride3,
+      |                                   dimSize, concatDim, tid);
       |    data[tid] += out[dataOffset + elementOffset];
-      |    tid += stride;
       |  }
       |}
       |
@@ -808,201 +794,6 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
-      |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/THC/THCIntegerDivider.cuh
-      |// Result of div/mod operation stored together.
-      |template <typename Value>
-      |struct DivMod {
-      |  Value div, mod;
-      |
-      |  __host__ __device__ DivMod(Value div, Value mod) : div(div), mod(mod) { }
-      |};
-      |
-      |// Base case: we only have an implementation for uint32_t for now.  For
-      |// everything else, we use plain division.
-      |template <typename Value>
-      |struct IntDivider {
-      |  IntDivider() { }  // Dummy constructor for arrays.
-      |  IntDivider(Value d) : divisor(d) { }
-      |
-      |  __host__ __device__ inline Value div(Value n) const { return n / divisor; }
-      |  __host__ __device__ inline Value mod(Value n) const { return n % divisor; }
-      |  __host__ __device__ inline DivMod<Value> divmod(Value n) const {
-      |    return DivMod<Value>(n / divisor, n % divisor);
-      |  }
-      |
-      |  Value divisor;
-      |};
-      |
-      |// Implement fast integer division.
-      |template <>
-      |struct IntDivider<unsigned int> {
-      |  static_assert(sizeof(unsigned int) == 4, "Assumes 32-bit unsigned int.");
-      |
-      |  IntDivider() { }  // Dummy constructor for arrays.
-      |
-      |  IntDivider(unsigned int d) : divisor(d) {
-      |    assert(divisor >= 1 && divisor <= INT32_MAX);
-      |
-      |    // TODO: gcc/clang has __builtin_clz() but it's not portable.
-      |    for (shift = 0; shift < 32; shift++) if ((1U << shift) >= divisor) break;
-      |
-      |    uint64_t one = 1;
-      |    uint64_t magic = ((one << 32) * ((one << shift) - divisor)) / divisor + 1;
-      |    m1 = magic;
-      |    assert(m1 > 0 && m1 == magic);  // m1 must fit in 32 bits.
-      |  }
-      |
-      |  __host__ __device__ inline unsigned int div(unsigned int n) const {
-      |#ifdef __CUDA_ARCH__
-      |    // 't' is the higher 32-bits of unsigned 32-bit multiplication of 'n' and
-      |    // 'm1'.
-      |    unsigned int t = __umulhi(n, m1);
-      |    return (t + n) >> shift;
-      |#else
-      |    // Using uint64_t so that the addition does not overflow.
-      |    uint64_t t = ((uint64_t) n * m1) >> 32;
-      |    return (t + n) >> shift;
-      |#endif
-      |  }
-      |
-      |  __host__ __device__ inline unsigned int mod(unsigned int n) const {
-      |    return n - div(n) * divisor;
-      |  }
-      |
-      |  __host__ __device__ inline DivMod<unsigned int> divmod(unsigned int n) const {
-      |    unsigned int q = div(n);
-      |    return DivMod<unsigned int>(q, n - q * divisor);
-      |  }
-      |
-      |  unsigned int divisor;  // d above.
-      |  unsigned int m1;  // Magic number: m' above.
-      |  unsigned int shift;  // Shift amounts.
-      |};
-      |
-      |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/detail/OffsetCalculator.cuh
-      |/// OffsetCalculator calculates the offset in bytes of a linear index for NARGS
-      |/// operands that share the same shape, but may have different strides.
-      |
-      |template <int NARGS>
-      |struct OffsetCalculator {
-      |  static constexpr int MAX_DIMS = 25;
-      |
-      |  // The offset for each argument (in bytes). Wrapper around fixed-size array.
-      |  struct offsets_t {
-      |    __host__ __device__ uint32_t& operator[](int idx) {
-      |      return values[idx];
-      |    }
-      |    uint32_t values[NARGS];
-      |  };
-      |
-      |
-      |  // OffsetCalculator(int dims, const int64_t* sizes, const int64_t* const* strides) : dims(dims) {
-      |  OffsetCalculator(int dims, const int32_t* sizes, const int32_t* const* strides) : dims(dims) {
-      |    for (int i = 0; i < MAX_DIMS; ++i) {
-      |      if (i < dims) {
-      |        sizes_[i] = IntDivider<uint32_t>(sizes[i]);
-      |      } else {
-      |        sizes_[i] = IntDivider<uint32_t>(1);
-      |      }
-      |      for (int arg = 0; arg < NARGS; arg++) {
-      |        strides_[i][arg] = i < dims ? strides[arg][i] : 0;
-      |      }
-      |    }
-      |  }
-      |
-      |  __host__ __device__ offsets_t get(uint32_t linear_idx) const {
-      |    offsets_t offsets;
-      |#pragma unroll
-      |    for (int arg = 0; arg < NARGS; arg++) {
-      |      offsets[arg] = 0;
-      |    }
-      |
-      |#pragma unroll
-      |    for (int dim = 0; dim < MAX_DIMS; ++dim) {
-      |      if (dim == dims) {
-      |        break;
-      |      }
-      |      auto divmod = sizes_[dim].divmod(linear_idx);
-      |      linear_idx = divmod.div;
-      |
-      |#pragma unroll
-      |      for (int arg = 0; arg < NARGS; arg++) {
-      |        offsets[arg] += divmod.mod * strides_[dim][arg];
-      |      }
-      |    }
-      |    return offsets;
-      |  }
-      |
-      |  void print() {
-      |    for (auto i = 1; i < 128; i++) {
-      |      auto offsets = get(i);
-      |      printf("offsets[%d]: ", i);
-      |      for (auto arg = 0; arg < NARGS; arg++) {
-      |        printf("%d ", offsets[arg]);
-      |      }
-      |      printf("\n");
-      |    }
-      |  }
-      |
-      |  int dims;
-      |  IntDivider<uint32_t> sizes_[MAX_DIMS];
-      |  uint32_t strides_[MAX_DIMS][NARGS];
-      |};
-      |
-      |// From: https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/native/cuda/Loops.cuh
-      |template<int nt, int vt, typename func_t>
-      |__launch_bounds__(nt, 4)
-      |__global__ void elementwise_kernel(int N, func_t f) {
-      |  int tid = threadIdx.x;
-      |  int nv = nt * vt;
-      |  int idx = nv * blockIdx.x + tid;
-      |#pragma unroll
-      |  for (int i = 0; i < vt; i++) {
-      |    if (idx < N) {
-      |      f(idx);
-      |      idx += nt;
-      |    }
-      |  }
-      |}
-      |
-      |template<int nt, int vt, typename func_t>
-      |static void launch_kernel(int64_t N, const func_t& f) {
-      |  if (N == 0) {
-      |    return;
-      |  }
-      |  dim3 block(nt);
-      |  dim3 grid((N + block.x * vt - 1) / (block.x * vt));
-      |  elementwise_kernel<nt, vt, func_t><<<grid, block, 0>>>(N, f);
-      |}
-      |
-      |template<typename func_t>
-      |void gpu_unary_kernel(float *res, float *x,
-      |                      int32_t resRank, const int32_t resScalarCount,
-      |                      const int32_t* resShape, const int32_t* const* strides,
-      |                      const func_t& f) {
-      |  OffsetCalculator<2> calc(resRank, resShape, strides);
-      |  launch_kernel<128, 4>(resScalarCount, [=]__device__(int idx) {
-      |    auto offsets = calc.get(idx);
-      |    float* out = &res[offsets[0]];
-      |    float* in = &x[offsets[1]];
-      |    *out = f(*in);
-      |  });
-      |}
-      |
-      |template<typename func_t>
-      |void gpu_binary_kernel(float *res, float *x, float *y,
-      |                       int32_t resRank, const int32_t resScalarCount,
-      |                       const int32_t* resShape, const int32_t* const* strides,
-      |                       const func_t& f) {
-      |  OffsetCalculator<3> calc(resRank, resShape, strides);
-      |  launch_kernel<128, 4>(resScalarCount, [=]__device__(int idx) {
-      |    auto offsets = calc.get(idx);
-      |    float* out = &res[offsets[0]];
-      |    float* in1 = &x[offsets[1]];
-      |    float* in2 = &y[offsets[2]];
-      |    *out = f(*in1, *in2);
-      |  });
-      |}
       |""".stripMargin
 
 }
