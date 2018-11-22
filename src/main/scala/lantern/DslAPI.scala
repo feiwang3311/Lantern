@@ -644,6 +644,31 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
+      |__global__ void addScalar(float* in, float* out, float add, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in[tid] + add;
+      |}
+      |__global__ void minusScalar(float* in, float* out, float minus, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in[tid] - minus;
+      |}
+      |__global__ void multScalar(float* in, float* out, float mult, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in[tid] * mult;
+      |}
+      |__global__ void divScalar(float* in, float* out, float div, int size) {
+      |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+      |  int stride = gridDim.x * blockDim.x;
+      |  for (; tid < size; tid += stride)
+      |    if (tid < size) out[tid] = in[tid] / div;
+      |}
+      |
       |__global__ void elementwise_1D_1D_mul(float* in1, float* in2, float* out, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  int stride = gridDim.x * blockDim.x;

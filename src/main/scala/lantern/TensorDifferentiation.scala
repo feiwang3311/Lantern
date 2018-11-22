@@ -4219,7 +4219,11 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
-    override def +(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def +(x: Tensor, y: Rep[Float]): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      unchecked[Unit](s"addScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
+      Tensor(res, x.shape: _*)
+    }
     override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "+")
     @virtualize
     override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
@@ -4234,10 +4238,14 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
-    override def +=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def +=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"addScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
     override def +=(x: Tensor, y: Tensor): Unit = ???
 
-    override def -(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def -(x: Tensor, y: Rep[Float]): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      unchecked[Unit](s"minusScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
+      Tensor(res, x.shape: _*)
+    }
     override def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "-")
     @virtualize
     override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
@@ -4253,10 +4261,14 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
-    override def -=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def -=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"minusScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
     override def -=(x: Tensor, y: Tensor): Unit = ???
 
-    override def *(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def *(x: Tensor, y: Rep[Float]): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      unchecked[Unit](s"multScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
+      Tensor(res, x.shape: _*)
+    }
     override def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "*")
     @virtualize
     override def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
@@ -4273,10 +4285,14 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
-    override def *=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def *=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"multScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
     override def *=(x: Tensor, y: Tensor): Unit = ???
 
-    override def /(x: Tensor, y: Rep[Float]): Tensor = ???
+    override def /(x: Tensor, y: Rep[Float]): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      unchecked[Unit](s"divScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
+      Tensor(res, x.shape: _*)
+    }
     override def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "/")
     @virtualize
     override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
@@ -4294,7 +4310,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
-    override def /=(x: Tensor, y: Rep[Float]): Unit = ???
+    override def /=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"divScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
     override def /=(x: Tensor, y: Tensor): Unit = ???
 
     override def mul_sub(in1: Tensor, in2: Tensor): Tensor = {
@@ -5427,9 +5443,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for sum op")
       assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
-      // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
-      val shape = Seq(unit(1), input.d.scalarCount, unit(1), unit(1))
-      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(shape: _*))
+      +=(input.d, res.d.data(0))
     }
 
     override def mean(x: Tensor): Tensor = {
@@ -5441,8 +5455,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
       generateRawComment("backprop for mean op")
       assert(res.d.shape.dims == Seq(unit(1)), s"result of mean reduce should be scalar, got ${res.d.shape}")
-      // TODO (Fei Wang): Need cleaner code --> for cases where we abuse cudnnAddBiasTensor function, pad everything to rank 4
-      cudnnAddBiasTensor(res.d.resize(1, 1, 1, 1), input.d.resize(input.x.shape.padTo(4, unit(1)): _*), scale = 1.0f / input.x.scalarCount)
+      +=(input.d, res.d.data(0) / input.x.scalarCount)
     }
 
     override def sum(x: Tensor, dim: Int): Tensor = {
