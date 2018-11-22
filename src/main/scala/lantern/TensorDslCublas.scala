@@ -418,7 +418,8 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
       val beta1 = NewArray[Float](1); beta1(0) = beta
       (transX, transY) match {
         case (false, false) =>
-          assert(x.shape == y.shape && x.shape == output.shape, "TODO: only handle uniform shape (no transpose) for now")
+          Tensor.assertShapeEqual(x.shape, y.shape)
+          Tensor.assertShapeEqual(x.shape, output.shape)
           val m = x.shape(0)
           val n = x.shape.drop(1).product1
           unchecked[Unit](
@@ -426,7 +427,8 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
             n, ",", m, ",", alpha1, ",",
             x.data, ",", n, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
         case (false, true) =>
-          assert(x.rank == 2 && y.rank == 2 && x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0), "is this assertion correct in terms of types?")
+          assert(x.rank == 2 && y.rank == 2)
+          assert(x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0), "is this assertion correct in terms of types?")
           val m = x.shape(0)
           val n = x.shape(1)
           unchecked[Unit](
@@ -434,7 +436,8 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
             n, ",", m, ",", alpha1, ",",
             x.data, ",", n, ",", beta1, ", ", y.data, ", ", m, ", ", output.data, ",", n, "))")
         case (true, false) =>
-          assert(x.rank == 2 && y.rank == 2 && x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0))
+          assert(x.rank == 2 && y.rank == 2)
+          assert(x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0))
           val m = x.shape(1)
           val n = x.shape(0)
           unchecked[Unit](
@@ -442,7 +445,8 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
             n, ",", m, ",", alpha1, ",",
             x.data, ",", m, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
         case (true, true) =>
-          assert(x.rank == 2 && y.rank == 2 && x.shape == y.shape)
+          assert(x.rank == 2 && y.rank == 2) 
+          Tensor.assertShapeEqual(x.shape, y.shape)
           val m = x.shape(1)
           val n = x.shape(0)
           unchecked[Unit](
