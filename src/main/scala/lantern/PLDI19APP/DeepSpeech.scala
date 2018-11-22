@@ -200,9 +200,7 @@ object DeepSpeech {
           imgIdx += batchSize
           val inputR = TensorR(input.toGPU(), isInput = true)
           val loss = gradR_loss(lossFun(inputR, percent, target, targetLength))(Tensor.zeros(1))
-          trainLoss += loss.data(0)
-          // opt.perform{case (name, (tr, ot)) => tr.d.toCPU().printHead(5, name)}
-          // error("stop")
+          trainLoss += loss.toCPU().data(0)
           opt.step()
 
           // selective printing

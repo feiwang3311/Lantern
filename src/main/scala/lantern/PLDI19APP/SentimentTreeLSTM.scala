@@ -335,7 +335,7 @@ object SentimentTreeLSTM {
           val leftchs  = tree_data(index * 4 + 2)
           val rightchs = tree_data(index * 4 + 3)
           val loss = gradR_loss(net(scores.toGPU(size), words, leftchs, rightchs))(Tensor.zeros(1))
-          val loss_value = loss.data(0)
+          val loss_value = loss.toCPU().data(0)
           average_loss = average_loss * (n) / (n+1) + loss_value / (n+1)
           opt.step()
           resetMallocAddr(addr)

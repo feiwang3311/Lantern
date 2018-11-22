@@ -113,7 +113,6 @@ object MnistCNN {
     }
   }
 
-
   val mnistGPU = new LanternDriverCudnn[String, Unit] {
 
     @virtualize
@@ -176,7 +175,8 @@ object MnistCNN {
           val inputR = TensorR(input.toGPU(), isInput=true)
           val targetR = target.toGPU(batchSize)
           val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(4))
-          trainLoss += loss.data(0)
+          generateRawComment("save loss data (need CPU access!)")
+          trainLoss += loss.toCPU().data(0)
           opt.step()
 
           // selective printing

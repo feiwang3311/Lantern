@@ -109,7 +109,7 @@ __global__ void arrayUpdate(T *data, int index, T value) {
   data[index] = value;
 }
 
-__global__ void arrayFill_greg(float* data, float value, int size) {
+__global__ void arrayFill(float* data, float value, int size) {
   int stride = gridDim.x * blockDim.x;
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   for (int i = tid; i < size; i += stride) data[i] = value;
@@ -302,6 +302,31 @@ __global__ void momentum_update_1D_1D(float* x, float* d, float* m, float learni
   }
 }
 
+__global__ void addScalar(float* in, float* out, float add, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride)
+    if (tid < size) out[tid] = in[tid] + add;
+}
+__global__ void minusScalar(float* in, float* out, float minus, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride)
+    if (tid < size) out[tid] = in[tid] - minus;
+}
+__global__ void multScalar(float* in, float* out, float mult, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride)
+    if (tid < size) out[tid] = in[tid] * mult;
+}
+__global__ void divScalar(float* in, float* out, float div, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride)
+    if (tid < size) out[tid] = in[tid] / div;
+}
+
 __global__ void elementwise_1D_1D_mul(float* in1, float* in2, float* out, int size) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int stride = gridDim.x * blockDim.x;
@@ -389,6 +414,16 @@ __global__ void elementwise_1D_1D_square_grad(float* in_x, float* in_d, float* o
   int stride = gridDim.x * blockDim.x;
   for (; tid < size; tid += stride)
     if (tid < size) in_d[tid] += out_d[tid] * 2 * in_x[tid];
+}
+
+__global__ void clipAt(float* in, float bound, int size) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride)
+    if (tid < size) {
+      if (in[tid] > bound) in[tid] = bound;
+      if (in[tid] < -bound) in[tid] = -bound;
+    }
 }
 
 __global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int xstrides2, int xstrides3, int scalarCount) {
@@ -699,7 +734,7 @@ float x39 = x38 / 1000000.0f;
 printf("Data reading in %lf sec\n",x39);
 // Tensor 'toGPU' invocation.
 float* x98 = (float*)myGpuMalloc(32768 * sizeof(float));
-int32_t x41 = open("/u/data/u99/wang603/TiarkMlEnv/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
+int32_t x41 = open("/home/fei/bitbucket/Lantern/src/out/PLDI19evaluation/squeezenet/squeezenetCifar10.onnx.bin",0);
 int64_t x42 = fsize(x41);
 float* x43 = (float*)mmap(0, x42, PROT_READ | PROT_WRITE, MAP_FILE | MAP_PRIVATE, x41, 0);
 float* x45 = x43+526720;

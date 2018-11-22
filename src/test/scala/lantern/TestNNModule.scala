@@ -24,7 +24,7 @@ class ModuleTest extends FunSuite {
 
   test("reflection") {
 
-    val test1 = new DslDriverC[String, Unit] with NNModule {
+    val test1 = new LanternDriverC[String, Unit] with NNModule {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -42,14 +42,18 @@ class ModuleTest extends FunSuite {
 
         val li = MyModule(3, 4)
         li.registerParameters("")
-        li.forEachNamedParameter { case (name, (tensorR, _)) => System.out.println(s"$name: $tensorR") }
+
+        // check registration
+        val nameSets = scala.collection.mutable.Set[String]()
+        li.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
+        assert(nameSets == Set("bias", "weight", "other/weight", "other/bias"))
       }
     }
     test1.eval("a")
   }
 
   test("option") {
-    val test = new DslDriverC[String, Unit] with NNModule {
+    val test = new LanternDriverC[String, Unit] with NNModule {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         case class Linear1(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
@@ -69,14 +73,19 @@ class ModuleTest extends FunSuite {
         }
         val testModule = Linear(3, 4, Some(TensorR(Tensor.zeros(4))))
         testModule.registerParameters("")
-        testModule.forEachNamedParameter {case (name, (tr, _)) => System.out.println((s"$name: $tr"))}
+
+        // check registration
+        val nameSets = scala.collection.mutable.Set[String]()
+        testModule.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
+        System.out.println(nameSets)
+        assert(nameSets == Set("other2/bias", "bias", "weight", "other2/weight"))
       }
     }
     test.eval("a")
   }
 
   test("seq") {
-    val test = new DslDriverC[String, Unit] with NNModule {
+    val test = new LanternDriverC[String, Unit] with NNModule {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         case class Linear1(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
@@ -94,14 +103,18 @@ class ModuleTest extends FunSuite {
         }
         val testModule = Linear(3, 4)
         testModule.registerParameters("")
-        testModule.forEachNamedParameter {case (name, (tr, _)) => System.out.println((s"$name: $tr"))}
+
+        // check registration
+        val nameSets = scala.collection.mutable.Set[String]()
+        testModule.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
+        assert(nameSets == Set("others_index_0", "weight", "others_index_1", "others1_index_1/weight", "others1_index_1/bias", "others1_index_0/bias", "others1_index_0/weight"))
       }
     }
     test.eval("a")
   }
 
   test("module") {
-    val test = new DslDriverC[String, Unit] with NNModule {
+    val test = new LanternDriverC[String, Unit] with NNModule {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
@@ -122,7 +135,12 @@ class ModuleTest extends FunSuite {
         }
 
         testModule.registerParameters(testModule.name + "/")
-        testModule.forEachNamedParameter{ case(name, (tr, _)) => System.out.println(s"$name: $tr") }
+
+        // check registration
+        val nameSets = scala.collection.mutable.Set[String]()
+        testModule.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
+        assert(nameSets == Set("test/bias", "test/module/bias", "test/module/weight"))
+
         val x = Tensor.zeros(6)
         gradR(x => testModule(x))(x)
         ()
@@ -132,7 +150,7 @@ class ModuleTest extends FunSuite {
   }
 
   test("newModule") {
-    val test = new DslDriverC[String, Unit] with NNModule {
+    val test = new LanternDriverC[String, Unit] with NNModule {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
@@ -153,14 +171,18 @@ class ModuleTest extends FunSuite {
           }
         }
         fc.registerParameters(fc.name + "/")
-        fc.forEachNamedParameter{case(name, (tr, _)) => System.out.println(s"$name: $tr")}
+
+        // check registration
+        val nameSets = scala.collection.mutable.Set[String]()
+        fc.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
+        assert(nameSets == Set("fully_connected/bn/bias", "fully_connected/bn/scale", "fully_connected/linear/weight"))
       }
     }
     test.eval("a")
   }
 
   test("stackOverFlow") {
-    val test = new DslDriverC[String, Unit] with NNModule {
+    val test = new LanternDriverC[String, Unit] with NNModule {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
@@ -176,14 +198,18 @@ class ModuleTest extends FunSuite {
 
         val module = TestNested()
         module.registerParameters(module.name + "/")
-        module.forEachNamedParameter{case(name, (tr, _)) => System.out.println(s"$name: $tr")}
+
+        // check registration
+        val nameSets = scala.collection.mutable.Set[String]()
+        module.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
+        assert(nameSets == Set("TestNested/randomName/dummy"))
       }
     }
     test.eval("a")
   }
 
   test("newModuleNested2") {
-    val test = new DslDriverC[String, Unit] with NNModule {
+    val test = new LanternDriverC[String, Unit] with NNModule {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
@@ -211,6 +237,13 @@ class ModuleTest extends FunSuite {
 
         module.registerParameters(module.name + "/")
         module.forEachNamedParameter{case(name, (tr, _)) => System.out.println(s"$name: $tr")}
+
+        // check registration
+        val nameSets = scala.collection.mutable.Set[String]()
+        module.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
+        assert(nameSets == Set("TestNested/conv/bn1/scale", "TestNested/conv/bn1/bias",
+          "TestNested/conv/bn2/bias", "TestNested/conv/bn2/scale", "TestNested/conv/conv1/kernel",
+          "TestNested/conv/conv1/bias", "TestNested/conv/conv2/bias", "TestNested/conv/conv2/kernel"))
       }
     }
     test.eval("a")

@@ -1161,7 +1161,7 @@ trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorDsl with DslExp
   }
 }
 
-abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with NNModule { self =>
+abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with TensorDslCPU with NNModule { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
 }

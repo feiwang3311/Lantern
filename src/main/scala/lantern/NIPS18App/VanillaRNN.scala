@@ -183,7 +183,7 @@ object VanillaRNN {
     }
   }
 
-  val min_char_rnn_module = new DslDriverC[String, Unit] with NNModule {
+  val min_char_rnn_module = new LanternDriverC[String, Unit] with NNModule {
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
