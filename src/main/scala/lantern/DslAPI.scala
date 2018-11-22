@@ -644,11 +644,11 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
-      |__global__ void addScalarInArrayInPlace(float* in, float* add, int size) {
+      |__global__ void addScalarInArrayInPlace(float* in, float* add, float scale, int size) {
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  int stride = gridDim.x * blockDim.x;
       |  for (; tid < size; tid += stride)
-      |    if (tid < size) in[tid] += add[0];
+      |    if (tid < size) in[tid] += add[0] * scale;
       |}
       |
       |__global__ void addScalar(float* in, float* out, float add, int size) {
