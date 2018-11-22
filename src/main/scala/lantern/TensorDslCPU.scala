@@ -259,6 +259,14 @@ trait TensorDslCPU extends TensorDsl {
       if (!bias.isInput) this.inplaceElementWiseOpWithBroadCastOrReduce(bias.d, main.d, (_ + _))
     }
 
+    override def plusEqual(base: Tensor, adder: Tensor): Tensor = {
+      this.inplaceElementWiseOpWithBroadCastOrReduce(base, adder, (_ + _))
+      base
+    }
+    override def plusEqual_grad(base: TensorR, adder: TensorR): Unit = {
+      if (!adder.isInput) this.inplaceElementWiseOpWithBroadCastOrReduce(adder.d, base.d, (_ + _))
+    }
+
     override def +(x: Tensor, y: Rep[Float]): Tensor = map(x, s => s + y)
     override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseOpWithBroadCast(x, y, _ + _)
     override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {

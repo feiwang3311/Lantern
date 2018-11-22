@@ -544,6 +544,14 @@ trait TensorDslCudnn extends TensorDslCublas {
       // TODO (Fei Wang): be more general, use ReduceTensor!
     }
 
+    override def plusEqual(base: Tensor, adder: Tensor): Tensor = {
+      cudnnAddBiasTensor(adder, base)
+      base
+    }
+    override def plusEqual_grad(base: TensorR, adder: TensorR): Unit = {
+      if (!adder.isInput) cudnnAddBiasTensor(base.d, adder.d)
+    }
+
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias
     // This is effectively the gradient of `cudnnAddBiasTensor`.
     def cudnnConvolutionBackwardBias(biasGrad: Tensor, resGrad: Tensor): Unit = {

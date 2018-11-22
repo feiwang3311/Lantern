@@ -413,6 +413,9 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
     override def plusBias(main: Tensor, bias: Tensor): Tensor = ???
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = ???
 
+    override def plusEqual(base: Tensor, adder: Tensor): Tensor = ???
+    override def plusEqual_grad(base: TensorR, adder: TensorR): Unit = ???
+
     override def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit = {
       val alpha1 = NewArray[Float](1); alpha1(0) = alpha
       val beta1 = NewArray[Float](1); beta1(0) = beta

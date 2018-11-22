@@ -301,6 +301,10 @@ trait TensorDsl extends DslOps with Diff {
     def plusBias(main: Tensor, bias: Tensor): Tensor
     def plusBias_grad(main: TensorR, bias: TensorR): Unit
 
+    // plusEqual assumes that adder is of the same shape as base, and addition can be down inPlace
+    def plusEqual(base: Tensor, adder: Tensor): Tensor
+    def plusEqual_grad(base: TensorR, adder: TensorR): Unit
+
     // output = x * alpha + y * beta (can be in-place if output is x or y)
     def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit
     def trans(x: Tensor): Tensor
@@ -436,7 +440,10 @@ trait TensorDsl extends DslOps with Diff {
     def map(op: Rep[Float] => Rep[Float]) = backend.map(this, op)
     def fold(init: Rep[Float])(op: (Rep[Float], Rep[Float]) => Rep[Float]) = backend.fold(init)(this, op)
 
+    // bias may need to be broadcasted; plus is inPlace
     def plusBias(that: Tensor): Tensor = backend.plusBias(this, that)
+    // that is the same size as this; plus is inPlace
+    def plusEqual(that: Tensor): Tensor = backend.plusEqual(this, that)
 
     // Elementwise addition.
     def +(that: Rep[Float]): Tensor = backend.+(this, that)
@@ -1219,6 +1226,11 @@ trait TensorDsl extends DslOps with Diff {
     def plusBias(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       backend.plusBias(this.x, that.x); k(this)  // note: plusBias is in-place
       backend.plusBias_grad(this, that)
+    }
+
+    def plusEqual(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
+      backend.plusEqual(this.x, that.x); k(this)
+      backend.plusEqual_grad(this, that)
     }
 
     def + (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
