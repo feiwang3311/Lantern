@@ -270,12 +270,12 @@ object SentimentTreeLSTM {
         def apply(l: ArrayBuffer[TensorR], r: ArrayBuffer[TensorR]) = {
           val ArrayBuffer(_, hiddenl, celll) = l  // this tensors are in GPU as well
           val ArrayBuffer(_, hiddenr, cellr) = r  // this tensors are in GPU as well
-          val i_gate = (U0i.dot(hiddenl) plusBias U1i.dot(hiddenr) plusBias bbi).sigmoid()
-          val fl_gate = (U00f.dot(hiddenl) plusBias U01f.dot(hiddenr) plusBias bbf).sigmoid()
-          val fr_gate = (U10f.dot(hiddenl) plusBias U11f.dot(hiddenr) plusBias bbf).sigmoid()
-          val o_gate = (U0o.dot(hiddenl) plusBias U1o.dot(hiddenr) plusBias bbo).sigmoid()
-          val u_value = (U0u.dot(hiddenl) plusBias U1u.dot(hiddenr) plusBias bbu).tanh()
-          val cell = i_gate * u_value plusBias fl_gate * celll plusBias fr_gate * cellr
+          val i_gate = (U0i.dot(hiddenl) plusEqual U1i.dot(hiddenr) plusBias bbi).sigmoid()
+          val fl_gate = (U00f.dot(hiddenl) plusEqual U01f.dot(hiddenr) plusBias bbf).sigmoid()
+          val fr_gate = (U10f.dot(hiddenl) plusEqual U11f.dot(hiddenr) plusBias bbf).sigmoid()
+          val o_gate = (U0o.dot(hiddenl) plusEqual U1o.dot(hiddenr) plusBias bbo).sigmoid()
+          val u_value = (U0u.dot(hiddenl) plusEqual U1u.dot(hiddenr) plusBias bbu).tanh()
+          val cell = i_gate * u_value plusEqual fl_gate * celll plusEqual fr_gate * cellr
           val hidden = o_gate * cell.tanh()
           ArrayBuffer(hidden, cell)
         }
@@ -305,7 +305,7 @@ object SentimentTreeLSTM {
               ArrayBuffer(loss, hidden, cell)
             } {
               val ArrayBuffer(cell, hidden) = node(l, r)
-              val loss = out(hidden, slice(scores, i)) plusBias l(0) plusBias r(0)
+              val loss = out(hidden, slice(scores, i)) plusEqual l(0) plusEqual r(0)
               ArrayBuffer(loss, hidden, cell)
             }
           }

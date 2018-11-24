@@ -533,8 +533,8 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |                                 float* out, int concatDim,
       |                                 int outSize0, int outSize1, int outSize2, int outSize3,
       |                                 int outStride0, int outStride1, int outStride2, int outStride3) {
-      |  int[] outSizes = {outSize0, outSize1, outSize2, outSize3};
-      |  int[] outStrides = {outStride0, outStride1, outStride2, outStride3};
+      |  int outSizes[] = {outSize0, outSize1, outSize2, outSize3};
+      |  int outStrides[] = {outStride0, outStride1, outStride2, outStride3};
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
       |  if (tid >= nElement) return;
@@ -557,8 +557,8 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |                                      float* out, int concatDim,
       |                                      int outSize0, int outSize1, int outSize2, int outSize3,
       |                                      int outStride0, int outStride1, int outStride2, int outStride3) {
-      |  int[] outSizes = {outSize0, outSize1, outSize2, outSize3};
-      |  int[] outStrides = {outStride0, outStride1, outStride2, outStride3};
+      |  int outSizes[] = {outSize0, outSize1, outSize2, outSize3};
+      |  int outStrides[] = {outStride0, outStride1, outStride2, outStride3};
       |  int tid = blockIdx.x * blockDim.x + threadIdx.x;
       |  int nElement = blockIdx.y == 0 ? nElement1 : nElement2;
       |  if (tid >= nElement) return;
