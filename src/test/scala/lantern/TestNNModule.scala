@@ -16,7 +16,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 
-import onnx.onnx_ml;
 import scala.collection.mutable.Map;
 import scala.collection.mutable.ArrayBuffer;
 
