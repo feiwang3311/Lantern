@@ -25,6 +25,7 @@ object SentimentTreeLSTM {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      debug = false
 
       val startTime = get_time()
 

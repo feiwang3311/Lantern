@@ -27,6 +27,8 @@ object DeepSpeech {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      debug = false
+
       Random.srand(Some(42))
       val dataTimer = Timer2()
       dataTimer.startTimer

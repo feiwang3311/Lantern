@@ -29,6 +29,7 @@ object Resnet50Onnx {
   val resnet50InferenceCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      debug = false
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
       val (func, x_dims, y_dims) = (model.inference_func(model.initializer_map_tensor), model.x_dims, model.y_dims)
@@ -48,6 +49,7 @@ object Resnet50Onnx {
   val resnet50InferenceGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      debug = false
       // reading ONNX model
       val model = readONNX(root_dir + model_file)
       val initMap = model.initializer_map_tensor.map{case (name, tr) => (name, tr.toGPU())}
@@ -68,6 +70,7 @@ object Resnet50Onnx {
   val resnet50TrainingCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      debug = false
       Random.srand(Some(42))
       val dataTimer = Timer2()
       dataTimer.startTimer
@@ -132,6 +135,7 @@ object Resnet50Onnx {
   val resnet50TrainingGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      debug = false
       Random.srand(Some(42))
       val dataTimer = Timer2()
       dataTimer.startTimer

@@ -19,6 +19,7 @@ trait TensorDsl extends DslOps with Diff {
       By using getAllocMem and setAllocMem, we can selectively return a big trunk of memory after one iteration of training.
    **/
 
+  var debug: Boolean = true
   implicit def Seq2SeqRep(x: Seq[Int]) = x map (unit(_))
   implicit def SeqRB2SeqRBOps[T](s: Seq[T]): SeqRBOps[T] = SeqRBOps(s)
   @virtualize
@@ -54,11 +55,13 @@ trait TensorDsl extends DslOps with Diff {
   def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
 
   @virtualize
-  def assert(b: Rep[Boolean], s: String) = if (!b) error(s)
+  def assert(b: Rep[Boolean], s: String = "ERROR not specified"): Unit = if (debug) {
+    if (!b) error(s)
+  }
   @virtualize
-  def assert(b: Rep[Boolean]) = if (!b) error("ERROR not specified")
-  @virtualize
-  def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = if (!cond) {printf(msg + "\\n", args : _*); error("")} else {}
+  def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = if (debug) {
+    if (!cond) {printf(msg + "\\n", args : _*); error("")} else {}
+  }
   def exit() = unchecked[Unit]("exit(0)")
 
   object Random {

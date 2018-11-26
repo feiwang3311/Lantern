@@ -30,6 +30,7 @@ object SqueezeNetOnnx {
   val squeezenetInferenceCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      debug = false
       // init timer
       Random.srand(Some(42))
       val dataTimer = Timer2()
@@ -68,6 +69,7 @@ object SqueezeNetOnnx {
   val squeezenetInferenceGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+      debug = false
       // init timer
       Random.srand(Some(42))
       val dataTimer = Timer2()
@@ -109,7 +111,7 @@ object SqueezeNetOnnx {
   val squeezenetTrainingCPU = new LanternDriverC[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
-
+      debug = false
       // init timer
       Random.srand(Some(42))
       val dataTimer = Timer2()
@@ -175,7 +177,7 @@ object SqueezeNetOnnx {
   val squeezenetTrainingGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
-
+      debug = false
       // init timer
       Random.srand(Some(42))
       val dataTimer = Timer2()

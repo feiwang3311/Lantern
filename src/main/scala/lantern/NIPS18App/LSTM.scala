@@ -41,6 +41,8 @@ object LSTM {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+
+      debug = false
       /**
        add scanner
        **/
@@ -247,6 +249,8 @@ object LSTM {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
+
+      debug = false
       /**
        add scanner
        **/
