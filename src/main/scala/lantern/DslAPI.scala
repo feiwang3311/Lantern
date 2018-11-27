@@ -446,6 +446,13 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  return res;
       |}
       |
+      |void myGpuFree(size_t bytes) {
+      |  bytes = ((bytes + (1 << N) - 1) >> N) << N;
+      |  gpuMallocAddr = (void *)((char *)gpuMallocAddr - bytes);
+      |  cudaMemset((void*)gpuMallocAddr, 0, bytes);
+      |  return;
+      |}
+      |
       |template <typename T>
       |__global__ void arrayUpdate(T *data, int index, T value) {
       |  data[index] = value;

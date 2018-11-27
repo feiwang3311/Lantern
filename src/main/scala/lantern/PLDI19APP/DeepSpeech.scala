@@ -20,8 +20,7 @@ object DeepSpeech {
 
   val root_dir = "src/out/PLDI19evaluation/"
   val gpu_file_dir = "deepspeech2/lantern/Lantern.cu"
-  // val data_dir: String = "/u/data/u99/wang603/TiarkMlEnv/SampleData/deepspeech_train.bin"
-  val data_dir: String = "/scratch/wu636/training/speech_recognition/data/test/deepspeech_train.bin"
+  val data_dir: String = "/scratch-ml00/wang603/deepspeechData/deepspeech_train.bin"
 
   val deepspeechGPU = new LanternDriverCudnn[String, Unit] {
 
@@ -43,12 +42,12 @@ object DeepSpeech {
 
         def apply(input: TensorR): TensorR @diff = {
           val in1 = If_B (useBatchNorm) {
-            val input2D = input.resize(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
+            val input2D = input.resizeNoCheck(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
             val inputBN = batchNorm.get.apply(input2D)
-            inputBN.resize(input.x.shape(0), input.x.shape(1), input.x.shape(2))
+            inputBN.resizeNoCheck(input.x.shape(0), input.x.shape(1), input.x.shape(2))
           } { input }
           val output = rnn(in1)
-          If_B (bidirectional) {output.resize(output.x.shape(0), output.x.shape(1), 2, output.x.shape(2) / 2).sum(2)} {output}
+          If_B (bidirectional) {output.resizeNoCheck(output.x.shape(0), output.x.shape(1), 2, output.x.shape(2) / 2).sum(2)} {output}
         }
       }
 
@@ -117,9 +116,9 @@ object DeepSpeech {
             val shape0 = in.x.shape(0)
             val shape1 = in.x.shape(1)
             val shape2 = in.x.shape(2)
-            val in2D = in.resize(shape0 * shape1, shape2)
+            val in2D = in.resizeNoCheck(shape0 * shape1, shape2)
             val out2D = linear(bn(in2D))
-            out2D.resize(shape0, shape1, numClasses)
+            out2D.resizeNoCheck(shape0, shape1, numClasses)
           }
         }
 
@@ -142,7 +141,7 @@ object DeepSpeech {
           // generateRawComment("after getting length info") // line 1138
           val step1 = conv(input)
           generateRawComment("after conv ops")  // line 1480
-          val step2 = step1.resize(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
+          val step2 = step1.resizeNoCheck(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
           generateRawComment("after resize and permute") // line 1576
 

@@ -1338,9 +1338,9 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     def softmaxHelper(x: Tensor, dim: Int, mode: SoftmaxMode.Value): Tensor = {
       assert(dim >= 0 && dim < x.rank, s"dim should be in range of input rank, got ${x.shape}, ${dim}")
-      val tmpIn = x.resize(x.shape.take(dim).product1, x.shape(dim), x.shape.drop(dim+1).product1, 1)
+      val tmpIn = x.resizeNoCheck(x.shape.take(dim).product1, x.shape(dim), x.shape.drop(dim+1).product1, 1)
       val tmpOut = cudnnSoftmaxForward(tmpIn, mode)
-      val res = tmpOut.resize(x.shape: _*)
+      val res = tmpOut.resizeNoCheck(x.shape: _*)
       res
     }
 
@@ -1349,10 +1349,10 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     def softmaxBackwardHelper(input: TensorR, res: TensorR, dim: Int, mode: SoftmaxMode.Value): Unit = {
       assert(dim >= 0 && dim < input.x.rank, s"dim should be in range of input rank, got ${input.x.shape}, ${dim}")
-      val tmpIn = new TensorR(input.x.resize(input.x.shape.take(dim).product1, input.x.shape(dim), input.x.shape.drop(dim+1).product1, 1),
-                              input.d.resize(input.x.shape.take(dim).product1, input.x.shape(dim), input.x.shape.drop(dim+1).product1, 1))
-      val tmpOut = new TensorR(res.x.resize(res.x.shape.take(dim).product1, res.x.shape(dim), res.x.shape.drop(dim+1).product1, 1),
-                               res.d.resize(res.x.shape.take(dim).product1, res.x.shape(dim), res.x.shape.drop(dim+1).product1, 1))
+      val tmpIn = new TensorR(input.x.resizeNoCheck(input.x.shape.take(dim).product1, input.x.shape(dim), input.x.shape.drop(dim+1).product1, 1),
+                              input.d.resizeNoCheck(input.x.shape.take(dim).product1, input.x.shape(dim), input.x.shape.drop(dim+1).product1, 1))
+      val tmpOut = new TensorR(res.x.resizeNoCheck(res.x.shape.take(dim).product1, res.x.shape(dim), res.x.shape.drop(dim+1).product1, 1),
+                               res.d.resizeNoCheck(res.x.shape.take(dim).product1, res.x.shape(dim), res.x.shape.drop(dim+1).product1, 1))
       cudnnSoftmaxBackward(tmpIn, tmpOut, mode)
     }
 
@@ -1431,9 +1431,9 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def sum(x: Tensor): Tensor = {
-      val xx = x.resize(x.shape.padTo(4, unit(1)): _*)
+      val xx = x.resizeNoCheck(x.shape.padTo(4, unit(1)): _*)
       val res = cudnnReduceTensor(xx, ReductionOp.Add, xx.shape.indices)
-      res.resize(1)
+      res.resizeNoCheck(1)
     }
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
@@ -1456,7 +1456,7 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     override def sum(x: Tensor, dim: Int): Tensor = {
       assert(dim >= 0 && dim < x.rank, s"dim should be in range, got ${dim} from ${x.shape}")
-      val xx = x.resize(x.shape.padTo(4, unit(1)): _*)
+      val xx = x.resizeNoCheck(x.shape.padTo(4, unit(1)): _*)
       val indices = dim +: ((x.rank until xx.rank): Range).toSeq
       cudnnReduceTensor(xx, ReductionOp.Add, indices)
     }
@@ -1559,7 +1559,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t paramsSize;
           |CUDNN_CALL(cudnnGetRNNParamsSize(
           |    cudnnHandle, rnn_desc, x_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
+          |#ifdef DEBUG
           |assert(paramsSize / sizeof(float) == """.stripMargin, w.scalarCount, s""" && "Expected parameter size mismatch");
+          |#endif
           |
           |cudnnFilterDescriptor_t w_desc;
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&w_desc));
@@ -1584,7 +1586,6 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t workspaceSize;
           |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
           |    cudnnHandle, rnn_desc, seqLength, x_descs, &workspaceSize));
-          |void* workspace = myGpuMalloc(workspaceSize);
           |""".stripMargin) ++
 
         // If training, create reserve space and call `ForwardTraining` function.
@@ -1599,6 +1600,7 @@ trait TensorDslCudnn extends TensorDslCublas {
             reserveSpace, " = (float*)reserveSpace;\n",
             reserveSpaceSize, " = (int)reserveSize;\n") ++
           Seq(
+            "void* workspace = myGpuMalloc(workspaceSize);\n" +
             "CUDNN_CALL(cudnnRNNForwardTraining(\n" +
             s"    cudnnHandle, rnn_desc, seqLength, x_descs, ", x.data, ",\n" +
             "    hx_desc,", hxData, ", cx_desc,", cxData, ", w_desc, ", w.data, ", y_descs, ", res.data, ",\n" +
@@ -1613,7 +1615,8 @@ trait TensorDslCudnn extends TensorDslCublas {
             "    hy_desc,", hyData, ", cy_desc, NULL, workspace, workspaceSize));\n")
         ) ++
 
-        Seq("}"): _*)
+        Seq("myGpuFree(workspaceSize);\n" +
+            "}"): _*)
 
       if (training)
         (res, hy, Some(reserveSpace, reserveSpaceSize))
@@ -1725,7 +1728,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t paramsSize;
           |CUDNN_CALL(cudnnGetRNNParamsSize(
           |    cudnnHandle, rnn_desc, dx_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
+          |#ifdef DEBUG
           |assert(paramsSize / sizeof(float) == """.stripMargin, w.x.scalarCount, s""" && "Expected parameter size mismatch");
+          |#endif
           |
           |cudnnFilterDescriptor_t w_desc;
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&w_desc));
@@ -1759,10 +1764,11 @@ trait TensorDslCudnn extends TensorDslCublas {
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnRNNBackwardData(\n" +
-          s"    cudnnHandle, rnn_desc, seqLength, y_descs, ", output.x.data, ", y_descs, ", output.d.data, ",\n" +
+          "    cudnnHandle, rnn_desc, seqLength, y_descs, ", output.x.data, ", y_descs, ", output.d.data, ",\n" +
           "    dhy_desc, NULL, dcy_desc, NULL, w_desc, ", w.x.data, ", hx_desc, ", hxData, ",\n" +
           "    cx_desc, ", cxData, ", dx_descs, ", input.d.data, ", dhx_desc, NULL, dcx_desc, NULL,\n" +
           "    workspace, workspaceSize, ", reserve, ", ", reserveSize, "));\n" +
+          "myGpuFree(workspaceSize);\n" +
           "}"): _*)
     }
 
@@ -1839,8 +1845,9 @@ trait TensorDslCudnn extends TensorDslCublas {
           |size_t paramsSize;
           |CUDNN_CALL(cudnnGetRNNParamsSize(
           |    cudnnHandle, rnn_desc, x_descs[0], &paramsSize, CUDNN_DATA_FLOAT));
-          |// printf("paramsSize: %zu\\n", paramsSize / sizeof(float));
+          |#ifdef DEBUG
           |assert(paramsSize / sizeof(float) == """.stripMargin, w.d.scalarCount, s""" && "Expected parameter size mismatch");
+          |#endif
           |
           |cudnnFilterDescriptor_t dw_desc;
           |CUDNN_CALL(cudnnCreateFilterDescriptor(&dw_desc));
@@ -1869,6 +1876,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           s"    cudnnHandle, rnn_desc, seqLength, x_descs, ", input.x.data, ", hx_desc, ", hxData, ",\n" +
           "    y_descs, ", output.x.data, ", workspace, workspaceSize,\n" +
           "    dw_desc, ", w.d.data, ", ", reserve, ", ", reserveSize, "));\n" +
+          "myGpuFree(workspaceSize);\n" +
           "}"): _*)
     }
 

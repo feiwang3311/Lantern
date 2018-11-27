@@ -131,14 +131,15 @@ def main():
     forward_time = AverageMeter()
     backward_time = AverageMeter()
 
-    filename = "/scratch/wu636/Lantern/src/out/PLDI19evaluation/deepspeech2/ds2-pytorch/data/test/deepspeech_train.pickle"
+    filename = "/scratch-ml00/wang603/deepspeechData/deepspeech_train.pickle"
     batchedData = user_defined_input.Batch(filename)
 
     def train_one_epoch(epoch):
         avg_loss = 0
         for i in range(batchedData.numBatches):
+#            if i == 1: return
             end = time.time()
-            inputs, targets, input_percentages, target_sizes = batchedData.batch()
+            inputs, targets, input_percentages, target_sizes = batchedData.batch(last=False)
 
             # making all inputs Tensor
             inputs = torch.from_numpy(inputs)

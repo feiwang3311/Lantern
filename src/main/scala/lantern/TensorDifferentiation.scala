@@ -615,6 +615,8 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def resize(dims: Rep[Int]*) = Tensor(this.data, resizeDim(this.scalarCount, dims): _*)
+    @virtualize
+    def resizeNoCheck(dims: Rep[Int]*) = Tensor(this.data, dims: _*)
 
     @virtualize
     // NOTE: this function is fixed to run on CPU!
@@ -1393,28 +1395,18 @@ trait TensorDsl extends DslOps with Diff {
       backend.softmax_grad(this, y, adjust_dim)
     }
 
-    // // deprecated (older version that only works with 1D data), should remove
-    // def logSoftmax(): TensorR @diff = shift { (k: TensorR => Unit) =>
-    //   assert(this.x.rank == 1, s"logSoftmax are for 1D vectors, got ${this.x.shape}")
-    //   val y = TensorR(x.logSoftmax()); k(y)  // note that y is 2D (batchSize = 1, length)
-    //   backend.logSoftmax_grad(resizeHelperNoChecker(this, 1, this.x.shape(0)), y)
-    // }
-
     def logSoftmaxB(dim: Int = 1): TensorR @diff = shift { (k: TensorR => Unit) =>
       val adjust_dim = if (dim < 0) this.x.rank + dim else dim
       val y = TensorR(x.logSoftmaxB(adjust_dim)); k(y)
       backend.logSoftmax_grad(this, y, adjust_dim)
     }
 
-    // def resize(dims: Rep[Int]*): TensorR @diff = shift { (k: TensorR => Unit) =>
-    //   val newDims = resizeDim(this.x.scalarCount, dims)
-    //   k(new TensorR(new Tensor(this.x.data, newDims), new Tensor(this.d.data, newDims)))
-    // }
-
     def resize(dims: Rep[Int]*) = {
       val newDims = resizeDim(this.x.scalarCount, dims)
       new TensorR(new Tensor(this.x.data, newDims), new Tensor(this.d.data, newDims))
     }
+
+    def resizeNoCheck(dims: Rep[Int]*) = new TensorR(new Tensor(this.x.data, dims), new Tensor(this.d.data, dims))
 
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert (this.x.rank == 2, s"nllLossB() function only takes tensor of rank 2, got ${this.x.shape}")
@@ -1425,8 +1417,6 @@ trait TensorDsl extends DslOps with Diff {
 
     def ctcLoss(inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor =
       backend.ctcLoss(this, inputLengths, labels, labelLengths)
-
-    def resizeHelperNoChecker(t: TensorR, dims: Int*) = new TensorR(t.x.resize(dims: _*), t.d.resize(dims: _*))
 
     @virtualize
     def averagePoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
