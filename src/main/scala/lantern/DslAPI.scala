@@ -5,6 +5,10 @@ import org.scala_lang.virtualized.SourceContext
 
 import scala.virtualization.lms.common._
 
+import java.nio._
+import java.nio.file._
+import java.io._
+
 trait DslOps extends PrimitiveOps with NumericOpsExtra with BooleanOps
     with LiftString with LiftPrimitives with LiftNumeric with LiftBoolean
     with IfThenElse with Equal with RangeOps with OrderingOps with MiscOps with ArrayOps with StringOps
@@ -324,10 +328,7 @@ trait DslGenBase extends CGenNumericOpsExtra
   // Raw code, to be included in the code template at file scope, before the main function.
   def templateRawCode: String = ""
 
-  override def emitSource[A:Manifest](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
-    withStream(out) {
-      stream.println(templateHeaders.map(x => s"#include $x").mkString("\n"))
-      stream.println(raw"""
+  val preamble = raw"""
         |using namespace std;
         |#ifndef MAP_FILE
         |#define MAP_FILE MAP_SHARED
@@ -394,7 +395,12 @@ trait DslGenBase extends CGenNumericOpsExtra
         |  Snippet(argv[1]);
         |  return 0;
         |}
-        |""".stripMargin)
+        |""".stripMargin
+
+  override def emitSource[A:Manifest](args: List[Sym[_]], body: Block[A], functionName: String, out: java.io.PrintWriter) = {
+    withStream(out) {
+      stream.println(templateHeaders.map(x => s"#include $x").mkString("\n"))
+      stream.println(preamble)
     }
     super.emitSource[A](args, body, functionName, out)
   }
@@ -966,7 +972,7 @@ trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorDsl with DslExp
   }
 }
 
-abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with TensorDslCPU with NNModule with Dataset { self =>
+abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with TensorDslCPU with NNModule with Dataset with ONNXLib { self =>
   override def manifestA: Manifest[A] = manifest[A]
   override def manifestB: Manifest[B] = manifest[B]
 }
@@ -1001,4 +1007,122 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCud
       (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
     }
   }
+}
+
+
+// library code generation
+trait DslGenBaseLib extends DslGenBase {
+  val IR: DslExp
+  import IR._
+
+  override val preamble = raw"""
+        |using namespace std;
+        |#ifndef MAP_FILE
+        |#define MAP_FILE MAP_SHARED
+        |#endif
+        |
+        |long fsize(int fd) {
+        |  struct stat stat;
+        |  int res = fstat(fd, &stat);
+        |  return stat.st_size;
+        |}
+        |
+        |long HEAP_SIZE_CPU = 1073741826; // 1048576; // 536870912; // 268435456; // 2097152; 1610612739; // 4294967304; //
+        |void *mallocBase = calloc(HEAP_SIZE_CPU, 1);
+        |void *mallocAddr = mallocBase;
+        |void *waterMark = mallocBase;
+        |void *myMalloc(size_t bytes) {
+        |  void *res = mallocAddr;
+        |  mallocAddr = (void *)((char *)mallocAddr + bytes);
+        |  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE_CPU)
+        |    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE_CPU\n");
+        |  return res;
+        |}
+        |
+        |long HEAP_SIZE = 8589934608; //  4294967304; // this is for GPU
+        |
+        |$templateRawCode
+        |
+        |""".stripMargin
+}
+
+trait DslGenLibC extends DslGenBaseLib {
+  val IR: DslExp
+  import IR._
+}
+
+abstract class DslDriverBaseLib[A: Manifest, B: Manifest, C:Manifest] extends DslExp { self =>
+  val codegen: DslGenBaseLib {
+    val IR: self.type
+  }
+
+  def libDir: String
+  def libFileName: String
+  def libInferenceFuncName: String
+
+  // The code snippet to compile.
+  def snippet(x: Rep[A], y: Rep[B]): Rep[C]
+
+  def generateLib: Unit
+
+  lazy val code: String = {
+    val source = new java.io.StringWriter()
+    codegen.emitSource2[A,B,C](snippet, libInferenceFuncName, new java.io.PrintWriter(source))
+    source.toString
+  }
+}
+
+abstract class DslDriverLibC[A: Manifest, B: Manifest, C:Manifest] extends DslDriverBaseLib[A, B, C] { self =>
+  override val codegen = new DslGenLibC {
+    val IR: self.type = self
+  }
+}
+
+trait LanternDriverLib[A, B, C] extends DslDriverBaseLib[A, B, C] with TensorDsl with DslExp { self =>
+  implicit def manifestA: Manifest[A]
+  implicit def manifestB: Manifest[B]
+  implicit def manifestC: Manifest[C]
+
+  def wrapper(x: Rep[A], y: Rep[B]): Rep[C] = {
+    generateRawComment("Backend setup.")
+    backend.setup()
+    val result = snippet(x, y)
+
+    generateRawComment("Backend cleanup.")
+    backend.cleanup()
+    result
+  }
+
+  override lazy val code: String = {
+    val source = new java.io.StringWriter()
+    codegen.emitSource2(wrapper, libInferenceFuncName, new java.io.PrintWriter(source))
+    source.toString
+  }
+
+  override def generateLib {
+    val dir = new File(libDir)
+    if (!dir.exists()) dir.mkdirs()
+    val cppFileName = s"$libDir/$libFileName.cpp"
+    val headerFileName = s"$libDir/$libFileName.h"
+    val binaryFileName = s"$libDir/$libFileName.so"
+    val out = new java.io.PrintWriter(cppFileName)
+    out.println(code)
+    out.close()
+    val out2 = new java.io.PrintWriter(headerFileName)
+    out2.println(s"void $libInferenceFuncName(float* in, float* out);")
+    out2.println(s"void *myMalloc(size_t bytes);")
+    out2.println(s"long fsize(int fd);")
+    out2.close()
+
+    // new java.io.File(binaryFileName).delete
+    // import scala.sys.process._
+    // System.out.println(s"Compile C++ code $cppFileName into $binaryFileName as dynamic library")
+    // (s"g++ -c -std=c++11 -O3 $cppFileName -o $binaryFileName -fPIC -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lpthread": ProcessBuilder).lines.foreach(System.out.println) //-std=c99
+  }
+}
+
+abstract class LanternDriverLibC[A: Manifest, B: Manifest, C: Manifest] extends DslDriverLibC[A, B, C] with LanternDriverLib[A, B, C] with TensorDslCPU with NNModule with Dataset with ONNXLib { self =>
+  override def manifestA: Manifest[A] = manifest[A]
+  override def manifestB: Manifest[B] = manifest[B]
+  override def manifestC: Manifest[C] = manifest[C]
 }

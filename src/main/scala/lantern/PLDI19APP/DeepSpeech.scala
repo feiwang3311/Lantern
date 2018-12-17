@@ -36,7 +36,6 @@ object DeepSpeech {
       case class BatchRNN(val name: String = "batch_rnn",
                           inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = RnnTanhMode,
                           bidirectional: Boolean = true, useBatchNorm: Boolean = false) extends Module {
-        printf("inputSize for batchRNN is %d\\n", inputSize)
         val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
