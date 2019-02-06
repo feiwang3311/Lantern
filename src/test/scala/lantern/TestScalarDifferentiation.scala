@@ -133,6 +133,30 @@ class AdLMSTest extends FunSuite {
     }
   }
 
+  test("reverse_mode_sin") {
+    val gr1 = new DslDriverScala[Double,Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        gradR(x => x.sin())(x)
+      }
+    }
+    def grad(x: Double) = Math.cos(x)
+    for (x <- (-5 until 5)) {
+      assert (gr1.eval(x) == grad(x))
+    }
+  }
+
+  test("reverse_mode_cos") {
+    val gr1 = new DslDriverScala[Double,Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        gradR(x => x.cos())(x)
+      }
+    }
+    def grad(x: Double) = - Math.sin(x)
+    for (x <- (-5 until 5)) {
+      assert (gr1.eval(x) == grad(x))
+    }
+  }
+
   test("reverseRV") {
     val grv1 = new DslDriverScala[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
@@ -157,6 +181,29 @@ class AdLMSTest extends FunSuite {
     }
   }
 
+  test("forward_mode_sin") {
+    val gf1 = new DslDriverScala[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        gradF(x => x.sin())(x)
+      }
+    }
+    def grad(x: Double) = Math.cos(x)
+    for (x <- (-5 until 5)) {
+      assert (gf1.eval(x) == grad(x))
+    }
+  }
+
+  test("forward_mode_cos") {
+    val gf1 = new DslDriverScala[Double, Double] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Double] = {
+        gradF(x => x.cos())(x)
+      }
+    }
+    def grad(x: Double) = - Math.sin(x)
+    for (x <- (-5 until 5)) {
+      assert (gf1.eval(x) == grad(x))
+    }
+  }
 
   test("forward_forward") {
     val gff1 = new DslDriverScala[Double,Double] with DiffApi {

@@ -22,8 +22,13 @@ trait DiffApi extends DslOps with Diff {
       new NumF(this.x + that.x, this.d + that.d)
     def *(that: NumF) =
       new NumF(this.x * that.x, this.d * that.x + that.d * this.x)
+    def sin() =
+      new NumF(Math.sin(this.x), Math.cos(this.x) * this.d)
+    def cos() =
+      new NumF(Math.cos(this.x), -1.0 * Math.sin(this.x) * this.d)
     override def toString = (x,d).toString
   }
+
   class NumFF(val x: RDouble, val d: NumF) {
     def +(that: NumFF) =
       new NumFF(this.x + that.x, this.d + that.d)
@@ -44,6 +49,14 @@ trait DiffApi extends DslOps with Diff {
     def -(that: NumR): NumR @diff = shift{ (k: NumR => Unit) =>
       val y = new NumR(x - that.x, var_new(0.0)); k(y)
       this.d += y.d; that.d -= y.d}
+    def sin(): NumR @diff = shift { (k: NumR => Unit) =>
+      val y = new NumR(Math.sin(x), var_new(0.0)); k(y)
+      this.d += y.d * Math.cos(x)
+    }
+    def cos(): NumR @diff = shift{ (k: NumR => Unit) =>
+      val y = new NumR(Math.cos(x), var_new(0.0)); k(y)
+      this.d -= y.d * Math.sin(x)
+    }
     def print() = {
       printf("the value is %f\n", x)
       printf("the gradient is %f\n", d)
@@ -303,6 +316,7 @@ trait DiffApi extends DslOps with Diff {
     reset { f(x1).d = 1.0 }
     x1.d
   }
+
   def gradR(f: NumR => NumR @diff)(x: RDouble): Rep[Double] = {
     val x1 = new NumR(x, var_new(0.0))
     reset {
