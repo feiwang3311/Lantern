@@ -25,19 +25,19 @@ def getLabelFromFileName(filename):
 
 def getColor(label):
   if label == 'Numpy':
-    return 'g'
+    return '#a6cee3'
   if label == 'Lantern':
-    return 'b'
+    return '#1f78b4'
   if label == 'PyTorch':
-    return 'r'
+    return '#b2df8a'
   if label == 'TensorFlow':
-    return 'y'
+    return '#23901c'
   if label == 'TensorFold' or label == 'TensorFold20' or label == 'TF20':
-    return 'm'
+    return '#23901c'
   if label == 'DyNet' or label == 'DyNetB':
-    return 'g'
+    return '#a6cee3'
   if label == 'DyNetNB':
-    return 'c'
+    return '#006600'
   else:
     print("NOTE: color not defined for label: %s" % label)
 
