@@ -328,7 +328,7 @@ trait DslGenBase extends CGenNumericOpsExtra
   // Raw code, to be included in the code template at file scope, before the main function.
   def templateRawCode: String = ""
 
-  val preamble = raw"""
+  def preamble = raw"""
         |using namespace std;
         |#ifndef MAP_FILE
         |#define MAP_FILE MAP_SHARED
@@ -1015,7 +1015,7 @@ trait DslGenBaseLib extends DslGenBase {
   val IR: DslExp
   import IR._
 
-  override val preamble = raw"""
+  override def preamble = raw"""
         |using namespace std;
         |#ifndef MAP_FILE
         |#define MAP_FILE MAP_SHARED
