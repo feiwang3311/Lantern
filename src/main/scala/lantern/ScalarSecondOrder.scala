@@ -91,4 +91,77 @@ trait SecOrderApi extends DslOps with Diff {
     (gradient, hessian_vector)
   }
 
+  object NumFS {
+    // def apply(x: Rep[Array[Double]], d: Rep[Array[Double]]) = new NumFS(x, d)
+    def apply(x: Rep[Array[Double]]) = {
+      val d = NewArray[Double](1); d(0) = 0.0
+      new NumFS(x, d)
+    }
+    def apply() = {
+      val x = NewArray[Double](1); x(0) = 0.0
+      val d = NewArray[Double](1); d(0) = 0.0
+      new NumFS(x, d)
+    }
+    def apply(x: Rep[Double], d: Rep[Double] = 0.0) = {
+      val xx = NewArray[Double](1); xx(0) = x
+      val dd = NewArray[Double](1); dd(0) = d
+      new NumFS(xx, dd)
+    }
+  }
+
+  // Array here is always size 1
+  class NumFS(val x: Rep[Array[Double]], val d: Rep[Array[Double]]) {
+    def + (that: NumFS) = NumFS(x(0) + that.x(0), d(0) + that.d(0))
+    def * (that: NumFS) = NumFS(x(0) * that.x(0), d(0) * that.x(0) + that.d(0) * x(0))
+    def sin() = NumFS(Math.sin(x(0)), d(0) * Math.cos(x(0)))
+    def cos() = NumFS(Math.cos(x(0)), 0 - d(0) * Math.sin(x(0)))
+
+    def += (that: NumFS) = {
+      x(0) = x(0) + that.x(0)
+      d(0) = d(0) + that.d(0)
+    }
+    def update(that: NumFS): Unit = this += that
+    def update(that0: NumFS, that1: NumFS, f: (NumFS, NumFS) => NumFS): Unit = this += f(that0, that1)
+  }
+
+  class NumRS(val x: NumFS, val d: NumFS) {
+    def + (that: NumRS) = shift { (k: NumRS => Unit) =>
+      val y = new NumRS(x + that.x, NumFS()); k(y)
+      this.d update y.d; that.d update y.d
+    }
+    def * (that: NumRS) = shift { (k: NumRS => Unit) =>
+      val y = new NumRS(x * that.x, NumFS()); k(y)
+      this.d update (that.x, y.d, (a, b) => a * b)
+      that.d update (this.x, y.d, (a, b) => a * b)
+    }
+    def sin() = shift { (k: NumRS => Unit) =>
+      val y = new NumRS(x.sin(), NumFS()); k(y)
+      this.d update (y.d, x, (a, b) => a * x.cos()) 
+    }
+  }
+  
+  def toNumRS(x: Rep[Double]) = new NumRS(NumFS(x), NumFS())
+
+  /* tests: R^2 -> R */
+  // println("test for R^2 -> R")
+  def grad_two_inputsS(f: (NumRS, NumRS) => NumRS @diff)(v0: Double, v1: Double)(v: (Double, Double)) = {
+    val x1 = new NumRS(NumFS(v0, v._1), NumFS())
+    val x2 = new NumRS(NumFS(v1, v._2), NumFS())
+    reset {
+      val temp = f(x1, x2)
+      temp.d.x(0) = 1.0
+      ()
+    }
+    val gradient = (x1.d.x(0), x2.d.x(0))
+    val hessian_vector = (x1.d.d(0), x2.d.d(0))
+    (gradient, hessian_vector)
+  }
+
+  @virtualize
+  def assertVectorEqual(result: (Rep[Double], Rep[Double]), expected: (Rep[Double], Rep[Double])) =
+    if (result._1 != expected._1 || result._2 != expected._2) {
+      printf("(%f, %f) is not as expected (%f, %f)", result._1, result._2, expected._1, expected._2)
+      error("")
+    }
+
 }
