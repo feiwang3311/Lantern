@@ -110,7 +110,7 @@ trait SecOrderApi extends DslOps with Diff {
   }
 
   // Array here is always size 1
-  class NumFS(val x: Rep[Array[Double]], val d: Rep[Array[Double]]) {
+  class NumFS(val x: Rep[Array[Double]], val d: Rep[Array[Double]]) extends Serializable {
     def + (that: NumFS) = NumFS(x(0) + that.x(0), d(0) + that.d(0))
     def * (that: NumFS) = NumFS(x(0) * that.x(0), d(0) * that.x(0) + that.d(0) * x(0))
     def sin() = NumFS(Math.sin(x(0)), d(0) * Math.cos(x(0)))
@@ -122,9 +122,12 @@ trait SecOrderApi extends DslOps with Diff {
     }
     def update(that: NumFS): Unit = this += that
     def update(that0: NumFS, that1: NumFS, f: (NumFS, NumFS) => NumFS): Unit = this += f(that0, that1)
+
+    def < (that: NumFS): Rep[Boolean] = x(0) < that.x(0)
+    def > (that: NumFS): Rep[Boolean] = x(0) > that.x(0)
   }
 
-  class NumRS(val x: NumFS, val d: NumFS) {
+  class NumRS(val x: NumFS, val d: NumFS) extends Serializable {
     def + (that: NumRS) = shift { (k: NumRS => Unit) =>
       val y = new NumRS(x + that.x, NumFS()); k(y)
       this.d update y.d; that.d update y.d
@@ -138,6 +141,9 @@ trait SecOrderApi extends DslOps with Diff {
       val y = new NumRS(x.sin(), NumFS()); k(y)
       this.d update (y.d, x, (a, b) => a * x.cos()) 
     }
+
+    def < (that: NumRS): Rep[Boolean] = x < that.x
+    def > (that: NumRS): Rep[Boolean] = x > that.x
   }
   
   def toNumRS(x: Rep[Double]) = new NumRS(NumFS(x), NumFS())
@@ -158,10 +164,75 @@ trait SecOrderApi extends DslOps with Diff {
   }
 
   @virtualize
-  def assertVectorEqual(result: (Rep[Double], Rep[Double]), expected: (Rep[Double], Rep[Double])) =
-    if (result._1 != expected._1 || result._2 != expected._2) {
+  def assertVectorEqual(result: (Rep[Double], Rep[Double]), expected: (Rep[Double], Rep[Double]), eps: Double = 0.00001) =
+    if (result._1 < expected._1 - eps || result._1 > expected._1 + eps ||
+        result._2 < expected._2 - eps || result._2 > expected._2 + eps) {
       printf("(%f, %f) is not as expected (%f, %f)", result._1, result._2, expected._1, expected._2)
       error("")
     }
+
+  def helperArray(x: NumRS): Rep[Array[Array[Double]]] = {
+    val temp = NewArray[Array[Double]](4)
+    temp(0) = x.x.x; temp(1) = x.x.d; temp(2) = x.d.x; temp(3) = x.d.d
+    temp
+  }
+
+  def FUN(f: NumRS => Unit): (NumRS => Unit) = { (x: NumRS) =>
+    val f1 = fun { (in: Rep[Array[Array[Double]]]) =>
+      f(new NumRS(new NumFS(in(0), in(1)), new NumFS(in(2), in(3))))
+    }
+    f1(helperArray(x))
+  }
+
+  @virtualize
+  def IF(c: Rep[Boolean])(a: =>NumRS @diff)(b: =>NumRS @diff): NumRS @diff = shift { k:(NumRS => Unit) =>
+    val k1 = FUN(k)
+    if (c) RST(k1(a)) else RST(k1(b))
+  }
+
+  @virtualize
+  def WHILE(init: NumRS)(c: NumRS => Rep[Boolean])(b: NumRS => NumRS @diff): NumRS @diff = shift { k:(NumRS => Unit) =>
+    lazy val loop: NumRS => Unit = FUN { (x: NumRS) =>
+      if (c(x)) RST(loop(b(x))) else RST(k(x))
+    }
+    loop(init)
+  }
+
+  def FUN(f: (Rep[Int], NumRS) => Unit): (Rep[Int], NumRS) => Unit = { (i: Rep[Int], x: NumRS) =>
+    val f1 = fun { (i: Rep[Int], in: Rep[Array[Array[Double]]]) =>
+      f(i, new NumRS(new NumFS(in(0), in(1)), new NumFS(in(2), in(3))))
+    }
+    f1(i, helperArray(x))
+  }
+
+  @virtualize
+  def FOR(init: NumRS)(c: Rep[Int])(b: (Rep[Int], NumRS) => NumRS @diff): NumRS @diff = shift { k:(NumRS => Unit) =>
+    lazy val loop: (Rep[Int], NumRS) => Unit = FUN { (i: Rep[Int], x: NumRS) =>
+      if (i < c) { RST(loop(i+1, b(i, x))) } else RST(k(x))
+    }
+    loop(0, init)
+  }
+
+  // stack continuations for recursive models
+  def FUN(f: (Rep[Int], NumRS => Unit, NumRS) => Unit): (Rep[Int], NumRS => Unit, NumRS) => Unit = { (i: Rep[Int], k: NumRS => Unit, x: NumRS) =>
+    val ks: Rep[Array[Array[Double]] => Unit] = fun { (in: Rep[Array[Array[Double]]]) =>
+      k(new NumRS(new NumFS(in(0), in(1)), new NumFS(in(2), in(3))))
+    }
+    val f1 = fun { (i: Rep[Int], ks: Rep[Array[Array[Double]] => Unit], in: Rep[Array[Array[Double]]]) =>
+      val k: (NumRS => Unit) = (x: NumRS) => ks(helperArray(x))
+      f(i, k, new NumRS(new NumFS(in(0), in(1)), new NumFS(in(2), in(3))))
+    }
+    f1(i, ks, helperArray(x))
+  }
+
+  @virtualize // NOTE: this version cannot handle empty trees // assume that children array use -1 for leaf nodes
+  def TREE(init: NumRS)(lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (NumRS, NumRS, Rep[Int]) => NumRS @diff): NumRS @diff = shift {
+    (k: NumRS => Unit) =>
+    lazy val tree: (Rep[Int], NumRS => Unit, NumRS) => Unit = FUN { (i: Rep[Int], k: NumRS => Unit, x: NumRS) =>
+      def shift_tree = (i: Rep[Int]) => shift { k: (NumRS => Unit) => tree(i, k, x) }
+      RST(k( IF(i >= 0){ b(shift_tree(lch(i)), shift_tree(rch(i)), i) } { x } ))
+    }
+    tree(0, k, init)
+  }
 
 }

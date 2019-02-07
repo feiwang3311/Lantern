@@ -1565,8 +1565,7 @@ trait TensorDsl extends DslOps with Diff {
   def FUNc(f: TensorR => Unit): (TensorR => Unit) = { (x:TensorR) =>
     val dims = x.x.shape.toSeq
     val f1 = fun { (x: Rep[Array[Array[Float]]]) =>
-      val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
-      f(tensor)
+      f(new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*)))
     }
     val in = NewArray[Array[Float]](2)
     in(0) = x.x.data; in(1) = x.d.data

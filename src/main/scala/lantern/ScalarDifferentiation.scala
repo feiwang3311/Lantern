@@ -78,7 +78,7 @@ trait DiffApi extends DslOps with Diff {
 
   // Note: we make the generated function return the accumulated deltaVar
   // and add it to the var after calling the continuation. Slightly different
-  // than in the upstaged version. The main reason is that we don't (want to)
+  // than in the unstaged version. The main reason is that we don't (want to)
   // have NumR objects in the generated code and that we can't (easily) pass
   // a mutable var to a function with reference semantics (we could with
   // explicit boxing, and in C/C++ we could just pass the address)
