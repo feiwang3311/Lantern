@@ -171,29 +171,6 @@ class TestCudnn extends LanternFunSuite {
     runTest(test5)
   }
 
-  testGPU("mul_sub") {
-    val mul_sub = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cudnn-mulsub"
-      @virtualize
-      def snippet(x: Rep[String]): Rep[Unit] = {
-        val x1 = Tensor.fromData(Seq(2, 3, 2), 1,2,3,4,5,6,7,8,9,10,11,12)
-        val x2 = Tensor.fromData(Seq(3, 2), 1,2,3,4,5,6)
-        val result = x1.mul_sub(x2)
-        val x1R = TensorR(x1)
-        val x2R = TensorR(x2)
-        gradR(x => x1R.mul_sub(x2R))(Tensor.zeros(1))
-
-        backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(2, 3, 2), 1,4,9,16,25,36,7,16,27,40,55,72)
-        val expectedGrad1 = Tensor.fromData(Seq(2, 3, 2), 1,2,3,4,5,6,1,2,3,4,5,6)
-        val expectedGrad2 = Tensor.fromData(Seq(3, 2), 8,10,12,14,16,18)
-        Tensor.assertEqual(expected, result.toCPU())
-        Tensor.assertEqual(expectedGrad1, x1R.d.toCPU())
-        Tensor.assertEqual(expectedGrad2, x2R.d.toCPU())
-      }
-    }
-    runTest(mul_sub)
-  }
 
   testGPU("permute") {
     val permute = new LanternDriverCudnn[String, Unit] {

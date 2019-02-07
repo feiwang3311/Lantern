@@ -296,9 +296,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
     override def /=(x: Tensor, y: Rep[Float]): Unit = ??? //elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
     override def /=(x: Tensor, y: Tensor): Unit = ??? //elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
 
-    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = ???
-    override def mul_sub_grad(in1: TensorR, in2: TensorR, res: TensorR): Unit = ???
-
     override def plusBias(main: Tensor, bias: Tensor): Tensor = ???
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = ???
 

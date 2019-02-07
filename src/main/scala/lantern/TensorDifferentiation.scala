@@ -48,9 +48,9 @@ trait TensorDsl extends DslOps with Diff {
     toDims.map(x => if (x > 0) x else scalarCount / prod)
   }
 
-  def mmax(a: Int, b: Int) = if (a >= b) a else b
   @virtualize
   def mmax(a: Rep[Int], b: Rep[Int]) = if (a >= b) a else b
+  def mmax(a: Int, b: Int) = if (a >= b) a else b
 
   def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
 
@@ -242,14 +242,7 @@ trait TensorDsl extends DslOps with Diff {
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
 
-    // TODO (Fei Wang): should remove, now that elementWiseOPWithBroadCasting is working for cudnn
-    // in2 has less rank than in1, and the shape of in2 matches with the last ${in2.rank} shapes of in1
-    // i.e. in1.shape = (4 , 5, 6, 7), and in2.shape = (6, 7)
-    // mul is done elementwise for each sub tensor of in1
-    def mul_sub(in1: Tensor, in2: Tensor): Tensor
-    def mul_sub_grad(in1: TensorR, in2: TensorR, out: TensorR): Unit
-
-    // Why do we have plusBias and what is the difference of plusBias with elementWise + with broadcasting
+    // Why do we have plusBias and what is the difference of plusBias with elementWise + with broadcasting?
     // Ans: plusBias is less general than elementwise + with broadcasting, since it is assume that
     // the bias may be broadcasted, while the other tensor (call it main tensor) doesn't need to.
     // That resulted in easier implementation in cuDNN API calls.
@@ -258,7 +251,7 @@ trait TensorDsl extends DslOps with Diff {
     def plusBias(main: Tensor, bias: Tensor): Tensor
     def plusBias_grad(main: TensorR, bias: TensorR): Unit
 
-    // plusEqual assumes that adder is of the same shape as base, and addition can be down inPlace
+    // plusEqual assumes that adder is of the same shape as base, and addition can be done inPlace
     def plusEqual(base: Tensor, adder: Tensor): Tensor
     def plusEqual_grad(base: TensorR, adder: TensorR): Unit
 
@@ -346,6 +339,7 @@ trait TensorDsl extends DslOps with Diff {
     def sum_grad(input: TensorR, res: TensorR): Unit
     def mean(x: Tensor): Tensor
     def mean_grad(input: TensorR, res: TensorR): Unit
+    
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -433,8 +427,6 @@ trait TensorDsl extends DslOps with Diff {
     // In-place elementwise division.
     def /=(that: Rep[Float]): Unit = backend./=(this, that)
     def /= (that: Tensor): Unit = backend./=(this, that)
-
-    def mul_sub(in2: Tensor): Tensor = backend.mul_sub(this, in2)
 
     def fillInPlace(value: Rep[Float]): Unit = backend.fillInPlace(this, value)
     def setAsOne() = fillInPlace(1)
@@ -1240,12 +1232,6 @@ trait TensorDsl extends DslOps with Diff {
       backend.div_grad(this, that, y, xShape, yShape)
     }
 
-    def mul_sub(in2: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.mul_sub(in2.x)); k(y)
-      generateRawComment("backprop for mul_sub")
-      backend.mul_sub_grad(this, in2, y)
-    }
-
     // `dot` represents the following:
     // - vector-vector dot product.
     //   [V] dot [V] => [1] (scalar)
@@ -1307,7 +1293,6 @@ trait TensorDsl extends DslOps with Diff {
     def mask4D(lengths: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       x.mask4D(lengths); k(this)
       generateRawComment("backprop for mask4D, not sure if gradient should be masked as well?")
-      // this.d.mask4D(lengths)
     }
 
     def relu(inPlace: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>

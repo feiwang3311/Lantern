@@ -311,12 +311,6 @@ trait TensorDslCPU extends TensorDsl {
     override def /=(x: Tensor, y: Rep[Float]): Unit = mapInPlace(x, s => s / y)
     override def /=(x: Tensor, y: Tensor): Unit = inplaceElementWiseOpWithBroadCastOrReduce(x, y, (_ / _))
 
-    override def mul_sub(in1: Tensor, in2: Tensor): Tensor = this.*(in1, in2)._1
-    override def mul_sub_grad(in1: TensorR, in2: TensorR, out:TensorR): Unit = {
-      val in2Shape = Dimensions(Seq(unit(1), unit(1)) ++ in2.x.shape.dims, true)
-      mul_grad(in1, in2, out, out.x.shape, in2Shape)
-    }
-
     override def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit = {
       (transX, transY) match {
         case (false, false) => output.changeTo { i => x.data(i) * alpha + y.data(i) * beta }

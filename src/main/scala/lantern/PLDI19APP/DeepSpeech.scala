@@ -20,7 +20,7 @@ object DeepSpeech {
 
   val root_dir = "src/out/PLDI19evaluation/"
   val gpu_file_dir = "deepspeech2/lantern/Lantern.cu"
-  val data_dir: String = "/scratch-ml00/wang603/deepspeechData/deepspeech_train.bin"
+  val data_dir = "/scratch-ml00/wang603/deepspeechData/deepspeech_train.bin"
 
   val deepspeechGPU = new LanternDriverCudnn[String, Unit] {
 
@@ -60,7 +60,7 @@ object DeepSpeech {
           val padding = TensorR(Tensor.zeros((unit(context) +: input.x.shape.drop(1)): _*))
           val x = input.concat(0, padding)
           val xs = x.repeat0(context).permute(0, 2, 3, 1)
-          (xs mul_sub weight).sum(3)
+          (xs * weight).sum(3)
         }
       }
 
