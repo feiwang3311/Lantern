@@ -23,18 +23,10 @@ trait SecOrderApi extends DslOps with Diff {
 
   object NumF {
     var counter = 0
-    // def apply(tag: Int, x: Double, d: Double) = new NumF(tag, x, d)
-    // def apply(x: Double, d: Double = 0.0) = {
-    //   val temp = new NumF(counter, x, d)
-    //   printf(s"$temp\n")
-    //   counter += 1
-    //   temp
-    // }
     def apply(x: Double = 0.0, d: Double = 0.0, negtag: Boolean = false) = 
       if (negtag) new NumF(-1, x, d)
       else {
         val temp = new NumF(counter, x, d)
-        // printf(s"$temp\n")
         counter += 1
         temp
       }

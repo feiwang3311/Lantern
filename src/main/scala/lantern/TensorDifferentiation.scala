@@ -80,6 +80,7 @@ trait TensorDsl extends DslOps with Diff {
     def get(idx: Int): Rep[Int] = if (!dims.indices.contains(idx)) 1 else dims(idx)
     def reverse: Seq[Rep[Int]] = dims.reverse
 
+    // get scalarCount and strides
     val (scalarCount +: strides): Seq[Rep[Int]] = (dims :\ Seq[Rep[Int]](1)) {
       case (dim, seq@(t +: q)) => (dim * t) +: seq
     }
@@ -205,7 +206,7 @@ trait TensorDsl extends DslOps with Diff {
 
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
-    // Return dimensions as well to track whether broadcasting happened for the two operands
+    // Also return dimensions to track whether broadcasting happened for the two operands
     def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions)
     // back prop for + (may fuse the gradient of the two operands for efficiency)
     def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit
@@ -242,7 +243,6 @@ trait TensorDsl extends DslOps with Diff {
     def /=(x: Tensor, y: Rep[Float]): Unit
     def /=(x: Tensor, y: Tensor): Unit
 
-    // Why do we have plusBias and what is the difference of plusBias with elementWise + with broadcasting?
     // Ans: plusBias is less general than elementwise + with broadcasting, since it is assume that
     // the bias may be broadcasted, while the other tensor (call it main tensor) doesn't need to.
     // That resulted in easier implementation in cuDNN API calls.
@@ -1171,12 +1171,12 @@ trait TensorDsl extends DslOps with Diff {
       d.clipAt(bound)
     }
 
-    // that is bias
-    def plusBias(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      backend.plusBias(this.x, that.x); k(this)  // note: plusBias is in-place
-      backend.plusBias_grad(this, that)
+    def plusBias(bias: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
+      backend.plusBias(this.x, bias.x); k(this)  // note: plusBias is in-place
+      backend.plusBias_grad(this, bias)
     }
 
+    // plusEqual assumes that "that" is of the same dimension as "this", and addition can be done in place
     def plusEqual(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       backend.plusEqual(this.x, that.x); k(this)
       backend.plusEqual_grad(this, that)
