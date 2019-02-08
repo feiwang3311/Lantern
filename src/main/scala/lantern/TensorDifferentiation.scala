@@ -1182,14 +1182,11 @@ trait TensorDsl extends DslOps with Diff {
       backend.minus_grad(this, that, y, xShape, yShape)
     }
 
-    // mark: HERE: following code need to be backend depend!
     // this is element wise multiplication
     def * (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that); k(y)
-      generateRawComment("back prop for * with scalar")
       backend.geam(this.d, false, 1.0f, y.d, false, that, this.d)
     }
-
     def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (ya, xShape, yShape) = backend.*(x, that.x)
       val y = TensorR(ya); k(y)
@@ -1200,7 +1197,6 @@ trait TensorDsl extends DslOps with Diff {
     // element wise division
     def / (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x / that); k(y)
-      // this.d += y.d / that  // TODO (Fei Wang) can be optimized to save space
       this.d.addMul(1.0f / that, y.d)
     }
     def / (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
