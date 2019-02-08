@@ -481,13 +481,13 @@ class AdLMSVectorTest extends LanternFunSuite {
          // backward pass
          val dy = Tensor.copy(ps)
          dy.data(y_data(i)) -= 1
-         dWhy += (dy cart hs)
+         dWhy.add_cartesian(hs, dy)
          dby += dy
          val dh = (Why.trans() dot dy) + dhnext
          val dhraw = (Tensor.ones(1) - hs * hs) * dh
          dbh += dhraw
-         dWxh += (dhraw cart x)
-         dWhh += (dhraw cart hprev)
+         dWxh.add_cartesian(x, dhraw)
+         dWhh.add_cartesian(hprev, dhraw)
          dhnext.copy_data(Whh.trans() dot dhraw)
          ()
        }

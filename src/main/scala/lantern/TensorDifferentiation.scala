@@ -457,6 +457,10 @@ trait TensorDsl extends DslOps with Diff {
       backend.dot(this, that)
     }
 
+    // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
+    // the result is to update this so that this += that * y, where * is Cartesian product
+    def add_cartesian(that: Tensor, y: Tensor) = backend.add_cartesian(this, that, y)
+
     def gemm(that: Tensor, transX: Boolean, transY: Boolean, alpha: Float): Tensor = {
       generateRawComment(s"gemm: ${this.shape.seq}, ${that.shape.seq}")
       backend.gemm(this, transX, that, transY, alpha)
@@ -524,22 +528,6 @@ trait TensorDsl extends DslOps with Diff {
         idx += 1
       }
       idx != this.scalarCount
-    }
-
-    // NOTE: only handles (Vector Cartesian Vector)
-    // limited support for GPU backend. Do not recommend using this function
-    @deprecated
-    def cart(that: Tensor) = {
-      assert(this.rank == 1 && that.rank == 1, "cartesian product is only for 1d vectors")
-      val res = backend.mallocArray[Float](this.shape(0) * that.shape(0))
-      val off = var_new(0)
-      for (i <- DataLoop(this.shape(0))) {
-        for (j <- DataLoop(that.shape(0))) {
-          res(off) = data(i) * that.data(j)
-          off += 1
-        }
-      }
-      Tensor(res, this.shape(0), that.shape(0))
     }
 
     @virtualize
@@ -696,37 +684,6 @@ trait TensorDsl extends DslOps with Diff {
           printf("\\n")
       }
       printf("\\n")
-    }
-
-    // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
-    // the result is to update this so that this += that * y, where * is Cartesian product
-    def add_cartesian(that: Tensor, y: Tensor) = {
-      generateRawComment("add_cartesian")
-      assert(this.rank == 2 && that.shape == Dimensions(Seq(this.shape(1))) && y.shape == Dimensions(Seq(this.shape(0))) ||
-        this.rank == 1 && that.shape == this.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
-      val off = var_new(0)
-      val up = this.shape.head
-      for (i <- DataLoop(up)) {
-        for (j <- DataLoop(shape(1))) {
-          this.data(off + j) = this.data(off + j) + that.data(j) * y.data(i)
-        }
-        off += this.shape(1)
-      }
-    }
-
-    // setting: this is dims(0)-sized vector, that is matrix (dims(0) * dims(1)), y is dims(1)-sized vector
-    // the result is to update this so that this accumulate every matrix col * y
-    def add_composion(that: Tensor, y: Tensor) = {
-      assert(that.rank == 2 && this.shape.seq == Seq(that.shape(1)) && y.shape.seq == Seq(that.shape(0))
-        || that.rank == 1 && this.shape == that.shape && y.isScalar, s"${shape} - ${that.shape} - ${y.shape}")
-      val off = var_new(0)
-      val up = that.shape.head
-      for (i <- DataLoop(up)) {
-        for (j <- DataLoop(that.shape(1))) {
-          data(j) += that.data(off + j) * y.data(i)
-        }
-        off += that.shape(1)
-      }
     }
 
     @virtualize

@@ -199,7 +199,7 @@ trait TensorDslCPU extends TensorDsl {
     // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
     // the result is to update this so that this += that * y, where * is Cartesian product
     override def add_cartesian(x: Tensor, y: Tensor, output: Tensor) = {
-      generateRawComment("add_cartesian")
+      generateRawComment("backend add_cartesian")
       assert(x.rank == 2 && y.shape == Dimensions(Seq(x.shape(1))) && output.shape == Dimensions(Seq(x.shape(0))))
       val off = var_new(0)
       for (i <- DataLoop(x.shape(0))) {
