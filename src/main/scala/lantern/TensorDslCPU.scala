@@ -174,7 +174,7 @@ trait TensorDslCPU extends TensorDsl {
           if (!x.isInput) x.d.addMul(output.d.data(0), y.x)
           if (!y.isInput) y.d.addMul(output.d.data(0), x.x)
         case (2, 1) =>
-          if (!x.isInput) x.d.add_cartesian(y.x, output.d); // that.d.add_composion(this.x, y.d)
+          if (!x.isInput) add_cartesian(x.d, y.x, output.d); // that.d.add_composion(this.x, y.d)
           if (!y.isInput) {
             val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
             unchecked[Unit](
@@ -193,6 +193,20 @@ trait TensorDslCPU extends TensorDsl {
             "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
             dim2, ",", dim3, ",", dim1, ",", 1, ",",
             x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
+      }
+    }
+
+    // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
+    // the result is to update this so that this += that * y, where * is Cartesian product
+    override def add_cartesian(x: Tensor, y: Tensor, output: Tensor) = {
+      generateRawComment("add_cartesian")
+      assert(x.rank == 2 && y.shape == Dimensions(Seq(x.shape(1))) && output.shape == Dimensions(Seq(x.shape(0))))
+      val off = var_new(0)
+      for (i <- DataLoop(x.shape(0))) {
+        for (j <- DataLoop(x.shape(1))) {
+          x.data(off + j) = x.data(off + j) + y.data(j) * output.data(i)
+        }
+        off += x.shape(1)
       }
     }
 

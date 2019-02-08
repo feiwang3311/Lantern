@@ -203,6 +203,10 @@ trait TensorDsl extends DslOps with Diff {
       }
 
     def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit
+ 
+    // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
+    // the result is to update this so that this += that * y, where * is Cartesian product
+    def add_cartesian(x: Tensor, y: Tensor, output: Tensor): Unit
 
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
