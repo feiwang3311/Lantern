@@ -212,6 +212,11 @@ trait TensorDsl extends DslOps with Diff {
     // this function updates `x`, so that x += y^T dot output.
     def add_composition(x: Tensor, y: Tensor, output: Tensor): Unit
 
+    // x += y^T dot output
+    def add_dotTrans1(x: Tensor, y: Tensor, output: Tensor): Unit
+    // x += y dot output^T
+    def add_dotTrans2(x: Tensor, y: Tensor, output: Tensor): Unit
+
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
     // Also return dimensions to track whether broadcasting happened for the two operands
@@ -467,6 +472,11 @@ trait TensorDsl extends DslOps with Diff {
     // `this` is vector of size `a`, `y` is vector of size `b`, that is 2-D matrix of size (b x a)
     // this function updates `this`, so that this += that^T dot y.
     def add_composition(that: Tensor, y: Tensor): Unit = backend.add_composition(this, that, y)
+
+    // this += that^T dot y
+    def add_dotTrans1(that: Tensor, y: Tensor): Unit = backend.add_dotTrans1(this, that, y)
+    // this += that dot y^T
+    def add_dotTrans2(that: Tensor, y: Tensor): Unit = backend.add_dotTrans2(this, that, y)
 
     def gemm(that: Tensor, transX: Boolean, transY: Boolean, alpha: Float): Tensor = {
       generateRawComment(s"gemm: ${this.shape.seq}, ${that.shape.seq}")

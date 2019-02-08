@@ -177,16 +177,9 @@ trait TensorDslCPU extends TensorDsl {
           if (!x.isInput) add_cartesian(x.d, y.x, output.d); // that.d.add_composion(this.x, y.d)
           if (!y.isInput) add_composition(y.d, x.x, output.d);
         case (2, 2) =>
-          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
           generateRawComment("backprop of matrix-matrix-dot")
-          if (!x.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
-            dim1, ",", dim2, ",", dim3, ",", 1, ",",
-            output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim2, ")")
-          if (!y.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
-            dim2, ",", dim3, ",", dim1, ",", 1, ",",
-            x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
+          if (!x.isInput) add_dotTrans2(x.d, output.d, y.x)
+          if (!y.isInput) add_dotTrans1(y.d, x.x, output.d)
       }
     }
 
@@ -210,6 +203,25 @@ trait TensorDslCPU extends TensorDsl {
         "cblas_sgemv(CblasRowMajor, CblasTrans, ",
          dim1, ",", dim2, ",", 1, ",",
          y.data, ",", dim2, ",", output.data, ",", 1, ",", 1, ",", x.data, ",", 1, ")")
+    }
+
+    override def add_dotTrans1(x: Tensor, y: Tensor, output: Tensor): Unit = {
+      generateRawComment("backend add_dotTrans1")
+      val dim1 = y.shape(0); val dim2 = y.shape(1); val dim3 = output.shape(1)
+      unchecked[Unit](
+        "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+        dim2, ",", dim3, ",", dim1, ",", 1, ",",
+        y.data, ",", dim2, ",", output.data, ",", dim3, ",", 1, ",", x.data, ",", dim3, ")")
+    }
+
+    override def add_dotTrans2(x: Tensor, y: Tensor, output: Tensor): Unit = {
+      generateRawComment("backend add_dotTrans2")
+      val dim1 = x.shape(0); val dim2 = x.shape(1); val dim3 = output.shape(1)
+      unchecked[Unit](
+        "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+        dim1, ",", dim2, ",", dim3, ",", 1, ",",
+        y.data, ",", dim3, ",", output.data, ",", dim3, ",", 1, ",", x.data, ",", dim2, ")")
+
     }
 
     @virtualize
