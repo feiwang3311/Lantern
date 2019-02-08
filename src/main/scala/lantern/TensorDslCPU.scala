@@ -175,13 +175,7 @@ trait TensorDslCPU extends TensorDsl {
           if (!y.isInput) y.d.addMul(output.d.data(0), x.x)
         case (2, 1) =>
           if (!x.isInput) add_cartesian(x.d, y.x, output.d); // that.d.add_composion(this.x, y.d)
-          if (!y.isInput) {
-            val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
-            unchecked[Unit](
-              "cblas_sgemv(CblasRowMajor, CblasTrans, ",
-              dim1, ",", dim2, ",", 1, ",",
-              x.x.data, ",", dim2, ",", output.d.data, ",", 1, ",", 1, ",", y.d.data, ",", 1, ")")
-          }
+          if (!y.isInput) add_composition(y.d, x.x, output.d);
         case (2, 2) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
           generateRawComment("backprop of matrix-matrix-dot")
@@ -196,8 +190,6 @@ trait TensorDslCPU extends TensorDsl {
       }
     }
 
-    // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
-    // the result is to update this so that this += that * y, where * is Cartesian product
     override def add_cartesian(x: Tensor, y: Tensor, output: Tensor) = {
       generateRawComment("backend add_cartesian")
       assert(x.rank == 2 && y.shape == Dimensions(Seq(x.shape(1))) && output.shape == Dimensions(Seq(x.shape(0))))
@@ -208,6 +200,16 @@ trait TensorDslCPU extends TensorDsl {
         }
         off += x.shape(1)
       }
+    }
+
+    override def add_composition(x: Tensor, y: Tensor, output: Tensor) = {
+      generateRawComment("bankend add_composition")
+      assert(y.rank == 2 && x.shape == Dimensions(Seq(y.shape(1))) && output.shape == Dimensions(Seq(y.shape(0))))
+      val dim1 = y.shape(0); val dim2 = y.shape(1)
+      unchecked[Unit](
+        "cblas_sgemv(CblasRowMajor, CblasTrans, ",
+         dim1, ",", dim2, ",", 1, ",",
+         y.data, ",", dim2, ",", output.data, ",", 1, ",", 1, ",", x.data, ",", 1, ")")
     }
 
     @virtualize

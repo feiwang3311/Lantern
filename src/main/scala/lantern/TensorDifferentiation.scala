@@ -204,9 +204,13 @@ trait TensorDsl extends DslOps with Diff {
 
     def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit
  
-    // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
-    // the result is to update this so that this += that * y, where * is Cartesian product
+    // `x` is matrix, `y` is dims(1)-sized vector, `output` is dims(0)-sized vector
+    // this function updates `this` so that x += output * y, where * is Cartesian product
     def add_cartesian(x: Tensor, y: Tensor, output: Tensor): Unit
+
+    // `x` is vector of size `a`, `output` is vector of size `b`, `y` is 2-D matrix of size (b x a)
+    // this function updates `x`, so that x += y^T dot output.
+    def add_composition(x: Tensor, y: Tensor, output: Tensor): Unit
 
     // Elementwise addition.
     def +(x: Tensor, y: Rep[Float]): Tensor
@@ -384,8 +388,7 @@ trait TensorDsl extends DslOps with Diff {
     assert(scalarCount != 0, "Tensor cannot have scalar count 0")
 
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
-    // TODO (Fei Wang): mind the semantics here!!! it is a slice, not (dim0, dim1) selection!!! Maybe fix with better coding style??
-    // i inclued, j excluded
+    // Slice: i inclued, j excluded
     def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i) +: shape.tail)
 
     def clipAt(bound: Float) = backend.clipAt(this, bound)
@@ -457,9 +460,13 @@ trait TensorDsl extends DslOps with Diff {
       backend.dot(this, that)
     }
 
-    // setting: this is matrix, that is dims(0)-sized vector, y is dims(1)-sized vector
-    // the result is to update this so that this += that * y, where * is Cartesian product
-    def add_cartesian(that: Tensor, y: Tensor) = backend.add_cartesian(this, that, y)
+    // `this` is 2-D matrix, `that` is dims(1)-sized vector, `y` is dims(0)-sized vector
+    // this function updates `this` so that this += that * y, where * is Cartesian product
+    def add_cartesian(that: Tensor, y: Tensor): Unit = backend.add_cartesian(this, that, y)
+
+    // `this` is vector of size `a`, `y` is vector of size `b`, that is 2-D matrix of size (b x a)
+    // this function updates `this`, so that this += that^T dot y.
+    def add_composition(that: Tensor, y: Tensor): Unit = backend.add_composition(this, that, y)
 
     def gemm(that: Tensor, transX: Boolean, transY: Boolean, alpha: Float): Tensor = {
       generateRawComment(s"gemm: ${this.shape.seq}, ${that.shape.seq}")

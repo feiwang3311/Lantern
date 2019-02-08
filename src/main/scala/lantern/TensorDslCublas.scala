@@ -243,14 +243,8 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
             dim, ",", 1, ",", one, ",",
             y.d.data, ",", dim, ",", scale.data, ", ", x.x.data, ", ", dim, ", ", y.d.data, ",", dim, "))")
         case (2, 1) =>
-          // x.d.add_cartesian(y.x, output.d);
           if (!x.isInput) add_cartesian(x.d, y.x, output.d)
-          // that.d.add_composion(this.x, y.d)
-          val dim1 = x.x.shape(0); val dim2 = x.x.shape(1)
-          if (!y.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
-            dim2, ",", dim1, ",", one, ",",
-            x.x.data, ",", dim2, ",", output.d.data, ",", 1, ",", one, ",", y.d.data, ",", 1, "))")
+          if (!y.isInput) add_composition(y.d, x.x, output.d)
         case (2, 2) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
           generateRawComment("backprop of matrix-matrix-dot")
@@ -273,6 +267,15 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
         dim2, ", ", dim1, ", ", 1, ", ", one, ", ",
         y.data, ", ", dim2, ", ", output.data, ", ", 1, ", ", one, ", ", x.data, ", ", dim2, "))")
     } 
+    override def add_composition(x: Tensor, y: Tensor, output: Tensor): Unit = {
+      val dim1 = y.shape(0); val dim2 = y.shape(1)
+      val zero = NewArray[Float](1); zero(0) = 0
+      val one = NewArray[Float](1); one(0) = 1
+      unchecked[Unit](
+        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
+         dim2, ",", dim1, ",", one, ",",
+         y.data, ",", dim2, ",", output.data, ",", 1, ",", one, ",", x.data, ",", 1, "))")
+    }
 
     override def +(x: Tensor, y: Rep[Float]): Tensor = ??? //elementwiseUnaryOp(x)(s => Seq(s + " + ", y))
     override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = ??? //elementwiseBinaryOp(x, y) { _ + " + " + _ }
