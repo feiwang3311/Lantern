@@ -812,7 +812,13 @@ trait TensorDsl extends DslOps with Diff {
       backend.conv2D_batch(this, kernel, bias, strides, pads)
 
     @virtualize
-    def averagePool_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]): Tensor = {
+    def averagePool2D_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]): Tensor = paddings match {
+      case Some(pads) => backend.averagePool2D_batch(this, kernels, strides, pads)
+      case None => backend.averagePool2D_batch(this, kernels, strides, Seq(0,0,0,0))
+    }
+  /*  
+    {
+
       val (strideRow :: strideCol :: Nil) = strides.take(2).toList
       val (kernelRow :: kernelCol :: Nil) = kernels.take(2).toList
       val (padUp :: padDown :: padLeft :: padRight :: Nil) = paddings match {
@@ -828,7 +834,7 @@ trait TensorDsl extends DslOps with Diff {
 
       backend.averagePool2D_batch(this, kernels, strides, paddings match {case None => Seq(0, 0, 0, 0); case Some(paddings) => paddings})
     }
-
+*/
     @virtualize
     def maxPool(strideRow: Int, strideCol: Int) = {
       assert(this.rank == 3)
@@ -1379,7 +1385,7 @@ trait TensorDsl extends DslOps with Diff {
 
     @virtualize
     def averagePoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(this.x.averagePool_batch(kernels, strides, pads))
+      val y = TensorR(this.x.averagePool2D_batch(kernels, strides, pads))
       k(y)
 
       // back prop

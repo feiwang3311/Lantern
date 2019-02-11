@@ -423,7 +423,7 @@ class TestCudnn extends LanternFunSuite {
         val input = Tensor.fromData(Seq(1,1,3,3),1,2,3,4,5,6,7,8,9)
         val kernel = Seq(2,2)
         val strides = Seq(1,1)
-        val output = input.averagePool_batch(kernel, strides, None)
+        val output = input.averagePool2D_batch(kernel, strides, None)
 
         backend = BackendCPU()
         val expect_output = Tensor.fromData(Seq(1,1,2,2), 3, 4, 6, 7)

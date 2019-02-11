@@ -637,7 +637,7 @@ trait ONNXLib extends TensorDsl {
             val kernel = atts("kernel_shape")
             val pads = atts("pads")           // pads may be zero
 
-            val out = input1.averagePool_batch(kernel, strides, Some(pads))
+            val out = input1.averagePool2D_batch(kernel, strides, Some(pads))
             intermediate_map_tensor += (output -> out)
           }
 
