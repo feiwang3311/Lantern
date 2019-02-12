@@ -203,7 +203,7 @@ trait TensorDsl extends DslOps with Diff {
       }
 
     def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit
- 
+
     // `x` is matrix, `y` is dims(1)-sized vector, `output` is dims(0)-sized vector
     // this function updates `this` so that x += output * y, where * is Cartesian product
     def add_cartesian(x: Tensor, y: Tensor, output: Tensor): Unit
@@ -352,7 +352,7 @@ trait TensorDsl extends DslOps with Diff {
     def sum_grad(input: TensorR, res: TensorR): Unit
     def mean(x: Tensor): Tensor
     def mean_grad(input: TensorR, res: TensorR): Unit
-    
+
     // TODO: Add more ops:
     // - Reduction operators (e.g. sum).
     //   - Reduction op GPU implementations are non-trivial.
@@ -816,25 +816,7 @@ trait TensorDsl extends DslOps with Diff {
       case Some(pads) => backend.averagePool2D_batch(this, kernels, strides, pads)
       case None => backend.averagePool2D_batch(this, kernels, strides, Seq(0,0,0,0))
     }
-  /*  
-    {
 
-      val (strideRow :: strideCol :: Nil) = strides.take(2).toList
-      val (kernelRow :: kernelCol :: Nil) = kernels.take(2).toList
-      val (padUp :: padDown :: padLeft :: padRight :: Nil) = paddings match {
-        case None => List(0, 0, 0, 0)
-        case Some(pads) => pads.take(4).toList
-      }
-      assert(this.rank == 4, "the input for averagePool_batch should have 4 dimensions")
-      assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")
-      assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
-      assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
-      assert(this.shape(2) + 2 * padUp >= kernelRow && this.shape(3) + 2 * padUp >= kernelCol, "Image too small for averagePool_batch: " + this.shape + "|" + (kernelRow, kernelCol))
-      assert(padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
-
-      backend.averagePool2D_batch(this, kernels, strides, paddings match {case None => Seq(0, 0, 0, 0); case Some(paddings) => paddings})
-    }
-*/
     @virtualize
     def maxPool(strideRow: Int, strideCol: Int) = {
       assert(this.rank == 3)
@@ -1125,7 +1107,7 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.000001f) = {
+    def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.0001f) = {
       val errorPrefix = if (mark.nonEmpty) s"ERROR ($mark)" else "ERROR"
       assertShapeEqual(a.shape, b.shape)
 
