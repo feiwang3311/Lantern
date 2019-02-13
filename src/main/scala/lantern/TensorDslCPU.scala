@@ -580,14 +580,10 @@ trait TensorDslCPU extends TensorDsl {
         case None => assert(false, "BackendCPU needs finput to be Some[TensorR], found None"); TensorR(Tensor.zeros(1))
         case Some(finputr) => finputr
       }
-
       // back-propagate to inputs
       if (!input.isInput) ConvGradInput(res.d, input.d, finputR.d, filter.x, strides._1, strides._2, padding._1, padding._2)
       // back-propagate to weights
-      bias match {
-        case None => ConvGradParam(finputR.x, res.d, filter.d, None, strides._1, strides._2, padding._1, padding._2)
-        case Some(bias) => ConvGradParam(finputR.x, res.d, filter.d, Some(bias.d), strides._1, strides._2, padding._1, padding._2)
-      }
+      ConvGradParam(finputR.x, res.d, filter.d, bias.map(_.d), strides._1, strides._2, padding._1, padding._2)
     }
 
     def ConvGradParam(finput: Tensor, gradOutput: Tensor, gradWeight: Tensor, gradBias: Option[Tensor], dH: Int, dW: Int, padH: Int, padW: Int, scale: Float = 1.0f) = {
