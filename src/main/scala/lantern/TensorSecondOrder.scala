@@ -26,12 +26,14 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
       d.clipAt(bound)
     }
 
+    // TODO: optimization to fuse loops are needed here!
     def + (that: TensorF): TensorF = new TensorF(x + that.x, d + that.d)
     def + (that: Rep[Float]): TensorF = new TensorF(x + that, d)
     def - (that: TensorF): TensorF = new TensorF(x - that.x, d - that.d)
     def - (that: Rep[Float]): TensorF = new TensorF(x - that, d)
     def * (that: TensorF): TensorF = new TensorF(x * that.x, d * that.x + x * that.d)
     def * (that: Rep[Float]): TensorF = new TensorF(x * that, d * that)
+    def / (that: TensorF): TensorF = new TensorF(x / that.x, d / that.x - x * that.d / that.x / that.x)
     def dot(that: TensorF): TensorF = new TensorF(x dot that.x, x.dot(that.d) + d.dot(that.x))
     def sum(): TensorF = new TensorF(x.sum(), d.sum())
     def tanh(): TensorF = {
@@ -93,9 +95,21 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
       val y = TensorFR(x + that.x); k(y)
       d += y.d; that.d += y.d
     }
+    def + (that: Rep[Float]): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x + that); k(y)
+      d += y.d
+    }
+    def - (that: TensorFR): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x - that.x); k(y)
+      d += y.d; that.d -= y.d
+    }
     def * (that: TensorFR): TensorFR @diff = shift { (k: TensorFR => Unit) =>
       val y = TensorFR(x * that.x); k(y)
       d += y.d * that.x; that.d += y.d * x
+    }
+    def / (that: TensorFR): TensorFR @diff = shift { (k: TensorFR => Unit) => 
+      val y = TensorFR(x / that.x); k(y)
+      d += y.d / that.x; that.d -= y.d * x / that.x / that.x
     }
     def dot (that: TensorFR): TensorFR @diff = shift { (k: TensorFR => Unit) =>
       val y = TensorFR(x dot that.x); k(y)
