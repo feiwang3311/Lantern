@@ -40,7 +40,7 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
     }
     def conv2D_batch(kernel: TensorF, bias: Option[TensorF], strides: Seq[Int], pads: Seq[Int]): (TensorF, Option[TensorF]) = {
       val (value, opValue) = x.conv2D_batch(kernel.x, bias.map(_.x), strides, pads)
-      val (tangent1, opTangent1) = x.conv2D_batch(kernel.d, None, strides, pads)
+      val (tangent1, opTangent1) = x.conv2D_batch(kernel.d, bias.map(_.d), strides, pads)
       val (tangent2, opTangent2) = d.conv2D_batch(kernel.x, None, strides, pads)
       (new TensorF(value, tangent1 + tangent2), (opValue, opTangent2) match {
          case (Some(oV), Some(oT)) => Some(new TensorF(oV, oT))
