@@ -34,20 +34,46 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
     def * (that: TensorF): TensorF = new TensorF(x * that.x, d * that.x + x * that.d)
     def * (that: Rep[Float]): TensorF = new TensorF(x * that, d * that)
     def / (that: TensorF): TensorF = new TensorF(x / that.x, d / that.x - x * that.d / that.x / that.x)
+    def / (that: Rep[Float]): TensorF = new TensorF(x / that, d / that)
     def dot(that: TensorF): TensorF = new TensorF(x dot that.x, x.dot(that.d) + d.dot(that.x))
     def sum(): TensorF = new TensorF(x.sum(), d.sum())
     def tanh(): TensorF = {
       val value = x.tanh()
       new TensorF(value, d - value * value * d)
     }
+    def exp(): TensorF = {
+      val value = x.exp()
+      new TensorF(value, d * value)
+    }
+    def log(): TensorF = new TensorF(x.log(), d / x)
+    def sqrt(): TensorF = {
+      val value = x.sqrt()
+      new TensorF(value, d / value / 2)
+    }
+    def square(): TensorF = new TensorF(x * x, x * d * 2)
+    def relu(inPlace: Boolean = false): TensorF = if (inPlace) {
+      val temp = new TensorR(x, d)
+      backend.relu_grad(temp, temp, inPlace)
+      new TensorF(x.relu(inPlace), d)
+    } else {
+      val temp = TensorR(x)
+      backend.relu_grad(temp, new TensorR(x, d), inPlace)
+      new TensorF(x.relu(inPlace), temp.d)
+    }
+    def hardTanh(min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false) = if (inPlace) {
+      val temp = new TensorR(x, d)
+      backend.hardTanh_grad(temp, temp, min_val, max_val, inPlace)
+      new TensorF(x.hardTanh(min_val, max_val, inPlace), d)
+    } else {
+      val temp = TensorR(x)
+      backend.hardTanh_grad(temp, new TensorR(x, d), min_val, max_val, inPlace)
+      new TensorF(x.hardTanh(min_val, max_val, inPlace), temp.d)
+    }
     def conv2D_batch(kernel: TensorF, bias: Option[TensorF], strides: Seq[Int], pads: Seq[Int]): (TensorF, Option[TensorF]) = {
       val (value, opValue) = x.conv2D_batch(kernel.x, bias.map(_.x), strides, pads)
       val (tangent1, opTangent1) = x.conv2D_batch(kernel.d, bias.map(_.d), strides, pads)
       val (tangent2, opTangent2) = d.conv2D_batch(kernel.x, None, strides, pads)
-      (new TensorF(value, tangent1 + tangent2), (opValue, opTangent2) match {
-         case (Some(oV), Some(oT)) => Some(new TensorF(oV, oT))
-         case _ => None
-      })
+      (new TensorF(value, tangent1 + tangent2), opValue.map(new TensorF(_, opTangent2.get)))
     }
 
     // inplace mutations
@@ -103,13 +129,25 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
       val y = TensorFR(x - that.x); k(y)
       d += y.d; that.d -= y.d
     }
+    def - (that: Rep[Float]): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x - that); k(y)
+      d += y.d
+    }
     def * (that: TensorFR): TensorFR @diff = shift { (k: TensorFR => Unit) =>
       val y = TensorFR(x * that.x); k(y)
       d += y.d * that.x; that.d += y.d * x
     }
-    def / (that: TensorFR): TensorFR @diff = shift { (k: TensorFR => Unit) => 
+    def * (that: Rep[Float]): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x * that); k(y)
+      d += y.d * that
+    }
+    def / (that: TensorFR): TensorFR @diff = shift { (k: TensorFR => Unit) =>
       val y = TensorFR(x / that.x); k(y)
       d += y.d / that.x; that.d -= y.d * x / that.x / that.x
+    }
+    def / (that: Rep[Float]): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x / that); k(y)
+      d += y.d / that
     }
     def dot (that: TensorFR): TensorFR @diff = shift { (k: TensorFR => Unit) =>
       val y = TensorFR(x dot that.x); k(y)
@@ -127,6 +165,45 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
       val y = TensorFR(x.tanh()); k(y)
       d += y.d; d -= y.x * y.x * y.d
     }
+    def exp(): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x.exp()); k(y)
+      d += y.d * y.x
+    }
+    def log(): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x.log()); k(y)
+      d += y.d / x
+    }
+    def sqrt(): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x.sqrt()); k(y)
+      d += y.d / y.x / 2
+    }
+    def square(): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      val y = TensorFR(x.square()); k(y)
+      d += y.d * x * 2
+    }
+    def relu(inPlace: Boolean = false): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      if (inPlace) {
+        x.relu(inPlace); k(this)
+        backend.relu_grad(new TensorR(x.x, d.x), new TensorR(x.x, d.x), inPlace)
+        backend.relu_grad(new TensorR(x.x, d.d), new TensorR(x.x, d.d), inPlace)
+      } else {
+        val y = TensorFR(x.relu(inPlace)); k(y)
+        backend.relu_grad(new TensorR(x.x, d.x), new TensorR(y.x.x, y.d.x), inPlace)
+        backend.relu_grad(new TensorR(x.x, d.d), new TensorR(y.x.x, y.d.d), inPlace)
+      }
+    }
+    def hardTanh(min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): TensorFR @diff = shift { (k: TensorFR => Unit) =>
+      if (inPlace) {
+        x.hardTanh(min_val, max_val, inPlace); k(this)
+        backend.hardTanh_grad(new TensorR(x.x, d.x), new TensorR(x.x, d.x), min_val, max_val, inPlace)
+        backend.hardTanh_grad(new TensorR(x.x, d.d), new TensorR(x.x, d.d), min_val, max_val, inPlace)
+      } else {
+        val y = TensorFR(x.hardTanh(min_val, max_val, inPlace)); k(y)
+        backend.hardTanh_grad(new TensorR(x.x, d.x), new TensorR(y.x.x, y.d.x), min_val, max_val, inPlace)
+        backend.hardTanh_grad(new TensorR(x.x, d.d), new TensorR(y.x.x, y.d.d), min_val, max_val, inPlace)
+      }
+    }
+
     def conv2D_batch(kernel: TensorFR, bias: Option[TensorFR] = None, strides: Seq[Int] = Seq(1,1), pads: Seq[Int] = Seq(0,0)): TensorFR @diff = shift { (k: TensorFR => Unit) =>
       val (out, opInput) =  x.conv2D_batch(kernel.x, bias.map(_.x), strides, pads)
       val y = TensorFR(out); val opInputFR = opInput.map(TensorFR(_)); k(y)

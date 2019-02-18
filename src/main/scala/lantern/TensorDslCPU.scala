@@ -735,7 +735,8 @@ trait TensorDslCPU extends TensorDsl {
       val res = if (inPlace) x.data else mallocArray[Float](x.scalarCount)
       for (i <- 0 until x.scalarCount: Rep[Range]) {
         if (x.data(i) < min_val) res(i) = min_val
-        if (x.data(i) > max_val) res(i) = max_val
+        else if (x.data(i) > max_val) res(i) = max_val
+        else res(i) = x.data(i)
       }
       Tensor(res, x.shape.seq: _*)
     }

@@ -103,7 +103,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
       override val fileName = currentTestName
       def snippet(a: Rep[String]): Rep[Unit] = {
         // set input and vector for Hessen
-        val x1 = Tensor.fromData(Seq(4), 5.0f, 7.0f, 3.0f, 2.0f)
+        val x1 = Tensor.fromData(Seq(4), 6.0f, 7.0f, 3.0f, 2.0f)
         val d1 = Tensor.fromData(Seq(4), 0.4f, 0.5f, 0.6f, 0.7f)
         val start1 = TensorFR(new TensorF(x1, d1))
 
@@ -113,29 +113,72 @@ class TensorSecondOrderTest extends LanternFunSuite {
 
         // compute gradient and hessV
         val res = gradHessV{ () =>
-          (start1 - start2).tanh.sum
+          (start1 - start2 - 2).tanh.sum
         }
 
         // correctness assertion
-        Tensor.assertEqual(res, Tensor.scalar(3.284112f))
-        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 0.419974f, 0.001341f, 0.419974f, 0.419974f))
-        Tensor.assertEqual(getGradient(start2), Tensor.fromData(Seq(4), -0.419974f, -0.001341f, -0.419974f, -0.419974f))
-        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), -0.127940f, -0.000536f, -0.127940f, -0.127940f))
-        Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(4), 0.127940f, 0.000536f, 0.127940f, 0.127940f))
+        Tensor.assertEqual(res, Tensor.scalar(-0.559161f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 1.000000f, 0.070651f, 0.419974f, 0.419974f))
+        Tensor.assertEqual(getGradient(start2), Tensor.fromData(Seq(4), -1.000000f, -0.070651f, -0.419974f, -0.419974f))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), -0.000000f, -0.027244f, 0.127940f, 0.127940f))
+        Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(4), 0.000000f,  0.027244f, -0.127940f, -0.127940f))
         // PyTorch equvilent code
-        // start1 = torch.tensor([5.0, 7.0, 3.0, 2.0], requires_grad=True)
+        // start1 = torch.tensor([6.0, 7.0, 3.0, 2.0], requires_grad=True)
         // start2 = torch.tensor([4.0, 3.0, 2.0, 1.0], requires_grad=True)
-        // out = (start1 - start2).tanh().sum()
+        // out = (start1 - start2 - 2).tanh().sum()
         // grads = torch.autograd.grad(out, [start1, start2], create_graph=True, retain_graph = True)
         // flatten = torch.cat([g.reshape(-1) for g in grads if g is not None])
         // v = torch.tensor([0.4, 0.5, 0.6, 0.7, 0.2, 0.3, 0.4, 0.5])
         // hvps = torch.autograd.grad([flatten @ v], [start1, start2], allow_unused=True)
         // torch.set_printoptions(precision=6)
-        // print(out.data) # 3.284112
-        // print(grads[0].data) # tensor([0.419974, 0.001341, 0.419974, 0.419974])
-        // print(grads[1].data) # tensor([-0.419974, -0.001341, -0.419974, -0.419974])
-        // print(hvps[0].data)  # tensor([-0.127940, -0.000536, -0.127940, -0.127940])
-        // print(hvps[1].data)  # tensor([0.127940, 0.000536, 0.127940, 0.127940])
+        // print(out.data) # tensor(-0.559161)
+        // print(grads[0].data) # tensor([1.000000, 0.070651, 0.419974, 0.419974])
+        // print(grads[1].data) # tensor([-1.000000, -0.070651, -0.419974, -0.419974])
+        // print(hvps[0].data)  # tensor([-0.000000, -0.027244,  0.127940,  0.127940])
+        // print(hvps[1].data)  # tensor([ 0.000000,  0.027244, -0.127940, -0.127940])
+      }
+    }
+    g1.eval("a")
+  }
+
+  test("mult_tanh") {
+    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
+      override val fileName = currentTestName
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set input and vector for Hessen
+        val x1 = Tensor.fromData(Seq(4), -0.6f, 0.7f, -0.3f, 0.2f)
+        val d1 = Tensor.fromData(Seq(4), 0.4f, 0.5f, 0.6f, 0.7f)
+        val start1 = TensorFR(new TensorF(x1, d1))
+
+        val x2 = Tensor.fromData(Seq(4), 0.4f, 0.3f, 0.2f, 1)
+        val d2 = Tensor.fromData(Seq(4), 0.2f, 0.3f, 0.4f, 0.5f)
+        val start2 = TensorFR(new TensorF(x2, d2))
+
+        // compute gradient and hessV
+        val res = gradHessV{ () =>
+          (start1 * start2 * 2).tanh.sum
+        }
+
+        // correctness assertion
+        Tensor.assertEqual(res, Tensor.scalar(0.211209f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 0.640693f, 0.505468f, 0.394295f, 1.711277f))
+        Tensor.assertEqual(getGradient(start2), Tensor.fromData(Seq(4), -0.961040f,  1.179425f, -0.591442f,  0.342256f))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), 0.366092f,  0.216553f,  0.788590f, -1.224995f))
+        Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(4), 0.572076f, 0.168311f, 1.182885f, 0.781767f))
+        // PyTorch equvilent code
+        // start1 = torch.tensor([-0.6, 0.7, -0.3, 0.2], requires_grad=True)
+        // start2 = torch.tensor([0.4, 0.3, 0.2, 1.0], requires_grad=True)
+        // out = (start1 * start2 * 2).tanh().sum()
+        // grads = torch.autograd.grad(out, [start1, start2], create_graph=True, retain_graph = True)
+        // flatten = torch.cat([g.reshape(-1) for g in grads if g is not None])
+        // v = torch.tensor([0.4, 0.5, 0.6, 0.7, 0.2, 0.3, 0.4, 0.5])
+        // hvps = torch.autograd.grad([flatten @ v], [start1, start2], allow_unused=True)
+        // torch.set_printoptions(precision=6)
+        // print(out.data) # tensor(0.211209)
+        // print(grads[0].data) # tensor([0.640693, 0.505468, 0.394295, 1.711277])
+        // print(grads[1].data) # tensor([-0.961040,  1.179425, -0.591442,  0.342256])
+        // print(hvps[0].data)  # tensor([ 0.366092,  0.216553,  0.788590, -1.224995])
+        // print(hvps[1].data)  # tensor([0.572076, 0.168311, 1.182885, 0.781767])
       }
     }
     g1.eval("a")
@@ -156,50 +199,29 @@ class TensorSecondOrderTest extends LanternFunSuite {
 
         // compute gradient and hessV
         val res = gradHessV{ () =>
-          (start1 / start2).tanh.sum
+          (start1 / start2 / 2).tanh.sum
         }
 
         // correctness assertion
-        Tensor.assertEqual(res, Tensor.scalar(3.698828f))
-        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 0.070104f, 0.012306f, 0.090353f, 0.070651f))
-        Tensor.assertEqual(getGradient(start2), Tensor.fromData(Seq(4), -0.087630f, -0.028713f, -0.135530f, -0.141302f))
-        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), -0.007965f, 0.000380f, -0.018071f,  0.005540f))
-        Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(4), 7.327703e-03f, -6.539864e-05f,  2.710599e-02f,  1.011486e-02f))
+        Tensor.assertEqual(res, Tensor.scalar(2.774543f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 0.086552f, 0.053723f, 0.149146f, 0.209987f))
+        Tensor.assertEqual(getGradient(start2), Tensor.fromData(Seq(4), -0.108190f, -0.125355f, -0.223720f, -0.419974f))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), -0.006128f, -0.002424f, -0.029829f, -0.057016f))
+        Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(4), 0.004414f, 0.009238f, 0.044744f, 0.177028f))
         // PyTorch equvilent code
         // start1 = torch.tensor([5.0, 7.0, 3.0, 2.0], requires_grad=True)
         // start2 = torch.tensor([4.0, 3.0, 2.0, 1.0], requires_grad=True)
-        // out = (start1 / start2).tanh().sum()
+        // out = (start1 / start2 / 2).tanh().sum()
         // grads = torch.autograd.grad(out, [start1, start2], create_graph=True, retain_graph = True)
         // flatten = torch.cat([g.reshape(-1) for g in grads if g is not None])
         // v = torch.tensor([0.4, 0.5, 0.6, 0.7, 0.2, 0.3, 0.4, 0.5])
         // hvps = torch.autograd.grad([flatten @ v], [start1, start2], allow_unused=True)
         // torch.set_printoptions(precision=6)
-        // print(out.data) # tensor(3.698828)
-        // print(grads[0].data) # tensor([0.070104, 0.012306, 0.090353, 0.070651])
-        // print(grads[1].data) # tensor([-0.087630, -0.028713, -0.135530, -0.141302])
-        // print(hvps[0].data)  # tensor([-0.007965,  0.000380, -0.018071,  0.005540])
-        // print(hvps[1].data)  # tensor([ 7.327703e-03, -6.539864e-05,  2.710599e-02,  1.011486e-02])
-      }
-    }
-    g1.eval("a")
-  }
-
-  test("mult1") {
-    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
-      override val fileName = currentTestName
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        // set input and vector for Hessen
-        val x = Tensor.fromData(Seq(4), 1,2,3,4)
-        val d = Tensor.fromData(Seq(4), 0.4f, 0.5f, 0.6f, 0.7f)
-        val start = new TensorF(x, d)
-
-        // compute gradient and hessV
-        val (grad, hessV) = gradHessV(x => (x * x * x).sum())(start)
-
-        // correctness assertion
-        Tensor.assertEqual(grad, Tensor.fromData(Seq(4), 3,12,27,48))
-        Tensor.assertEqual(hessV, Tensor.fromData(Seq(4), 2.4f,6.0f,10.8f,16.8f))
-        ()
+        // print(out.data) # tensor(2.774543)
+        // print(grads[0].data) # tensor([0.086552, 0.053723, 0.149146, 0.209987])
+        // print(grads[1].data) # tensor([-0.108190, -0.125355, -0.223720, -0.419974])
+        // print(hvps[0].data)  # tensor([-0.006128, -0.002424, -0.029829, -0.057016])
+        // print(hvps[1].data)  # tensor([0.004414, 0.009238, 0.044744, 0.177028])
       }
     }
     g1.eval("a")
@@ -434,6 +456,264 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // >> tensor([0.419974, 0.070651, 0.009866, 0.001341])
         // x.grad
         // >> tensor([-0.255880, -0.068109, -0.011781, -0.001876])
+      }
+    }
+    g1.eval("a")
+  }
+
+  test("exp0") {
+    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
+      override val fileName = currentTestName
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set inputs and vectors for Hessian
+        val x1 = Tensor.fromData(Seq(4), 1,2,3,4)
+        val d1 = Tensor.fromData(Seq(4), 0.4f, 0.5f, 0.6f, 0.7f)
+        val start1 = TensorFR(new TensorF(x1, d1))
+
+        // compute gradient and hessV
+        val res: Tensor = gradHessV { () =>
+          start1.exp.sum
+        }
+
+        // correctness assertion
+        Tensor.assertEqual(res, Tensor.scalar(84.791023f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 2.718282f,  7.389056f, 20.085537f, 54.598148f))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), 1.087313f,  3.694528f, 12.051323f, 38.218704f))
+        // PyTorch equvilent code
+        // v = torch.tensor([0.4, 0.5, 0.6, 0.7])
+        // x = torch.tensor([1.0, 2.0, 3.0, 4.0], requires_grad=True)
+        // f = x.exp().sum()
+        // grad_f, = torch.autograd.grad(f, x, create_graph=True)
+        // z = grad_f @ v
+        // z.backward()
+        // torch.set_printoptions(precision=6)
+        // f.data # tensor(84.791023)
+        // grad_f.data # tensor([ 2.718282,  7.389056, 20.085537, 54.598148])
+        // x.grad # tensor([ 1.087313,  3.694528, 12.051323, 38.218704])
+      }
+    }
+    g1.eval("a")
+  }
+
+  test("log0") {
+    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
+      override val fileName = currentTestName
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set inputs and vectors for Hessian
+        val x1 = Tensor.fromData(Seq(4), 1,2,3,4)
+        val d1 = Tensor.fromData(Seq(4), 0.4f, 0.5f, 0.6f, 0.7f)
+        val start1 = TensorFR(new TensorF(x1, d1))
+
+        // compute gradient and hessV
+        val res: Tensor = gradHessV { () =>
+          start1.log.sum
+        }
+
+        // correctness assertion
+        Tensor.assertEqual(res, Tensor.scalar(3.178054f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4),1.000000f, 0.500000f, 0.333333f, 0.250000f))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), -0.400000f, -0.125000f, -0.066667f, -0.043750f))
+        // PyTorch equvilent code
+        // v = torch.tensor([0.4, 0.5, 0.6, 0.7])
+        // x = torch.tensor([1.0, 2.0, 3.0, 4.0], requires_grad=True)
+        // f = x.log().sum()
+        // grad_f, = torch.autograd.grad(f, x, create_graph=True)
+        // z = grad_f @ v
+        // z.backward()
+        // torch.set_printoptions(precision=6)
+        // f.data # tensor(3.178054)
+        // grad_f.data # tensor([1.000000, 0.500000, 0.333333, 0.250000])
+        // x.grad # tensor([-0.400000, -0.125000, -0.066667, -0.043750])
+      }
+    }
+    g1.eval("a")
+  }
+
+  test("sqrt0") {
+    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
+      override val fileName = currentTestName
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set inputs and vectors for Hessian
+        val x1 = Tensor.fromData(Seq(4), 1,2,3,4)
+        val d1 = Tensor.fromData(Seq(4), 0.4f, 0.5f, 0.6f, 0.7f)
+        val start1 = TensorFR(new TensorF(x1, d1))
+
+        // compute gradient and hessV
+        val res: Tensor = gradHessV { () =>
+          start1.sqrt.sum
+        }
+
+        // correctness assertion
+        Tensor.assertEqual(res, Tensor.scalar(6.146265f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 0.500000f, 0.353553f, 0.288675f, 0.250000f))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), -0.100000f, -0.044194f, -0.028868f, -0.021875f))
+        // PyTorch equvilent code
+        // v = torch.tensor([0.4, 0.5, 0.6, 0.7])
+        // x = torch.tensor([1.0, 2.0, 3.0, 4.0], requires_grad=True)
+        // f = x.sqrt().sum()
+        // grad_f, = torch.autograd.grad(f, x, create_graph=True)
+        // z = grad_f @ v
+        // z.backward()
+        // torch.set_printoptions(precision=6)
+        // f.data # tensor(6.146265)
+        // grad_f.data # tensor([0.500000, 0.353553, 0.288675, 0.250000])
+        // x.grad # tensor([-0.100000, -0.044194, -0.028868, -0.021875])
+      }
+    }
+    g1.eval("a")
+  }
+
+  test("square0") {
+    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
+      override val fileName = currentTestName
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set inputs and vectors for Hessian
+        val x1 = Tensor.fromData(Seq(4), 1,2,3,4)
+        val d1 = Tensor.fromData(Seq(4), 0.4f, 0.5f, 0.6f, 0.7f)
+        val start1 = TensorFR(new TensorF(x1, d1))
+
+        // compute gradient and hessV
+        val res: Tensor = gradHessV { () =>
+          start1.square.sum
+        }
+
+        // correctness assertion
+        Tensor.assertEqual(res, Tensor.scalar(30))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 2, 4, 6, 8))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), 0.800000f, 1.000000f, 1.200000f, 1.400000f))
+        // PyTorch equvilent code
+        // v = torch.tensor([0.4, 0.5, 0.6, 0.7])
+        // x = torch.tensor([1.0, 2.0, 3.0, 4.0], requires_grad=True)
+        // f = (x * x).sum()
+        // grad_f, = torch.autograd.grad(f, x, create_graph=True)
+        // z = grad_f @ v
+        // z.backward()
+        // torch.set_printoptions(precision=6)
+        // f.data # tensor(30.)
+        // grad_f.data # tensor([2., 4., 6., 8.])
+        // x.grad # tensor([0.800000, 1.000000, 1.200000, 1.400000])
+      }
+    }
+    g1.eval("a")
+  }
+
+  test("relu0") {
+    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
+      override val fileName = currentTestName
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set input and vector for Hessen
+        val x1 = Tensor.fromData(Seq(4), -0.6f, 0.7f, -0.3f, 0.2f)
+        val d1 = Tensor.fromData(Seq(4), 0.4f, 0.5f, 0.6f, 0.7f)
+        val start1 = TensorFR(new TensorF(x1, d1))
+
+        // compute gradient and hessV
+        val res = gradHessV{ () =>
+          start1.relu(inPlace=false).sum
+        }
+
+        // correctness assertion
+        Tensor.assertEqual(res, Tensor.scalar(0.9f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 0.000000f, 1, 0.000000f, 1))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), 0.000000f, 0, 0.000000f, 0))
+        // PyTorch equvilent code
+        // start1 = torch.tensor([-0.6, 0.7, -0.3, 0.2], requires_grad=True)
+        // out = start1.relu().sum()
+        // grads = torch.autograd.grad(out, [start1], create_graph=True, retain_graph = True)
+        // flatten = torch.cat([g.reshape(-1) for g in grads if g is not None])
+        // v = torch.tensor([0.4, 0.5, 0.6, 0.7])
+        // hvps = torch.autograd.grad([flatten @ v], [start1], allow_unused=True)
+        // torch.set_printoptions(precision=6)
+        // print(out.data) # tensor(0.900000)
+        // print(grads[0].data) # tensor([0., 1., 0., 1.])
+        // print(hvps[0].data)  # tensor([0., 0., 0., 0.])
+      }
+    }
+    g1.eval("a")
+  }
+
+  test("relu1") {
+    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
+      override val fileName = currentTestName
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set input and vector for Hessen
+        val x1 = Tensor.fromData(Seq(4), -0.6f, 0.7f, -0.3f, 0.2f)
+        val d1 = Tensor.fromData(Seq(4), -0.4f, -0.5f, 0.6f, 0.7f)
+        val start1 = TensorFR(new TensorF(x1, d1))
+
+        val x2 = Tensor.fromData(Seq(4), 0.4f, 0.3f, 0.2f, 1)
+        val d2 = Tensor.fromData(Seq(4), -0.2f, -0.3f, -0.4f, 0.5f)
+        val start2 = TensorFR(new TensorF(x2, d2))
+
+        // compute gradient and hessV
+        val res = gradHessV{ () =>
+          (start1 * start2).tanh().relu(inPlace=false).sum
+        }
+
+        // correctness assertion
+        Tensor.assertEqual(res, Tensor.scalar(0.404342f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), 0.000000f, 0.287149f, 0.000000f, 0.961043f))
+        Tensor.assertEqual(getGradient(start2), Tensor.fromData(Seq(4), -0.000000f, 0.670015f, -0.000000f, 0.192209f))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), 0.000000f, -0.244360f, 0.000000f, 0.177024f))
+        Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(4), 0.000000f, -0.378740f, 0.000000f, 0.612031f))
+        // PyTorch equvilent code
+        // start1 = torch.tensor([-0.6, 0.7, -0.3, 0.2], requires_grad=True)
+        // start2 = torch.tensor([0.4, 0.3, 0.2, 1.0], requires_grad=True)
+        // out = (start1 * start2).tanh().relu().sum()
+        // grads = torch.autograd.grad(out, [start1, start2], create_graph=True, retain_graph = True)
+        // flatten = torch.cat([g.reshape(-1) for g in grads if g is not None])
+        // v = torch.tensor([-0.4, -0.5, 0.6, 0.7, -0.2, -0.3, -0.4, 0.5])
+        // hvps = torch.autograd.grad([flatten @ v], [start1, start2], allow_unused=True)
+        // torch.set_printoptions(precision=6)
+        // print(out.data) # tensor(0.404342)
+        // print(grads[0].data) # tensor([0.000000, 0.287149, 0.000000, 0.961043])
+        // print(grads[1].data) # tensor([-0.000000, 0.670015, -0.000000, 0.192209])
+        // print(hvps[0].data)  # tensor([ 0.000000, -0.244360,  0.000000,  0.177024])
+        // print(hvps[1].data)  # tensor([-0.000000, -0.378740,  0.000000,  0.612031])
+      }
+    }
+    g1.eval("a")
+  }
+
+  test("hardTanh1") {
+    val g1 = new LanternDriverC[String, Unit] with TensorSecOrderApi {
+      override val fileName = currentTestName
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set input and vector for Hessen
+        val x1 = Tensor.fromData(Seq(4), -6f, 7f, -3f, 2f)
+        val d1 = Tensor.fromData(Seq(4), -0.4f, -0.5f, 0.6f, 0.7f)
+        val start1 = TensorFR(new TensorF(x1, d1))
+
+        val x2 = Tensor.fromData(Seq(4), 0.4f, 0.3f, 0.2f, 0.1f)
+        val d2 = Tensor.fromData(Seq(4), -0.2f, -0.3f, -0.4f, 0.5f)
+        val start2 = TensorFR(new TensorF(x2, d2))
+
+        // compute gradient and hessV
+        val res = gradHessV{ () =>
+          val temp = (start1 * start2).square()
+          temp.hardTanh(inPlace=false).sum
+        }
+
+        // correctness assertion
+        Tensor.assertEqual(res, Tensor.scalar(2.4f))
+        Tensor.assertEqual(getGradient(start1), Tensor.fromData(Seq(4), -0.000000f,  0.000000f, -0.240000f,  0.040000f))
+        Tensor.assertEqual(getGradient(start2), Tensor.fromData(Seq(4), 0.000000f, 0.000000f, 3.600000f, 0.800000f))
+        Tensor.assertEqual(getHessV(start1), Tensor.fromData(Seq(4), 0.000000f, 0.000000f, 1.008000f, 0.414000f))
+        Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(4), 0.000000f,  0.000000f, -8.640000f,  4.560000f))
+        // PyTorch equvilent code
+        // start1 = torch.tensor([-6.0, 7.0, -3.0, 2.0], requires_grad=True)
+        // start2 = torch.tensor([0.4, 0.3, 0.2, 0.1], requires_grad=True)
+        // hardTanh = torch.nn.Hardtanh()
+        // out = hardTanh((start1 * start2) * (start1 * start2)).sum()
+        // grads = torch.autograd.grad(out, [start1, start2], create_graph=True, retain_graph = True)
+        // flatten = torch.cat([g.reshape(-1) for g in grads if g is not None])
+        // v = torch.tensor([-0.4, -0.5, 0.6, 0.7, -0.2, -0.3, -0.4, 0.5])
+        // hvps = torch.autograd.grad([flatten @ v], [start1, start2], allow_unused=True)
+        // torch.set_printoptions(precision=6)
+        // print(out.data) # tensor(2.400000)
+        // print(grads[0].data) # tensor([-0.000000,  0.000000, -0.240000,  0.040000])
+        // print(grads[1].data) # tensor([0.000000, 0.000000, 3.600000, 0.800000])
+        // print(hvps[0].data)  # tensor([0.000000, 0.000000, 1.008000, 0.414000])
+        // print(hvps[1].data)  # tensor([0.000000,  0.000000, -8.640000,  4.560000])
       }
     }
     g1.eval("a")
