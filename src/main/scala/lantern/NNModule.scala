@@ -313,6 +313,22 @@ trait NNModuleCublas extends NNModule with TensorDslCublas {
 trait NNModuleCudnn extends NNModule with TensorDslCudnn {
   backend = BackendCudnn()
 
+  def RNNRelu(inputSize: Int, hiddenSize: Int, numLayers: Int = 1,
+              dropout: Float = 0f, bidirectional: Boolean = false, name: String = "rnn_relu") =
+    RNNBase(RnnReluMode, inputSize, hiddenSize, numLayers, dropout, bidirectional, name)
+ 
+  def RNNTanh(inputSize: Int, hiddenSize: Int, numLayers: Int = 1,
+              dropout: Float = 0f, bidirectional: Boolean = false, name: String = "rnn_tanh") =
+    RNNBase(RnnTanhMode, inputSize, hiddenSize, numLayers, dropout, bidirectional, name)
+ 
+  def LSTM(inputSize: Int, hiddenSize: Int, numLayers: Int = 1,
+           dropout: Float = 0f, bidirectional: Boolean = false, name: String = "lstm") =
+    RNNBase(LstmMode, inputSize, hiddenSize, numLayers, dropout, bidirectional, name)
+
+  def GRU(inputSize: Int, hiddenSize: Int, numLayers: Int = 1,
+          dropout: Float = 0f, bidirectional: Boolean = false, name: String = "gru") =
+    RNNBase(GruMode, inputSize, hiddenSize, numLayers, dropout, bidirectional, name)
+
   case class RNNBase (val mode: RnnMode, val inputSize: Int, val hiddenSize: Int, val numLayers: Int = 1,
     val dropout: Float = 0f, val bidirectional: Boolean = false, val name: String = "rnn") extends Module {
 
