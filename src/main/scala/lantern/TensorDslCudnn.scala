@@ -663,7 +663,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    cudnnHandle,
           |    in_desc, grad_out_desc, conv_desc, grad_filt_desc,
           |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-          |algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+          |// algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
@@ -1635,26 +1635,26 @@ trait TensorDslCudnn extends TensorDslCublas {
                              reserve: Rep[Array[Float]],
                              reserveSize: Rep[Int]): Unit = {
       // TODO: Calculate hidden state gradients?
-      assert(input.d.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
-      assert(output.d.rank == 3, "RNN output should have rank 3: [seqLength x batchSize x hiddenSize * numDirections]")
+      assert(input.x.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
+      assert(output.x.rank == 3, "RNN output should have rank 3: [seqLength x batchSize x hiddenSize * numDirections]")
       hx match {
         case None =>
         case Some(hx) =>
           assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
-          assert(input.d.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+          assert(input.x.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
       }
       cx match {
         case None =>
         case Some(cx) =>
           assert(cx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
-          assert(input.d.shape(1) == cx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+          assert(input.x.shape(1) == cx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
       }
       val hxData = hx.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
       val cxData = cx.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
 
-      val seqLength = input.d.shape(0)
-      val batchSize = input.d.shape(1)
-      val inputSize = input.d.shape(2)
+      val seqLength = input.x.shape(0)
+      val batchSize = input.x.shape(1)
+      val inputSize = input.x.shape(2)
       val numDirections = if (bidirectional) 2 else 1
 
       unchecked[Unit](
@@ -1761,19 +1761,19 @@ trait TensorDslCudnn extends TensorDslCublas {
                                 bidirectional: Boolean = false,
                                 reserve: Rep[Array[Float]],
                                 reserveSize: Rep[Int]): Unit = {
-      assert(input.d.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
-      assert(output.d.rank == 3, "RNN output should have rank 3: [seqLength x batchSize x hiddenSize * numDirections]")
+      assert(input.x.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
+      assert(output.x.rank == 3, "RNN output should have rank 3: [seqLength x batchSize x hiddenSize * numDirections]")
       hx match {
         case None =>
         case Some(hx) =>
           assert(hx.rank == 3, "RNN hidden state should have rank 3: [numLayers * numDirections x batchSize x hiddenSize]")
-          assert(input.d.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
+          assert(input.x.shape(1) == hx.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
       }
       val hxData = hx.map(_.data).getOrElse(unchecked[Array[Float]]("(float*)NULL"))
 
-      val seqLength = input.d.shape(0)
-      val batchSize = input.d.shape(1)
-      val inputSize = input.d.shape(2)
+      val seqLength = input.x.shape(0)
+      val batchSize = input.x.shape(1)
+      val inputSize = input.x.shape(2)
       val numDirections = if (bidirectional) 2 else 1
 
       unchecked[Unit](
@@ -1869,8 +1869,8 @@ trait TensorDslCudnn extends TensorDslCublas {
                          bidirectional: Boolean = false,
                          reserve: Rep[Array[Float]],
                          reserveSize: Rep[Int]): Unit = {
-      cudnnRNNBackwardData(mode, input, hx, cx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
-      // TODO: Need to update `BackwardWeights` to accumulate gradients.
+      if (!input.isInput)
+        cudnnRNNBackwardData(mode, input, hx, cx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
       cudnnRNNBackwardWeights(mode, input, hx, w, output, numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
     }
 

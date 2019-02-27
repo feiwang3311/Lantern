@@ -35,8 +35,8 @@ object DeepSpeech {
       // Reference: https://github.com/SeanNaren/deepspeech.pytorch/blob/c959d29c381e5bef7cdfb0cd420ddacd89d11520/model.py#L80
       case class BatchRNN(val name: String = "batch_rnn",
                           inputSize: Int, hiddenSize: Int, rnnMode: RnnMode = RnnTanhMode,
-                          bidirectional: Boolean = true, useBatchNorm: Boolean = false) extends Module {
-        val rnn = RNNBase(rnnMode, inputSize, hiddenSize, bidirectional = bidirectional)
+                          bidirectional: Boolean = true, useBatchNorm: Boolean = false, numLayers: Int = 1) extends Module {
+        val rnn = RNNBase(rnnMode, inputSize, hiddenSize, numLayers = numLayers, bidirectional = bidirectional)
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
         def apply(input: TensorR): TensorR @diff = {
@@ -100,10 +100,7 @@ object DeepSpeech {
         }
 
         printf("initial rnn input size is %d \\n", rnnInputSize)
-        val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
-          if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
-          else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
-        }
+        val rnns = BatchRNN("batch_rnn", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm=false, numLayers)
 
         val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
 
@@ -144,12 +141,13 @@ object DeepSpeech {
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
           generateRawComment("after resize and permute") // line 1576
 
-          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If_B (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in))}
-          val step4 = rec(rnns, step3)
-          generateRawComment("after RNN layers")// line 8711
+//          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If_B (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in))}
+//          val step4 = rec(rnns, step3)
+          val step4 = rnns(step3)
+          //generateRawComment("after RNN layers")// line 8711
 
           val step5 = If_B (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }
-          generateRawComment("after maybe lookahead") // line 8450
+          //generateRawComment("after maybe lookahead") // line 8450
           // TODO igore eval_mode (which needs a softmax layer) for now
           fc(step5)  // T * B * num_alphabet
         }
@@ -158,8 +156,8 @@ object DeepSpeech {
       val labels = "_'ABCDEFGHIJKLMNOPQRSTUVWXYZ "
       val net = DeepSpeech(labels = labels, bidirectional = true)
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
-      val opt = SGD(net, learning_rate = 3e-8f, gradClip = 1000.0f)
-      // val opt = SGD_Momentum(net, learning_rate = 3e-4f, momentum = 0.9f, gradClip = 400.0f, nesterov = true)
+      // val opt = SGD(net, learning_rate = 3e-8f, gradClip = 1000.0f)
+      val opt = SGD_Momentum(net, learning_rate = 3e-4f, momentum = 0.9f, gradClip = 400.0f, nesterov = true)
 
       def lossFun(input: TensorR, percent: Rep[Array[Float]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val probs = net(input).softmax_batch(2)

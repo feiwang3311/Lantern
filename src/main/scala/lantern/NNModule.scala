@@ -313,19 +313,14 @@ trait NNModuleCublas extends NNModule with TensorDslCublas {
 trait NNModuleCudnn extends NNModule with TensorDslCudnn {
   backend = BackendCudnn()
 
-  trait RNNBase extends Module {
-    val mode: RnnMode
-    val inputSize: Int
-    val hiddenSize: Int
-    val numLayers: Int = 1
-    val dropout: Float = 0f
-    val bidirectional: Boolean = false
+  case class RNNBase (val mode: RnnMode, val inputSize: Int, val hiddenSize: Int, val numLayers: Int = 1,
+    val dropout: Float = 0f, val bidirectional: Boolean = false, val name: String = "rnn") extends Module {
 
     assert(inputSize >= 1, "Input size must be at least 1")
     assert(hiddenSize >= 1, "Hidden size must be at least 1")
     assert(numLayers >= 1, "Number of layers must be at least 1")
     assert(dropout >= 0 && dropout <= 1, "Dropout must be between 0 and 1")
-
+    
     val w_ih = ArrayBuffer[TensorR]()
     val w_hh = ArrayBuffer[TensorR]()
     val b_ih = ArrayBuffer[TensorR]()
@@ -338,22 +333,21 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
     val b_hh_reverse = ArrayBuffer[TensorR]()
 
     val numDirections = if (bidirectional) 2 else 1
-    lazy val gateSize = hiddenSize * mode.numGates
-
-    // Initialize parameter buffer.
-    // cuDNN requires that all parameters are stored in a contiguous buffer.
-    // NOTE: Choose different initialization strategy?
-    // TODO (Fei Wang): For now we are resigtering this big TensorR, not the pieces of weights and biases. (Better to fix later)
-    lazy val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
+    val gateSize = hiddenSize * mode.numGates
 
     def getParameterSize(): Int = {
-      val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize * numDirections
+      val w_ih_size = gateSize * inputSize + (numLayers - 1) * gateSize * hiddenSize // * numDirections
       val w_hh_size = numLayers * gateSize * hiddenSize
       val b_ih_size = numLayers * gateSize
       val b_hh_size = numLayers * gateSize
       val total = w_ih_size + w_hh_size + b_ih_size + b_hh_size
       if (bidirectional) total * 2 else total
     }
+
+    // Initialize parameter buffer.
+    // cuDNN requires that all parameters are stored in a contiguous buffer.
+//    val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
+    val parameterBuffer = Nonparameter(TensorR(Tensor.rand(Seq(getParameterSize()), 0.01f)))
 
     def setupParameters(): Unit = {
       // Helper function that computes offsets for individual parameter tensors.
@@ -365,27 +359,21 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
         new TensorR(x, d)
       }
 
-      // Weight parameters must be registered first.
       for (layer <- (0 until numLayers): Range) {
-        val layerInputSize = if (layer == 0) inputSize else hiddenSize * numDirections
+        val layerInputSize = if (layer == 0) inputSize else hiddenSize
         w_ih += getParameter(gateSize, layerInputSize)
         w_hh += getParameter(gateSize, hiddenSize)
-        if (bidirectional) {
-          w_ih_reverse += getParameter(gateSize, layerInputSize)
-          w_hh_reverse += getParameter(gateSize, hiddenSize)
-        }
-      }
-
-      // Then, register bias parameters.
-      for (layer <- (0 until numLayers): Range) {
         b_ih += getParameter(gateSize)
         b_hh += getParameter(gateSize)
         if (bidirectional) {
+          w_ih_reverse += getParameter(gateSize, layerInputSize)
+          w_hh_reverse += getParameter(gateSize, hiddenSize)
           b_ih_reverse += getParameter(gateSize)
           b_hh_reverse += getParameter(gateSize)
         }
       }
     }
+    setupParameters()
 
     def apply(input: TensorR, hx: Option[TensorR] = None, cx: Option[TensorR] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert(input.x.rank == 3, "RNN input should have rank 3: [seqLength x batchSize x inputSize]")
@@ -410,58 +398,5 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
         mode, input, hx.map(_.x), cx.map(_.x), parameterBuffer, output,
         numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
     }
-  }
-
-  // Helper object for getting an RNN module instance given the specified RNN mode and hyperparameters.
-  object RNNBase {
-    def apply(mode: RnnMode, inputSize: Int, hiddenSize: Int, numLayers: Int = 1,
-              dropout: Float = 0f, bidirectional: Boolean = false): RNNBase = {
-      mode match {
-        case RnnReluMode => RNNRelu(inputSize, hiddenSize, numLayers, dropout, bidirectional)
-        case RnnTanhMode => RNNTanh(inputSize, hiddenSize, numLayers, dropout, bidirectional)
-        case LstmMode => LSTM(inputSize, hiddenSize, numLayers, dropout, bidirectional)
-        case GruMode => GRU(inputSize, hiddenSize, numLayers, dropout, bidirectional)
-      }
-    }
-  }
-
-  case class RNNRelu(override val inputSize: Int,
-                     override val hiddenSize: Int,
-                     override val numLayers: Int = 1,
-                     override val dropout: Float = 0f,
-                     override val bidirectional: Boolean = false,
-                     val name: String = "rnn-relu") extends RNNBase {
-    override val mode = RnnReluMode
-    setupParameters()
-  }
-
-  case class RNNTanh(override val inputSize: Int,
-                     override val hiddenSize: Int,
-                     override val numLayers: Int = 1,
-                     override val dropout: Float = 0f,
-                     override val bidirectional: Boolean = false,
-                     val name: String = "rnn-tanh") extends RNNBase {
-    override val mode = RnnTanhMode
-    setupParameters()
-  }
-
-  case class LSTM(override val inputSize: Int,
-                  override val hiddenSize: Int,
-                  override val numLayers: Int = 1,
-                  override val dropout: Float = 0f,
-                  override val bidirectional: Boolean = false,
-                  val name: String = "lstm") extends RNNBase {
-    override val mode = LstmMode
-    setupParameters()
-  }
-
-  case class GRU(override val inputSize: Int,
-                 override val hiddenSize: Int,
-                 override val numLayers: Int = 1,
-                 override val dropout: Float = 0f,
-                 override val bidirectional: Boolean = false,
-                 val name: String = "gru") extends RNNBase {
-    override val mode = GruMode
-    setupParameters()
   }
 }
