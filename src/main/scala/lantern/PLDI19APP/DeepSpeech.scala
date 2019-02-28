@@ -100,7 +100,11 @@ object DeepSpeech {
         }
 
         printf("initial rnn input size is %d \\n", rnnInputSize)
-        val rnns = BatchRNN("batch_rnn", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm=false, numLayers)
+        val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
+          if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
+          else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
+        } 
+//        val rnns = BatchRNN("batch_rnn", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm=false, numLayers)
 
         val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
 
@@ -118,17 +122,6 @@ object DeepSpeech {
           }
         }
 
-//        def getSeqLens(lengths: Rep[Array[Int]], size: Rep[Int]) = {
-//          conv.modules.foldLeft(lengths) { case(ls, (_, m)) =>
-//            if (m.isInstanceOf[Conv2D]) {
-//              val mm = m.asInstanceOf[Conv2D]
-//              val ls_next = NewArray[Int](size)
-//              for (i <- 0 until size) ls_next(i) = (ls(i) + 2 * mm.pad(1) - mm.dilation(1) * (mm.kernelSize(1) - 1) - 1) / mm.stride(1) + 1
-              // ls.map(x => (x + 2 * mm.pad(1) - mm.dilation(1) * (mm.kernelSize(1) - 1) - 1) / mm.stride(1) + 1)
-//              ls_next } else ls
-//          }
-//        }
-
         def apply(input: TensorR): TensorR @diff = {
           // input is B * C * D * T
           // generateRawComment("before getting length info") // line 1117
@@ -141,9 +134,9 @@ object DeepSpeech {
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
           generateRawComment("after resize and permute") // line 1576
 
-//          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If_B (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in))}
-//          val step4 = rec(rnns, step3)
-          val step4 = rnns(step3)
+          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If_B (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in))}
+          val step4 = rec(rnns, step3)
+//          val step4 = rnns(step3)
           //generateRawComment("after RNN layers")// line 8711
 
           val step5 = If_B (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }

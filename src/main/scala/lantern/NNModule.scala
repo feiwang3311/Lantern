@@ -404,7 +404,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
           assert(batchSize == hx.x.shape(1), "RNN hidden state second dimension should equal input second dimension (batch size)")
       }
 
-      val (y, hy, reserve, reserveSize) = BackendCudnn().cudnnRNNForwardTraining(
+      val (y, hy, reserve, reserveSize, counter) = BackendCudnn().cudnnRNNForwardTraining(
         mode, input.x, hx.map(_.x), cx.map(_.x), parameterBuffer.x,
         numLayers, hiddenSize, dropout, bidirectional)
       val output = TensorR(y)
@@ -412,7 +412,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
 
       BackendCudnn().cudnnRNNBackward(
         mode, input, hx.map(_.x), cx.map(_.x), parameterBuffer, output,
-        numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize)
+        numLayers, hiddenSize, dropout, bidirectional, reserve, reserveSize, counter)
     }
   }
 }
