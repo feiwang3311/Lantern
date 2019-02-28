@@ -1435,12 +1435,27 @@ trait TensorDslCudnn extends TensorDslCublas {
       unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f/input.x.scalarCount, ", ", input.d.scalarCount, ")")
     }
 
+    @virtualize
     override def sum(x: Tensor, dim: Int): Tensor = {
       assert(dim >= 0 && dim < x.rank, s"dim should be in range, got ${dim} from ${x.shape}")
-      val xx = x.resizeNoCheck(x.shape.padTo(4, unit(1)): _*)
-      val indices = dim +: ((x.rank until xx.rank): Range).toSeq
-      cudnnReduceTensor(xx, ReductionOp.Add, indices)
+      val resShape: Seq[Rep[Int]] = x.shape.take(dim) ++ x.shape.drop(dim+1)
+      val resData = if (x.shape(dim) < 5) {
+        val resData = mallocArray[Float](resShape.scalarCount)
+        val inputStride = x.shape.strides.padTo(4, 1)
+        val outputStride = resShape.strides.padTo(3, 1)
+        generateRawComment("optimization for dimension sum if size is small")
+        unchecked[Unit](
+          "sum_optimization<<<28, 512>>>(", x.data, ", ", inputStride(0), ", ", inputStride(1), ", ", inputStride(2), ", ", inputStride(3), ", ", resData, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ", ", resShape.product1, ", ", x.shape(dim), ");\n")
+        resData
+      } else {
+        val xx = x.resizeNoCheck(x.shape.padTo(4, unit(1)): _*)
+        val indices = dim +: ((x.rank until xx.rank): Range).toSeq
+        val ret = cudnnReduceTensor(xx, ReductionOp.Add, indices)
+        ret.data
+      }
+      new Tensor(resData, resShape)
     }
+
     override def sum_grad(input: TensorR, output: TensorR, dim: Int): Unit = {
       // TODO: (Fei Wang) there are limitations in cudnnAddBiasTensor (dim 0 must be 1). So we need user-defined kernel for this!!
       assert(input.x.rank == output.x.rank + 1, s"input should be 1 rank higher than the output, got ${input.x.shape}, ${output.x.shape}")
@@ -1561,6 +1576,7 @@ trait TensorDslCudnn extends TensorDslCublas {
          |size_t workspaceSize_$counter;
          |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
          |    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, &workspaceSize_$counter));
+         |void* workspace_$counter = myGpuMalloc(workspaceSize_$counter);
          """.stripMargin): _* 
       )
 
@@ -1577,25 +1593,22 @@ trait TensorDslCudnn extends TensorDslCublas {
             reserveSpace, " = (float*)reserveSpace;\n",
             reserveSpaceSize, " = (int)reserveSize;\n") ++
           Seq(
-            s"void* workspace = myGpuMalloc(workspaceSize_$counter);\n" +
             "CUDNN_CALL(cudnnRNNForwardTraining(\n" +
             s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", x.data, ",\n" +
             s"    hx_desc_$counter,", hxData, s", hx_desc_$counter,", cxData, s", w_desc_$counter, ", w.data, s", y_descs_$counter, ", res.data, ",\n" +
-            s"    hx_desc_$counter, ", hyData, s", hx_desc_$counter, NULL, workspace, workspaceSize_$counter, reserveSpace, reserveSize));\n") ++
-          Seq(s"myGpuFree(workspaceSize_$counter);\n}"): _*)
+            s"    hx_desc_$counter, ", hyData, s", hx_desc_$counter, NULL, workspace_$counter, workspaceSize_$counter, reserveSpace, reserveSize));\n") ++
+          Seq(s"}"): _*)
 
         // If inference, call `ForwardInference` function.
       else
         unchecked[Unit](
-          Seq("{\n" +
-            s"void* workspace = myGpuMalloc(workspaceSize_$counter);\n" +
+          Seq(
              "CUDNN_CALL(cudnnRNNForwardInference(\n" +
             s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", x.data, ",\n" +
             s"    hx_desc_$counter,", hxData, s", hx_desc_$counter,", cxData, s", w_desc_$counter, ", w.data, s", y_descs_$counter, ", res.data, ",\n" +
-            s"    hx_desc_$counter,", hyData, s", hx_desc_$counter, NULL, workspace, workspaceSize_$counter));\n"
+            s"    hx_desc_$counter,", hyData, s", hx_desc_$counter, NULL, workspace_$counter, workspaceSize_$counter));\n"
           ) ++
-          Seq("myGpuFree(workspaceSize);\n" +
-            "}"): _*)
+          Seq(s"myGpuFree(workspaceSize_$counter);\n"): _*)
 
       if (training)
         (res, hy, Some(reserveSpace, reserveSpaceSize), counter)
@@ -1657,15 +1670,11 @@ trait TensorDslCudnn extends TensorDslCublas {
       val numDirections = if (bidirectional) 2 else 1
 
       unchecked[Unit](
-          "{\n" +
-         s"void* workspace = myGpuMalloc(workspaceSize_$counter);\n" +
          s"CUDNN_CALL(cudnnRNNBackwardData(\n" +
          s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, y_descs_$counter, ", output.x.data, s", y_descs_$counter, ", output.d.data, ",\n" +
          s"    hx_desc_$counter, NULL, hx_desc_$counter, NULL, w_desc_$counter, ", w.x.data, s", hx_desc_$counter, ", hxData, ",\n" +
          s"    hx_desc_$counter, ", cxData, s", x_descs_$counter, ", input.d.data, s", hx_desc_$counter, NULL, hx_desc_$counter, NULL,\n" +
-         s"    workspace, workspaceSize_$counter, ", reserve, ", ", reserveSize, "));\n" +
-         s"myGpuFree(workspaceSize_$counter);\n" +
-          "}\n"
+         s"    workspace_$counter, workspaceSize_$counter, ", reserve, ", ", reserveSize, "));\n"
       )
     }
 
@@ -1694,14 +1703,10 @@ trait TensorDslCudnn extends TensorDslCublas {
       val numDirections = if (bidirectional) 2 else 1
 
       unchecked[Unit](
-           "{\n" +
-          s"void* workspace = myGpuMalloc(workspaceSize_$counter);\n" +
           s"CUDNN_CALL(cudnnRNNBackwardWeights(\n" +
           s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", input.x.data, s", hx_desc_$counter, ", hxData, ",\n" +
-          s"    y_descs_$counter, ", output.x.data, s", workspace, workspaceSize_$counter,\n" +
-          s"    w_desc_$counter, ", w.d.data, ", ", reserve, ", ", reserveSize, "));\n" +
-          s"myGpuFree(workspaceSize_$counter);\n" +
-           "}\n"
+          s"    y_descs_$counter, ", output.x.data, s", workspace_$counter, workspaceSize_$counter,\n" +
+          s"    w_desc_$counter, ", w.d.data, ", ", reserve, ", ", reserveSize, "));\n"
       )
     }
 
