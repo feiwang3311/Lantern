@@ -288,11 +288,11 @@ trait TensorDsl extends DslOps with Diff {
       * @return Result of 2D convolution.
       */
     // NOTE: cuDNN accepts only two padding arguments: [padVertical, padHorizontal].
-    def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor])
+    def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int)
 
     @virtualize
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
-                          padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit
+                          padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit
 
     def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]])
     def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
@@ -301,12 +301,12 @@ trait TensorDsl extends DslOps with Diff {
     def averagePool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit
 
     def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor
-    def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor])
-    def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit
+    def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int)
+    def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit
 
     def batchNorm1DInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor
-    def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor])
-    def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit
+    def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int)
+    def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit
 
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
@@ -509,13 +509,13 @@ trait TensorDsl extends DslOps with Diff {
     def batchNormInference(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor =
       backend.batchNormInference(this, scale, bias, runningMean, runningVar)
 
-    def batchNormTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) =
+    def batchNormTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int) =
       backend.batchNormTraining(this, scale, bias, runningMean, runningVar)
 
     def batchNorm1DInference(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor =
       backend.batchNorm1DInference(this, scale, bias, runningMean, runningVar)
 
-    def batchNorm1DTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) =
+    def batchNorm1DTraining(scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int) =
       backend.batchNorm1DTraining(this, scale, bias, runningMean, runningVar)
 
     @virtualize
@@ -808,8 +808,9 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     @virtualize
-    def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) =
+    def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int) = {
       backend.conv2D_batch(this, kernel, bias, strides, pads)
+    }
 
     @virtualize
     def averagePool2D_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]): Tensor = paddings match {
@@ -1307,16 +1308,16 @@ trait TensorDsl extends DslOps with Diff {
 
     def batchNorm(scale: TensorR, bias: TensorR, runningMean: Tensor, runningVar: Tensor): TensorR @diff =
       shift { (k: TensorR => Unit) =>
-        val (y, saveMean, saveInvVariance) = x.batchNormTraining(scale.x, bias.x, runningMean, runningVar)
+        val (y, saveMean, saveInvVariance, counterId) = x.batchNormTraining(scale.x, bias.x, runningMean, runningVar)
         val ty = TensorR(y); k(ty);
-        backend.batchNorm_grad(this, ty, scale, bias, saveMean, saveInvVariance)
+        backend.batchNorm_grad(this, ty, scale, bias, saveMean, saveInvVariance, counterId)
       }
 
     def batchNorm1D(scale: TensorR, bias: TensorR, runningMean: Tensor, runningVar: Tensor): TensorR @diff =
       shift { (k: TensorR => Unit) =>
-        val (y, saveMean, saveInvVariance) = x.batchNorm1DTraining(scale.x, bias.x, runningMean, runningVar)
+        val (y, saveMean, saveInvVariance, counterId) = x.batchNorm1DTraining(scale.x, bias.x, runningMean, runningVar)
         val ty = TensorR(y); k(ty);
-        backend.batchNorm1D_grad(this, ty, scale, bias, saveMean, saveInvVariance)
+        backend.batchNorm1D_grad(this, ty, scale, bias, saveMean, saveInvVariance, counterId)
       }
 
     def batchNormAv(): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -1378,7 +1379,7 @@ trait TensorDsl extends DslOps with Diff {
     def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
       assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
       assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
-      val (output, finputOption) = bias match {
+      val (output, finputOption, counterId) = bias match {
         case Some(bias) => backend.conv2D_batch(x, kernel.x, Some(bias.x), strides, pads)
         case None =>       backend.conv2D_batch(x, kernel.x, None, strides, pads)
       }
@@ -1388,8 +1389,8 @@ trait TensorDsl extends DslOps with Diff {
       val paddings = if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else {if (pads.size == 1) (pads(0), pads(0)) else ???}}
       val stridess = if (strides.size == 2) (strides(0), strides(1)) else ???
       finputOption match {
-        case None => backend.conv2D_batch_grad(this, None, kernel, y, bias, paddings, stridess, dilations = (1, 1))
-        case Some(finput) => backend.conv2D_batch_grad(this, Some(TensorR(finput)), kernel, y, bias, paddings, stridess, dilations = (1, 1))
+        case None => backend.conv2D_batch_grad(this, None, kernel, y, bias, paddings, stridess, dilations = (1, 1), counterId)
+        case Some(finput) => backend.conv2D_batch_grad(this, Some(TensorR(finput)), kernel, y, bias, paddings, stridess, dilations = (1, 1), counterId)
       }
     }
 

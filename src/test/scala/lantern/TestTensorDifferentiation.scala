@@ -1104,7 +1104,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val bias = Tensor.zeros(1)
         val strides = Seq(2, 2)
         val pads = Seq(0,0,0,0)
-        val (output, finputOption) = input.conv2D_batch(kernel, Some(bias), strides, pads)
+        val (output, finputOption, _) = input.conv2D_batch(kernel, Some(bias), strides, pads)
         // output.print("output")
         // assert equal
         val expect = Tensor.fromData(Seq(1,1,2,2), 44, 64, 44, 64)
@@ -1125,7 +1125,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val bias = Tensor.zeros(1)
         val strides = Seq(3, 3)
         val pads = Seq(1, 1, 1, 1)
-        val (output, finputOption) = input.conv2D_batch(kernel, Some(bias), strides, pads)
+        val (output, finputOption, _) = input.conv2D_batch(kernel, Some(bias), strides, pads)
 
         // assert equal
         val expect = Tensor.fromData(Seq(1,1,2,2), 4.0f, 4.0f, 4.0f, 4.0f)
@@ -1146,7 +1146,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val bias = Tensor.zeros(1)
         val strides = Seq(3, 3)
         val pads = Seq(1, 1, 1, 1)
-        val (output, finputOption) = input.conv2D_batch(kernel, Some(bias), strides, pads)
+        val (output, finputOption, _) = input.conv2D_batch(kernel, Some(bias), strides, pads)
 
         // assert equal
         val expect = Tensor.fromData(Seq(1,1,2,2), 14.0f, 22.0f, 18.0f, 26.0f)
@@ -1166,7 +1166,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         val kernel = Tensor.ones(1, 1, 3, 3)
         val strides = Seq(3, 3)
         val pads = Seq(1, 1, 1, 1)
-        val (output, finputOption) = input.conv2D_batch(kernel, None, strides, pads)
+        val (output, finputOption, _) = input.conv2D_batch(kernel, None, strides, pads)
 
         val expect = Tensor.fromData(Seq(1,1,2,2), 4.0f, 4.0f, 4.0f, 4.0f)
         Tensor.assertEqual(expect, output, "expect and output are")

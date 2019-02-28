@@ -69,11 +69,11 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
       backend.hardTanh_grad(temp, new TensorR(x, d), min_val, max_val, inPlace)
       new TensorF(x.hardTanh(min_val, max_val, inPlace), temp.d)
     }
-    def conv2D_batch(kernel: TensorF, bias: Option[TensorF], strides: Seq[Int], pads: Seq[Int]): (TensorF, Option[TensorF]) = {
-      val (value, opValue) = x.conv2D_batch(kernel.x, bias.map(_.x), strides, pads)
-      val (tangent1, opTangent1) = x.conv2D_batch(kernel.d, bias.map(_.d), strides, pads)
-      val (tangent2, opTangent2) = d.conv2D_batch(kernel.x, None, strides, pads)
-      (new TensorF(value, tangent1 + tangent2), opValue.map(new TensorF(_, opTangent2.get)))
+    def conv2D_batch(kernel: TensorF, bias: Option[TensorF], strides: Seq[Int], pads: Seq[Int]): (TensorF, Option[TensorF], Int) = {
+      val (value, opValue, counterId) = x.conv2D_batch(kernel.x, bias.map(_.x), strides, pads)
+      val (tangent1, opTangent1, _) = x.conv2D_batch(kernel.d, bias.map(_.d), strides, pads)
+      val (tangent2, opTangent2, _) = d.conv2D_batch(kernel.x, None, strides, pads)
+      (new TensorF(value, tangent1 + tangent2), opValue.map(new TensorF(_, opTangent2.get)), counterId)
     }
 
     // inplace mutations
@@ -205,7 +205,7 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
     }
 
     def conv2D_batch(kernel: TensorFR, bias: Option[TensorFR] = None, strides: Seq[Int] = Seq(1,1), pads: Seq[Int] = Seq(0,0)): TensorFR @diff = shift { (k: TensorFR => Unit) =>
-      val (out, opInput) =  x.conv2D_batch(kernel.x, bias.map(_.x), strides, pads)
+      val (out, opInput, counterId) =  x.conv2D_batch(kernel.x, bias.map(_.x), strides, pads)
       val y = TensorFR(out); val opInputFR = opInput.map(TensorFR(_)); k(y)
 
       generateRawComment("conv2D back-propagate sec order")
@@ -223,21 +223,21 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
         new TensorR(kernel.x.x, kernel.d.x),
         new TensorR(y.x.x, y.d.x),
         bias map (v => new TensorR(v.x.x, v.d.x)),
-        paddings, stridess, (1, 1))
+        paddings, stridess, (1, 1), counterId)
       backend.conv2D_batch_grad(
         new TensorR(this.x.d, this.d.d), //
         opInputFR map (v => new TensorR(v.x.d, v.d.d)),
         new TensorR(kernel.x.d, kernel.d.d), //
         new TensorR(y.x.x, y.d.x), //
         None,
-        paddings, stridess, (1, 1))
+        paddings, stridess, (1, 1), counterId)
       backend.conv2D_batch_grad(
         new TensorR(this.x.d, this.d.d), //
         opInputFR map (v => new TensorR(v.x.x, v.d.d)),
         new TensorR(kernel.x.x, kernel.d.d), //
         new TensorR(y.x.d, y.d.d), //
         bias map (v => new TensorR(v.d.x, v.d.d)),
-        paddings, stridess, (1, 1))
+        paddings, stridess, (1, 1), counterId)
     }
   }
 

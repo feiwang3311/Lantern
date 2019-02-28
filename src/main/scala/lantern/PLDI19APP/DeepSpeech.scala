@@ -104,7 +104,6 @@ object DeepSpeech {
           if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
           else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
         } 
-//        val rnns = BatchRNN("batch_rnn", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm=false, numLayers)
 
         val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
 
@@ -136,7 +135,6 @@ object DeepSpeech {
 
           def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If_B (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in))}
           val step4 = rec(rnns, step3)
-//          val step4 = rnns(step3)
           //generateRawComment("after RNN layers")// line 8711
 
           val step5 = If_B (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }

@@ -228,7 +228,7 @@ class TestCudnn extends LanternFunSuite {
         val bias = Tensor.ones(1)
         val strides = Seq(2, 2)
         val pads = Seq(0,0,0,0)
-        val (output, finputOption) = input.conv2D_batch(kernel, Some(bias), strides, pads)
+        val (output, finputOption, _) = input.conv2D_batch(kernel, Some(bias), strides, pads)
 
         generateRawComment("check")
         backend = BackendCPU()

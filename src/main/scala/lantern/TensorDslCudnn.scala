@@ -444,63 +444,71 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionForward
     def cudnnConvolutionForward(input: Tensor, filter: Tensor, res: Tensor, bias: Option[Tensor] = None,
-                                padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+                                padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Int = {
       assert(input.rank == 4, s"Convolution input must have rank 4, but got ${input.rank}")
       assert(res.rank == 4, s"Convolution result must have rank 4, but got ${res.rank}")
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
+
+      val counter = nextKernel
+      nextKernel += 1 
+
       unchecked[Unit](
-        Seq("""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+        Seq(s"""
+          |cudnnTensorDescriptor_t in_desc_$counter;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc_$counter));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ",  input.shape(3), """));
+          |    in_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ",  input.shape(3), s"""));
           |
-          |cudnnFilterDescriptor_t filt_desc;
-          |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+          |cudnnFilterDescriptor_t filt_desc_$counter;
+          |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc_$counter));
           |CUDNN_CALL(cudnnSetFilter4dDescriptor(
-          |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-          |    """.stripMargin, filter.shape(0), ", ", filter.shape(1), ", ", filter.shape(2), ", ", filter.shape(3), """));
+          |    filt_desc_$counter, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+          |    """.stripMargin, filter.shape(0), ", ", filter.shape(1), ", ", filter.shape(2), ", ", filter.shape(3), s"""));
           |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |cudnnTensorDescriptor_t out_desc_$counter;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc_$counter));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    out_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
           |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), s"""));
           |
-          |cudnnConvolutionDescriptor_t conv_desc;
-          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+          |cudnnConvolutionDescriptor_t conv_desc_$counter;
+          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc_$counter));
           |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-          |    conv_desc,
+          |    conv_desc_$counter,
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
           |""".stripMargin) ++
-        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
-        Seq("""
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc_$counter, $mathType));")).getOrElse(Seq()): _*
+      )
+
+      unchecked[Unit](
+        Seq(s"""
           |// Algorithm.
+          |{
           |cudnnConvolutionFwdAlgo_t algo;
           |CUDNN_CALL(cudnnGetConvolutionForwardAlgorithm(
           |    cudnnHandle,
-          |    in_desc, filt_desc, conv_desc, out_desc,
+          |    in_desc_$counter, filt_desc_$counter, conv_desc_$counter, out_desc_$counter,
           |    CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 0, &algo));
           |
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionForwardWorkspaceSize(
-          |    cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, algo, &ws_size));
+          |    cudnnHandle, in_desc_$counter, filt_desc_$counter, conv_desc_$counter, out_desc_$counter, algo, &ws_size));
           |void *ws_data = myGpuMalloc(ws_size);
           |""".stripMargin) ++
         Seq(
           "// Execute convolution.\n" +
           "CUDNN_CALL(cudnnConvolutionForward(\n" +
           "    cudnnHandle,\n" +
-          "    ", one, ", in_desc, ", input.data, ", filt_desc, ", filter.data, ",\n" +
-          "    conv_desc, algo, ws_data, ws_size,\n" +
-          "    ", zero, ", out_desc, ", res.data, "));\n" +
+          "    ", one, s", in_desc_$counter, ", input.data, s", filt_desc_$counter, ", filter.data, ",\n" +
+         s"    conv_desc_$counter, algo, ws_data, ws_size,\n" +
+          "    ", zero, s", out_desc_$counter, ", res.data, "));\n" +
           "}"): _*
       )
+      counter
     }
 
     override def plusBias(main: Tensor, bias: Tensor): Tensor = {
@@ -565,122 +573,124 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardData
     def cudnnConvolutionBackwardData(inputGrad: Tensor, filter: Tensor, resGrad: Tensor,
-                                     padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+                                     padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit = {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, but got ${resGrad.rank}")
       assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
+//     unchecked[Unit](
+//       Seq(s"""
+//         |{
+//         |cudnnFilterDescriptor_t filt_desc;
+//         |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
+//         |CUDNN_CALL(cudnnSetFilter4dDescriptor(
+//         |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+//         |    """.stripMargin, filter.shape(0), ", ", filter.shape(1), ", ", filter.shape(2), ", ", filter.shape(3), """));
+//         |
+//         |cudnnTensorDescriptor_t grad_in_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    """.stripMargin, inputGrad.shape(0), ", ", inputGrad.shape(1), ", ", inputGrad.shape(2), ", ", inputGrad.shape(3), """));
+//         |
+//         |cudnnTensorDescriptor_t grad_out_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    """.stripMargin, resGrad.shape(0), ", ", resGrad.shape(1), ", ", resGrad.shape(2), ", ", resGrad.shape(3), s"""));
+//         |
+//         |cudnnConvolutionDescriptor_t conv_desc;
+//         |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+//         |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+//         |    conv_desc,
+//         |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
+//         |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+//         |""".stripMargin) ++
+//       cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
       unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnFilterDescriptor_t filt_desc;
-          |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-          |CUDNN_CALL(cudnnSetFilter4dDescriptor(
-          |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-          |    """.stripMargin, filter.shape(0), ", ", filter.shape(1), ", ", filter.shape(2), ", ", filter.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t grad_in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, inputGrad.shape(0), ", ", inputGrad.shape(1), ", ", inputGrad.shape(2), ", ", inputGrad.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t grad_out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, resGrad.shape(0), ", ", resGrad.shape(1), ", ", resGrad.shape(2), ", ", resGrad.shape(3), s"""));
-          |
-          |cudnnConvolutionDescriptor_t conv_desc;
-          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-          |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-          |    conv_desc,
-          |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
-          |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-          |""".stripMargin) ++
-        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
-          Seq("""
-          |// Algorithm.
+          Seq(s"""
+          |{// Algorithm.
           |cudnnConvolutionBwdDataAlgo_t algo;
           |CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
           |    cudnnHandle,
-          |    filt_desc, grad_out_desc, conv_desc, grad_in_desc,
+          |    filt_desc_$counter, out_desc_$counter, conv_desc_$counter, in_desc_$counter,
           |    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
           |// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-          |    cudnnHandle, filt_desc, grad_out_desc, conv_desc, grad_in_desc, algo, &ws_size));
+          |    cudnnHandle, filt_desc_$counter, out_desc_$counter, conv_desc_$counter, in_desc_$counter, algo, &ws_size));
           |void *ws_data = myGpuMalloc(ws_size);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnConvolutionBackwardData(\n" +
           "    cudnnHandle,\n" +
-          "    ", one, ", filt_desc, ", filter.data, ", grad_out_desc, ", resGrad.data, ",\n" +
-          "    conv_desc, algo, ws_data, ws_size,\n" +
-          "    ", one, ", grad_in_desc, ", inputGrad.data, "));\n" +
+          "    ", one, s", filt_desc_$counter, ", filter.data, s", out_desc_$counter, ", resGrad.data, ",\n" +
+         s"    conv_desc_$counter, algo, ws_data, ws_size,\n" +
+          "    ", one, s", in_desc_$counter, ", inputGrad.data, "));\n" +
           "}"): _*
       )
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardFilter
     def cudnnConvolutionBackwardFilter(filterGrad: Tensor, input: Tensor, resGrad: Tensor,
-                                       padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+                                       padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit = {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
+//     unchecked[Unit](
+//       Seq(s"""
+//         |{
+//         |cudnnFilterDescriptor_t grad_filt_desc;
+//         |CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
+//         |CUDNN_CALL(cudnnSetFilter4dDescriptor(
+//         |    grad_filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
+//         |    """.stripMargin, filterGrad.shape(0), ", ", filterGrad.shape(1), ", ", filterGrad.shape(2), ", ", filterGrad.shape(3), """));
+//         |
+//         |cudnnTensorDescriptor_t grad_out_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    """.stripMargin, resGrad.shape(0), ", ", resGrad.shape(1), ", ", resGrad.shape(2), ", ", resGrad.shape(3), """));
+//         |
+//         |cudnnTensorDescriptor_t in_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), s"""));
+//         |
+//         |cudnnConvolutionDescriptor_t conv_desc;
+//         |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
+//         |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
+//         |    conv_desc,
+//         |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
+//         |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+//         |""".stripMargin) ++
+//       cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
       unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnFilterDescriptor_t grad_filt_desc;
-          |CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
-          |CUDNN_CALL(cudnnSetFilter4dDescriptor(
-          |    grad_filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-          |    """.stripMargin, filterGrad.shape(0), ", ", filterGrad.shape(1), ", ", filterGrad.shape(2), ", ", filterGrad.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t grad_out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, resGrad.shape(0), ", ", resGrad.shape(1), ", ", resGrad.shape(2), ", ", resGrad.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), s"""));
-          |
-          |cudnnConvolutionDescriptor_t conv_desc;
-          |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-          |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-          |    conv_desc,
-          |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
-          |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-          |""".stripMargin) ++
-        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
-          Seq("""
-          |// Algorithm.
+          Seq(s"""
+          |{// Algorithm.
           |cudnnConvolutionBwdFilterAlgo_t algo;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
           |    cudnnHandle,
-          |    in_desc, grad_out_desc, conv_desc, grad_filt_desc,
+          |    in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter,
           |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
           |// algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
-          |    cudnnHandle, in_desc, grad_out_desc, conv_desc, grad_filt_desc, algo, &ws_size));
+          |    cudnnHandle, in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter, algo, &ws_size));
           |void *ws_data = myGpuMalloc(ws_size);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnConvolutionBackwardFilter(\n" +
           "    cudnnHandle,\n" +
-          "    ", one, ", in_desc, ", input.data, ", grad_out_desc, ", resGrad.data, ",\n" +
-          "    conv_desc, algo, ws_data, ws_size,\n" +
-          "    ", one, ", grad_filt_desc, ", filterGrad.data, "));\n" +
+          "    ", one, s", in_desc_$counter, ", input.data, s", out_desc_$counter, ", resGrad.data, ",\n" +
+         s"    conv_desc_$counter, algo, ws_data, ws_size,\n" +
+          "    ", one, s", filt_desc_$counter, ", filterGrad.data, "));\n" +
           "}"): _*
       )
     }
 
-    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) ={
+    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int) ={
       // TODO: Dedupe assertions/shape calculations with CPU implementation.
       assert(input.rank == 4, "Input must be 4-D (first dimension is batch size)")
       assert(kernel.rank == 4, "Kernel must be 4-D")
@@ -706,22 +716,22 @@ trait TensorDslCudnn extends TensorDslCublas {
       val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
       val resData = mallocArray[Float](resShape.product1)
       val res = Tensor(resData, resShape: _*)
-      cudnnConvolutionForward(input, kernel, res, padding = (padH, padW), strides = (strideRow, strideCol), dilations = (1, 1))
+      val counterId = cudnnConvolutionForward(input, kernel, res, padding = (padH, padW), strides = (strideRow, strideCol), dilations = (1, 1))
 
       // If bias is defined, execute `cudnnAddBiasTensor`.
       bias match {
         case None =>
         case Some(bias) => cudnnAddBiasTensor(bias, res)
       }
-      (res, None)
+      (res, None, counterId)
     }
 
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
-                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counterId: Int): Unit = {
       assert(input.x.rank == 4, s"convolution input values should be 4D, but got ${input.x.rank}")
       assert(input.isInput || input.d.rank == 4, s"convolution input gradients is either ignored (for training data) or should be 4D, but got ${input.d.rank}")
-      if (!input.isInput) cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations)
-      cudnnConvolutionBackwardFilter(filter.d, input.x, res.d, padding, strides, dilations)
+      if (!input.isInput) cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations, counterId)
+      cudnnConvolutionBackwardFilter(filter.d, input.x, res.d, padding, strides, dilations, counterId)
       bias match {
         case None =>
         case Some(bias) =>
@@ -874,47 +884,51 @@ trait TensorDslCudnn extends TensorDslCublas {
     // TODO (Fei Wang): What is proper value for momentum (or should be called exponentialAverageFactor) here?
     def cudnnBatchNormalizationForwardTraining(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                runningMean: Tensor, runningVar: Tensor, saveMean: Tensor, saveInvVariance: Tensor,
-                                               momentum: Double = 0.1, epsilon: Double = 1e-5): Unit = {
+                                               momentum: Double = 0.1, epsilon: Double = 1e-5): Int = {
       val biasShape =
         if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1)
         else if (bias.rank == 4) bias.shape.dims
         else {System.out.println(s"bias rank is not 1 or 4, but ${bias.rank}"); ???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
+      
+      val counter = nextKernel
+      nextKernel += 1
+
       unchecked[Unit](
         Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |cudnnTensorDescriptor_t in_desc_$counter;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc_$counter));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), """));
+          |    in_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), s"""));
           |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+          |cudnnTensorDescriptor_t out_desc_$counter;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc_$counter));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), """));
+          |    out_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), s"""));
           |
-          |cudnnTensorDescriptor_t sbmv_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+          |cudnnTensorDescriptor_t sbmv_desc_$counter;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc_$counter));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    sbmv_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
           |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
           |
-          |""".stripMargin) ++
+          |""".stripMargin):_*)
+      unchecked[Unit](
         Seq(
           "CUDNN_CALL(cudnnBatchNormalizationForwardTraining(\n" +
           // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
           "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", zero, ", in_desc, ", x.data, ", out_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
+          "    ", one, ", ", zero, s", in_desc_$counter, ", x.data, s", out_desc_$counter, ", res.data, s", sbmv_desc_$counter, ", scale.data, ",\n" +
           "    ", bias.data, ", ", momentum, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, ",\n" +
-          "    ", saveMean.data, ", ", saveInvVariance.data, "));\n" +
-          "}"): _*)
+          "    ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
+       counter
     }
 
     def cudnnBatchNormalizationBackward(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
-                                        saveMean: Tensor, saveInvVariance: Tensor,
+                                        saveMean: Tensor, saveInvVariance: Tensor, counter: Int,
                                         momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
       val biasShape =
         if (bias.x.rank == 1) Seq(1, bias.x.shape(0), 1, 1)
@@ -922,36 +936,36 @@ trait TensorDslCudnn extends TensorDslCublas {
         else {System.out.println(s"bias rank is not 1 or 4, but ${bias.x.rank}"); ???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
+//     unchecked[Unit](
+//       Seq(s"""
+//         |{
+//         |cudnnTensorDescriptor_t in_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
+//         |
+//         |cudnnTensorDescriptor_t out_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    """.stripMargin, res.x.shape(0), ", ", res.x.shape(1), ", ", res.x.shape(2), ", ", res.x.shape(3), """));
+//         |
+//         |cudnnTensorDescriptor_t sbmv_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
+//         |
+//         |""".stripMargin) ++
       unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, res.x.shape(0), ", ", res.x.shape(1), ", ", res.x.shape(2), ", ", res.x.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t sbmv_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
-          |
-          |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
           // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
           "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", one, ", ", one, ", ", one, ", in_desc, ", input.x.data, ",\n" +
-          "    out_desc, ", res.d.data, ", in_desc, ", input.d.data, ", sbmv_desc, ", scale.x.data, ",\n" +
-          "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n" +
-          "}"): _*)
+          "    ", one, ", ", one, ", ", one, ", ", one, s", in_desc_$counter, ", input.x.data, ",\n" +
+          s"    out_desc_$counter, ", res.d.data, s", in_desc_$counter, ", input.d.data, s", sbmv_desc_$counter, ", scale.x.data, ",\n" +
+          "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
     }
 
     override def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = {
@@ -960,18 +974,18 @@ trait TensorDslCudnn extends TensorDslCublas {
       res
     }
 
-    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = {
+    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int) = {
       val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
       val saveMean = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
       val saveInvVariance = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
-      cudnnBatchNormalizationForwardTraining(x, res, scale, bias, runningMean, runningVar, saveMean, saveInvVariance)
-      (res, Some(saveMean), Some(saveInvVariance))
+      val counterId = cudnnBatchNormalizationForwardTraining(x, res, scale, bias, runningMean, runningVar, saveMean, saveInvVariance)
+      (res, Some(saveMean), Some(saveInvVariance), counterId)
     }
 
     override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
-                                saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = {
+                                saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit = {
       (saveMean, saveInvVariance) match {
-        case (Some(saveMean), Some(saveInvVariance)) => cudnnBatchNormalizationBackward(input, res, scale, bias, saveMean, saveInvVariance)
+        case (Some(saveMean), Some(saveInvVariance)) => cudnnBatchNormalizationBackward(input, res, scale, bias, saveMean, saveInvVariance, counterId)
         case _ => ???
       }
     }
@@ -1008,64 +1022,69 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     def cudnnBatchNormalization1DForwardTraining(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                runningMean: Tensor, runningVar: Tensor, saveMean: Tensor, saveInvVariance: Tensor,
-                                               momentum: Double = 0.1, epsilon: Double = 1e-5): Unit = {
+                                               momentum: Double = 0.1, epsilon: Double = 1e-5): Int = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
+     
+      val counter = nextKernel
+      nextKernel += 1
+
       unchecked[Unit](
         Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+          |cudnnTensorDescriptor_t in_desc_$counter;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc_$counter));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, x.shape(0), ", ", x.shape(1), """, 1, 1));
+          |    in_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    """.stripMargin, x.shape(0), ", ", x.shape(1), s""", 1, 1));
           |
-          |cudnnTensorDescriptor_t sbmv_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+          |cudnnTensorDescriptor_t sbmv_desc_$counter;
+          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc_$counter));
           |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+          |    sbmv_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
           |    1, """.stripMargin, bias.shape(0), """, 1, 1));
           |
-          |""".stripMargin) ++
+          |""".stripMargin):_*)
+
+      unchecked[Unit](
         Seq(
           "CUDNN_CALL(cudnnBatchNormalizationForwardTraining(\n" +
           "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
           // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", zero, ", in_desc, ", x.data, ", in_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
+          "    ", one, ", ", zero, s", in_desc_$counter, ", x.data, s", in_desc_$counter, ", res.data, s", sbmv_desc_$counter, ", scale.data, ",\n" +
           "    ", bias.data, ", ", momentum, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, ",\n" +
-          "    ", saveMean.data, ", ", saveInvVariance.data, "));\n" +
-          "}"): _*)
+          "    ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
+      counter
     }
 
     def cudnnBatchNormalization1DBackward(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
-                                        saveMean: Tensor, saveInvVariance: Tensor,
+                                        saveMean: Tensor, saveInvVariance: Tensor, counter: Int,
                                         momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
+//     unchecked[Unit](
+//       Seq(s"""
+//         |{
+//         |cudnnTensorDescriptor_t in_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), """, 1, 1));
+//         |
+//         |cudnnTensorDescriptor_t sbmv_desc;
+//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+//         |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+//         |    1, """.stripMargin, bias.x.shape(0), """, 1, 1));
+//         |
+//         |""".stripMargin) ++
       unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), """, 1, 1));
-          |
-          |cudnnTensorDescriptor_t sbmv_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    1, """.stripMargin, bias.x.shape(0), """, 1, 1));
-          |
-          |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
           "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
           // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", one, ", ", one, ", ", one, ", in_desc, ", input.x.data, ",\n" +
-          "    in_desc, ", res.d.data, ", in_desc, ", input.d.data, ", sbmv_desc, ", scale.x.data, ",\n" +
-          "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n" +
-          "}"): _*)
+          "    ", one, ", ", one, ", ", one, ", ", one, s", in_desc_$counter, ", input.x.data, ",\n" +
+         s"    in_desc_$counter, ", res.d.data, s", in_desc_$counter, ", input.d.data, s", sbmv_desc_$counter, ", scale.x.data, ",\n" +
+          "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
     }
 
     @virtualize
@@ -1082,7 +1101,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     @virtualize
-    override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = {
+    override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int) = {
       assert(x.rank == 2, s"batchNorm1D only applies to inputs of 2D matrix, got ${x.shape}")
       assert(scale.rank == 1)
       assert(scale.shape(0) == x.shape(1), s"scale should be rank 1 and have the same size as input dim 1, got ${scale.shape} and ${x.shape}")
@@ -1095,12 +1114,13 @@ trait TensorDslCudnn extends TensorDslCublas {
       val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
       val saveMean = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
       val saveInvVariance = Tensor(mallocArray[Float](bias.scalarCount), bias.shape: _*)
-      cudnnBatchNormalization1DForwardTraining(x, res, scale, bias, runningMean, runningVar, saveMean, saveInvVariance)
-      (res, Some(saveMean), Some(saveInvVariance))
+      val counterId = cudnnBatchNormalization1DForwardTraining(x, res, scale, bias, runningMean, runningVar, saveMean, saveInvVariance)
+      (res, Some(saveMean), Some(saveInvVariance), counterId)
     }
-    override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = {
+
+    override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit = {
       (saveMean, saveInvVariance) match {
-        case (Some(saveMean), Some(saveInvVariance)) => cudnnBatchNormalization1DBackward(input, res, scale, bias, saveMean, saveInvVariance)
+        case (Some(saveMean), Some(saveInvVariance)) => cudnnBatchNormalization1DBackward(input, res, scale, bias, saveMean, saveInvVariance, counterId)
         case _ => ???
       }
     }

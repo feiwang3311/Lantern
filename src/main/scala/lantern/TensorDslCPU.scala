@@ -529,7 +529,7 @@ trait TensorDslCPU extends TensorDsl {
       }
     }
 
-    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor]) = {
+    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int) = {
       val ((dH:Int) :: (dW:Int) :: Nil) = strides.take(2).toList
       val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else if (pads.size == 4) (pads(0), pads(2)) else ???}
       val nOutputPlane = kernel.shape(0)
@@ -552,7 +552,7 @@ trait TensorDslCPU extends TensorDsl {
         val finput_t = finput(t).data
         ConvOutputFrame(input_t, output_t, kernel.data, finput_t, kW, kH, dW, dH, padW, padH, nInputPlane, inputWidth, inputHeight, nOutputPlane, outputWidth, outputHeight)
       }
-      (output, Some(finput))
+      (output, Some(finput), 0)
     }
 
     def ConvOutputFrame(input: RAF, output: RAF, weight: RAF, finput: RAF, kW: Rep[Int], kH: Rep[Int], dW: Int, dH: Int, padW: Int, padH: Int,
@@ -573,7 +573,7 @@ trait TensorDslCPU extends TensorDsl {
     // Gradient of `conv2D_batch`.
     @virtualize
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
-                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Unit = {
+                                   padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit = {
       // NOTE: Strides/paddings may be in the wrong order.
       assert(dilations._1 == 1 && dilations._2 == 1, "Currently, only dilations of 1 are supported")
       val finputR: TensorR = finput match {
@@ -1044,7 +1044,7 @@ trait TensorDslCPU extends TensorDsl {
       res
     }
 
-    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = {
+    override def batchNormTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int) = {
       val saveMean = x.batchNormAv()
       val diff = x - saveMean
       val saveInvVariance = diff.square().batchNormAv()
@@ -1052,16 +1052,16 @@ trait TensorDslCPU extends TensorDsl {
       val xhat = diff / (saveInvVariance + epsilon).sqrt()
       val outy = xhat * scale.resize(-1, 1, 1) + bias.resize(-1, 1, 1)
       // runningMean and runningVariance should also be updated???
-      (outy, Some(saveMean), Some(saveInvVariance))
+      (outy, Some(saveMean), Some(saveInvVariance), 0)
     }
 
-    override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = {
+    override def batchNorm_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit = {
       ???
     }
 
     override def batchNorm1DInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = ???
-    override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor]) = ???
-    override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor]): Unit = ???
+    override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int) = ???
+    override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit = ???
 
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
