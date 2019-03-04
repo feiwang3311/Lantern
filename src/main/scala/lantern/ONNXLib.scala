@@ -116,7 +116,10 @@ trait ONNXLib extends TensorDsl {
         (name, (dims, datatype, floatarray))
       } else if (datatype == TensorProto.INT64) {
         val rawdata: org.bytedeco.javacpp.BytePointer = init.raw_data
-        val intarray: Array[Int] = toInts(rawdata.asByteBuffer.array).toArray
+        val bytes = new Array[Byte](rawdata.asByteBuffer.remaining())
+        rawdata.asByteBuffer.get(bytes, 0, bytes.length);
+        val intarray: Array[Int] = toInts(bytes).toArray
+        // val intarray: Array[Int] = toInts(rawdata.asByteBuffer.array).toArray
         assert(intarray.length == dims.product, s"${intarray.length} != $dims.product")
         (name, (dims, datatype, intarray.map(_.toFloat)))
       } else {
@@ -185,9 +188,9 @@ trait ONNXLib extends TensorDsl {
     val byteArray = Files.readAllBytes(Paths.get(model_file))
 
     val model = new ModelProto()
-   ParseProtoFromBytes(model.asInstanceOf[MessageLite],
-                      new BytePointer(byteArray: _*),
-                      byteArray.length.toLong)
+    ParseProtoFromBytes(model.asInstanceOf[MessageLite],
+                        new BytePointer(byteArray: _*),
+                        byteArray.length.toLong)
 
     val graph = model.graph
 
@@ -199,8 +202,9 @@ trait ONNXLib extends TensorDsl {
     // partition initializer by data type
     val (float_init, int_init) = initializer.partition(_.data_type == TensorProto.FLOAT)
 
-    // read and save int parameters as non-Rep type
-    // intMap are tensors that hold shape informations, so the Seq[Int] is the rank, and will always be size 1. The Array[Rep[Int]] is the shape, which is unknown at staging time
+    // intMap are tensors that hold shape informations.
+    // The Seq[Int] is the rank, and will always be size 1 or 0 (for scalar).
+    // The Seq[Rep[Int]] is the shape, which is unknown at staging time
     val intMap: MMap[String, (Seq[Int], Seq[Rep[Int]])] =
       MMap(int_init.map(ParseHelper.extract_init(_)).map{
         case (name, (dims, dt, arr: Array[Float])) =>
@@ -226,7 +230,7 @@ trait ONNXLib extends TensorDsl {
     val output_map: Map[String, (Seq[Int], Int)] = outputs.map(o => ParseHelper.extract_value(o)).toMap
 
     // find out the real input (a entry of input_map that is not in initializer)
-    def real_input(): (String, Seq[Int]) = { 
+    def real_input(): (String, Seq[Int]) = {
       val all_inputs = input_map.keys
       val init_names = byteMap.map{ case (name, _) => name}.toSet
       val non_initialized_inputs = all_inputs.filter(k => !init_names.contains(k) && !intMap.contains(k))
@@ -269,6 +273,7 @@ trait ONNXLib extends TensorDsl {
     case class squeezeNode(input: String, output: String, axes: List[Int]) extends Node
     case class unsqueezeNode(input: String, output: String, axes: List[Int]) extends Node
     case class constantNode(output: String, data: Float) extends Node
+    case class gatherNode(input: String, output: String, axis: Int) extends Node
 
     def getAttributeProtoInts(attribute: AttributeProto): Seq[Long] = {
       (0 to (attribute.ints_size - 1)).map(y => attribute.ints(y.toInt)).toSeq
@@ -551,9 +556,19 @@ trait ONNXLib extends TensorDsl {
           constantNode(outputs.head, data(0))
         }
 
-        case _ =>
+      case "Gather" => {
+        val inputs: Seq[String] = getInputs(node)
+        val outputs: Seq[String] = getOutputs(node)
+        assert(inputs.size == 1, s"inputs should be size 1 for GatherNode, got ${inputs.size}")
+        assert(outputs.size == 1, s"outputs should be size 1 for GatherNode, got ${outputs.size}")
+        val attributes: Seq[AttributeProto] = getAttributes(node)
+        assert(attributes.size == 1, s"attributes size should be 1 for GatherNode, got ${attributes.size}")
+        gatherNode(inputs.head, outputs.head, attributes.head.i().toInt) // the last parameter is the axis
+      }
+
+        case n =>
           System.out.println(node.toString)
-          throw new RuntimeException(s"Node not yet implemented")
+          throw new RuntimeException(s"Node $n not yet implemented")
       }
     }
 
@@ -796,6 +811,16 @@ trait ONNXLib extends TensorDsl {
             }
           }
 
+          case gatherNode(input, output, axis) => {
+            if (inTwoMaps(input)) {
+              ???
+            } else {
+              val (dim1: Seq[Int], input1) = intMap.get(input).get
+              assert(axis < input1.size, s"axis out of bound, got ${axis}, but array size is ${input1.size}")
+              intMap += (output -> (Seq(), Seq(input1(axis))))
+            }
+          }
+
           case x =>
             throw new RuntimeException(s"not yet implemented, $x")
         }
@@ -1021,6 +1046,17 @@ trait ONNXLib extends TensorDsl {
               intermediate_map_tensorR += (output -> input1)
             } else {
               ???
+            }
+
+          } else if (node.isInstanceOf[gatherNode]) {
+
+            val gatherNode(input, output, axis) = node
+            if (inTwoMaps(input)) {
+              ???
+            } else {
+              val (dim1: Seq[Int], input1) = intMap.get(input).get
+              assert(axis < input1.size, s"axis out of bound, got ${axis}, but array size is ${input1.size}")
+              intMap += (output -> (Seq(), Seq(input1(axis))))
             }
 
           } else {
