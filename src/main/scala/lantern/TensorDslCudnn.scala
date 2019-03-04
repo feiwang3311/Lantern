@@ -673,7 +673,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    cudnnHandle,
           |    in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter,
           |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-          |// algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+          |algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
           |// Workspace.
           |size_t ws_size;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
