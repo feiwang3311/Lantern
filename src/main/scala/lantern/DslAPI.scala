@@ -365,8 +365,9 @@ trait DslGenBase extends CGenNumericOpsExtra
         |void *myMalloc(size_t bytes) {
         |  void *res = mallocAddr;
         |  mallocAddr = (void *)((char *)mallocAddr + bytes);
-        |  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE_CPU)
-        |    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE_CPU\n");
+        |  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE_CPU) {
+        |    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE_CPU\n"); abort();
+        |  }
         |  return res;
         |}
         |
@@ -447,8 +448,9 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  bytes = ((bytes + (1 << N) - 1) >> N) << N;
       |  void *res = gpuMallocAddr;
       |  gpuMallocAddr = (void *)((char *)gpuMallocAddr + bytes);
-      |  if ((long)gpuMallocAddr >= (long)gpuMallocBase + HEAP_SIZE)
-      |    fprintf(stderr, "GPU breached memory limit of HEAP_SIZE\n");
+      |  if ((long)gpuMallocAddr >= (long)gpuMallocBase + HEAP_SIZE) {
+      |    fprintf(stderr, "GPU breached memory limit of HEAP_SIZE\n"); abort();
+      |  }
       |  return res;
       |}
       |

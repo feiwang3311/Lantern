@@ -480,34 +480,73 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
           |""".stripMargin) ++
-        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc_$counter, $mathType));")).getOrElse(Seq()): _*
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc_$counter, $mathType));\n")).getOrElse(Seq()) ++
+        Seq(s"cudnnConvolutionFwdAlgo_t algo_$counter;"): _*
       )
 
+      if (false)
       unchecked[Unit](
         Seq(s"""
-          |// Algorithm.
-          |{
-          |cudnnConvolutionFwdAlgo_t algo;
-          |CUDNN_CALL(cudnnGetConvolutionForwardAlgorithm(
+          |cudnnConvolutionFwdAlgo_t algos_$counter[] = {
+          |      CUDNN_CONVOLUTION_FWD_ALGO_GEMM,
+          |      CUDNN_CONVOLUTION_FWD_ALGO_FFT,
+          |      CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING,
+          |      CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
+          |      CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM,
+          |      CUDNN_CONVOLUTION_FWD_ALGO_DIRECT,
+          |      CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD,
+          |      CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD_NONFUSED,
+          |};
+          |size_t max_sz_$counter = 0;
+          |for (int c = 0; c < 8; c++) {
+          |     size_t sz = 0;
+          |     if (CUDNN_STATUS_SUCCESS == cudnnGetConvolutionForwardWorkspaceSize(
+          |         cudnnHandle, in_desc_$counter, filt_desc_$counter, conv_desc_$counter, out_desc_$counter, algos_$counter[c], &sz)
+          |         && max_sz_$counter < sz)
+          |         max_sz_$counter = sz;
+          |}
+          |size_t avail_$counter = (long)gpuMallocBase + HEAP_SIZE - (long)gpuMallocAddr;
+          |if (max_sz_$counter > avail_$counter) max_sz_$counter = avail_$counter;
+          |cudnnConvolutionFwdAlgoPerf_t perfResults_$counter[8];
+          |int perf_count_$counter;
+          |void* maxSpace_$counter = myGpuMalloc(max_sz_$counter);
+         """.stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnFindConvolutionForwardAlgorithmEx(\n" +
+         s"    cudnnHandle, in_desc_$counter, ", input.data, s", filt_desc_$counter, ", filter.data, ",\n" + 
+         s"    conv_desc_$counter, out_desc_$counter, ", res.data, s", CUDNN_CONVOLUTION_FWD_ALGO_COUNT, &perf_count_$counter,\n" +
+         s"    perfResults_$counter, maxSpace_$counter, max_sz_$counter));\n" +
+         s"myGpuFree(max_sz_$counter);\n" +
+         s"algo_$counter = perfResults_$counter[0].algo;\n"): _*)
+      else 
+      unchecked[Unit](
+        s"""
+          |int returned_algo_count_$counter;
+          |cudnnConvolutionFwdAlgoPerf_t perfResults_$counter[8];
+          |CUDNN_CALL(cudnnGetConvolutionForwardAlgorithm_v7(
           |    cudnnHandle,
-          |    in_desc_$counter, filt_desc_$counter, conv_desc_$counter, out_desc_$counter,
-          |    CUDNN_CONVOLUTION_FWD_PREFER_FASTEST, 0, &algo));
-          |
-          |// Workspace.
-          |size_t ws_size;
+          |    in_desc_$counter, filt_desc_$counter, conv_desc_$counter, out_desc_$counter, 8, &returned_algo_count_$counter,
+          |    perfResults_$counter));
+          |algo_$counter = perfResults_$counter[0].algo;
+         """.stripMargin)
+
+      unchecked[Unit](
+        Seq(
+        s"""
+          |size_t ws_size_$counter;
           |CUDNN_CALL(cudnnGetConvolutionForwardWorkspaceSize(
-          |    cudnnHandle, in_desc_$counter, filt_desc_$counter, conv_desc_$counter, out_desc_$counter, algo, &ws_size));
-          |void *ws_data = myGpuMalloc(ws_size);
+          |    cudnnHandle, in_desc_$counter, filt_desc_$counter, conv_desc_$counter, out_desc_$counter, algo_$counter, &ws_size_$counter));
+          |void *ws_data_$counter = myGpuMalloc(ws_size_$counter);
           |""".stripMargin) ++
         Seq(
           "// Execute convolution.\n" +
           "CUDNN_CALL(cudnnConvolutionForward(\n" +
           "    cudnnHandle,\n" +
           "    ", one, s", in_desc_$counter, ", input.data, s", filt_desc_$counter, ", filter.data, ",\n" +
-         s"    conv_desc_$counter, algo, ws_data, ws_size,\n" +
-          "    ", zero, s", out_desc_$counter, ", res.data, "));\n" +
-          "}"): _*
-      )
+         s"    conv_desc_$counter, algo_$counter, ws_data_$counter, ws_size_$counter,\n" +
+          "    ", zero, s", out_desc_$counter, ", res.data, "));\n") ++
+        Seq(s"myGpuFree(ws_size_$counter);\n"): _*)
+
       counter
     }
 
@@ -577,57 +616,67 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, but got ${resGrad.rank}")
       assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
-//     unchecked[Unit](
-//       Seq(s"""
-//         |{
-//         |cudnnFilterDescriptor_t filt_desc;
-//         |CUDNN_CALL(cudnnCreateFilterDescriptor(&filt_desc));
-//         |CUDNN_CALL(cudnnSetFilter4dDescriptor(
-//         |    filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-//         |    """.stripMargin, filter.shape(0), ", ", filter.shape(1), ", ", filter.shape(2), ", ", filter.shape(3), """));
-//         |
-//         |cudnnTensorDescriptor_t grad_in_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_in_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    grad_in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    """.stripMargin, inputGrad.shape(0), ", ", inputGrad.shape(1), ", ", inputGrad.shape(2), ", ", inputGrad.shape(3), """));
-//         |
-//         |cudnnTensorDescriptor_t grad_out_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    """.stripMargin, resGrad.shape(0), ", ", resGrad.shape(1), ", ", resGrad.shape(2), ", ", resGrad.shape(3), s"""));
-//         |
-//         |cudnnConvolutionDescriptor_t conv_desc;
-//         |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-//         |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-//         |    conv_desc,
-//         |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
-//         |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-//         |""".stripMargin) ++
-//       cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
+
+      unchecked[Unit](s"cudnnConvolutionBwdDataAlgo_t algo_bwd_$counter;\n")
+      if (false)
       unchecked[Unit](
-          Seq(s"""
-          |{// Algorithm.
-          |cudnnConvolutionBwdDataAlgo_t algo;
-          |CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm(
+        Seq(
+        s"""
+          |cudnnConvolutionBwdDataAlgo_t algos_bwd_$counter[] = {
+          |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_0,
+          |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+          |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT,
+          |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING,
+          |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD,
+          |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD_NONFUSED,
+          |};
+          |size_t max_sz_bwd_$counter = 0;
+          |for (int c = 0; c < 6; c++) {
+          |    size_t sz = 0;
+          |    if (CUDNN_STATUS_SUCCESS == cudnnGetConvolutionBackwardDataWorkspaceSize(
+          |        cudnnHandle, filt_desc_$counter, out_desc_$counter, conv_desc_$counter, in_desc_$counter,
+          |        algos_bwd_$counter[c], &sz) && max_sz_bwd_$counter < sz)
+          |        max_sz_bwd_$counter = sz;
+          |}
+          |cudnnConvolutionBwdDataAlgoPerf_t perfResults_bwd_$counter[6];
+          |int perf_count_bwd_$counter;
+          |void* maxSpace_bwd_$counter = myGpuMalloc(max_sz_bwd_$counter);
+         """.stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnFindConvolutionBackwardDataAlgorithmEx(\n" +
+         s"    cudnnHandle, filt_desc_$counter, ", filter.data, s", out_desc_$counter, ", resGrad.data, ",\n" +
+         s"    conv_desc_$counter, in_desc_$counter, ", inputGrad.data, s", 6, &perf_count_bwd_$counter, \n" +
+         s"    perfResults_bwd_$counter, maxSpace_bwd_$counter, max_sz_bwd_$counter));\n" +
+         s"myGpuFree(max_sz_bwd_$counter);\n" +
+         s"algo_bwd_$counter = perfResults_bwd_$counter[0].algo;\n"): _*)
+      else
+      unchecked[Unit](
+        s"""
+          |int returned_algo_count_bwd_$counter;
+          |cudnnConvolutionBwdDataAlgoPerf_t perfResults_bwd_$counter[6];
+          |CUDNN_CALL(cudnnGetConvolutionBackwardDataAlgorithm_v7(
           |    cudnnHandle,
-          |    filt_desc_$counter, out_desc_$counter, conv_desc_$counter, in_desc_$counter,
-          |    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST, 0, &algo));
-          |// algo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
-          |// Workspace.
-          |size_t ws_size;
+          |    filt_desc_$counter, out_desc_$counter, conv_desc_$counter, in_desc_$counter, 6,
+          |    &returned_algo_count_bwd_$counter, perfResults_bwd_$counter));
+          |algo_bwd_$counter = perfResults_bwd_$counter[0].algo;
+          |// algo_bwd_$counter = CUDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+         """.stripMargin)
+
+      unchecked[Unit](
+        Seq(s"""
+          |size_t ws_size_bwd_$counter;
           |CUDNN_CALL(cudnnGetConvolutionBackwardDataWorkspaceSize(
-          |    cudnnHandle, filt_desc_$counter, out_desc_$counter, conv_desc_$counter, in_desc_$counter, algo, &ws_size));
-          |void *ws_data = myGpuMalloc(ws_size);
+          |    cudnnHandle, filt_desc_$counter, out_desc_$counter, conv_desc_$counter, in_desc_$counter,
+          |    algo_bwd_$counter, &ws_size_bwd_$counter));
+          |void *ws_data_bwd_$counter = myGpuMalloc(ws_size_bwd_$counter);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnConvolutionBackwardData(\n" +
           "    cudnnHandle,\n" +
           "    ", one, s", filt_desc_$counter, ", filter.data, s", out_desc_$counter, ", resGrad.data, ",\n" +
-         s"    conv_desc_$counter, algo, ws_data, ws_size,\n" +
-          "    ", one, s", in_desc_$counter, ", inputGrad.data, "));\n" +
-          "}"): _*
+         s"    conv_desc_$counter, algo_bwd_$counter, ws_data_bwd_$counter, ws_size_bwd_$counter,\n" +
+          "    ", one, s", in_desc_$counter, ", inputGrad.data, "));\n") ++
+        Seq(s"myGpuFree(ws_size_bwd_$counter);\n"): _*
       )
     }
 
@@ -636,57 +685,65 @@ trait TensorDslCudnn extends TensorDslCublas {
                                        padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit = {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
-//     unchecked[Unit](
-//       Seq(s"""
-//         |{
-//         |cudnnFilterDescriptor_t grad_filt_desc;
-//         |CUDNN_CALL(cudnnCreateFilterDescriptor(&grad_filt_desc));
-//         |CUDNN_CALL(cudnnSetFilter4dDescriptor(
-//         |    grad_filt_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
-//         |    """.stripMargin, filterGrad.shape(0), ", ", filterGrad.shape(1), ", ", filterGrad.shape(2), ", ", filterGrad.shape(3), """));
-//         |
-//         |cudnnTensorDescriptor_t grad_out_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&grad_out_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    grad_out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    """.stripMargin, resGrad.shape(0), ", ", resGrad.shape(1), ", ", resGrad.shape(2), ", ", resGrad.shape(3), """));
-//         |
-//         |cudnnTensorDescriptor_t in_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), s"""));
-//         |
-//         |cudnnConvolutionDescriptor_t conv_desc;
-//         |CUDNN_CALL(cudnnCreateConvolutionDescriptor(&conv_desc));
-//         |CUDNN_CALL(cudnnSetConvolution2dDescriptor(
-//         |    conv_desc,
-//         |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
-//         |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
-//         |""".stripMargin) ++
-//       cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc, $mathType));")).getOrElse(Seq()) ++
+
+      unchecked[Unit](s"cudnnConvolutionBwdFilterAlgo_t algo_bwf_$counter;\n")
+      if (false)
       unchecked[Unit](
-          Seq(s"""
-          |{// Algorithm.
-          |cudnnConvolutionBwdFilterAlgo_t algo;
-          |CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm(
+        Seq(s"""
+          |cudnnConvolutionBwdFilterAlgo_t algos_bwf_$counter[] = {
+          |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
+          |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
+          |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT,
+          |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_3,
+          |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_WINOGRAD_NONFUSED,
+          |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT_TILING,
+          |};
+          |size_t max_sz_bwf_$counter = 0;
+          |for (int c = 0; c < 6; c++) {
+          |    size_t sz = 0;
+          |    if (CUDNN_STATUS_SUCCESS == cudnnGetConvolutionBackwardFilterWorkspaceSize(
+          |        cudnnHandle, in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter,
+          |        algos_bwf_$counter[c], &sz) && max_sz_bwf_$counter < sz)
+          |        max_sz_bwf_$counter = sz;
+          |}
+          |cudnnConvolutionBwdFilterAlgoPerf_t perfResults_bwf_$counter[6];
+          |int perf_count_bwf_$counter;
+          |void* maxSpace_bwf_$counter = myGpuMalloc(max_sz_bwf_$counter);
+          """.stripMargin) ++
+        Seq(
+          "CUDNN_CALL(cudnnFindConvolutionBackwardFilterAlgorithmEx(\n" +
+         s"    cudnnHandle, in_desc_$counter, ", input.data, s", out_desc_$counter, ", resGrad.data, ",\n" +
+         s"    conv_desc_$counter, filt_desc_$counter, ", filterGrad.data, s", 6, &perf_count_bwf_$counter,\n" +
+         s"    perfResults_bwf_$counter, maxSpace_bwf_$counter, max_sz_bwf_$counter));\n" +
+         s"myGpuFree(max_sz_bwf_$counter);\n" +
+         s"algo_bwf_$counter = perfResults_bwf_$counter[0].algo;\n"): _*)
+    else                  
+      unchecked[Unit](
+        s"""
+          |int returned_algo_counter_bwf_$counter;
+          |cudnnConvolutionBwdFilterAlgoPerf_t perfResults_bwf_$counter[6];
+          |CUDNN_CALL(cudnnGetConvolutionBackwardFilterAlgorithm_v7(
           |    cudnnHandle,
-          |    in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter,
-          |    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST, 0, &algo));
-          |algo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
-          |// Workspace.
-          |size_t ws_size;
+          |    in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter, 6,
+          |    &returned_algo_counter_bwf_$counter, perfResults_bwf_$counter));
+          |algo_bwf_$counter = perfResults_bwf_$counter[0].algo;
+          |algo_bwf_$counter = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1; // should have for ResNet
+          """.stripMargin)
+
+      unchecked[Unit](
+        Seq(s"""
+          |size_t ws_size_bwf_$counter;
           |CUDNN_CALL(cudnnGetConvolutionBackwardFilterWorkspaceSize(
-          |    cudnnHandle, in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter, algo, &ws_size));
-          |void *ws_data = myGpuMalloc(ws_size);
+          |    cudnnHandle, in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter,
+          |    algo_bwf_$counter, &ws_size_bwf_$counter));
+          |void *ws_data_bwf_$counter = myGpuMalloc(ws_size_bwf_$counter);
           |""".stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnConvolutionBackwardFilter(\n" +
           "    cudnnHandle,\n" +
           "    ", one, s", in_desc_$counter, ", input.data, s", out_desc_$counter, ", resGrad.data, ",\n" +
-         s"    conv_desc_$counter, algo, ws_data, ws_size,\n" +
-          "    ", one, s", filt_desc_$counter, ", filterGrad.data, "));\n" +
-          "}"): _*
+         s"    conv_desc_$counter, algo_bwf_$counter, ws_data_bwf_$counter, ws_size_bwf_$counter,\n" +
+          "    ", one, s", filt_desc_$counter, ", filterGrad.data, "));\n"): _*
       )
     }
 
