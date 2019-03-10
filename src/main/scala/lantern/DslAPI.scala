@@ -830,6 +830,43 @@ trait DslGenCublas extends DslGenBase with CudaGenGPUOps {
       |  }
       |}
       |
+      |cudnnConvolutionFwdAlgo_t       algo_0      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_0      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_0  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_0  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_0  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_0  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_1      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_1      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_1  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_1  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_1  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_1  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_2      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_2      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_2  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_2  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_2  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_2  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_3      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_3      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_3  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_3  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_3  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_3  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_4      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_4      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_4  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_4  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_4  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_4  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_5      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_5      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_5  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_5  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_5  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_5  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_6      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_6      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_6  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_6  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_6  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_6  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_7      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_7      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_7  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_7  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_7  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_7  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_8      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_8      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_8  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_8  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_8  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_8  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_9      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_9      = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_9  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_9  = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_9  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_9  = false;
+      |cudnnConvolutionFwdAlgo_t       algo_10     = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_10     = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_10 = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_10 = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_10 = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_10 = false;
+      |cudnnConvolutionFwdAlgo_t       algo_11     = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_11     = false;
+      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_11 = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_11 = false;
+      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_11 = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_11 = false;
+      |
       |""".stripMargin
 
 }

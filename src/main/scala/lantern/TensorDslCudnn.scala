@@ -480,13 +480,14 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
           |""".stripMargin) ++
-        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc_$counter, $mathType));\n")).getOrElse(Seq()) ++
-        Seq(s"cudnnConvolutionFwdAlgo_t algo_$counter;"): _*
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc_$counter, $mathType));\n")).getOrElse(Seq()):_*// ++
+//        Seq(s"cudnnConvolutionFwdAlgo_t algo_$counter;"): _*
       )
 
-      if (false)
+      if (true)
       unchecked[Unit](
         Seq(s"""
+          |if (init_algo_$counter) {} else {
           |cudnnConvolutionFwdAlgo_t algos_$counter[] = {
           |      CUDNN_CONVOLUTION_FWD_ALGO_GEMM,
           |      CUDNN_CONVOLUTION_FWD_ALGO_FFT,
@@ -517,7 +518,8 @@ trait TensorDslCudnn extends TensorDslCublas {
          s"    conv_desc_$counter, out_desc_$counter, ", res.data, s", CUDNN_CONVOLUTION_FWD_ALGO_COUNT, &perf_count_$counter,\n" +
          s"    perfResults_$counter, maxSpace_$counter, max_sz_$counter));\n" +
          s"myGpuFree(max_sz_$counter);\n" +
-         s"algo_$counter = perfResults_$counter[0].algo;\n"): _*)
+         s"algo_$counter = perfResults_$counter[0].algo;\n" + 
+         s"init_algo_$counter = true;\n}\n"): _*)
       else 
       unchecked[Unit](
         s"""
@@ -617,11 +619,12 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
 
-      unchecked[Unit](s"cudnnConvolutionBwdDataAlgo_t algo_bwd_$counter;\n")
-      if (false)
+//      unchecked[Unit](s"cudnnConvolutionBwdDataAlgo_t algo_bwd_$counter;\n")
+      if (true)
       unchecked[Unit](
         Seq(
         s"""
+          |if (init_algo_bwd_$counter) {} else {
           |cudnnConvolutionBwdDataAlgo_t algos_bwd_$counter[] = {
           |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_0,
           |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
@@ -648,7 +651,8 @@ trait TensorDslCudnn extends TensorDslCublas {
          s"    conv_desc_$counter, in_desc_$counter, ", inputGrad.data, s", 6, &perf_count_bwd_$counter, \n" +
          s"    perfResults_bwd_$counter, maxSpace_bwd_$counter, max_sz_bwd_$counter));\n" +
          s"myGpuFree(max_sz_bwd_$counter);\n" +
-         s"algo_bwd_$counter = perfResults_bwd_$counter[0].algo;\n"): _*)
+         s"algo_bwd_$counter = perfResults_bwd_$counter[0].algo;\n" + 
+         s"init_algo_bwd_$counter = true;\n}\n"): _*)
       else
       unchecked[Unit](
         s"""
@@ -686,10 +690,11 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
 
-      unchecked[Unit](s"cudnnConvolutionBwdFilterAlgo_t algo_bwf_$counter;\n")
-      if (false)
+//      unchecked[Unit](s"cudnnConvolutionBwdFilterAlgo_t algo_bwf_$counter;\n")
+      if (true)
       unchecked[Unit](
         Seq(s"""
+          |if (init_algo_bwf_$counter) {} else {
           |cudnnConvolutionBwdFilterAlgo_t algos_bwf_$counter[] = {
           |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
           |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
@@ -716,7 +721,8 @@ trait TensorDslCudnn extends TensorDslCublas {
          s"    conv_desc_$counter, filt_desc_$counter, ", filterGrad.data, s", 6, &perf_count_bwf_$counter,\n" +
          s"    perfResults_bwf_$counter, maxSpace_bwf_$counter, max_sz_bwf_$counter));\n" +
          s"myGpuFree(max_sz_bwf_$counter);\n" +
-         s"algo_bwf_$counter = perfResults_bwf_$counter[0].algo;\n"): _*)
+         s"algo_bwf_$counter = perfResults_bwf_$counter[0].algo;\n" +
+         s"init_algo_bwf_$counter = true;\n}\n"): _*)
     else                  
       unchecked[Unit](
         s"""
@@ -727,7 +733,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    in_desc_$counter, out_desc_$counter, conv_desc_$counter, filt_desc_$counter, 6,
           |    &returned_algo_counter_bwf_$counter, perfResults_bwf_$counter));
           |algo_bwf_$counter = perfResults_bwf_$counter[0].algo;
-          |algo_bwf_$counter = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1; // should have for ResNet
+          |// algo_bwf_$counter = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1; // should have for ResNet
           """.stripMargin)
 
       unchecked[Unit](
