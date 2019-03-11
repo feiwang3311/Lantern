@@ -29,7 +29,7 @@ python3 train.py --use_gpu=True
 
 cd ../lantern
 echo "Exp: run Lantern training with GPU"
-nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
+nvcc -g -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
 ./LanternOnnxTrainingCu	result_Lantern
 
 cd ../tensorflow

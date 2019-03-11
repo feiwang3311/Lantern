@@ -14,7 +14,7 @@ echo "Exp: run TreeLSTM models"
 cd treelstm
 echo "Exp: run Lantern training with GPU"
 cd lantern
-nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternTraining.cu -o LanternTrainingCu -lcublas -lcudnn
+nvcc -g -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternTraining.cu -o LanternTrainingCu -lcublas -lcudnn
 ./LanternTrainingCu result_Lantern
 
 echo "Exp: run PyTorch training with GPU"

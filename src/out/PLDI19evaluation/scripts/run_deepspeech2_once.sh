@@ -18,7 +18,7 @@ python3 train.py
 
 echo "Exp: run lantern deepspeech2"
 cd ../../lantern
-nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ Lantern.cu -o Lantern -lcublas -lcudnn
+nvcc -g -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ Lantern.cu -o Lantern -lcublas -lcudnn
 ./Lantern result_Lantern
 cd ../
 

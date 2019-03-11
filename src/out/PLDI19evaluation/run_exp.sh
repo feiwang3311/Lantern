@@ -28,7 +28,7 @@ python3 train.py --use_gpu=True --inference=True --write_to=result_PyTorch_infer
 # python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
 cd ../lantern
 echo "Exp: run Lantern training with GPU"
-nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
+nvcc -g -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
 ./LanternOnnxTrainingCu	result_Lantern
 cd ../tensorflow
 echo "Exp: run TensorFlow training with GPU"
@@ -55,7 +55,7 @@ python3 train.py --use_gpu=True --inference=True --write_to=result_PyTorch_infer
 # python3 train.py --inference=True --write_to=result_PyTorch_inference_CPU
 cd ../lantern
 echo "Exp: run Lantern training with GPU"
-nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
+nvcc -g -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternOnnxTraining.cu -o LanternOnnxTrainingCu -lcublas -lcudnn
 ./LanternOnnxTrainingCu	result_Lantern
 cd ../tensorflow
 echo "Exp: run TensorFlow training with GPU"
@@ -72,7 +72,7 @@ echo "Exp: run TreeLSTM models"
 cd ../treelstm
 echo "Exp: run Lantern training with GPU"
 cd lantern
-nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternTraining.cu -o LanternTrainingCu -lcublas -lcudnn
+nvcc -g -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ LanternTraining.cu -o LanternTrainingCu -lcublas -lcudnn
 ./LanternTrainingCu result_Lantern
 echo "Exp: run PyTorch training with GPU"
 cd ../pytorch
@@ -109,7 +109,7 @@ cd ds2-pytorch/pytorch
 python3 train.py
 cd ../../lantern
 echo "Exp: run lantern deepspeech2"
-nvcc -g -ccbin gcc-5 -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ Lantern.cu -o Lantern -lcublas -lcudnn
+nvcc -g -std=c++11 -O3 --expt-extended-lambda -Wno-deprecated-gpu-targets -lstdc++ Lantern.cu -o Lantern -lcublas -lcudnn
 ./Lantern result_Lantern
 cd ../
 cp ds2-pytorch/pytorch/result_PyTorch result_PyTorch.txt

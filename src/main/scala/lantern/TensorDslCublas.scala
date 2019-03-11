@@ -12,13 +12,8 @@ import scala.math._
 
 trait TensorDslCublas extends TensorDslCPU with GPUOps {
 
-  val concatMap = new scala.collection.mutable.HashMap[Int,String]()
-  val permuteKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
-  val permuteGradKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
-  val mulSubKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
-  val mulSubGradKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
-  val mask4dKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
-  var next: Int = 0
+  val permutationKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
+  var nextKernel: Int = 0
 
   def getCudaMallocAddr(): Rep[Long] = {
     unchecked[Long]("(long)gpuMallocAddr")
@@ -377,8 +372,219 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
       this.geam(x.d, false, 1.0f, y.d, true, 1.0f, x.d)
     }
 
-    override def permute(x: Tensor, dims: Int*): Tensor = ???
-    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = ???
+    // this helper function add x to resTensor after permutation via dims
+    def permuteHelper(x: Tensor, resTensor: Tensor, dims: Int*): Unit = {
+
+      assert(x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
+      val order = ((0 until x.rank): Range)
+      assert(dims != order && dims.sorted == order, s"dimensions should be permutation of ranks, got rank: ${x.rank}, dims: ${dims}")
+       
+      // generate specialized kernel functions if the kernel function is not in the Map already
+      val TILE_DIM = 32;
+      val BLOCK_ROWS = 8;
+      if (!permutationKernelMap.contains(dims.toSeq)) {
+        if (x.rank == 2) { // this is transpose
+          val kernel = s"""
+            |__global__ void permute2D${nextKernel}(float *odata, const float *idata, int dimy, int dimx) {
+            |
+            |  __shared__ float tile[$TILE_DIM][$TILE_DIM+1];  
+            |  int x = blockIdx.x * $TILE_DIM + threadIdx.x;
+            |  int y = blockIdx.y * $TILE_DIM + threadIdx.y;
+            |  if (x < dimx)
+            |    for (int j = 0; j < $TILE_DIM && j < dimy - y; j += $BLOCK_ROWS)
+            |      tile[threadIdx.y+j][threadIdx.x] = idata[(y+j)*dimx + x];
+            |  __syncthreads();
+            |  x = blockIdx.y * $TILE_DIM + threadIdx.x;  // transpose block offset
+            |  y = blockIdx.x * $TILE_DIM + threadIdx.y;
+            |  if (x < dimy)
+            |    for (int j = 0; j < $TILE_DIM && j < dimx-y; j += $BLOCK_ROWS)
+            |      odata[(y+j)*dimy + x] += tile[threadIdx.x][threadIdx.y + j];
+            |}
+           """.stripMargin
+          val kernelName = s"permute2D${nextKernel}"
+          permutationKernelMap(dims.toSeq) = (kernel, kernelName)
+          nextKernel += 1
+        } else if (x.rank == 3) { // this is permutation for 3D Tensor
+          if (dims(2) == 2) { // this is the simple case, where the inner most dimension is not permutated
+			val kernel = s"""
+              |__global__ void permuteSim3D${nextKernel}(float* odata, const float* idata, int dim0, int dim1, int dim2) {
+              |  int ioffset = blockIdx.y * dim1 * dim2 + blockIdx.x * dim2;
+              |  int ooffset = blockIdx.x * dim0 * dim2 + blockIdx.y * dim2;
+              |  for (int i = threadIdx.x; i < dim2; i += blockDim.x)
+              |    odata[ooffset + i] += idata[ioffset + i];
+              |}
+             """.stripMargin
+            val kernelName = s"permuteSim3D${nextKernel}"
+            permutationKernelMap(dims.toSeq) = (kernel, kernelName)
+            nextKernel += 1
+          } else { // this is the complicate case for 3D permutation (the inner most dimension is also permutated)
+            val kernel = s"""
+             |__global__ void permute3D${nextKernel}(float *odata, const float *idata,
+             |         int dim0, int dim1, int dim2,
+             |         int istr0, int istr1, int ostr0, int ostr1) {
+             | 
+             |  __shared__ float tile[$TILE_DIM][$TILE_DIM+1];
+             | 
+             |  int x = blockIdx.x * $TILE_DIM + threadIdx.x;
+             |  int y = blockIdx.y * $TILE_DIM + threadIdx.y;
+             |  int z = blockIdx.z;
+             | 
+             |  if (x < dim2)
+             |    for (int j = 0; j < $TILE_DIM && j < ${if (dims(2) == 0) "dim0" else "dim1"} - y; j += $BLOCK_ROWS)
+             |      tile[threadIdx.y+j][threadIdx.x] = idata[z*${if (dims(2) == 0) "istr1" else "istr0"} + (y+j)*${if (dims(2) == 0) "istr0" else "istr1"} + x];
+             | 
+             |  __syncthreads();
+             | 
+             |  x = blockIdx.y * $TILE_DIM + threadIdx.x;  // transpose block offset
+             |  y = blockIdx.x * $TILE_DIM + threadIdx.y;
+             | 
+             |  if (x < ${if (dims(2) == 0) "dim0" else "dim1"})
+             |    for (int j = 0; j < $TILE_DIM && j < dim2-y; j += $BLOCK_ROWS)
+             |      odata[(y+j)*${if (dims(0) == 2) "ostr0" else "ostr1"} + z*${if (dims(0) == 2) "ostr1" else "ostr0"} + x] += tile[threadIdx.x][threadIdx.y + j];
+             |}
+             """.stripMargin
+            val kernelName = s"permute3D${nextKernel}"
+            permutationKernelMap(dims.toSeq) = (kernel, kernelName)
+            nextKernel += 1
+          }
+        } else { // this is for 4D permutation
+          if (dims(3) == 3) { // this is the simple case, where the last dimension is not permutated
+            val idxes = Seq("blockIdx.z", "blockIdx.y", "blockIdx.x")
+            val kernel = s""" 
+             |__global__ void permuteSim4D${nextKernel}(float* odata, const float* idata,
+             |      int istr0, int istr1, int istr2,   // elide istr3/ostr3 because that is '1'
+             |      int ostr0, int ostr1, int ostr2) { // actually ostr2 should be the same as istr2 (can remove)
+             |
+             |  int ioffset = ${idxes(0)} * istr0 + ${idxes(1)} * istr1 + ${idxes(2)} * istr2;
+             |  int ooffset = ${idxes(dims(0))} * ostr0 + ${idxes(dims(1))} * ostr1 + ${idxes(dims(2))} * ostr2;
+             |  for (int i = threadIdx.x; i < istr2; i += blockDim.x)
+             |    odata[ooffset + i] += idata[ioffset + i];
+             |}
+             """.stripMargin
+            val kernelName = s"permuteSim4D${nextKernel}"
+            permutationKernelMap(dims.toSeq) = (kernel, kernelName)
+            nextKernel += 1
+          } else { // this is the complicated case, where the last dimension is permutated
+            
+            val setIOffsetBase = if (dims(3) == 0) {
+              "int ioffsetBase = x + y * istr0 + blockIdx.z * istr1 + blockIdx.y * istr2;"
+            } else if (dims(3) == 1) {
+              "int ioffsetBase = x + y * istr1 + blockIdx.z * istr0 + blockIdx.y * istr2;"
+            } else { // dims(3) must be 2 now
+              "int ioffsetBase = x + y * istr2 + blockIdx.z * istr0 + blockIdx.y * istr1;"
+            }
+            val pos: Seq[Int] = Seq(0,1,2,3).map(dims.indexOf(_))
+            val ostrPos: Seq[String] = pos.map(Seq("ostr0", "ostr1", "ostr2", "1")(_))
+            val setOOffsetBase = if (dims(3) == 0) {
+              s"int ooffsetBase = x + y * ${ostrPos(3)} + blockIdx.z * ${ostrPos(1)} + blockIdx.y * ${ostrPos(2)};" 
+            } else if (dims(3) == 1) {
+              s"int ooffsetBase = x + y * ${ostrPos(3)} + blockIdx.z * ${ostrPos(0)} + blockIdx.y * ${ostrPos(2)};"
+            } else { // dim(3) must be 2 now
+              s"int ooffsetBase = x + y * ${ostrPos(3)} + blockIdx.z * ${ostrPos(0)} + blockIdx.y * ${ostrPos(1)};"
+            }
+
+            val kernel = s"""
+              |__global__ void permute4D${nextKernel}(float *odata, const float *idata,
+              |    int dim0, int dim1, int dim2, int dim_3,
+              |    int istr0, int istr1, int istr2,
+              |    int ostr0, int ostr1, int ostr2,
+              |    int strideBIdxX) {
+              |
+              |  __shared__ float tile[$TILE_DIM][$TILE_DIM+1];
+              |
+              |  int blockIdxY = blockIdx.x / strideBIdxX;
+              |  int blockIdxX = blockIdx.x - blockIdxY * strideBIdxX;
+              |  int x = blockIdxX * $TILE_DIM + threadIdx.x;
+              |  int y = blockIdxY * $TILE_DIM + threadIdx.y;
+              |
+              |  if (x < dim_3) {
+              |    ${setIOffsetBase}
+              |    for (int j = 0; j < $TILE_DIM && j < ${Seq("dim0", "dim1", "dim2")(dims(3))} - y; j += $BLOCK_ROWS)
+              |      tile[threadIdx.y+j][threadIdx.x] = idata[ioffsetBase + j * ${Seq("istr0", "istr1", "istr2")(dims(3))}];
+              |  }  
+              |  __syncthreads();
+              |
+              |  x = blockIdxY * $TILE_DIM + threadIdx.x;  // transpose block offset
+              |  y = blockIdxX * $TILE_DIM + threadIdx.y;
+              |
+              |  if (x < ${Seq("dim0", "dim1", "dim2", "dim_3")(dims(3))}) {
+              |    ${setOOffsetBase}
+              |    for (int j = 0; j < $TILE_DIM && j < dim_3 - y; j += $BLOCK_ROWS)
+              |      odata[ooffsetBase + j * ${ostrPos(3)}] += tile[threadIdx.x][threadIdx.y + j];
+              |  }
+              |}
+             """.stripMargin
+            val kernelName = s"permute4D${nextKernel}"
+            permutationKernelMap(dims.toSeq) = (kernel, kernelName)
+            nextKernel += 1
+          }
+        }
+      }
+      // end of if (permutationKernelMap.contains()), the following code should call the kernel function
+      val (_, kernelName) = permutationKernelMap(dims.toSeq)
+      if (x.rank == 2) { // this is transpose
+        unchecked[Unit](
+         "{\n",
+         s"dim3 dimGrid((", x.shape(1), s"+$TILE_DIM-1)/$TILE_DIM, (", x.shape(0), s"+$TILE_DIM-1)/$TILE_DIM, 1);\n",
+         s"dim3 dimBlock($TILE_DIM, $BLOCK_ROWS, 1);\n",
+         s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ");\n", 
+         "}\n" 
+        )
+      } else if (x.rank == 3) { // this is permutation for 3D Tensor
+        if (dims(2) == 2) { // this is the simple case (inner most dimension doesn't permute)
+          unchecked[Unit](
+            "{\n",
+           s"dim3 dimGrid(", x.shape(1), ", ", x.shape(0), ", 1);\n",
+           s"dim3 dimBlock(256, 1, 1);\n",
+           s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ");\n",
+            "}\n"
+          )
+        } else { // this is the complicated case for 3D permutation
+          unchecked[Unit](
+            "{\n",
+           s"dim3 dimGrid((", x.shape(2), s"+$TILE_DIM-1)/$TILE_DIM,(", x.shape(dims(2)), s"+$TILE_DIM-1)/$TILE_DIM,", if(dims(2)==0) x.shape(1) else x.shape(0), ");\n",
+           s"dim3 dimBlock($TILE_DIM, $BLOCK_ROWS, 1);\n", 
+           s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape.strides(0),
+                 ", ", x.shape.strides(1), ", ", resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ");\n",
+            "}\n"
+          )
+        } 
+      } else { // this is the permutation for 4D Tensor
+        if (dims(3) == 3) { // this is the simple case for 4D Tensor (inner most dimension doesn't permute)
+          unchecked[Unit](
+            "{\n",
+           s"dim3 dimGrid(", x.shape(2), ", ", x.shape(1), ", ", x.shape(0), ");\n",
+           s"dim3 dimBlock(256, 1, 1);\n",
+           s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape.strides(0), ", ", x.shape.strides(1), ", ",
+                x.shape.strides(2), ", ", resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ", resTensor.shape.strides(2), ");\n",
+            "}\n"
+          )
+        } else { // this is the complicated case for 4D Tensor
+          unchecked[Unit](
+            "{\n",
+           s"int strideBIdxX = (", x.shape(3), s" + $TILE_DIM - 1)/$TILE_DIM;\n",
+           s"int strideBIdxY = (", x.shape(dims(3)), s" + $TILE_DIM -1)/$TILE_DIM;\n",
+           s"dim3 dimGrid(strideBIdxX * strideBIdxY, ", if (dims(3)==2) x.shape(1) else x.shape(2), ", ", if (dims(3)==0) x.shape(1) else x.shape(0), ");\n",
+           s"dim3 dimBlock($TILE_DIM, $BLOCK_ROWS, 1);\n",
+           s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), ", ",
+                 x.shape.strides(0), ", ", x.shape.strides(1), ", ", x.shape.strides(2), ", ",
+                 resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ", resTensor.shape.strides(2), ", strideBIdxX);\n",
+            "}\n"
+          )
+        }
+      }
+    }
+
+    override def permute(x: Tensor, dims: Int*): Tensor = {
+      val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(x.shape(_)): _*)
+      permuteHelper(x, resTensor, dims: _*)
+      resTensor
+    }
+
+    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = {
+      val revDims = ((0 until dims.length): Range).toSeq.map(dims.indexOf(_))
+      permuteHelper(y.d, x.d, revDims:_*)
+    }
 
     override def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor = {
       (transX, transY) match {

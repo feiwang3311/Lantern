@@ -955,7 +955,8 @@ abstract class DslDriverC[A: Manifest, B: Manifest] extends DslDriverBase[A, B] 
 }
 
 abstract class DslDriverCuda[A: Manifest, B: Manifest] extends DslDriverBase[A, B] with DslGPUExp {
-  def nvccArguments: Seq[String] = Seq("-ccbin gcc-5", "-std=c++11", "-O1", "--expt-extended-lambda", "-Wno-deprecated-gpu-targets", "-lstdc++")
+  //def nvccArguments: Seq[String] = Seq("-ccbin gcc-5", "-std=c++11", "-O1", "--expt-extended-lambda", "-Wno-deprecated-gpu-targets", "-lstdc++")
+  def nvccArguments: Seq[String] = Seq("-std=c++11", "-O1", "--expt-extended-lambda", "-Wno-deprecated-gpu-targets", "-lstdc++")
 }
 
 abstract class DslDriverCublas[A: Manifest, B: Manifest] extends DslDriverCuda[A, B] { self =>
@@ -1044,10 +1045,7 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends DslDriverCu
     val IR: self.type = self
 
     override def templateRawCode: String = {
-      super.templateRawCode +
-      (concatMap.values mkString("\n\n")) + (mask4dKernelMap.values map(_._1) mkString("\n\n")) +
-      (permuteKernelMap.values map(_._1) mkString("\n\n")) + (permuteGradKernelMap.values map(_._1) mkString("\n\n")) +
-      (mulSubKernelMap.values map(_._1) mkString("\n\n")) + (mulSubGradKernelMap.values map(_._1) mkString("\n\n"))
+      super.templateRawCode + (permutationKernelMap.values map (_._1) mkString("\n\n"))
     }
   }
 }
@@ -1060,10 +1058,7 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCud
     val IR: self.type = self
 
     override def templateRawCode: String = {
-      super.templateRawCode +
-      (concatMap.values mkString("\n\n")) + (mask4dKernelMap.values map(_._1) mkString("\n\n")) +
-      (permuteKernelMap.values map(_._1) mkString("\n\n")) + (permuteGradKernelMap.values map(_._1) mkString("\n\n")) +
-      (mulSubKernelMap.values map(_._1) mkString("\n\n")) + (mulSubGradKernelMap.values map(_._1) mkString("\n\n")) +
+      super.templateRawCode + (permutationKernelMap.values map (_._1) mkString("\n\n")) +
       (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
     }
   }

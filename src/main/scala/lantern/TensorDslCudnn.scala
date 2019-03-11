@@ -13,7 +13,7 @@ import scala.math._
 trait TensorDslCudnn extends TensorDslCublas {
 
   val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
-  var nextKernel = 0
+//  var nextKernel = 0
 
   // A map from tensor shapes to cuDNN tensor descriptors.
   private var tensorDescriptorCache = MutableMap[Dimensions, String]()
@@ -328,78 +328,78 @@ trait TensorDslCudnn extends TensorDslCublas {
       ()
     }
 
-    override def permute(x: Tensor, dims: Int*): Tensor = {
-      assert(dims.sorted == ((0 until x.rank): Range), s"permutation dimensions should be within ranks, got rank: ${x.rank}, dims: ${dims}")
-      assert(x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
-      val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(i => x.shape(i)): _*)
-      // pad everything to rank 4
-      val inShape = x.shape.padTo(4, unit(1)); val inStrid = x.shape.strides.padTo(4, unit(1));
-      val dimsPad = dims ++ (dims.size until 4: Range)
-      val outStrid = NewArray[Int](4); val resStrid = resTensor.shape.strides.padTo(4, unit(1));
-      for (i <- 0 until 4: Range) outStrid(dimsPad(i)) = resStrid(i)
-
-      val one = NewArray[Float](1); one(0) = 1
-      val zero = NewArray[Float](0); zero(0) = 0
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
-          |    in_desc, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
-          |    """.stripMargin, inStrid(0), ", ", inStrid(1), ", ", inStrid(2), ", ", inStrid(3), s"""));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
-          |    out_desc, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
-          |    """.stripMargin, outStrid(0), ", ", outStrid(1), ", ", outStrid(2), ", ", outStrid(3), s"""));
-          |
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnTransformTensor(\n" +
-          "    cudnnHandle, ", one, ", in_desc, ", x.data, ", ", zero, ", out_desc, ", resTensor.data, "));\n" +
-          "}"): _*
-      )
-      resTensor
-    }
-
-    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = {
-      assert(dims.sorted == ((0 until x.x.rank): Range), s"permutation dimensions should be within ranks, got rank: ${x.x.rank}, dims: ${dims}")
-      assert(x.x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
-      // pad everything to rank 4
-      val inShape = x.x.shape.padTo(4, unit(1)); val inStrid = x.x.shape.strides.padTo(4, unit(1));
-      val dimsPad = dims ++ (dims.size until 4: Range)
-      val outStrid = NewArray[Int](4); val resStrid = y.x.shape.strides.padTo(4, unit(1));
-      for (i <- 0 until 4: Range) outStrid(dimsPad(i)) = resStrid(i)
-
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
-          |    in_desc, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
-          |    """.stripMargin, outStrid(0), ", ", outStrid(1), ", ", outStrid(2), ", ", outStrid(3), s"""));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
-          |    out_desc, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
-          |    """.stripMargin, inStrid(0), ", ", inStrid(1), ", ", inStrid(2), ", ", inStrid(3), s"""));
-          |
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnTransformTensor(\n" +
-          "    cudnnHandle, ", one, ", in_desc, ", y.d.data, ", ", one, ", out_desc, ", x.d.data, "));\n" +
-          "}"): _*
-      )
-    }
+//    override def permute(x: Tensor, dims: Int*): Tensor = {
+//      assert(dims.sorted == ((0 until x.rank): Range), s"permutation dimensions should be within ranks, got rank: ${x.rank}, dims: ${dims}")
+//      assert(x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
+//      val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(i => x.shape(i)): _*)
+//      // pad everything to rank 4
+//      val inShape = x.shape.padTo(4, unit(1)); val inStrid = x.shape.strides.padTo(4, unit(1));
+//      val dimsPad = dims ++ (dims.size until 4: Range)
+//      val outStrid = NewArray[Int](4); val resStrid = resTensor.shape.strides.padTo(4, unit(1));
+//      for (i <- 0 until 4: Range) outStrid(dimsPad(i)) = resStrid(i)
+//
+//      val one = NewArray[Float](1); one(0) = 1
+//      val zero = NewArray[Float](0); zero(0) = 0
+//      unchecked[Unit](
+//        Seq(s"""
+//          |{
+//          |cudnnTensorDescriptor_t in_desc;
+//          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+//          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
+//          |    in_desc, CUDNN_DATA_FLOAT,
+//          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
+//          |    """.stripMargin, inStrid(0), ", ", inStrid(1), ", ", inStrid(2), ", ", inStrid(3), s"""));
+//          |
+//          |cudnnTensorDescriptor_t out_desc;
+//          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+//          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
+//          |    out_desc, CUDNN_DATA_FLOAT,
+//          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
+//          |    """.stripMargin, outStrid(0), ", ", outStrid(1), ", ", outStrid(2), ", ", outStrid(3), s"""));
+//          |
+//          |""".stripMargin) ++
+//        Seq(
+//          "CUDNN_CALL(cudnnTransformTensor(\n" +
+//          "    cudnnHandle, ", one, ", in_desc, ", x.data, ", ", zero, ", out_desc, ", resTensor.data, "));\n" +
+//          "}"): _*
+//      )
+//      resTensor
+//    }
+//
+//    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = {
+//      assert(dims.sorted == ((0 until x.x.rank): Range), s"permutation dimensions should be within ranks, got rank: ${x.x.rank}, dims: ${dims}")
+//      assert(x.x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
+//      // pad everything to rank 4
+//      val inShape = x.x.shape.padTo(4, unit(1)); val inStrid = x.x.shape.strides.padTo(4, unit(1));
+//      val dimsPad = dims ++ (dims.size until 4: Range)
+//      val outStrid = NewArray[Int](4); val resStrid = y.x.shape.strides.padTo(4, unit(1));
+//      for (i <- 0 until 4: Range) outStrid(dimsPad(i)) = resStrid(i)
+//
+//      val one = NewArray[Float](1); one(0) = 1
+//      unchecked[Unit](
+//        Seq(s"""
+//          |{
+//          |cudnnTensorDescriptor_t in_desc;
+//          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+//          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
+//          |    in_desc, CUDNN_DATA_FLOAT,
+//          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
+//          |    """.stripMargin, outStrid(0), ", ", outStrid(1), ", ", outStrid(2), ", ", outStrid(3), s"""));
+//          |
+//          |cudnnTensorDescriptor_t out_desc;
+//          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+//          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
+//          |    out_desc, CUDNN_DATA_FLOAT,
+//          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
+//          |    """.stripMargin, inStrid(0), ", ", inStrid(1), ", ", inStrid(2), ", ", inStrid(3), s"""));
+//          |
+//          |""".stripMargin) ++
+//        Seq(
+//          "CUDNN_CALL(cudnnTransformTensor(\n" +
+//          "    cudnnHandle, ", one, ", in_desc, ", y.d.data, ", ", one, ", out_desc, ", x.d.data, "));\n" +
+//          "}"): _*
+//      )
+//    }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
     // Note: this function performs in-place addition for `res`.
