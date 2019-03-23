@@ -12,7 +12,7 @@ import java.io.File
 
 class TensorSecondOrderCudnnTest extends LanternFunSuite {
 
-  test("sum0") {
+  testGPU("sum0") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
 
       override val fileName = "secOrder-gpu-sum0"
@@ -34,7 +34,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("add0") {
+  testGPU("add0") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-add0"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -56,7 +56,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("add_tanh") {
+  testGPU("add_tanh") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-add_tanh"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -101,7 +101,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
   }
 
 
-  test("minus_tanh") {
+  testGPU("minus_tanh") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-minus_tanh"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -145,7 +145,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("mult_tanh") {
+  testGPU("mult_tanh") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-mult_tanh"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -189,7 +189,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("div_tanh") {
+  testGPU("div_tanh") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-div_tanh"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -233,7 +233,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("basic3") {
+  testGPU("basic3") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-basic3"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -263,7 +263,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("basic3.1") {
+  testGPU("basic3.1") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-basic3.1"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -293,7 +293,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("basic4") {
+  testGPU("basic4") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-basic4"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -325,7 +325,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("vv_dot1") {
+  testGPU("vv_dot1") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-vv_dot1"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -350,7 +350,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("vv_dot2") {
+  testGPU("vv_dot2") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-vv_dot2"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -380,7 +380,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("mv_dot1") {
+  testGPU("mv_dot1") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-mv_dot1"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -410,7 +410,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("mm_dot1") {
+  testGPU("mm_dot1") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-mm_dot1"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -440,7 +440,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("tanh0") {
+  testGPU("tanh0") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-tanh0"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -479,7 +479,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("exp0") {
+  testGPU("exp0") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-exp0"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -514,7 +514,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("log0") {
+  testGPU("log0") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-log0"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -549,7 +549,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("sqrt0") {
+  testGPU("sqrt0") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-sqrt0"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -584,7 +584,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("square0") {
+  testGPU("square0") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-square0"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -619,7 +619,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("relu0") {
+  testGPU("relu0") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-relu0"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -654,7 +654,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("relu1") {
+  testGPU("relu1") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-relu1"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -698,7 +698,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("hardTanh1") {
+  testGPU("hardTanh1") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-hardTanh1"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -746,7 +746,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("conv0") { // for kernel
+  testGPU("conv0") { // for kernel
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-conv0"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -791,7 +791,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("conv1") { // for input
+  testGPU("conv1") { // for input
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-conv1"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -836,7 +836,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("conv2") { // for both kernel and input
+  testGPU("conv2") { // for both kernel and input
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-conv2"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -887,7 +887,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("vv_dot3") {
+  testGPU("vv_dot3") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-vv_dot3"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -926,7 +926,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("conv2.1") { // for both kernel and input (with bias)
+  testGPU("conv2.1") { // for both kernel and input (with bias)
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-conv2.1"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -993,7 +993,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
   }
 
 
-  test("conv3") { // for both kernel and input, larger pane of input
+  testGPU("conv3") { // for both kernel and input, larger pane of input
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-conv3"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1075,7 +1075,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("conv4") { // for both kernel and input, multiple channels
+  testGPU("conv4") { // for both kernel and input, multiple channels
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-conv4"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1241,7 +1241,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("conv5") { // for both kernel and input, multiple channels and batches
+  testGPU("conv5") { // for both kernel and input, multiple channels and batches
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-conv5"
       def snippet(a: Rep[String]): Rep[Unit] = {
@@ -1352,7 +1352,7 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
-  test("conv6") { // for both kernel and input, multiple channels and batches and bias
+  testGPU("conv6") { // for both kernel and input, multiple channels and batches and bias
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-conv6"
       def snippet(a: Rep[String]): Rep[Unit] = {
