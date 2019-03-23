@@ -107,25 +107,27 @@ def plot(files, model):
   # plot
   N = len(labels)
   fig, ax = plt.subplots()
-  if N == 2: width = 8
+  if N == 2: width = 8.5
   elif N == 3: width = 12
   else: width = 16
   fig.set_size_inches(width,8)
   ind = np.arange(1, N+1)
 
-  ps = plt.bar(ind, loopTimes, yerr = loopStds,  width = 0.55)
+  ps = plt.bar(ind, loopTimes, yerr = loopStds,  width = 0.5)
   for i in range(N):
     ps[i].set_facecolor(getColor(labels[i]))
   ax.set_xticks(ind)
-  ax.set_xticklabels(labels, fontsize = 25)
-  ax.tick_params(axis='y', labelsize = 20)
+  ax.set_xticklabels(labels, fontsize = 45)
+  ax.tick_params(axis='y', labelsize = 30)
   ax.set_ylim([0, max(loopTimes) * 1.2])
-  ax.set_ylabel("seconds", fontsize = 25)
+  ax.set_ylabel("Seconds", fontsize = 50)
   if step_desc == "1 epoch":
-    ax.set_title("{} training time per epoch".format(model), fontsize = 28)
+    # ax.set_title("{} training\ntime per epoch".format(model), fontsize = 50)
+    ax.set_title("{}".format(model), fontsize = 50)
   else:
-    ax.set_title("{} training time in {}".format(model, step_desc), fontsize = 28)
+    ax.set_title("{} training time in {}".format(model, step_desc), fontsize = 50)
   print("save plot at {}".format(save_dir + model + '.png'))
+  plt.tight_layout()
   pylab.savefig(save_dir + model + '.png')
 
 if __name__ == "__main__":

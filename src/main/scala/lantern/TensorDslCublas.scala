@@ -734,7 +734,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
       val size = x.scalarCount
       val res = if (inPlace) x.data else mallocArray[Float](size)
       val nGrid = 28
-      unchecked[Unit](s"hardTanh<<<${nGrid}, 512>>>(", x.data, ", ", res, ", ", min_val, ", ", max_val, ", ", inPlace, ")")
+      unchecked[Unit](s"hardTanh<<<${nGrid}, 512>>>(", x.data, ", ", res, ", ", min_val, ", ", max_val, ", ", x.scalarCount, ")")
       Tensor(res, x.shape.seq: _*)
     }
     override def hardTanh_grad(input: TensorR, res: TensorR, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Unit = {

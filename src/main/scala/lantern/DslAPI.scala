@@ -1059,7 +1059,8 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends DslDriverCud
 
     override def templateRawCode: String = {
       super.templateRawCode + (permutationKernelMap.values map (_._1) mkString("\n\n")) +
-      (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
+      (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n")) +
+      (elementWiseUpdateWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
     }
   }
 }

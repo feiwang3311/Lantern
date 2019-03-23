@@ -13,6 +13,9 @@ import scala.math._
 trait TensorDslCudnn extends TensorDslCublas {
 
   val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
+  val elementWiseUpdateWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
+  val attributesMap = new scala.collection.mutable.HashMap[Int, String]()
+  def printAttributes() = unchecked[Unit](attributesMap.values.mkString("\n"))
 //  var nextKernel = 0
 
   // A map from tensor shapes to cuDNN tensor descriptors.
@@ -212,6 +215,72 @@ trait TensorDslCudnn extends TensorDslCublas {
       }
     }
 
+    def elementWiseUpdateWithBroadCastKernel(rank: Int, op: String): String = {
+      if (!elementWiseUpdateWithBroadCastKernelMap.contains((rank, op))) {
+        val in1Stride = ((0 until rank): Range).map(x => s"int in1Stride$x").mkString(", ")
+        val in2Stride = ((0 until rank): Range).map(x => s"int in2Stride$x").mkString(", ")
+        val linearToStep = ((0 until rank): Range).map(x => s"    int in1Index$x = linearIdx / in1Stride$x; linearIdx = linearIdx - in1Index$x * in1Stride$x;").mkString("\n")
+        val in1Index = ((0 until rank): Range).map(x => s"in1Stride$x * in1Index$x").mkString(" + ")
+        val in2Index = ((0 until rank): Range).map(x => s"in2Stride$x * in1Index$x").mkString(" + ")
+        val kernel = s"""
+        |__global__ void elementWiseUpdateWithBroadCast${nextKernel}(float* in1, float* in2, int size,
+        |                ${in1Stride}, ${in2Stride}) {
+        |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+        |  int stride = gridDim.x * blockDim.x;
+        |  for (int i = tid; i < size; i += stride) {
+        |    int linearIdx = tid;
+        |    ${linearToStep}
+        |    int in1Index = ${in1Index};
+        |    int in2Index = ${in2Index};
+        |    in1[in1Index] ${op} in2[in2Index];
+        |  }
+        |}
+        """
+        val kernelName = s"elementWiseUpdateWithBroadCast${nextKernel}"
+        elementWiseUpdateWithBroadCastKernelMap((rank, op)) = (kernel, kernelName)
+        // don't forget to increment counter!!
+        nextKernel += 1
+      }
+      val (kernel, kernelName) = elementWiseUpdateWithBroadCastKernelMap((rank, op))
+      kernelName
+    }
+
+    @virtualize
+    def elementWiseUpdateWithBroadCast(in1: Tensor, in2: Tensor, op: String) = {
+        Tensor.dimBroadcast(in1.shape, in2.shape) match {
+          case Some((xShape, yShape, resShape)) => {
+            if (xShape.broadcasted) {
+              assertC(false, "TODO: so far only handles in1 += in2 where in1 is large!!")
+            } // TODO: so far only handles in1 += in2 where in1 is larger
+            else {
+              val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+              val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+              val kernelName = elementWiseUpdateWithBroadCastKernel(resShape.dims.size, op)
+              val nGrid = 28
+              if (resShape.dims.size == 1) {
+                unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
+                  xStridesShadow(0), ", ", yStridesShadow(0), ")")
+              } else if (resShape.dims.size == 2) {
+                unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
+                  xStridesShadow(0), ", ", xStridesShadow(1), ", ", yStridesShadow(0), ", ", yStridesShadow(1), ")")
+              } else if (resShape.dims.size == 3) {
+                unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
+                  xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ",
+                  yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ")")
+              } else if (resShape.dims.size == 4) {
+                unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
+                  xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ", xStridesShadow(3), ", ",
+                  yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ", yStridesShadow(3), ")")
+              } else {
+                assert(false, s"elementWiseUpdateWithBroadCast only handle tensors with rank no larger than 4, got ${resShape.dims.size}")
+              }
+              ()
+            }
+          }
+          case _ => ???
+        }
+    }
+
     override def +(x: Tensor, y: Rep[Float]): Tensor = {
       val res = mallocArray[Float](x.scalarCount)
       unchecked[Unit](s"addScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
@@ -232,7 +301,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def +=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"addScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
-    override def +=(x: Tensor, y: Tensor): Unit = ???
+    override def +=(x: Tensor, y: Tensor): Unit = elementWiseUpdateWithBroadCast(x, y, "+=")
 
     override def -(x: Tensor, y: Rep[Float]): Tensor = {
       val res = mallocArray[Float](x.scalarCount)
@@ -255,7 +324,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def -=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"minusScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
-    override def -=(x: Tensor, y: Tensor): Unit = ???
+    override def -=(x: Tensor, y: Tensor): Unit = elementWiseUpdateWithBroadCast(x, y, "-=")
 
     override def *(x: Tensor, y: Rep[Float]): Tensor = {
       val res = mallocArray[Float](x.scalarCount)
@@ -451,7 +520,9 @@ trait TensorDslCudnn extends TensorDslCublas {
       val one = NewArray[Float](1); one(0) = 1
 
       val counter = nextKernel
-      nextKernel += 1 
+      nextKernel += 1
+
+      attributesMap(counter) = "// Attributes;"
 
       unchecked[Unit](
         Seq(s"""
@@ -1478,12 +1549,16 @@ trait TensorDslCudnn extends TensorDslCublas {
 
     // TODO: Relax rank 4 requirement after implementing tensor descriptor helper functions.
     // `cudnnReduceTensor` supports tensors up to dimension 8.
+    @virtualize
     def cudnnReduceTensor(x: Tensor, op: ReductionOp.Value, indices: Seq[Int], flatten: Boolean = true, toTensor: Option[Rep[Array[Float]]] = None, clear: Boolean = true): Tensor = {
       assert(indices.forall(i => x.shape.indices.contains(i)), s"Indices out of bounds: $indices, tensor shape is ${x.shape}")
       val xShape: Seq[Rep[Int]] = x.shape.padTo(4, unit(1))
       val unflatShape: Seq[Rep[Int]] = xShape.zipWithIndex.map { case (dim, i) =>
         if (indices.contains(i)) unit(1) else dim
       }
+      // TODO: if shape is the same, return x??
+      if ((xShape zip unflatShape).forallR{case (a, b) => a == b})
+        assertC(false, "shape of reduction kernels should not be equal")
       val res = toTensor match {
         case None => Tensor(mallocArray[Float](unflatShape.product1), unflatShape: _*)
         case Some(array) => Tensor(array, unflatShape: _*)
@@ -1500,10 +1575,14 @@ trait TensorDslCudnn extends TensorDslCublas {
       else Tensor(res.data, resShape: _*)
     }
 
+    @virtualize
     override def sum(x: Tensor): Tensor = {
       val xx = x.resizeNoCheck(x.shape.padTo(4, unit(1)): _*)
-      val res = cudnnReduceTensor(xx, ReductionOp.Add, xx.shape.indices)
-      res.resizeNoCheck(1)
+      if (x.isScalar) x.resizeNoCheck(1) // TODO: double check if returning x (not a copy) is OK
+      else {
+        val res = cudnnReduceTensor(xx, ReductionOp.Add, xx.shape.indices)
+        res.resizeNoCheck(1)
+      }
     }
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {

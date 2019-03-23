@@ -150,9 +150,10 @@ trait TensorDsl extends DslOps with Diff {
     def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Rep[Int]): Unit
 
     // Copy data from one tensor to another.
+    @virtualize
     def copyTensorData(dest: Tensor, src: Tensor): Unit = {
-      assert(dest.scalarCount == src.scalarCount,
-        s"Tensors do not have same scalar count: ${dest.scalarCount}, ${src.scalarCount}")
+      assertC(dest.scalarCount == src.scalarCount,
+        "Tensors do not have same scalar count: %d, %d", dest.scalarCount, src.scalarCount)
       copyFloatArray(dest.data, src.data, dest.scalarCount)
     }
 
@@ -388,7 +389,7 @@ trait TensorDsl extends DslOps with Diff {
     val rank = dimensions.length
     assert (rank > 0, "Tensors need to have nonEmpty dimensions")
     val scalarCount = shape.scalarCount
-    val isScalar = scalarCount == 1
+    val isScalar = scalarCount == unit(1)
 
     assert(scalarCount != 0, "Tensor cannot have scalar count 0")
 
@@ -1102,10 +1103,24 @@ trait TensorDsl extends DslOps with Diff {
     def fromData(dims: Seq[Int], scalars: Float*): Tensor = backend.makeTensor(dims, scalars: _*)
 
     @virtualize
-    def assertShapeEqual(a: Dimensions, b: Dimensions, errorPrefix: String = "") = {
-      assert(a.dims.size == b.dims.size, s"$errorPrefix: tensors are not of the same rank, got ${a.dims.size} and ${b.dims.size}")
-      assertC((a.dims zip b.dims).forallR{case (a, b) => a == b}, "$errorPrefix: tensor shapes are not equal %s, %s\\n", a.toString, b.toString)
+    def ifShapeEqual(a: Dimensions, b: Dimensions): Rep[Boolean] = {
+      if (a.dims.size == b.dims.size) {
+        (a.dims zip b.dims).forallR{case (a, b) => a == b}
+      } else false
     }
+
+    def assertShapeEqual(a: Dimensions, b: Dimensions, errorPrefix: String = "") = {
+      assertC(ifShapeEqual(a, b), s"$errorPrefix: tensor shapes are not equal %s, %s \\n", a.toString, b.toString)
+    }
+
+    def assertShapeNotEqual(a: Dimensions, b: Dimensions, errorPrefix: String = "") = {
+      assertC(!ifShapeEqual(a, b), s"$errorPrefix: tensor shapes are equal %s, %s \\n", a.toString, b.toString)
+    }
+//   @virtualize
+//   def assertShapeEqual(a: Dimensions, b: Dimensions, errorPrefix: String = "") = {
+//     assert(a.dims.size == b.dims.size, s"$errorPrefix: tensors are not of the same rank, got ${a.dims.size} and ${b.dims.size}")
+//     assertC((a.dims zip b.dims).forallR{case (a, b) => a == b}, "$errorPrefix: tensor shapes are not equal %s, %s\\n", a.toString, b.toString)
+//   }
 
     @virtualize
     def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.0001f) = {
