@@ -56,6 +56,17 @@ trait DslExp extends DslOps
   case class RawComment(s: String) extends Def[Unit]
   def generateRawComment(s: String) = reflectEffect(RawComment(s))
 
+  // TODO: Add Shift Node () just like the RawComment node above
+
+  // TODO: not here: add a TypeAnalysis trait
+  // trait TypeAnalysis extends GenericNestedGodegen {
+  //   override def emitNode(sys: Sym[Any], rhs: Def[Any]) = rhs match {
+  //     case Shift(??,??) => {
+  //       ???
+  //     }
+  //   }
+  // }
+
   case class Comment[A:Manifest](s: String, verbose: Boolean, b: Block[A]) extends Def[A]
   def comment[A:Manifest](s: String, verbose: Boolean)(b: => Rep[A]): Rep[A] = {
     val br = reifyEffects(b)

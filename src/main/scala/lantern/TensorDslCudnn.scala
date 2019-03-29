@@ -171,7 +171,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         |    out[tid] = in1[in1Index] ${op} in2[in2Index];
         |  }
         |}
-        """
+        """.stripMargin
         val kernelName = s"elementWiseWithBroadCast${nextKernel}"
         elementWiseWithBroadCastKernelMap((rank, op)) = (kernel, kernelName)
         // don't forget to increment counter!!

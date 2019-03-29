@@ -232,10 +232,10 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
         None,
         paddings, stridess, (1, 1), counterId + 1)
       backend.conv2D_batch_grad(
-        new TensorR(this.x.x, this.d.d), //
-        opInputFR map (v => new TensorR(v.x.x, v.d.d)),
-        new TensorR(kernel.x.x, kernel.d.d), //
-        new TensorR(y.x.d, y.d.d), //
+        new TensorR(this.x.x, this.d.d), // in
+        opInputFR map (v => new TensorR(v.x.x, v.d.d)), // optional in
+        new TensorR(kernel.x.x, kernel.d.d), // filter
+        new TensorR(y.x.d, y.d.d), // result
         bias map (v => new TensorR(v.d.x, v.d.d)),
         paddings, stridess, (1, 1), counterId + 2)
     }
