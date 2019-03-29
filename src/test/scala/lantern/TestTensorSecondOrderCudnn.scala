@@ -56,6 +56,37 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
     g1.eval("a")
   }
 
+  testGPU("tanhff") {
+    val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
+      override val fileName = "secOrder-gpu-tanhff"
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // set input and vector for Hessian
+        val x1 = Tensor.fromData(Seq(4), 1.0f, 2.0f, 0.5f, 0.2f)
+        val d1 = Tensor.fromData(Seq(4), 1.0f, 1.0f, 1.0f, 1.0f)
+        val start = TensorFR(new TensorF(x1, d1))
+
+        val res = gradHessV{() => start.tanh.sum}
+
+        // correctness assertion
+        backend = BackendCPU()
+        Tensor.assertEqual(getGradient(start).toCPU(), Tensor.fromData(Seq(4), 0.419974f, 0.070651f, 0.786448f, 0.961043f))
+        Tensor.assertEqual(getHessV(start).toCPU(), Tensor.fromData(Seq(4), -0.639700f, -0.136219f, -0.726862f, -0.379372f))
+        // PyTorch equvilent code
+        // start1 = torch.tensor([1.0, 2.0, 0.5, 0.2], requires_grad=True)
+        // out = (start1).tanh().sum()
+        // grads = torch.autograd.grad(out, [start1], create_graph=True, retain_graph = True)
+        // flatten = torch.cat([g.reshape(-1) for g in grads if g is not None])
+        // v = torch.tensor([1.0, 1.0, 1.0, 1.0])
+        // hvps = torch.autograd.grad([flatten @ v], [start1], allow_unused=True)
+        // torch.set_printoptions(precision=6)
+        // print(out.data) # tensor(3.891992)
+        // print(grads[0].data) # tensor([0.070651, 0.000182, 0.070651, 0.070651])
+        // print(hvps[0].data)  # tensor([-0.081731, -0.000290, -0.136219, -0.163462])
+      }
+    }
+    g1.eval("a")
+  }
+
   testGPU("add_tanh") {
     val g1 = new LanternDriverCudnn[String, Unit] with TensorSecOrderApi {
       override val fileName = "secOrder-gpu-add_tanh"
