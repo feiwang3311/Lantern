@@ -3,19 +3,20 @@ package lantern
 import scala.util.continuations._
 import scala.util.continuations
 
-import scala.virtualization.lms._
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
 import org.scalatest.FunSuite
 
 import java.io.PrintWriter
 import java.io.File
 
+import lms.core.stub._
+import lms.core.virtualize
+import lms.macros.SourceContext
+
+
 class AdLMSTest extends FunSuite {
 
   test("function_composition") {
-    val g1 = new DslDriverScala[Double, Double] with DiffApi {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         def f1(x: NumR) = x * x * x
         def f2(x: NumR) = x * x
@@ -30,7 +31,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("simple") {
-    val g1 = new DslDriverScala[Double, Double] with DiffApi {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         def f(x: NumR) = x * x
         gradR(f)(x)
@@ -44,7 +45,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("reccc") {
-    val g1 = new DslDriverScala[Double, Double] with DiffApi {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         def f(x: NumR) = shift { (k: NumR => Unit) =>
           lazy val rec = FUNL { (k: NumR => Unit) => (x: NumR) =>
@@ -59,7 +60,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("rec") {
-    val g1 = new DslDriverScala[Double, Double] with DiffApi {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         def f(x: NumR) = Rec(x)(y => y * y)
         gradR(f)(x)
@@ -89,7 +90,7 @@ class AdLMSTest extends FunSuite {
   */
 
   test("leaky") {
-    val g1 = new DslDriverScala[Double, Double] with DiffApi {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         def f1(x: NumR) = x * x * x
         val v1: NumR = getNumR(1.0)
@@ -104,7 +105,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("side_effect") {
-    val g1 = new DslDriverScala[Double, Double] with DiffApi {
+    val g1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val v1: NumR = getNumR(1.0)
         val v2: NumR = getNumR(2.0)
@@ -122,7 +123,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("reverse_mode") {
-    val gr1 = new DslDriverScala[Double,Double] with DiffApi {
+    val gr1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradR(x => x + x*x*x)(x)
       }
@@ -134,7 +135,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("reverse_mode_sin") {
-    val gr1 = new DslDriverScala[Double,Double] with DiffApi {
+    val gr1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradR(x => x.sin())(x)
       }
@@ -146,7 +147,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("reverse_mode_cos") {
-    val gr1 = new DslDriverScala[Double,Double] with DiffApi {
+    val gr1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradR(x => x.cos())(x)
       }
@@ -157,20 +158,8 @@ class AdLMSTest extends FunSuite {
     }
   }
 
-  test("reverseRV") {
-    val grv1 = new DslDriverScala[Double,Double] with DiffApi {
-      def snippet(x: Rep[Double]): Rep[Double] = {
-        gradRV(x => x + x*x*x)(x)
-      }
-    }
-    def grad(x: Double) = 1 + 3 * x * x
-    for (x <- (-5 until 5)) {
-      assert (grv1.eval(x) == grad(x))
-    }
-  }
-
   test("forward_mode") {
-    val gf1 = new DslDriverScala[Double,Double] with DiffApi {
+    val gf1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradF(x => x + x*x*x)(x)
       }
@@ -182,7 +171,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("forward_mode_sin") {
-    val gf1 = new DslDriverScala[Double, Double] with DiffApi {
+    val gf1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradF(x => x.sin())(x)
       }
@@ -194,7 +183,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("forward_mode_cos") {
-    val gf1 = new DslDriverScala[Double, Double] with DiffApi {
+    val gf1 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradF(x => x.cos())(x)
       }
@@ -206,7 +195,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("forward_forward") {
-    val gff1 = new DslDriverScala[Double,Double] with DiffApi {
+    val gff1 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradFF(x => x + x*x*x)(x)
       }
@@ -219,7 +208,7 @@ class AdLMSTest extends FunSuite {
 
   // println("demonstrate the problem of perturbation confusion")
   test("perturbation_confusion") {
-    val grr = new DslDriverScala[Double, Double] with DiffApi {
+    val grr = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         gradR{ (x: NumR) =>
           val temp = new NumR(gradR(y => x + y)(1), var_new(0.0))
@@ -230,7 +219,6 @@ class AdLMSTest extends FunSuite {
     def grad_confusion = 2
     assert(grr.eval(1) == grad_confusion)
   }
-
 
   test("condition") {
     val gr2 = new DslDriverC[Double,Double] with DiffApi {
@@ -310,7 +298,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("while") {
-    val gr3 = new DslDriverScala[Double,Double] with DiffApi {
+    val gr3 = new DslDriver[Double,Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val half = (new NumR(0.5,var_new(0.0)))
         val res = gradR(x => LOOP(x)(_.x > 1.0)(_ * half))(x)
@@ -352,7 +340,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("loop3times") {
-    val gr4 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr4 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val half = new NumR(0.5, var_new(0.0))
         val res = gradR(x => LOOPC(x)(3)(x1 =>{half * x1}))(x)
@@ -368,7 +356,7 @@ class AdLMSTest extends FunSuite {
 
 
   test("loop_with_index") {
-    val gr7 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr7 = new DslDriver[Double, Double] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Double] = {
         val half = new NumR(0.5, var_new(0.0))
         val res = gradR(x => LOOPCC(x)(3)(i => x1 => {
@@ -386,7 +374,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("traverse_array") {
-    val gr8 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr8 = new DslDriver[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
         val array = NewArray[Double](3)
@@ -408,7 +396,7 @@ class AdLMSTest extends FunSuite {
   }
 
   test("traverse_array2") {
-    val gr9 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr9 = new DslDriver[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
         // preprocess data (wrap Array as RepArray)
@@ -433,7 +421,7 @@ class AdLMSTest extends FunSuite {
 
 
   test("traverse_array3") {
-    val gr10 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr10 = new DslDriver[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
         // preprocess data
@@ -459,13 +447,13 @@ class AdLMSTest extends FunSuite {
   }
 
   test("traverse_array4") {
-    val gr11 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr11 = new DslDriver[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
         // represent list as array
         val arr = scala.Array(4.0, 3.0, 1.5, 2.0)
         //val arr = scala.Array[Double]()
-        val arra = mutableStaticData(arr)
+        val arra = staticData(arr)
 
         // create a model that recursively use the data in arr (originated from list)
         def model: NumR => NumR @diff = { (x: NumR) =>
@@ -501,10 +489,10 @@ class AdLMSTest extends FunSuite {
   }*/
 
   test("traverse_array5") {
-    val gr11 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr11 = new DslDriver[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
-        val array = mutableStaticData(scala.Array(4.0, 3.0, 1.5, 2.0))
+        val array = staticData(scala.Array(4.0, 3.0, 1.5, 2.0))
 
         // create a model that recursively use the data in arr (originated from list)
         def model: NumR => NumR @diff = { (x: NumR) =>
@@ -582,7 +570,7 @@ class AdLMSTest extends FunSuite {
   */
 
   test("tree") {
-    val gr12 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr12 = new DslDriver[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
         // represent tree as arrays
@@ -593,9 +581,9 @@ class AdLMSTest extends FunSuite {
         val data = scala.Array[Double](5.0, 3.0, 4.0)
         val lch  = scala.Array[Int](1, 100, 100) // use very large number to mean non nodes
         val rch  = scala.Array[Int](2, 100, 100)
-        val data1 = mutableStaticData(data)
-        val lch1  = mutableStaticData(lch)
-        val rch1  = mutableStaticData(rch)
+        val data1 = staticData(data)
+        val lch1  = staticData(lch)
+        val rch1  = staticData(rch)
 
         // create a model that recursively use the data (originated from tree)
         def model: NumR => NumR @diff = { (x: NumR) =>
@@ -609,7 +597,6 @@ class AdLMSTest extends FunSuite {
       }
     }
 
-    // System.out.println(gr12.code)
 /*
 // generating Scala code
 class Snippet() extends (Double=>Double) {
@@ -675,16 +662,16 @@ double Snippet(double base, Tree tree) {
   }
 
   test("tree_closure") {
-    val gr12_2 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr12_2 = new DslDriver[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
         val A = scala.Array
         val data = A[Double](5.0, 3.0, 4.0)
         val lch  = A[Int](1, 100, 100)
         val rch  = A[Int](2, 100, 100)
-        val data1 = mutableStaticData(data)
-        val lch1  = mutableStaticData(lch)
-        val rch1  = mutableStaticData(rch)
+        val data1 = staticData(data)
+        val lch1  = staticData(lch)
+        val rch1  = staticData(rch)
 
         val para = new NumR(2.0, var_new(0.0))
         def model: NumR => NumR @diff = { (x: NumR) =>
@@ -705,7 +692,7 @@ double Snippet(double base, Tree tree) {
   }
 
   test("tree_if") {
-    val gr12_3 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr12_3 = new DslDriver[Double, Double] with DiffApi {
 
       @virtualize
       def snippet(x: Rep[Double]): Rep[Double] = {
@@ -713,9 +700,9 @@ double Snippet(double base, Tree tree) {
         val data = A[Double](0.0, 3.0, 4.0)
         val lch  = A[Int](1, 100, 100)
         val rch  = A[Int](2, 100, 100)
-        val data1 = mutableStaticData(data)
-        val lch1  = mutableStaticData(lch)
-        val rch1  = mutableStaticData(rch)
+        val data1 = staticData(data)
+        val lch1  = staticData(lch)
+        val rch1  = staticData(rch)
 
         val para  = new NumR(2.0, var_new(0.0))
         val paral = new NumR(1.5, var_new(0.0))
@@ -740,7 +727,7 @@ double Snippet(double base, Tree tree) {
   }
 
   test("tree_if2") {
-    val gr12_4 = new DslDriverScala[Double, Double] with DiffApi {
+    val gr12_4 = new DslDriver[Double, Double] with DiffApi {
 
       @virtualize
       def snippet(x: Rep[Double]): Rep[Double] = {
@@ -748,9 +735,9 @@ double Snippet(double base, Tree tree) {
         val data = A[Double](0.0, 3.0, 4.0)
         val lch  = A[Int](1, -1, -1)
         val rch  = A[Int](2, -1, -1)
-        val data1 = mutableStaticData(data)
-        val lch1  = mutableStaticData(lch)
-        val rch1  = mutableStaticData(rch)
+        val data1 = staticData(data)
+        val lch1  = staticData(lch)
+        val rch1  = staticData(rch)
 
         val para  = new NumR(2.0, var_new(0.0))
         val paral = new NumR(1.5, var_new(0.0))

@@ -3,17 +3,22 @@ package lantern
 import scala.util.continuations._
 import scala.util.continuations
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
+// import org.scala_lang.virtualized.virtualize
+// import org.scala_lang.virtualized.SourceContext
 
-import scala.virtualization.lms._
+// import scala.virtualization.lms._
+
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 trait Diff {
   type diff = cps[Unit]
   def RST(a: =>Unit @diff) = continuations.reset { a; () }
 }
 
-trait DiffApi extends DslOps with Diff {
+@virtualize
+trait DiffApi extends Base with Dsl with Diff {
 
   type RDouble = Rep[Double]
 
@@ -23,9 +28,9 @@ trait DiffApi extends DslOps with Diff {
     def *(that: NumF) =
       new NumF(this.x * that.x, this.d * that.x + that.d * this.x)
     def sin() =
-      new NumF(Math.sin(this.x), Math.cos(this.x) * this.d)
+      new NumF(this.x.sin(), this.x.cos() * this.d)
     def cos() =
-      new NumF(Math.cos(this.x), -1.0 * Math.sin(this.x) * this.d)
+      new NumF(this.x.cos(), -1.0 * this.x.sin() * this.d)
     override def toString = (x,d).toString
   }
 
@@ -50,12 +55,12 @@ trait DiffApi extends DslOps with Diff {
       val y = new NumR(x - that.x, var_new(0.0)); k(y)
       this.d += y.d; that.d -= y.d}
     def sin(): NumR @diff = shift { (k: NumR => Unit) =>
-      val y = new NumR(Math.sin(x), var_new(0.0)); k(y)
-      this.d += y.d * Math.cos(x)
+      val y = new NumR(x.sin(), var_new(0.0)); k(y)
+      this.d += y.d * x.cos()
     }
     def cos(): NumR @diff = shift{ (k: NumR => Unit) =>
-      val y = new NumR(Math.cos(x), var_new(0.0)); k(y)
-      this.d -= y.d * Math.sin(x)
+      val y = new NumR(x.cos(), var_new(0.0)); k(y)
+      this.d -= y.d * x.sin()
     }
     def print() = {
       printf("the value is %f\n", x)
@@ -65,14 +70,14 @@ trait DiffApi extends DslOps with Diff {
 
   // difference between static var and staged var:
   // static var won't work for nested scopes!!!
-  class NumRV(val x: RDouble, var d: RDouble) {
-    def +(that: NumRV): NumRV @diff = shift { (k: NumRV => Unit) =>
-      val y = new NumRV(x + that.x, 0.0); k(y)
-      this.d += y.d; that.d += y.d }
-    def *(that: NumRV): NumRV @diff = shift { (k: NumRV => Unit) =>
-      val y = new NumRV(x * that.x, 0.0); k(y)
-      this.d += that.x * y.d; that.d += this.x * y.d }
-  }
+  // class NumRV(val x: RDouble, var d: RDouble) {
+  //   def +(that: NumRV): NumRV @diff = shift { (k: NumRV => Unit) =>
+  //     val y = new NumRV(x + that.x, 0.0); k(y)
+  //     this.d += y.d; that.d += y.d }
+  //   def *(that: NumRV): NumRV @diff = shift { (k: NumRV => Unit) =>
+  //     val y = new NumRV(x * that.x, 0.0); k(y)
+  //     this.d += that.x * y.d; that.d += this.x * y.d }
+  // }
 
   def getNumR(x: RDouble) = new NumR(x, var_new(0.0))
 
@@ -311,17 +316,17 @@ trait DiffApi extends DslOps with Diff {
     rec(k)(init)
   }
 
-  def gradRV(f: NumRV => NumRV @diff)(x: Rep[Double]): Rep[Double] = {
-    val x1 = new NumRV(x, 0.0)
-    reset { f(x1).d = 1.0 }
-    x1.d
-  }
+  // def gradRV(f: NumRV => NumRV @diff)(x: Rep[Double]): Rep[Double] = {
+  //   val x1 = new NumRV(x, 0.0)
+  //   reset { f(x1).d = 1.0 }
+  //   x1.d
+  // }
 
   def gradR(f: NumR => NumR @diff)(x: RDouble): Rep[Double] = {
     val x1 = new NumR(x, var_new(0.0))
     reset {
       val r = f(x1)
-      var_assign(r.d, 1.0); ()
+      __assign(r.d, unit(1.0)); ()
     }
     x1.d
   }
