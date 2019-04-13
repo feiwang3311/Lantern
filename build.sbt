@@ -26,9 +26,9 @@ addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVe
 parallelExecution in Test := false
 // concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)
 
-lazy val root = (project in file(".")).dependsOn(lmsSub % "test->test; compile->compile")
+lazy val lantern = (project in file(".")).dependsOn(lms % "test->test; compile->compile")
 
-lazy val lmsSub = ProjectRef(file("../lms-clean"), "lms-clean")
+lazy val lms = project.in(file("../lms-clean"))
 
 //cps
 
