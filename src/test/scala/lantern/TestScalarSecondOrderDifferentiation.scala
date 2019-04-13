@@ -1,11 +1,8 @@
 package lantern
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import scala.virtualization.lms._
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
+import lms.core.stub._
+import lms.core.virtualize
+import lms.macros.SourceContext
 
 import org.scalatest.FunSuite
 
@@ -13,9 +10,9 @@ import java.io.PrintWriter
 import java.io.File
 
 class ScalarSecondOrderTest extends FunSuite {
-  
+
   test("1") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputs((x1, x2) => x1 * x2)(2.0, 3.0)((4.0, 5.0))
         assert (grad == (3.0, 2.0))
@@ -27,7 +24,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("1.1") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputs((x1, x2) => x1 * x1 * x2 * x2)(2.0, 3.0)((4.0, 5.0))
         assert (grad == (36.0, 24.0))
@@ -39,7 +36,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("1.2") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputs((x1, x2) => toNumR(2) * x1 * x1 * x2 + toNumR(3) * x2)(2, 3)((4, 5))
         assert (grad == (24, 11))
@@ -52,7 +49,7 @@ class ScalarSecondOrderTest extends FunSuite {
 
   test("1.3s") {
     @virtualize
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputsS((x1, x2) => x1 * x2)(2.0, 3.0)((4.0, 5.0))
         assertVectorEqual(grad, (3.0, 2.0))
@@ -64,7 +61,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("1.4s") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputsS((x1, x2) => x1 * x1 * x2 * x2)(2.0, 3.0)((4.0, 5.0))
         assertVectorEqual(grad, (36.0, 24.0))
@@ -76,7 +73,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("1.5s") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputsS((x1, x2) => toNumRS(2) * x1 * x1 * x2 + toNumRS(3) * x2)(2, 3)((4, 5))
         assertVectorEqual(grad, (24, 11))
@@ -88,7 +85,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("2") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputs((x1, x2) => (x1 + x2).sin())(2.0, 3.0)((4.0, 5.0))
         assert (grad == (scala.math.cos(5.0), scala.math.cos(5.0)))
@@ -100,7 +97,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("2s") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputsS((x1, x2) => (x1 + x2).sin())(2.0, 3.0)((4.0, 5.0))
         assertVectorEqual(grad, (scala.math.cos(5.0), scala.math.cos(5.0)))
@@ -112,7 +109,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("if_0") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputsS((x1, x2) => IF(x1 < x2){x1 * x2}{x1 * x1 * x2 * x2})(2.0, 3.0)((4.0, 5.0))
         assertVectorEqual(grad, (3.0, 2.0))
@@ -124,7 +121,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("if_1") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputsS((x1, x2) => IF(x1 > x2){x1 * x2}{x1 * x1 * x2 * x2})(2.0, 3.0)((4.0, 5.0))
         assertVectorEqual(grad, (36.0, 24.0))
@@ -137,7 +134,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("while_0") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputsS((x1, x2) => WHILE(x1)(_ < toNumRS(10)){_ * x2} * x1)(2.0, 3.0)((4.0, 5.0))
         assertVectorEqual(grad, (36.0, 24.0))
@@ -149,7 +146,7 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("for_0") {
-    val g1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val g1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputsS((x1, x2) => FOR(x1)(2){(i: Rep[Int], n: NumRS) => n * x2} * x1)(2.0, 3.0)((4.0, 5.0))
         assertVectorEqual(grad, (36.0, 24.0))
@@ -161,16 +158,16 @@ class ScalarSecondOrderTest extends FunSuite {
   }
 
   test("tree_0") {
-    val gr1 = new DslDriverScala[String, Unit] with SecOrderApi {
+    val gr1 = new DslDriver[String, Unit] with SecOrderApi {
       def snippet(x: Rep[String]): Rep[Unit] = {
         // represent tree as arrays
         /*    5
              / \
             3   4
         */
-        val data = mutableStaticData(scala.Array[Double](5.0, 3.0, 4.0))
-        val lch  = mutableStaticData(scala.Array[Int](1, -1, -1)) // -1 means leaf nodes
-        val rch  = mutableStaticData(scala.Array[Int](2, -1, -1))
+        val data = staticData(scala.Array[Double](5.0, 3.0, 4.0))
+        val lch  = staticData(scala.Array[Int](1, -1, -1)) // -1 means leaf nodes
+        val rch  = staticData(scala.Array[Int](2, -1, -1))
         val x1 = 2.0
         val x2 = 3.0
 

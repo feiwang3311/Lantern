@@ -1,11 +1,8 @@
 package lantern
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import scala.virtualization.lms._
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
+import lms.core.stub._
+import lms.core.virtualize
+import lms.macros.SourceContext
 
 import java.io.PrintWriter
 import java.io.File
@@ -750,9 +747,9 @@ class TensorSecondOrderCudnnTest extends LanternFunSuite {
 
         // correctness assertion
         backend = BackendCPU()
-        generateRawComment("test result")
+        generate_comment("test result")
         Tensor.assertEqual(res.toCPU(), Tensor.scalar(2.4f))
-        generateRawComment("test gradient")
+        generate_comment("test gradient")
         Tensor.assertEqual(getGradient(start1).toCPU(), Tensor.fromData(Seq(4), -0.000000f,  0.000000f, -0.240000f,  0.040000f))
         Tensor.assertEqual(getGradient(start2).toCPU(), Tensor.fromData(Seq(4), 0.000000f, 0.000000f, 3.600000f, 0.800000f))
         Tensor.assertEqual(getHessV(start1).toCPU(), Tensor.fromData(Seq(4), 0.000000f, 0.000000f, 1.008000f, 0.414000f))

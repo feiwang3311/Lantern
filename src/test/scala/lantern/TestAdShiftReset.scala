@@ -1,31 +1,29 @@
-/*
 package lantern
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.core.virtualize
+import lms.macros.SourceContext
 import org.scalatest.FunSuite
 
 object ShiftReset {
-  
+
   def main(args: Array[String]): Unit = {
 
     import scala.util.continuations._
     type diff = cps[Unit]
 
     class Num(val x: Double, var d: Double) {
-      def +(that: Num) = shift { (k: Num => Unit) => 
+      def +(that: Num) = shift { (k: Num => Unit) =>
         val y = new Num(x + that.x, 0.0); k(y)
-        this.d += y.d; that.d += y.d 
+        this.d += y.d; that.d += y.d
       }
       def -(that: Num) = shift { (k: Num => Unit) =>
         val y = new Num(x - that.x, 0.0); k(y)
-        this.d += y.d; that.d -= y.d 
+        this.d += y.d; that.d -= y.d
       }
-      def *(that: Num) = shift { (k: Num => Unit) => 
+      def *(that: Num) = shift { (k: Num => Unit) =>
         val y = new Num(x * that.x, 0.0); k(y)
-        this.d += that.x * y.d; that.d += this.x * y.d 
+        this.d += that.x * y.d; that.d += this.x * y.d
       }
       def sin() = shift { (k: Num => Unit) =>
         val y = new Num(math.sin(x), 0.0); k(y)
@@ -47,14 +45,14 @@ object ShiftReset {
     }
 
     def print_result_and_set_gradient(t: Num) = {
-        t.d = 1.0; 
-        val temp = t.x; 
+        t.d = 1.0;
+        val temp = t.x;
         println(s"result of function is $temp")
     }
 
     def grad_with_value(f: Num => Num @diff)(x: Double) = {
       val x1 = new Num(x, 0.0)
-      reset { 
+      reset {
         print_result_and_set_gradient(f(x1))
       }
       x1.d
@@ -86,7 +84,7 @@ object ShiftReset {
     /*** transfer the test examples from ad.scala to here ***/
     /** Step 1: simple example **/
     println("Step 1")
-    // Simple function 
+    // Simple function
     def f_simple(v0: Num): Num @diff = {
       val v1 = v0 * v0
       val v2 = v0 + v1
@@ -111,12 +109,12 @@ object ShiftReset {
 
     // Hand-coded correct derivative
     def gfif(x1: Double, x2: Double): (Double, Double) = {
-      if (x1 > x2) (1.0, 0.0) else (0.0, 1.0) 
-    } 
+      if (x1 > x2) (1.0, 0.0) else (0.0, 1.0)
+    }
 
     val gradient_if = grad_two_inputs(fif)(2.4, 3.9)
     println(s"gradient is $gradient_if")
-    assert (gradient_if == gfif(2.4, 3.9))   
+    assert (gradient_if == gfif(2.4, 3.9))
 
     println("Step 2b")
     // Function with if-statement (like the one in ScalarDifferentiation.scala)
@@ -138,14 +136,14 @@ object ShiftReset {
     // Linear recursive function
     def fr(x: Num): Num @diff = {
       // Divide by 2.0 until less than 1.0
-      if (x > 1.0) fr(0.5 * x) else x 
-      /* 
+      if (x > 1.0) fr(0.5 * x) else x
+      /*
         Question: what is a better way to handle constant Double in model?
         Discussion: 1. avoid 0.5 * x, always do x * 0.5, and support * operation in Num that takes Double
                     2. define implicit function to lift Double to Num, discard gradient of it
                     3. add stop_gradient flag in Num so that gradient propagation is conditional,
-                       define implicit function to lift Double to Num with stop_gradient flag 
-        Fei's opinion: Use 3. The feature of "stop_gradient" is useful for normal Num too, if users don't need 
+                       define implicit function to lift Double to Num with stop_gradient flag
+        Fei's opinion: Use 3. The feature of "stop_gradient" is useful for normal Num too, if users don't need
                               the gradient of some weights.
                        current implementation use 2.
       */
@@ -155,7 +153,7 @@ object ShiftReset {
     def gfr(x: Double): Double = {
       if (x > 1.0) 0.5 * gfr(0.5 * x) else 1.0
     }
- 
+
     val gradient_ldr = grad_with_value(fr)(9.0)
     println(s"gradient is $gradient_ldr")
     assert (gradient_ldr == gfr(9.0))
@@ -166,7 +164,7 @@ object ShiftReset {
     def frs(x: Num): Num @diff = {
       // Take sin(x) until the value is smaller than 0.5
       if (x > 0.5) frs(NumMath.sin(x)) else x
-      /* Question: is this NumMath object a good way to handle sin, cos, log, exp? 
+      /* Question: is this NumMath object a good way to handle sin, cos, log, exp?
                    other suggestions?
       */
     }
@@ -209,7 +207,7 @@ object ShiftReset {
     def f_while_1(a: Num): Num @diff = {
       var temp = a
       while (temp > 1.0) {
-        temp = temp * 0.5 
+        temp = temp * 0.5
       }
       temp
     }
@@ -248,7 +246,7 @@ object ShiftReset {
         b1 = b1 -1
       }
 
-      var dydr = 1.0 
+      var dydr = 1.0
       var dyda = 0.0
       var dydb1 = 0.0
       // Perform backward pass, popping operands off the stack for gradient calculations
@@ -256,7 +254,7 @@ object ShiftReset {
         // grad of: b1 = b1 - 1
         val _b1 = b1
         b1 = stack.pop()
-        dydb1 = dydb1 
+        dydb1 = dydb1
 
         // grad of: r = a * r
         val _r = r
@@ -267,7 +265,7 @@ object ShiftReset {
       (dyda, dydb1)
     }
 
-    val gradient_w2 = grad_two_inputs(f_while_2)(2.0, 4.0) 
+    val gradient_w2 = grad_two_inputs(f_while_2)(2.0, 4.0)
     /* Question: undifferentiable points "b" for now has gradient of 0.0.
                  is this a good default?
                  */
@@ -286,7 +284,7 @@ object ShiftReset {
         i += 1
       }
       r
-    } 
+    }
 
     val gradient_sum = grad_array(sum)(Array(12, 6, 15))
     // println(gradient_sum.getClass.getName)
@@ -301,13 +299,13 @@ object ShiftReset {
     println("Step 7.2")
     // generalize sum to a reduce_left function
     // It is important to re-implement the reduce_left function and add @diff notation to f parameter!!
-    def reduce_left(v: Array[Num])(f: (Num, Num) => Num @diff): Num @diff = { 
+    def reduce_left(v: Array[Num])(f: (Num, Num) => Num @diff): Num @diff = {
       var r = v(0)
       var i = 1
       while (i < v.length) {
         r = f(v(i), r)
         i += 1
-      } 
+      }
       r
     }
 
@@ -327,7 +325,7 @@ object ShiftReset {
         val x1 = fib(n-2)(seed)
         val x2 = fib(n-1)(seed)
         x1 + x2
-      } 
+      }
     }
 
     val ggg = grad_with_value(fib(6))(2.0)
@@ -337,4 +335,3 @@ object ShiftReset {
 
   }
 }
-*/

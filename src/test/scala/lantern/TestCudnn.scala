@@ -1,7 +1,8 @@
 package lantern
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
+import lms.core.stub._
+import lms.core.virtualize
+import lms.macros.SourceContext
 
 class TestCudnn extends LanternFunSuite {
 
@@ -627,7 +628,7 @@ class TestCudnn extends LanternFunSuite {
         val input = Tensor.fromData(Seq(2,3,2), -1,2,-3,4,-5,6, -7,8,-9,10,-11,12)
         val output = input.sum(1)
         val grad = gradR(x => x.sum(1).relu(false))(input)
-        generateRawComment("check")
+        generate_comment("check")
         backend = BackendCPU()
         val expect = Tensor.fromData(Seq(2, 2), -9, 12, -27, 30)
         val expectGrad = Tensor.fromData(Seq(2, 3, 2), 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1)
@@ -651,7 +652,7 @@ class TestCudnn extends LanternFunSuite {
         val pads = Seq(0,0,0,0)
         val (output, finputOption, _) = input.conv2D_batch(kernel, Some(bias), strides, pads)
 
-        generateRawComment("check")
+        generate_comment("check")
         backend = BackendCPU()
         val expect = Tensor.fromData(Seq(1,1,2,2), 45, 65, 45, 65)
         Tensor.assertEqual(expect, output.toCPU(), "expect and output are")
@@ -666,7 +667,7 @@ class TestCudnn extends LanternFunSuite {
 
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
-        generateRawComment("input")
+        generate_comment("input")
         val input = TensorR(Tensor.ones(1,1,4,4))
         val kernel = TensorR(Tensor.ones(1,1,3,3))
         val bias = TensorR(Tensor.zeros(1))
@@ -675,10 +676,10 @@ class TestCudnn extends LanternFunSuite {
         def conv(x: TensorR) = {
           input.convBBP(kernel, Some(bias), strides, pads)
         }
-        generateRawComment("grad")
+        generate_comment("grad")
         gradR(conv)(Tensor.zeros(1))
 
-        generateRawComment("check")
+        generate_comment("check")
         backend = BackendCPU()
         val expect_input_grad = Tensor.fromData(Seq(1,1,4,4),
           1.0f, 2.0f, 2.0f, 1.0f, 2.0f, 4.0f, 4.0f, 2.0f, 2.0f, 4.0f, 4.0f, 2.0f, 1.0f, 2.0f, 2.0f, 1.0f)
@@ -947,7 +948,7 @@ class TestCudnn extends LanternFunSuite {
         val grad = gradR(x => x.repeat0(2))(input)
 
         backend = BackendCPU()
-        generateRawComment("check for correctness")
+        generate_comment("check for correctness")
         val expectedResult = Tensor.fromData(Seq(3,3,2,2),
           1,2,3,4, 1,2,3,4, 1,2,3,4,
           1,2,3,4, 1,2,3,4, 0,0,0,0,

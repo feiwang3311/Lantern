@@ -1,15 +1,13 @@
-/*
 package lantern
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.core.virtualize
+import lms.macros.SourceContext
 import org.scalatest.FunSuite
 
 /** in this file I try to produce Jacobian **/
 object Jacobian {
-  
+
   def main(args: Array[String]): Unit = {
 
     import scala.util.continuations._
@@ -17,29 +15,29 @@ object Jacobian {
 
     /** Step 1, R^2 -> R^2 function **/
     class Num2(val x: Double, var d1: Double, var d2: Double) {
-      def +(that: Num2) = shift { (k: Num2 => Unit) => 
+      def +(that: Num2) = shift { (k: Num2 => Unit) =>
         val y = new Num2(x + that.x, 0.0, 0.0); k(y)
         this.d1 += y.d1; that.d1 += y.d1;
-        this.d2 += y.d2; that.d2 += y.d2 
+        this.d2 += y.d2; that.d2 += y.d2
       }
-      def *(that: Num2) = shift { (k: Num2 => Unit) => 
+      def *(that: Num2) = shift { (k: Num2 => Unit) =>
         val y = new Num2(x * that.x, 0.0, 0.0); k(y)
         this.d1 += that.x * y.d1; that.d1 += this.x * y.d1;
-        this.d2 += that.x * y.d2; that.d2 += this.x * y.d2; 
+        this.d2 += that.x * y.d2; that.d2 += this.x * y.d2;
       }
     }
 
     def print_result_and_set_gradient(t: (Num2, Num2)) = {
         t._1.d1 = 1.0; t._1.d2 = 0.0;
         t._2.d1 = 0.0; t._2.d2 = 1.0;
-        val temp = (t._1.x, t._2.x); 
+        val temp = (t._1.x, t._2.x);
         println(s"result of function is $temp")
     }
 
     def grad_with_value(f: (Num2, Num2) => (Num2, Num2) @diff)(x1: Double, x2: Double) = {
       val xx1 = new Num2(x1, 0.0, 0.0)
       val xx2 = new Num2(x2, 0.0, 0.0)
-      reset { 
+      reset {
         print_result_and_set_gradient(f(xx1, xx2))
       }
       (xx1.d1, xx1.d2, xx2.d1, xx2.d2)
@@ -57,19 +55,19 @@ object Jacobian {
 
     /** Step 2, R^2 -> R^n function **/
     import scala.collection.mutable.ArrayBuffer
-    
+
     class Num(val x : Double, val d: ArrayBuffer[Double]) {
       def +(that: Num) = shift { (k: Num => Unit) =>
       	val y = new Num(x + that.x, new ArrayBuffer[Double]()); k(y)
       	bufferFun(this.d, y.d)(_ + _)
       	bufferFun(that.d, y.d)(_ + _)
       }
-      def *(that: Num) = shift { (k: Num => Unit) => 
+      def *(that: Num) = shift { (k: Num => Unit) =>
       	val y = new Num(x * that.x, new ArrayBuffer[Double]()); k(y)
       	bufferFun(this.d, y.d)(_ + _ * that.x)
       	bufferFun(that.d, y.d)(_ + _ * this.x)
       }
-    } 
+    }
 
   	def bufferFun(a: => ArrayBuffer[Double], b: => ArrayBuffer[Double])(f: (Double, Double) => Double) = {
     	val n = b.length
@@ -78,7 +76,7 @@ object Jacobian {
     	while (i < n) {
     		if (status) a.append(f(0.0, b(i))) else a(i) = f(a(i), b(i))
     		i += 1
-    	}    	
+    	}
     }
 
     def print_result_and_set_gradient_array(t: ArrayBuffer[Num]) = {
@@ -99,7 +97,7 @@ object Jacobian {
     def grad_2(f: (Num, Num) => ArrayBuffer[Num] @diff)(x1: Double, x2: Double) = {
       val xx1 = new Num(x1, new ArrayBuffer[Double]())
       val xx2 = new Num(x2, new ArrayBuffer[Double]())
-      reset { 
+      reset {
         print_result_and_set_gradient_array(f(xx1, xx2))
       }
       (xx1.d, xx2.d)
@@ -145,10 +143,10 @@ object Jacobian {
 
     val jacob3 = grad_array(f_array_array)(ArrayBuffer(1.0, 2.0, 3.0, 4.0))
     println(jacob3)
-    assert (jacob3 == ArrayBuffer(ArrayBuffer(1.0, 1.0, 1.0, 1.0), ArrayBuffer(0.0, 1.0, 1.0, 1.0), 
+    assert (jacob3 == ArrayBuffer(ArrayBuffer(1.0, 1.0, 1.0, 1.0), ArrayBuffer(0.0, 1.0, 1.0, 1.0),
     	ArrayBuffer(0.0, 0.0, 1.0, 1.0), ArrayBuffer(0.0, 0.0, 0.0, 1.0)))
 
-    /* Step 4: See if I can get hessian from Jacobian 
+    /* Step 4: See if I can get hessian from Jacobian
     type diff2 = cps[Unit] @scala.util.continuations.cpsParam[Unit,Unit] @scala.util.continuations.cpsSynth
 
     class NumRF(val x: Double, var d: Num) {
@@ -168,7 +166,7 @@ object Jacobian {
     }
 
     def f_simple(v0: NumRF) = v0 * v0
-    val v1: (Num => Num @diff) = 
+    val v1: (Num => Num @diff) =
       (t: Num) => gradRF(f_simple)(t) // this should be a function that can be fed into Jacobian
       */
   }
@@ -181,19 +179,19 @@ object Jacobian_Map {
     import scala.util.continuations._
     type diff = cps[Unit]
     import scala.collection.mutable.{Map, HashMap, ArrayBuffer}
-    
+
     class Num(val x : Double, val d: Map[Num, Double]) {
       def +(that: Num) = shift { (k: Num => Unit) =>
         val y = new Num(x + that.x, new HashMap[Num, Double]()); k(y)
         mapFun(this.d, y.d)(_ + _)
         mapFun(that.d, y.d)(_ + _)
       }
-      def *(that: Num) = shift { (k: Num => Unit) => 
+      def *(that: Num) = shift { (k: Num => Unit) =>
         val y = new Num(x * that.x, new HashMap[Num, Double]()); k(y)
         mapFun(this.d, y.d)(_ + _ * that.x)
         mapFun(that.d, y.d)(_ + _ * this.x)
       }
-    }     
+    }
 
     def mapFun(a: => Map[Num, Double], b: => Map[Num, Double])(f: (Double, Double) => Double) = {
       // update values in a by values in b with function in f
@@ -244,7 +242,7 @@ object Jacobian_Map {
 
     val jacob3 = grad_array(f_array_array)(ArrayBuffer(1.0, 2.0, 3.0, 4.0))
     println(jacob3)
-    assert (jacob3 == ArrayBuffer(ArrayBuffer(1.0, 1.0, 1.0, 1.0), ArrayBuffer(0.0, 1.0, 1.0, 1.0), 
+    assert (jacob3 == ArrayBuffer(ArrayBuffer(1.0, 1.0, 1.0, 1.0), ArrayBuffer(0.0, 1.0, 1.0, 1.0),
       ArrayBuffer(0.0, 0.0, 1.0, 1.0), ArrayBuffer(0.0, 0.0, 0.0, 1.0)))
   }
 }
@@ -265,7 +263,7 @@ object Jacobian_Forward {
     }
 
     def mapFun(a: => Map[Num, Double], b: => Map[Num, Double])(f: (Double, Double) => Double) = {
-      // return a new Map with Union of Keys from a and b, 
+      // return a new Map with Union of Keys from a and b,
       // and values compounded by f (if key not exists in one map, use 0.0 instead
       val res = new HashMap[Num, Double]()
       for (key <- a.keySet ++ b.keySet) {
@@ -299,7 +297,7 @@ object Jacobian_Forward {
     println(s"the result of function is $result")
     println(s"the jacobians are $jacob")
     assert (result == ArrayBuffer(1.0, 3.0, 6.0, 10.0))
-    assert (jacob == ArrayBuffer(ArrayBuffer(1.0, 0.0, 0.0, 0.0), ArrayBuffer(1.0, 1.0, 0.0, 0.0), 
+    assert (jacob == ArrayBuffer(ArrayBuffer(1.0, 0.0, 0.0, 0.0), ArrayBuffer(1.0, 1.0, 0.0, 0.0),
       ArrayBuffer(1.0, 1.0, 1.0, 0.0), ArrayBuffer(1.0, 1.0, 1.0, 1.0))) // Note this result is different from reverse mode: FIXME
   }
 }
@@ -308,7 +306,7 @@ object Jacobian_Forward {
 object Hessian_JacobianOfGradient {
   def main(args: Array[String]): Unit = {
 
-    import scala.collection.mutable.{Map, HashMap, ArrayBuffer}    
+    import scala.collection.mutable.{Map, HashMap, ArrayBuffer}
     import scala.util.continuations._
     type diff = cps[Unit]
 
@@ -322,7 +320,7 @@ object Hessian_JacobianOfGradient {
     }
 
     def mapFun(a: => Map[NumF, Double], b: => Map[NumF, Double])(f: (Double, Double) => Double) = {
-      // return a new Map with Union of Keys from a and b, 
+      // return a new Map with Union of Keys from a and b,
       // and values compounded by f (if key not exists in one map, use 0.0 instead
       val res = new HashMap[NumF, Double]()
       for (key <- a.keySet ++ b.keySet) {
@@ -335,11 +333,11 @@ object Hessian_JacobianOfGradient {
     implicit def toNumR(x: Double) = new NumR(x, 0.0)
 
     class NumR(val x: NumF, var d: NumF) {
-      def +(that: NumR) = shift { (k: NumR => Unit) => 
+      def +(that: NumR) = shift { (k: NumR => Unit) =>
         val y = new NumR(x + that.x, 0.0); k(y)
         this.d = this.d + y.d; that.d = that.d + y.d
       }
-      def *(that: NumR) = shift { (k: NumR => Unit) => 
+      def *(that: NumR) = shift { (k: NumR => Unit) =>
         val y = new NumR(x * that.x, 0.0); k(y)
         this.d = this.d + that.x * y.d; that.d = that.d + this.x * y.d
       }
@@ -376,7 +374,7 @@ object Hessian_JacobianOfGradient {
     def grad_array(f: ArrayBuffer[NumR] => NumR @diff)(x: ArrayBuffer[Double]) = {
       val v = x.map(new NumR(_, 0.0))
       v.foreach(vv => vv.x.d.update(vv.x, 1.0)) // initialize the tangent of input parameters to be 1.0
-      reset{ 
+      reset{
         finalClosure(f(v))
       }
       val gradient = v.map(_.d.x)
@@ -399,8 +397,8 @@ object Hessian_JacobianOfGradient {
     println(s"the gradient of function is $grad2")
     println(s"the hessian are $hess2")
     assert (grad2 == ArrayBuffer(1.0, 2.0, 3.0, 4.0))
-    assert (hess2 == ArrayBuffer(ArrayBuffer(0.0, 0.0, 0.0, 0.0), ArrayBuffer(0.0, 0.0, 0.0, 0.0), 
-      ArrayBuffer(0.0, 0.0, 0.0, 0.0), ArrayBuffer(0.0, 0.0, 0.0, 0.0))) 
+    assert (hess2 == ArrayBuffer(ArrayBuffer(0.0, 0.0, 0.0, 0.0), ArrayBuffer(0.0, 0.0, 0.0, 0.0),
+      ArrayBuffer(0.0, 0.0, 0.0, 0.0), ArrayBuffer(0.0, 0.0, 0.0, 0.0)))
 
     def f_array2(v: ArrayBuffer[NumR]): NumR @diff = {
       val n = v.length; assert (n > 0)
@@ -418,7 +416,7 @@ object Hessian_JacobianOfGradient {
     println(s"the gradient of function is $grad3")
     println(s"the hessian are $hess3")
     assert (grad3 == ArrayBuffer(24.0, 12.0, 8.0, 6.0))
-    assert (hess3 == ArrayBuffer(ArrayBuffer(0.0, 12.0, 8.0, 6.0), ArrayBuffer(12.0, 0.0, 4.0, 3.0), 
+    assert (hess3 == ArrayBuffer(ArrayBuffer(0.0, 12.0, 8.0, 6.0), ArrayBuffer(12.0, 0.0, 4.0, 3.0),
       ArrayBuffer(8.0, 4.0, 0.0, 2.0), ArrayBuffer(6.0, 3.0, 2.0, 0.0)))
   }
 }
@@ -431,7 +429,7 @@ object Hessian_vector_product {
     import scala.collection.mutable.ArrayBuffer
     import scala.util.continuations._
     type diff = cps[Unit]
-    
+
     /* because we are calculating Hessian_vector product, the tangent is not a Map, but a number
        By the paper "Fast Exact Multiplication by the Hessian", Hv = diff_{r=0} {G(w + rv)} = J(G(w))*v
        So if we are looking at a function R^n -> R,
@@ -452,11 +450,11 @@ object Hessian_vector_product {
     implicit def toNumR(x: Double) = new NumR(x, 0.0)
 
     class NumR(val x: NumF, var d: NumF) {
-      def +(that: NumR) = shift { (k: NumR => Unit) => 
+      def +(that: NumR) = shift { (k: NumR => Unit) =>
         val y = new NumR(x + that.x, 0.0); k(y)
         this.d = this.d + y.d; that.d = that.d + y.d
       }
-      def *(that: NumR) = shift { (k: NumR => Unit) => 
+      def *(that: NumR) = shift { (k: NumR => Unit) =>
         val y = new NumR(x * that.x, 0.0); k(y)
         this.d = this.d + that.x * y.d; that.d = that.d + this.x * y.d
       }
@@ -485,7 +483,7 @@ object Hessian_vector_product {
     println(s"the gradient is $grad")
     println(s"the hessian vector product is $hess")
     assert (grad == (3.0, 2.0))
-    assert (hess == (5.0, 4.0)) 
+    assert (hess == (5.0, 4.0))
 
     /* tests: R^n -> R */
     println("tests: R^n -> R")
@@ -496,7 +494,7 @@ object Hessian_vector_product {
       assert (n > 0)
       // initialize the input
       val v = (x zip vd).map(z => new NumR(new NumF(z._1, z._2), 0.0))
-      reset{ 
+      reset{
         finalClosure(f(v))
       }
       val gradient = v.map(_.d.x)
@@ -519,7 +517,7 @@ object Hessian_vector_product {
     println(s"the gradient of function is $grad2")
     println(s"the hessian_vector product is $hess2")
     assert (grad2 == ArrayBuffer(1.0, 2.0, 3.0, 4.0))
-    assert (hess2 == ArrayBuffer(0.0, 0.0, 0.0, 0.0)) 
+    assert (hess2 == ArrayBuffer(0.0, 0.0, 0.0, 0.0))
 
     def f_array2(v: ArrayBuffer[NumR]): NumR @diff = {
       val n = v.length; assert (n > 0)
@@ -530,7 +528,7 @@ object Hessian_vector_product {
         r += 1
       }
       temp
-    } 
+    }
 
     println("more tests: R^n -> R")
     val (grad3, hess3) = grad_array(f_array2)(ArrayBuffer(1.0, 2.0, 3.0, 4.0))(ArrayBuffer(5.0, 6.0, 7.0, 8.0))
@@ -540,4 +538,3 @@ object Hessian_vector_product {
     assert (hess3 == ArrayBuffer(176.0, 112.0, 80.0, 62.0))
   }
 }
-*/

@@ -1,14 +1,17 @@
 /*
 package lantern
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.core.virtualize
+import lms.macros.SourceContext
 import org.scalatest.FunSuite
 
+import scala.util.continuations._
+import scala.util.continuations
+
+
 object Hessian_MuWang_1 {
-  
+
   def main(args: Array[String]): Unit = {
 
     import scala.util.continuations._
@@ -18,7 +21,7 @@ object Hessian_MuWang_1 {
 
     // use external Map data structure to track hessian matrix
     var hessian: Map[(Num, Num), Double] = new HashMap[(Num, Num), Double]()
-    var liveSet: Set[Num] = new HashSet[Num]() 
+    var liveSet: Set[Num] = new HashSet[Num]()
 
     def getHessian(a: Num, b: Num): Double = {
       if (liveSet.contains(a) && liveSet.contains(b)) {
@@ -76,12 +79,12 @@ object Hessian_MuWang_1 {
             incrementHessian(v, that, (if (v == that) 2 else 1) * this.x * t)
           }
         }
-        val t = getHessian(y, y) 
+        val t = getHessian(y, y)
         if (t != 0.0) incrementHessian(this, that, 2 * this.x * that.x * t)
-        if (y.d != 0) incrementHessian(this, that, y.d * (if (this == that) 2 else 1))  
+        if (y.d != 0) incrementHessian(this, that, y.d * (if (this == that) 2 else 1))
         liveSet.remove(y); // update liveSet step 2
       }
-    } 
+    }
 
     def setFinalClosure(t : Num) = {
       val result = t.x
@@ -89,7 +92,7 @@ object Hessian_MuWang_1 {
       t.d = 1.0                                     // set gradient
       liveSet = Set(t)                              // set liveSet with t
       hessian = new HashMap[(Num, Num), Double]()   // set hessian as empty
-    } 
+    }
 
     implicit def toNum(x: Double): Num = new Num(x, 0.0)
 
@@ -103,7 +106,7 @@ object Hessian_MuWang_1 {
       val hess = getHessian(x1, x1)
       // println(s"result of hessian is $hess")
       (grad, hess)
-    } 
+    }
 
     /* tests for hessian_1 */
     println("Step 1")
@@ -146,25 +149,17 @@ object Hessian_MuWang_1 {
 
     for (x <- -10 until 10) {
       for (y <- -10 until 10) {
-        assert (hessian_2((x1,x2) => 3*x1*x1*(x1+x1) + 2*x1*x2*(x1+x2) + x2*x2*(x2+x2))(x,y) == 
+        assert (hessian_2((x1,x2) => 3*x1*x1*(x1+x1) + 2*x1*x2*(x1+x2) + x2*x2*(x2+x2))(x,y) ==
           ((18*x*x+4*x*y+2*y*y, 2*x*x+4*x*y+6*y*y),  // gradients
            ((36*x+4*y, 4*x+4*y), (4*x+4*y, 4*x+12*y)) // hessians
           ))
       }
     }
-    
+
     println("done")
   }
 }
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
-import scala.virtualization.lms.common._
 object Hessian_MuWang_LMS {
 
   trait DiffApi extends Dsl {
@@ -177,7 +172,7 @@ object Hessian_MuWang_LMS {
 
     // use external Map data structure to track hessian matrix
     var hessian: Map[(Num, Num), RDouble] = new HashMap[(Num, Num), RDouble]()
-    var liveSet: Set[Num] = new HashSet[Num]() 
+    var liveSet: Set[Num] = new HashSet[Num]()
 
     def getHessian(a: Num, b: Num): RDouble = {
       if (liveSet.contains(a) && liveSet.contains(b)) {
@@ -232,12 +227,12 @@ object Hessian_MuWang_LMS {
             incrementHessian(v, that, (if (v == that) 2 else 1) * this.x * t)
           }
         }
-        val t = getHessian(y, y) 
+        val t = getHessian(y, y)
         if (t != 0.0) incrementHessian(this, that, 2 * this.x * that.x * t)
-        if (y.d != 0) incrementHessian(this, that, y.d * (if (this == that) 2 else 1))  
+        if (y.d != 0) incrementHessian(this, that, y.d * (if (this == that) 2 else 1))
         liveSet.remove(y); // update liveSet step 2
       }
-    } 
+    }
 
     def setFinalClosure(t : Num) = {
       val result = t.x
@@ -260,7 +255,7 @@ object Hessian_MuWang_LMS {
       printf("the result of hessian is %f\n", hess)
       // println(s"result of hessian is $hess")
       // (grad, hess)
-    } 
+    }
 
     def hessian_2(f: (Num, Num) => Num @diff)(x1: RDouble, x2: RDouble) = {
       val x11 = new Num(x1, 0.0)
@@ -280,25 +275,25 @@ object Hessian_MuWang_LMS {
 
   def main(args: Array[String]): Unit = {
 
-    val gr1 = new DslDriverScala[Double, Unit] with DiffApi {
+    val gr1 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => x + x*x*x)(x)
       }
     }
 
-    val gr2 = new DslDriverScala[Double, Unit] with DiffApi {
+    val gr2 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => toNum(3)*x*x + x*x*x)(x)
       }
     }
 
-    val gr3 = new DslDriverScala[Double, Unit] with DiffApi {
+    val gr3 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => (x+x)*x)(x)
       }
     }
 
-    val gr4 = new DslDriverScala[Double, Unit] with DiffApi {
+    val gr4 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => (x+x)*x*x + (toNum(2)*x+toNum(2)*x)*x)(x)
       }
@@ -317,8 +312,8 @@ object Hessian_MuWang_LMS {
       gr4.eval(x)
     }
 
-    val gr5 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
-      override val codegen = new DslGen with ScalaGenTupleOps {
+    val gr5 = new DslDriver[(Double, Double), Unit] with DiffApi { q =>
+      override val codegen = new DslGen {
         val IR: q.type = q
       }
 
@@ -327,8 +322,8 @@ object Hessian_MuWang_LMS {
       }
     }
 
-    val gr6 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
-      override val codegen = new DslGen with ScalaGenTupleOps {
+    val gr6 = new DslDriver[(Double, Double), Unit] with DiffApi { q =>
+      override val codegen = new DslGen {
         val IR: q.type = q
       }
 
@@ -366,7 +361,7 @@ object Hessian_MuWang_LMS_IFLOOP {
 
     // use external Map data structure to track hessian matrix
     var hessian: Map[(Num, Num), Var[Double]] = new HashMap[(Num, Num), Var[Double]]()
-    var liveSet: Set[Num] = new HashSet[Num]() 
+    var liveSet: Set[Num] = new HashSet[Num]()
 
     def getHessian(a: Num, b: Num): RDouble = {
       if (liveSet.contains(a) && liveSet.contains(b)) {
@@ -391,11 +386,11 @@ object Hessian_MuWang_LMS_IFLOOP {
           Reason: the last case create a new var, which translates to "var x?? : Double = 0.0" in generated code
                   there is no guarentee that this var will not be used in a higher scope, thus giving "effect in the wrong order error"
                   This error showed up when I added IF function, and can be resolved by making sure that all hessian between parameters are
-                      pre-initialized before running the hessian function 
+                      pre-initialized before running the hessian function
                       (so that the returned hessian pair is not created in an inner scope such as if branch)
-          Qeustion: Why LMS cannot automatically lift the var to the outer scope if necessary? 
-                    All Syms are of different name, so simply lifting the var creation out should fix any potential 
-                    "effect in the wrong order" error 
+          Qeustion: Why LMS cannot automatically lift the var to the outer scope if necessary?
+                    All Syms are of different name, so simply lifting the var creation out should fix any potential
+                    "effect in the wrong order" error
           */
         }
       }
@@ -449,17 +444,17 @@ object Hessian_MuWang_LMS_IFLOOP {
             incrementHessian(v, that, (if (v == that) 2 else 1) * this.x * t)
           }
         }
-        val t = getHessian(y, y) 
+        val t = getHessian(y, y)
         if (t != 0.0) incrementHessian(this, that, 2 * this.x * that.x * t)
-        if (readVar(y.d) != 0.0) incrementHessian(this, that, readVar(y.d) * (if (this == that) 2 else 1))  
+        if (readVar(y.d) != 0.0) incrementHessian(this, that, readVar(y.d) * (if (this == that) 2 else 1))
         liveSet.remove(y);                              // update liveSet step 2
       }
-    } 
+    }
 
     def RST(a: =>Unit @diff) = continuations.reset { a; () }
 
     def FUN(f: Num => Unit): (Num => Unit) = {
-      val f1 = fun { (x:Rep[Double]) => 
+      val f1 = fun { (x:Rep[Double]) =>
         val deltaVar = var_new(0.0)
         f(new Num(x, deltaVar))
         readVar(deltaVar)
@@ -470,15 +465,15 @@ object Hessian_MuWang_LMS_IFLOOP {
     @virtualize
     def IF(c: Rep[Boolean])(a: =>Num @diff)(b: =>Num @diff): Num @diff = shift { k:(Num => Unit) =>
       val k1 = FUN(k)
-      
+
       if (c) RST(k(a)) else RST(k(b)) // need to use k !
     }
 
     def setFinalClosure(t : Num) = {
       val result = t.x
       // println(s"result of function is $result")            // print result of the function
-      var_assign(t.d, 1.0)                                    // set gradient
-      liveSet = Set(t)                                        // reset liveSet with t only 
+      __assign(t.d, 1.0)                                    // set gradient
+      liveSet = Set(t)                                        // reset liveSet with t only
     }
 
     implicit def toNum(x: Double): Num = new Num(x, var_new(0.0))
@@ -496,7 +491,7 @@ object Hessian_MuWang_LMS_IFLOOP {
       printf("the result of hessian is %f\n", hess)
       // println(s"result of hessian is $hess")
       // (grad, hess)
-    } 
+    }
 
     def hessian_2(f: (Num, Num) => Num @diff)(x1: RDouble, x2: RDouble) = {
       val x11 = new Num(x1, var_new(0.0))
@@ -517,37 +512,37 @@ object Hessian_MuWang_LMS_IFLOOP {
 
   def main(args: Array[String]): Unit = {
 
-    val gr1 = new DslDriverScala[Double, Unit] with DiffApi {
+    val gr1 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => x*x*x)(x)
       }
     }
 
-    val gr2 = new DslDriverScala[Double, Unit] with DiffApi {
+    val gr2 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => toNum(3)*x*x + x*x*x)(x)
       }
-    }  
-
-    val gr3 = new DslDriverScala[Double, Unit] with DiffApi {
-      def snippet(x: Rep[Double]): Rep[Unit] = {
-        hessian_1(x => (x+x)*x)(x)
-      } 
     }
 
-    val gr4 = new DslDriverScala[Double, Unit] with DiffApi {
+    val gr3 = new DslDriver[Double, Unit] with DiffApi {
+      def snippet(x: Rep[Double]): Rep[Unit] = {
+        hessian_1(x => (x+x)*x)(x)
+      }
+    }
+
+    val gr4 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => (x+x)*x*x + (toNum(2)*x+toNum(2)*x)*x)(x)
       }
     }
 
-    val grif1 = new DslDriverScala[Double, Unit] with DiffApi {
+    val grif1 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1(x => IF (x.x > 0.0) {x*x*x} {toNum(-1)*x*x})(x)
       }
     }
 
-    val grif2 = new DslDriverScala[Double, Unit] with DiffApi {
+    val grif2 = new DslDriver[Double, Unit] with DiffApi {
       def snippet(x: Rep[Double]): Rep[Unit] = {
         hessian_1( x => {
             val y = IF(x.x > 0.0){x*x}{toNum(-1)*x}
@@ -556,7 +551,7 @@ object Hessian_MuWang_LMS_IFLOOP {
       }
     }
 
-    println("---- test hessian_1 reverse mode with dynamic vars ---- \n") 
+    println("---- test hessian_1 reverse mode with dynamic vars ---- \n")
     println(gr1.code)
     println(gr2.code)
     println(gr3.code)
@@ -573,7 +568,7 @@ object Hessian_MuWang_LMS_IFLOOP {
       grif2.eval(x)
     }
 
-    val gr5 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
+    val gr5 = new DslDriver[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
       override val codegen = new DslGen with ScalaGenTupleOps {
         val IR: q.type = q
       }
@@ -583,7 +578,7 @@ object Hessian_MuWang_LMS_IFLOOP {
       }
     }
 
-    val gr6 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
+    val gr6 = new DslDriver[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
       override val codegen = new DslGen with ScalaGenTupleOps {
         val IR: q.type = q
       }
@@ -593,7 +588,7 @@ object Hessian_MuWang_LMS_IFLOOP {
       }
     }
 
-    val gr7 = new DslDriverScala[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
+    val gr7 = new DslDriver[(Double, Double), Unit] with DiffApi with TupleOpsExp { q =>
       override val codegen = new DslGenScala with ScalaGenTupleOps {
         val IR: q.type = q
       }

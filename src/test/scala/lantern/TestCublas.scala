@@ -1,7 +1,8 @@
 package lantern
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
+import lms.core.stub._
+import lms.core.virtualize
+import lms.macros.SourceContext
 
 class TestCublas extends LanternFunSuite {
   testGPU("vector-vector-dot") {
@@ -10,18 +11,18 @@ class TestCublas extends LanternFunSuite {
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
-        generateRawComment("tensor computation")
+        generate_comment("tensor computation")
         val v1 = Tensor.fromData(Seq(4), 1, 2, 3, 4)
         val v2 = Tensor.fromData(Seq(4), -1, -2, -3, -4)
         val result = v1.dot(v2)
 
-        generateRawComment("tensor computation with gradient")
+        generate_comment("tensor computation with gradient")
         val v1r = TensorR(v1)
         val v2r = TensorR(v2)
         gradR(dummy => v1r dot v2r)(Tensor.zeros(1))
 
         backend = BackendCPU()
-        generateRawComment("checking")
+        generate_comment("checking")
         val expected = Tensor.scalar(-30)
         Tensor.assertEqual(result.toCPU(), expected)
         Tensor.assertEqual(v1r.d.toCPU(), v2.toCPU())
@@ -121,31 +122,31 @@ class TestCublas extends LanternFunSuite {
         val tr1 = TensorR(m1); val tr2 = TensorR(m2)
         val tr3 = TensorR(m1); val tr4 = TensorR(m2)
         gradR(x => (tr1 dot tr2))(Tensor.zeros(1))
-        generateRawComment("in between a dot call and a gemm call")
+        generate_comment("in between a dot call and a gemm call")
         gradR(x => tr3.gemm(tr4, false, false, 0.5f))(Tensor.zeros(1))
 
-        generateRawComment("second test")
+        generate_comment("second test")
         val m3 = Tensor.rand(4,3)
         val tr5 = TensorR(m1); val tr6 = TensorR(m3)
         val tr7 = TensorR(m1); val tr8 = TensorR(m3)
         gradR(x => (tr5 dot tr6.trans()))(Tensor.zeros(1))
         gradR(x => tr7.gemm(tr8, false, true, 0.5f))(Tensor.zeros(1))
 
-        generateRawComment("third test")
+        generate_comment("third test")
         val m4 = Tensor.rand(3,2)
         val tr9 = TensorR(m4); val tr10 = TensorR(m2)
         val tr11 = TensorR(m4); val tr12 = TensorR(m2)
         gradR(x => (tr9.trans() dot tr10))(Tensor.zeros(1))
         gradR(x => tr11.gemm(tr12, true, false, 0.5f))(Tensor.zeros(1))
 
-        generateRawComment("fourth test")
+        generate_comment("fourth test")
         val tr13 = TensorR(m4); val tr14 = TensorR(m3)
         val tr15 = TensorR(m4); val tr16 = TensorR(m3)
         gradR(x => (tr13.trans() dot tr14.trans()))(Tensor.zeros(1))
         gradR(x => tr15.gemm(tr16, true, true, 0.5f))(Tensor.zeros(1))
 
         backend = BackendCPU()
-        generateRawComment("check for correctness")
+        generate_comment("check for correctness")
         Tensor.assertEqual(tr1.d.toCPU() * 0.5f, tr3.d.toCPU())
         Tensor.assertEqual(tr2.d.toCPU() * 0.5f, tr4.d.toCPU())
         Tensor.assertEqual(tr5.d.toCPU() * 0.5f, tr7.d.toCPU())

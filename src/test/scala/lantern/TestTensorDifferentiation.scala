@@ -1,8 +1,5 @@
 package lantern
 
-import scala.util.continuations._
-import scala.util.continuations
-
 import lms.core.stub._
 import lms.core.virtualize
 import lms.macros.SourceContext
@@ -22,7 +19,7 @@ import org.scalactic.source
 import org.scalatest.{FunSuite, Tag}
 
 class LanternFunSuite extends FunSuite {
-  def runTest(driver: LanternDriverC[String, Unit]) {
+  def runTest(driver: LanternDriverBase[String, Unit]) {
     driver.codeToFile()
     driver.eval("dummy")
   }
@@ -36,6 +33,25 @@ class LanternFunSuite extends FunSuite {
     outcome
   }
   protected def currentTestName: String = _currentTestName.get()
+
+  // Returns true if GPU code generation is possible.
+  // Currently, checks if `nvcc` exists.
+  // One can force GPU code generation by defining the "LANTERN_RUN_GPU" environment variable.
+  def isGPUAvailable: Boolean = {
+    try {
+      ("nvcc --version": ProcessBuilder).!!; true
+    } catch {
+      case _: Throwable => sys.env.get("LANTERN_RUN_GPU").isDefined
+    }
+  }
+
+  // Utility function wrapping `test` that checks whether GPU is available.
+  def testGPU(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */)(implicit pos: source.Position) {
+    if (isGPUAvailable)
+      test(testName, testTags: _*)(testFun)(pos)
+    else
+      ignore(testName, testTags: _*)(testFun)(pos)
+  }
 }
 
 
@@ -213,7 +229,6 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(tr14.d, tr16.d)
       }
     }
-    System.out.println(gemm.code)
     runTest(gemm)
   }
 
@@ -240,6 +255,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         */
       }
     }
+    System.out.println(softmax.code)
     runTest(softmax)
   }
 
@@ -310,7 +326,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(tv.d, grad)
       }
     }
-    array2.eval("2.0f")
+    runTest(array2)
   }
 
   test("array2_1"){
@@ -337,7 +353,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         ()
       }
     }
-    array2_1.eval("abc")
+    runTest(array2_1)
   }
 
   test("array2_2") {

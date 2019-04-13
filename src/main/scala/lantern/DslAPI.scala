@@ -16,10 +16,20 @@ trait LanternGenC extends DslGenC {
   import IR._
 
   override def traverse(n: Node): Unit = n match {
-    case n @ Node(s, "new Array[Float]",List(x),_) =>
-      emitValDef(s, s"(float*)myMalloc(${shallow1(x)} * sizeof(float));")
+    case n @ Node(s, "new Array[Float]",List(x),_) => emitValDef(s, shallow(n) + ";")
     case n @ Node(s, "exit", List(x), _) => super.traverse(n)
     case _ => super.traverse(n)
+  }
+
+  override def shallow(n: Node): String = n match {
+    case n @ Node(s, "new Array[Float]",List(x),_) => s"(float*)myMalloc(${shallow1(x)} * sizeof(float))"
+    case _ => super.shallow(n)
+  }
+
+  override def shallow(n: lms.core.Backend.Def): String = n match {
+    case InlineSym(t: Node) => shallow(t)
+    case b: lms.core.Backend.Block => quoteBlock1(b)
+    case _ => quote(n)
   }
 
   override def emitAll(g: Graph, name: String)(m1:Manifest[_],m2:Manifest[_]): Unit = {
@@ -183,6 +193,8 @@ trait LanternGenC extends DslGenC {
 //   override def manifestB: Manifest[B] = manifest[B]
 // }
 
+
+// TODO: bad design!! NNModule should not depend on backend!
 abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverC[A, B]
 with TensorDsl with NNModule with NNModuleCudnn with Dataset with ONNXLib with ScannerOpsExp with TimerOpsExp { q =>
   override val codegen = new LanternGenC {
@@ -195,8 +207,9 @@ with TensorDsl with NNModule with NNModuleCudnn with Dataset with ONNXLib with S
   def codeToFile(name: Option[String] = None) = {
     val outFileName = name match {
       case Some(s) => s
-      case None => dir + fileName
+      case None => dir + fileName + ".cpp"
     }
+    System.out.println(s"code => $outFileName")
     val outFile = new PrintWriter(new File(outFileName))
     outFile.println(this.code)
     outFile.flush()
@@ -221,6 +234,8 @@ with TensorDsl with NNModule with NNModuleCudnn with Dataset with ONNXLib with S
 
 abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCPU { q =>
 
+  backend = BackendCPU()
+
   override lazy val f: A => Unit = {
     // TBD: should read result of type B?
     val out = new java.io.PrintWriter("/tmp/snippet.cpp")
@@ -229,13 +244,13 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBas
     (new java.io.File("/tmp/snippet")).delete
     import scala.sys.process._
     // TODO: would like to use time("cc") { .. }, but messes with captureOut
-    (s"gcc -std=c++11 -O3 /tmp/snippet.cpp -o /tmp/snippet -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lpthread": ProcessBuilder).lines.foreach(Console.println _)
+    (s"g++ -std=c++11 -O3 /tmp/snippet.cpp -o /tmp/snippet -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lpthread": ProcessBuilder).lines.foreach(Console.println _)
     (a: A) => (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
 
 }
 
-abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCublas with TensorDslCudnn { q =>
+abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCublas { q =>
 
   override lazy val f: A => Unit = {
     // TBD: should read result of type B?
@@ -249,4 +264,7 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDrive
     (a: A) => (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
 
+}
+
+abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCublas with TensorDslCudnn { q =>
 }
