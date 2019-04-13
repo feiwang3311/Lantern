@@ -1,13 +1,9 @@
 package lantern
 package NIPS18App
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 import scala.collection.mutable.ArrayBuffer
 import scala.math._
@@ -22,6 +18,12 @@ object LSTM {
   val root_dir2 = "src/out/NIPS18evaluation/"
 
   val min_char_lstm = new LanternDriverC[String, Unit] {
+
+    object Encoding {
+      val ix_a = 96  // index starts from 1
+      def char_to_ix(ch: Rep[Char]): Rep[Int] = ch.toInt - ix_a
+      def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix + ix_a).toChar
+    }
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)
@@ -229,7 +231,13 @@ object LSTM {
     }
   }
 
-  val min_char_lstm_module = new LanternDriverC[String, Unit] with NNModule {
+  val min_char_lstm_module = new LanternDriverC[String, Unit] {
+
+    object Encoding {
+      val ix_a = 96  // index starts from 1
+      def char_to_ix(ch: Rep[Char]): Rep[Int] = ch.toInt - ix_a
+      def ix_to_char(ix: Rep[Int]): Rep[Char] = (ix + ix_a).toChar
+    }
 
     class Scanner(name: Rep[String]) {
       val fd = open(name)

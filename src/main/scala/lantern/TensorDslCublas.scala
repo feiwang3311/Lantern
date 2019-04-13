@@ -1,16 +1,82 @@
 package lantern
 
 import scala.util.continuations._
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
 
-import scala.virtualization.lms._
-import scala.virtualization.lms.common._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
 
-trait TensorDslCublas extends TensorDslCPU with GPUOps {
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
+
+
+trait GPUOps extends Base with ArrayOps {
+  object NewGPUArray {
+    // Allocate an array of the specified size on the GPU.
+    def apply[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]] = gpu_array_new(scalarCount)
+  }
+  object GPUArray {
+    // Initialize an array with the specified elements on the GPU.
+    def apply[T: Manifest](xs: Rep[T]*) = gpu_array_fromseq(xs)
+  }
+  def gpu_array_new[T: Manifest](scalarCount: Rep[Int]): Rep[Array[T]]
+  def gpu_array_fromseq[T: Manifest](xs: Seq[Rep[T]]): Rep[Array[T]]
+  // Copy an array from device to host.
+  def gpu_array_copy_device_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
+  // Copy an array from host to device.
+  def gpu_array_copy_host_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
+  // Copy an array from device to device.
+  def gpu_array_copy_device_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit]
+}
+
+trait GPUOpsExp extends Base with ArrayOpsExpOpt {
+  object CopyDirection extends Enumeration {
+    val HostToDevice = Value("cudaMemcpyHostToDevice")
+    val DeviceToHost = Value("cudaMemcpyDeviceToHost")
+    val DeviceToDevice = Value("cudaMemcpyDeviceToDevice")
+  }
+  def gpu_array_new[T: Manifest](x: Exp[Int]) = Wrap[Array[T]](Adapter.g.reflectEffect("new GPUArray["+manifest[T]+"]", Unwrap(x))(Adapter.STORE))
+  def gpu_array_fromseq[T: Manifest](xs: Seq[Rep[T]]): Rep[Array[T]] = Wrap[Array[T]](Adapter.g.reflectEffect("new GPUArrayFromSeq["+manifest[T]+"]", Unwrap(xs))(Adapter.STORE))
+  def gpu_array_copy_device_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
+    Wrap[Unit](Adapter.g.reflectEffect("d2hCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len))(Adapter.STORE))
+    // reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.DeviceToHost))
+  def gpu_array_copy_host_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
+    Wrap[Unit](Adapter.g.reflectEffect("h2dCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len))(Adapter.STORE))
+    // reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.HostToDevice))
+  def gpu_array_copy_device_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
+    Wrap[Unit](Adapter.g.reflectEffect("d2dCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len))(Adapter.STORE))
+    // reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.DeviceToDevice))
+}
+
+trait CudaGenGPUOps extends CGenBase {
+  val IR: GPUOpsExp
+  import IR._
+
+  // Allocate GPU memory.
+  def getCudaMallocString(buffer: String, count: String, dataType: String): String =
+    "CUDA_CALL(cudaMalloc((void **)&" + buffer + ", " + count + " * sizeof(" + dataType + ")))"
+
+  // Allocate GPU memory from memory arena.
+  def getCudaMallocArenaString(count: String, dataType: String): String =
+    "(" + dataType + "*)myGpuMalloc(" + count + " * sizeof(" + dataType + "))"
+
+  // Copy an array in the specified direction.
+  def cudaMemcpy(dest: String, src: String, count: String, dataType: String, direction: CopyDirection.Value): String =
+    s"CUDA_CALL(cudaMemcpy($dest, $src, $count * sizeof($dataType), ${direction.toString}));"
+
+  // Allocate unified memory, accessible by CPU and GPU.
+  // FIXME: I encountered "bus error" when performing CPU ops on managed memory:
+  //     Thread 1 "snippet" received signal SIGBUS, Bus error.
+  //     Snippet (x0=<optimized out>) at snippet.cpp:144
+  //     144  float x32 = x30 - x31;
+  // I wonder if others can replicate this issue.
+  def getCudaMallocManagedString(buffer: String, count: String, dataType: String): String =
+  "CUDA_CALL(cudaMallocManaged((void **)&" + buffer + ", " + count + " * sizeof(" + dataType + ")));"
+
+}
+
+trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
 
   val permutationKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
   var nextKernel: Int = 0
@@ -69,26 +135,26 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
   class TensorTransferOps(t: Tensor) {
     // Get a CPU-allocated copy of this tensor.
     def toCPU(): Tensor = {
-      generateRawComment("Tensor 'toCPU' invocation.")
+      generate_comment("Tensor 'toCPU' invocation.")
       new Tensor(t.data.toCPU(t.scalarCount), t.shape)
     }
 
     // Get a GPU-allocated copy of this tensor.
     def toGPU(): Tensor = {
-      generateRawComment("Tensor 'toGPU' invocation.")
+      generate_comment("Tensor 'toGPU' invocation.")
       // val res = BackendGPU.mallocArray[Float](t.scalarCount)
       new Tensor(t.data.toGPU(t.scalarCount), t.shape)
     }
 
     // Move the underlying data of this tensor to the CPU.
     def moveToCPU(): Unit = {
-      generateRawComment("Tensor 'moveToCPU' invocation.")
+      generate_comment("Tensor 'moveToCPU' invocation.")
       t.data.moveToCPU(t.scalarCount)
     }
 
     // Move the underlying data of this tensor to the GPU.
     def moveToGPU(): Unit = {
-      generateRawComment("Tensor 'moveToGPU' invocation.")
+      generate_comment("Tensor 'moveToGPU' invocation.")
       t.data.moveToGPU(t.scalarCount)
     }
   }
@@ -110,7 +176,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
     * cuBLAS tensor operation backend. WIP.
     */
   class BackendCublas protected() extends Backend {
-    override def setup(): Unit = generateRawCode(
+    override def setup(): Unit = unchecked(
       """cublasHandle_t cublasHandle;
         |CUBLAS_CALL(cublasCreate(&cublasHandle));
         |CUDA_CALL(cudaMalloc(&gpuMallocBase, HEAP_SIZE));
@@ -118,12 +184,12 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
         |gpuMallocAddr = gpuMallocBase;
       """.stripMargin)
 
-    override def cleanup(): Unit = generateRawCode(
+    override def cleanup(): Unit = unchecked(
       """CUBLAS_CALL(cublasDestroy(cublasHandle));
         |CUDA_CALL(cudaFree(gpuMallocBase));
       """.stripMargin)
 
-    override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = NewGPUArray[T](length)
+    override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = ??? // NewGPUArray[T](length)
 
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Rep[Int]): Unit =
       gpu_array_copy_device_to_device(src, dest, length)
@@ -171,13 +237,13 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
     // NOTE: `sdot` fails when the cuBLAS pointer mode is host (as opposed to device).
     // Investigate performance impact.
     def sdot(n: Rep[Int], a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      generateRawComment("calling Sdot API function")
+      generate_comment("calling Sdot API function")
       unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",", 1, ",", b, ",", 1, ",", result, "))")
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       val res = BackendCPU().mallocArray[Float](1)
-      generateRawComment("calling sdot from vectorVectorDot function")
+      generate_comment("calling sdot from vectorVectorDot function")
       sdot(x.scalarCount, x.data, y.data, res)
       Tensor(res, 1).toGPU()  // TODO (Fei Wang): if use GPU memory for result, there is segfault
     }
@@ -241,7 +307,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
           if (!x.isInput) add_cartesian(x.d, y.x, output.d)
           if (!y.isInput) add_composition(y.d, x.x, output.d)
         case (2, 2) =>
-          generateRawComment("backprop of matrix-matrix-dot")
+          generate_comment("backprop of matrix-matrix-dot")
           if (!x.isInput) add_dotTrans2(x.d, output.d, y.x)
           if (!y.isInput) add_dotTrans1(y.d, x.x, output.d)
       }
@@ -361,7 +427,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
     override def trans(x: Tensor): Tensor = {
       assert(x.rank == 2, s"trans only supported for 2D matrix, got ${x.shape.seq}")
       val res = Tensor(mallocArray[Float](x.scalarCount), x.shape.reverse: _*)
-      generateRawComment("trans casted as geam call")
+      generate_comment("trans casted as geam call")
       this.geam(x, true, 1.0f, x, true, 0.0f, res)
       res
     }
@@ -642,7 +708,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOps {
     override def gemm_grad(x: TensorR, transX: Boolean, y: TensorR, transY: Boolean, alpha: Float, output: TensorR): Unit = {
       val alpha1 = NewArray[Float](1); alpha1(0) = alpha;
       val one = NewArray[Float](1); one(0) = 1.0f;
-      generateRawComment("backprop of gemm")
+      generate_comment("backprop of gemm")
       (transX, transY) match {
         case (false, false) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)

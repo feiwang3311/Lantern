@@ -1,13 +1,9 @@
 package lantern
 package PLDI19App
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
@@ -27,7 +23,7 @@ object SqueezeNetOnnx {
   // this dir is relative to the generated code
   val relative_data_dir = "../../cifar10_data/cifar-10-batches-bin/data_batch_1.bin"
 
-  val squeezenetInferenceCPU = new LanternDriverC[String, Unit] with ONNXLib {
+  val squeezenetInferenceCPU = new LanternDriverC[String, Unit] {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       debug = false
@@ -50,7 +46,7 @@ object SqueezeNetOnnx {
       val nbEpoch = 4
       val addr = getMallocAddr() // remember current allocation pointer here
 
-      generateRawComment("inferencing loop starts here")
+      generate_comment("inferencing loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         printf("Start inferencing epoch %d\\n", epoch + 1)
@@ -66,7 +62,7 @@ object SqueezeNetOnnx {
     }
   }
 
-  val squeezenetInferenceGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
+  val squeezenetInferenceGPU = new LanternDriverCudnn[String, Unit] {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       debug = false
@@ -91,7 +87,7 @@ object SqueezeNetOnnx {
       val addr = getMallocAddr() // remember current allocation pointer here
       val addrCuda = getCudaMallocAddr()
 
-      generateRawComment("inferencing loop starts here")
+      generate_comment("inferencing loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         printf("Start inferencing epoch %d\\n", epoch + 1)
@@ -108,7 +104,7 @@ object SqueezeNetOnnx {
     }
   }
 
-  val squeezenetTrainingCPU = new LanternDriverC[String, Unit] with ONNXLib {
+  val squeezenetTrainingCPU = new LanternDriverC[String, Unit] {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       debug = false
@@ -137,7 +133,7 @@ object SqueezeNetOnnx {
       val loss_save = NewArray[Double](nbEpoch)
       val addr = getMallocAddr() // remember current allocation pointer here
 
-      generateRawComment("training loop starts here")
+      generate_comment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         var trainLoss = var_new(0.0f)
@@ -174,7 +170,7 @@ object SqueezeNetOnnx {
     }
   }
 
-  val squeezenetTrainingGPU = new LanternDriverCudnn[String, Unit] with ONNXLib {
+  val squeezenetTrainingGPU = new LanternDriverCudnn[String, Unit] {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       debug = false
@@ -207,7 +203,7 @@ object SqueezeNetOnnx {
       val addr = getMallocAddr() // remember current allocation pointer here
       val addrCuda = getCudaMallocAddr()
 
-      generateRawComment("training loop starts here")
+      generate_comment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         var trainLoss = var_new(0.0f)

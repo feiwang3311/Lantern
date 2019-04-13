@@ -3,12 +3,11 @@ package lantern
 import scala.util.continuations._
 import scala.util.continuations
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
-import scala.virtualization.lms._
-
-trait SecOrderApi extends DslOps with Diff {
+trait SecOrderApi extends Base with Dsl with Diff {
 
   import scala.collection.mutable.ArrayBuffer
   import scala.util.continuations._
@@ -160,7 +159,7 @@ trait SecOrderApi extends DslOps with Diff {
     if (result._1 < expected._1 - eps || result._1 > expected._1 + eps ||
         result._2 < expected._2 - eps || result._2 > expected._2 + eps) {
       printf("(%f, %f) is not as expected (%f, %f)", result._1, result._2, expected._1, expected._2)
-      error("")
+      exit(1)
     }
 
   def helperArray(x: NumRS): Rep[Array[Array[Double]]] = {

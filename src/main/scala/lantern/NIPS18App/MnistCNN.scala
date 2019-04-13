@@ -1,13 +1,9 @@
 package lantern
 package NIPS18App
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
@@ -22,7 +18,7 @@ object MnistCNN {
   val cpu_file_dir = "evaluationCNN/Lantern/Lantern.cpp"
   val gpu_file_dir = "evaluationCNN/Lantern/Lantern.cu"
 
-  val mnistCPU = new LanternDriverC[String, Unit] {
+  val mnistCPU = new LanternDriverC[String, Unit] with ScannerOpsExp with TimerOpsExp {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -74,7 +70,7 @@ object MnistCNN {
 
       val addr = getMallocAddr() // remember current allocation pointer here
 
-      generateRawComment("training loop starts here")
+      generate_comment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         var imgIdx = var_new(0)
@@ -116,7 +112,7 @@ object MnistCNN {
     }
   }
 
-  val mnistGPU = new LanternDriverCudnn[String, Unit] {
+  val mnistGPU = new LanternDriverCudnn[String, Unit] with ScannerOpsExp with TimerOpsExp {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -168,7 +164,7 @@ object MnistCNN {
       val addr = getMallocAddr() // remember current allocation pointer here
       val addrCuda = getCudaMallocAddr()
 
-      generateRawComment("training loop starts here")
+      generate_comment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         var imgIdx = var_new(0)
@@ -181,7 +177,7 @@ object MnistCNN {
           val inputR = TensorR(input.toGPU(), isInput=true)
           val targetR = target.toGPU(batchSize)
           val loss = gradR_loss(lossFun(inputR, targetR))(Tensor.zeros(4))
-          generateRawComment("save loss data (need CPU access!)")
+          generate_comment("save loss data (need CPU access!)")
           trainLoss += loss.toCPU().data(0)
           opt.step()
 

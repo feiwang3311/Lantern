@@ -1,14 +1,14 @@
 package lantern
 
 import scala.util.continuations._
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
 
-import scala.virtualization.lms._
-import scala.virtualization.lms.common._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
+
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 trait TensorDslCPU extends TensorDsl {
 
@@ -128,7 +128,7 @@ trait TensorDslCPU extends TensorDsl {
     }
     override def fold(init: Rep[Float])(x: Tensor, op: (Rep[Float], Rep[Float]) => Rep[Float]): Rep[Float] = {
       val res = var_new[Float](init)
-      for (i <- DataLoop(x.scalarCount)) var_assign(res, op(res, x.data(i)))
+      for (i <- DataLoop(x.scalarCount)) __assign(res, op(res, x.data(i)))
       res
     }
 
@@ -177,14 +177,14 @@ trait TensorDslCPU extends TensorDsl {
           if (!x.isInput) add_cartesian(x.d, y.x, output.d); // that.d.add_composion(this.x, y.d)
           if (!y.isInput) add_composition(y.d, x.x, output.d);
         case (2, 2) =>
-          generateRawComment("backprop of matrix-matrix-dot")
+          generate_comment("backprop of matrix-matrix-dot")
           if (!x.isInput) add_dotTrans2(x.d, output.d, y.x)
           if (!y.isInput) add_dotTrans1(y.d, x.x, output.d)
       }
     }
 
     override def add_cartesian(x: Tensor, y: Tensor, output: Tensor) = {
-      generateRawComment("backend add_cartesian")
+      generate_comment("backend add_cartesian")
       assert(x.rank == 2 && y.shape == Dimensions(Seq(x.shape(1))) && output.shape == Dimensions(Seq(x.shape(0))))
       val off = var_new(0)
       for (i <- DataLoop(x.shape(0))) {
@@ -196,7 +196,7 @@ trait TensorDslCPU extends TensorDsl {
     }
 
     override def add_composition(x: Tensor, y: Tensor, output: Tensor) = {
-      generateRawComment("bankend add_composition")
+      generate_comment("bankend add_composition")
       assert(y.rank == 2 && x.shape == Dimensions(Seq(y.shape(1))) && output.shape == Dimensions(Seq(y.shape(0))))
       val dim1 = y.shape(0); val dim2 = y.shape(1)
       unchecked[Unit](
@@ -206,7 +206,7 @@ trait TensorDslCPU extends TensorDsl {
     }
 
     override def add_dotTrans1(x: Tensor, y: Tensor, output: Tensor): Unit = {
-      generateRawComment("backend add_dotTrans1")
+      generate_comment("backend add_dotTrans1")
       val dim1 = y.shape(0); val dim2 = y.shape(1); val dim3 = output.shape(1)
       unchecked[Unit](
         "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
@@ -215,7 +215,7 @@ trait TensorDslCPU extends TensorDsl {
     }
 
     override def add_dotTrans2(x: Tensor, y: Tensor, output: Tensor): Unit = {
-      generateRawComment("backend add_dotTrans2")
+      generate_comment("backend add_dotTrans2")
       val dim1 = x.shape(0); val dim2 = x.shape(1); val dim3 = output.shape(1)
       unchecked[Unit](
         "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
@@ -426,7 +426,7 @@ trait TensorDslCPU extends TensorDsl {
     }
 
     override def gemm_grad(x: TensorR, transX: Boolean, y: TensorR, transY: Boolean, alpha: Float, output: TensorR): Unit = {
-      generateRawComment(s"backprop of gemm ${x.x.shape.seq}, ${transX}, ${y.x.shape.seq}, ${transY}")
+      generate_comment(s"backprop of gemm ${x.x.shape.seq}, ${transX}, ${y.x.shape.seq}, ${transY}")
       (transX, transY) match {
         case (false, false) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
@@ -504,7 +504,7 @@ trait TensorDslCPU extends TensorDsl {
                   memsetFloatZero(slice(dst, y*outputWidth), outputWidth)
                 }, {
                   __ifThenElse ((lpad > 0), memsetFloatZero(slice(dst, y*outputWidth), lpad), ())
-                  generateRawComment("may have segfault here")
+                  generate_comment("may have segfault here")
                   memcpyFloat(slice(dst, y*outputWidth+lpad), slice(src, iy*inputWidth+ix+lpad), outputWidth-rpad-lpad)
                   __ifThenElse ((rpad > 0), memsetFloatZero(slice(dst, y*outputWidth+outputWidth-rpad), rpad), ())
                 })
@@ -1089,7 +1089,7 @@ trait TensorDslCPU extends TensorDsl {
 
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
       assert(x.rank == 2, "Input must be a 2-D tensor")
-      generateRawComment("nllLoss forward in CPU")
+      generate_comment("nllLoss forward in CPU")
       val batchSize = x.shape(0)
       val res = mallocArray[Float](batchSize)
       val offset = var_new(0)
@@ -1101,7 +1101,7 @@ trait TensorDslCPU extends TensorDsl {
     }
 
     override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
-      generateRawComment("nllLoss_grad implementation in CPU")
+      generate_comment("nllLoss_grad implementation in CPU")
       val offset = var_new(0)
       for (batch <- DataLoop(input.d.shape(0))) {
         input.d.data(offset + target(batch)) += -1.0f * res.d.data(batch)

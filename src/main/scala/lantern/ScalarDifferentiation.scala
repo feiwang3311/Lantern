@@ -3,11 +3,6 @@ package lantern
 import scala.util.continuations._
 import scala.util.continuations
 
-// import org.scala_lang.virtualized.virtualize
-// import org.scala_lang.virtualized.SourceContext
-
-// import scala.virtualization.lms._
-
 import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
@@ -28,9 +23,9 @@ trait DiffApi extends Base with Dsl with Diff {
     def *(that: NumF) =
       new NumF(this.x * that.x, this.d * that.x + that.d * this.x)
     def sin() =
-      new NumF(this.x.sin(), this.x.cos() * this.d)
+      new NumF(Math.sin(this.x), Math.cos(this.x) * this.d)
     def cos() =
-      new NumF(this.x.cos(), -1.0 * this.x.sin() * this.d)
+      new NumF(Math.cos(this.x), -1.0 * Math.sin(this.x) * this.d)
     override def toString = (x,d).toString
   }
 
@@ -55,12 +50,12 @@ trait DiffApi extends Base with Dsl with Diff {
       val y = new NumR(x - that.x, var_new(0.0)); k(y)
       this.d += y.d; that.d -= y.d}
     def sin(): NumR @diff = shift { (k: NumR => Unit) =>
-      val y = new NumR(x.sin(), var_new(0.0)); k(y)
-      this.d += y.d * x.cos()
+      val y = new NumR(Math.sin(x), var_new(0.0)); k(y)
+      this.d += y.d * Math.cos(x)
     }
     def cos(): NumR @diff = shift{ (k: NumR => Unit) =>
-      val y = new NumR(x.cos(), var_new(0.0)); k(y)
-      this.d -= y.d * x.sin()
+      val y = new NumR(Math.cos(x), var_new(0.0)); k(y)
+      this.d -= y.d * Math.sin(x)
     }
     def print() = {
       printf("the value is %f\n", x)

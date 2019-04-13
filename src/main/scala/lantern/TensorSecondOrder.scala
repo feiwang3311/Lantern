@@ -1,14 +1,14 @@
 package lantern
 
 import scala.util.continuations._
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
 
-import scala.virtualization.lms._
-import scala.virtualization.lms.common._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
+
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 trait TensorSecOrderApi extends TensorDsl with Diff {
 
@@ -208,7 +208,7 @@ trait TensorSecOrderApi extends TensorDsl with Diff {
       val (out, opInput, counterId) =  x.conv2D_batch(kernel.x, bias.map(_.x), strides, pads)
       val y = TensorFR(out); val opInputFR = opInput.map(TensorFR(_)); k(y)
 
-      generateRawComment("conv2D back-propagate sec order")
+      generate_comment("conv2D back-propagate sec order")
       val paddings = pads.size match {
         case 2 => (pads(0), pads(1))
         case 4 => (pads(0), pads(2))

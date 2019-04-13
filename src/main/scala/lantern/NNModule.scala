@@ -3,10 +3,9 @@ package lantern
 import scala.util.continuations._
 import scala.util.continuations
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
@@ -362,7 +361,7 @@ trait NNModuleCudnn extends NNModule with TensorDslCudnn {
 
     // Initialize parameter buffer.
     // cuDNN requires that all parameters are stored in a contiguous buffer.
-//    val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
+    //    val parameterBuffer = Nonparameter(TensorR(Tensor.fill(Seq(getParameterSize()), 0.01f)))
     val parameterBuffer = Nonparameter(TensorR(Tensor.rand(Seq(getParameterSize()), 0.01f)))
 
     def setupParameters(): Unit = {

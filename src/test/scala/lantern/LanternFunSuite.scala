@@ -4,6 +4,27 @@ import sys.process._
 import org.scalactic.source
 import org.scalatest.{FunSuite, Tag}
 
+abstract class DslDriverBase[A: Manifest, B: Manifest] extends DslExp { self =>
+  // The C-like code generator.
+  val codegen: DslGenBase {
+    val IR: self.type
+  }
+
+  val dir = "/tmp"
+  val fileName = s"lantern-snippet-${scala.util.Random.alphanumeric.take(4).mkString}"
+
+  def snippet(x: Rep[A]): Rep[B]
+
+  def eval(a: A)
+
+  lazy val code: String = {
+    val source = new java.io.StringWriter()
+    codegen.emitSource[A,B](snippet, "Snippet", new java.io.PrintWriter(source))
+    source.toString
+  }
+}
+
+
 class LanternFunSuite extends FunSuite {
   def runTest(driver: LanternDriver[String, Unit]) {
     driver.eval("dummy")

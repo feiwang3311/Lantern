@@ -3,10 +3,6 @@ package lantern
 import scala.util.continuations._
 import scala.util.continuations
 
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
 import scala.collection.mutable.ArrayBuffer
 import scala.math._
 import scala.collection.mutable.{Map => MMap};
@@ -22,12 +18,16 @@ import java.util.Scanner;
 import org.bytedeco.javacpp._;
 import org.bytedeco.javacpp.onnx._;
 
-trait ONNXLib extends TensorDsl {
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
+
+trait ONNXLib extends TensorDsl with ScannerOps {
 
   object ParseHelper {
 
     def getProtoProps[T](size: Int, propMethod: Int => T): Seq[T] = {
-      (0 to (size - 1)).map(y => propMethod(y.toInt)).toSeq
+      ((0 until size): Range).map(y => propMethod(y.toInt)).toSeq
     }
 
     def toInts(ba: Array[Byte]): Seq[Int] = {
@@ -276,7 +276,7 @@ trait ONNXLib extends TensorDsl {
     case class gatherNode(input: String, output: String, axis: Int) extends Node
 
     def getAttributeProtoInts(attribute: AttributeProto): Seq[Long] = {
-      (0 to (attribute.ints_size - 1)).map(y => attribute.ints(y.toInt)).toSeq
+      ((0 until attribute.ints_size): Range).map(y => attribute.ints(y.toInt)).toSeq
     }
 
 

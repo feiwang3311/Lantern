@@ -1,13 +1,9 @@
 package lantern
 package NIPS18App
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 import scala.collection.mutable.ArrayBuffer
 import scala.math._

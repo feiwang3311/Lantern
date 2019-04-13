@@ -1,22 +1,21 @@
 package lantern
 
 import scala.util.continuations._
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
 
-import scala.virtualization.lms._
-import scala.virtualization.lms.common._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
 
-trait TensorDslCudnn extends TensorDslCublas {
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
+
+trait TensorDslCudnn extends TensorDslCublas with GPUOps {
 
   val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
   val elementWiseUpdateWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
   val attributesMap = new scala.collection.mutable.HashMap[Int, String]()
   def printAttributes() = unchecked[Unit](attributesMap.values.mkString("\n"))
-//  var nextKernel = 0
 
   // A map from tensor shapes to cuDNN tensor descriptors.
   private var tensorDescriptorCache = MutableMap[Dimensions, String]()
@@ -142,12 +141,12 @@ trait TensorDslCudnn extends TensorDslCublas {
   class BackendCudnn protected() extends BackendCublas {
     override def setup(): Unit = {
       super.setup()
-      generateRawCode("cudnnHandle_t cudnnHandle;\nCUDNN_CALL(cudnnCreate(&cudnnHandle));")
+      unchecked("cudnnHandle_t cudnnHandle;\nCUDNN_CALL(cudnnCreate(&cudnnHandle));")
     }
 
     override def cleanup(): Unit = {
       super.cleanup()
-      generateRawCode("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
+      unchecked("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
     }
 
     def elementWiseWithBroadCastKernel(rank: Int, op: String): String = {
@@ -397,78 +396,6 @@ trait TensorDslCudnn extends TensorDslCublas {
       ()
     }
 
-//    override def permute(x: Tensor, dims: Int*): Tensor = {
-//      assert(dims.sorted == ((0 until x.rank): Range), s"permutation dimensions should be within ranks, got rank: ${x.rank}, dims: ${dims}")
-//      assert(x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
-//      val resTensor = Tensor(mallocArray[Float](x.scalarCount), dims.map(i => x.shape(i)): _*)
-//      // pad everything to rank 4
-//      val inShape = x.shape.padTo(4, unit(1)); val inStrid = x.shape.strides.padTo(4, unit(1));
-//      val dimsPad = dims ++ (dims.size until 4: Range)
-//      val outStrid = NewArray[Int](4); val resStrid = resTensor.shape.strides.padTo(4, unit(1));
-//      for (i <- 0 until 4: Range) outStrid(dimsPad(i)) = resStrid(i)
-//
-//      val one = NewArray[Float](1); one(0) = 1
-//      val zero = NewArray[Float](0); zero(0) = 0
-//      unchecked[Unit](
-//        Seq(s"""
-//          |{
-//          |cudnnTensorDescriptor_t in_desc;
-//          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-//          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
-//          |    in_desc, CUDNN_DATA_FLOAT,
-//          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
-//          |    """.stripMargin, inStrid(0), ", ", inStrid(1), ", ", inStrid(2), ", ", inStrid(3), s"""));
-//          |
-//          |cudnnTensorDescriptor_t out_desc;
-//          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-//          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
-//          |    out_desc, CUDNN_DATA_FLOAT,
-//          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
-//          |    """.stripMargin, outStrid(0), ", ", outStrid(1), ", ", outStrid(2), ", ", outStrid(3), s"""));
-//          |
-//          |""".stripMargin) ++
-//        Seq(
-//          "CUDNN_CALL(cudnnTransformTensor(\n" +
-//          "    cudnnHandle, ", one, ", in_desc, ", x.data, ", ", zero, ", out_desc, ", resTensor.data, "));\n" +
-//          "}"): _*
-//      )
-//      resTensor
-//    }
-//
-//    override def permute_grad(x: TensorR, y: TensorR, dims: Int*): Unit = {
-//      assert(dims.sorted == ((0 until x.x.rank): Range), s"permutation dimensions should be within ranks, got rank: ${x.x.rank}, dims: ${dims}")
-//      assert(x.x.rank <= 4, s"TODO, only handle tensor with rank at most 4D for now")
-//      // pad everything to rank 4
-//      val inShape = x.x.shape.padTo(4, unit(1)); val inStrid = x.x.shape.strides.padTo(4, unit(1));
-//      val dimsPad = dims ++ (dims.size until 4: Range)
-//      val outStrid = NewArray[Int](4); val resStrid = y.x.shape.strides.padTo(4, unit(1));
-//      for (i <- 0 until 4: Range) outStrid(dimsPad(i)) = resStrid(i)
-//
-//      val one = NewArray[Float](1); one(0) = 1
-//      unchecked[Unit](
-//        Seq(s"""
-//          |{
-//          |cudnnTensorDescriptor_t in_desc;
-//          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-//          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
-//          |    in_desc, CUDNN_DATA_FLOAT,
-//          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
-//          |    """.stripMargin, outStrid(0), ", ", outStrid(1), ", ", outStrid(2), ", ", outStrid(3), s"""));
-//          |
-//          |cudnnTensorDescriptor_t out_desc;
-//          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-//          |CUDNN_CALL(cudnnSetTensor4dDescriptorEx(
-//          |    out_desc, CUDNN_DATA_FLOAT,
-//          |    """.stripMargin, inShape(0), ", ", inShape(1), ", ", inShape(2), ", ", inShape(3), s""",
-//          |    """.stripMargin, inStrid(0), ", ", inStrid(1), ", ", inStrid(2), ", ", inStrid(3), s"""));
-//          |
-//          |""".stripMargin) ++
-//        Seq(
-//          "CUDNN_CALL(cudnnTransformTensor(\n" +
-//          "    cudnnHandle, ", one, ", in_desc, ", y.d.data, ", ", one, ", out_desc, ", x.d.data, "));\n" +
-//          "}"): _*
-//      )
-//    }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnAddTensor
     // Note: this function performs in-place addition for `res`.
@@ -551,8 +478,7 @@ trait TensorDslCudnn extends TensorDslCublas {
           |    ${padding._1}, ${padding._2}, ${strides._1}, ${strides._2}, ${dilations._1}, ${dilations._2},
           |    CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
           |""".stripMargin) ++
-        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc_$counter, $mathType));\n")).getOrElse(Seq()):_*// ++
-//        Seq(s"cudnnConvolutionFwdAlgo_t algo_$counter;"): _*
+        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc_$counter, $mathType));\n")).getOrElse(Seq()):_*
       )
 
       if (true)
@@ -690,7 +616,6 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
 
-//      unchecked[Unit](s"cudnnConvolutionBwdDataAlgo_t algo_bwd_$counter;\n")
       if (true)
       unchecked[Unit](
         Seq(
@@ -764,7 +689,6 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
 
-//      unchecked[Unit](s"cudnnConvolutionBwdFilterAlgo_t algo_bwf_$counter;\n")
       if (true)
       unchecked[Unit](
         Seq(s"""
@@ -1076,28 +1000,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         else {System.out.println(s"bias rank is not 1 or 4, but ${bias.x.rank}"); ???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
-//     unchecked[Unit](
-//       Seq(s"""
-//         |{
-//         |cudnnTensorDescriptor_t in_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
-//         |
-//         |cudnnTensorDescriptor_t out_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    """.stripMargin, res.x.shape(0), ", ", res.x.shape(1), ", ", res.x.shape(2), ", ", res.x.shape(3), """));
-//         |
-//         |cudnnTensorDescriptor_t sbmv_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
-//         |
-//         |""".stripMargin) ++
+
       unchecked[Unit](
         Seq(
           "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
@@ -1201,22 +1104,7 @@ trait TensorDslCudnn extends TensorDslCublas {
                                         momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
-//     unchecked[Unit](
-//       Seq(s"""
-//         |{
-//         |cudnnTensorDescriptor_t in_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), """, 1, 1));
-//         |
-//         |cudnnTensorDescriptor_t sbmv_desc;
-//         |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-//         |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-//         |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//         |    1, """.stripMargin, bias.x.shape(0), """, 1, 1));
-//         |
-//         |""".stripMargin) ++
+
       unchecked[Unit](
         Seq(
           "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
@@ -1586,7 +1474,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def sum_grad(input: TensorR, res: TensorR): Unit = {
-      generateRawComment("backprop for sum op")
+      generate_comment("backprop for sum op")
       assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
       unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f, ", ", input.d.scalarCount, ")")
     }
@@ -1598,7 +1486,7 @@ trait TensorDslCudnn extends TensorDslCublas {
     }
 
     override def mean_grad(input: TensorR, res: TensorR): Unit = {
-      generateRawComment("backprop for mean op")
+      generate_comment("backprop for mean op")
       assert(res.d.shape.dims == Seq(unit(1)), s"result of mean reduce should be scalar, got ${res.d.shape}")
       unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f/input.x.scalarCount, ", ", input.d.scalarCount, ")")
     }
@@ -1611,7 +1499,7 @@ trait TensorDslCudnn extends TensorDslCublas {
         val resData = mallocArray[Float](resShape.scalarCount)
         val inputStride = x.shape.strides.padTo(4, 1)
         val outputStride = resShape.strides.padTo(3, 1)
-        generateRawComment("optimization for dimension sum if size is small")
+        generate_comment("optimization for dimension sum if size is small")
         unchecked[Unit](
           "sum_optimization<<<28, 512>>>(", x.data, ", ", inputStride(0), ", ", inputStride(1), ", ", inputStride(2), ", ", inputStride(3), ", ", resData, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ", ", resShape.product1, ", ", x.shape(dim), ");\n")
         resData
@@ -1629,7 +1517,7 @@ trait TensorDslCudnn extends TensorDslCublas {
       assert(input.x.rank == output.x.rank + 1, s"input should be 1 rank higher than the output, got ${input.x.shape}, ${output.x.shape}")
       val inputShape = input.x.shape.padTo(4, 1)
       val outputStride = output.x.shape.strides.padTo(3, 1)
-      generateRawComment("backprop for sum on dim op")
+      generate_comment("backprop for sum on dim op")
       unchecked[Unit](
         "sum_grad<<<28, 512>>>(", input.d.data, ", ", inputShape(0), ", ", inputShape(1), ", ", inputShape(2), ", ", inputShape(3), ", ", input.x.scalarCount, ", ",
         output.d.data, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ");\n")

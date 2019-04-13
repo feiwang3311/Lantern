@@ -1,13 +1,9 @@
 package lantern
 package PLDI19App
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
@@ -41,7 +37,7 @@ object Resnet50Onnx {
         input.printHead(10, "input")
         val out = func(input)
         out.printHead(10, "output")
-        error("stop")
+        exit(1)
       }
     }
   }
@@ -62,7 +58,7 @@ object Resnet50Onnx {
         input.printHead(10, "input")
         val out = func(input.toGPU())
         out.toCPU().printHead(10, "output")
-        error("stop")
+        exit(1)
       }
     }
   }
@@ -95,7 +91,7 @@ object Resnet50Onnx {
       val loss_save = NewArray[Double](nbEpoch)
       val addr = getMallocAddr() // remember current allocation pointer here
 
-      generateRawComment("training loop starts here")
+      generate_comment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         var trainLoss = var_new(0.0f)
@@ -162,7 +158,7 @@ object Resnet50Onnx {
       val addr = getMallocAddr() // remember current allocation pointer here
       val addrCuda = getCudaMallocAddr()
 
-      generateRawComment("training loop starts here")
+      generate_comment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         var trainLoss = var_new(0.0f)

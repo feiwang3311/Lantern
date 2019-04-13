@@ -1,13 +1,9 @@
 package lantern
 package PLDI19App
 
-import scala.util.continuations._
-import scala.util.continuations
-
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
-
-import scala.virtualization.lms._
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
@@ -40,13 +36,13 @@ object DeepSpeech {
         val batchNorm: Option[BatchNorm1D] = if (useBatchNorm) Some(BatchNorm1D(inputSize)) else None
 
         def apply(input: TensorR): TensorR @diff = {
-          val in1 = If_B (useBatchNorm) {
+          val in1 = If (useBatchNorm) {
             val input2D = input.resizeNoCheck(input.x.shape(0) * input.x.shape(1), input.x.shape(2))
             val inputBN = batchNorm.get.apply(input2D)
             inputBN.resizeNoCheck(input.x.shape(0), input.x.shape(1), input.x.shape(2))
           } { input }
           val output = rnn(in1)
-          If_B (bidirectional) {output.resizeNoCheck(output.x.shape(0), output.x.shape(1), 2, output.x.shape(2) / 2).sum(2)} {output}
+          If (bidirectional) {output.resizeNoCheck(output.x.shape(0), output.x.shape(1), 2, output.x.shape(2) / 2).sum(2)} {output}
         }
       }
 
@@ -123,22 +119,22 @@ object DeepSpeech {
 
         def apply(input: TensorR): TensorR @diff = {
           // input is B * C * D * T
-          // generateRawComment("before getting length info") // line 1117
+          // generate_comment("before getting length info") // line 1117
           // val outputLengths = getSeqLens(lengths, input.x.shape(0))
           // val outputLengthsGPU = outputLengths.toGPU(input.x.shape(0))
-          // generateRawComment("after getting length info") // line 1138
+          // generate_comment("after getting length info") // line 1138
           val step1 = conv(input)
-          generateRawComment("after conv ops")  // line 1480
+          generate_comment("after conv ops")  // line 1480
           val step2 = step1.resizeNoCheck(step1.x.shape(0), step1.x.shape(1) * step1.x.shape(2), step1.x.shape(3))  // step2 is B * CD * T
           val step3 = step2.permute(2, 0, 1) // step3 is T * B * (CD)
-          generateRawComment("after resize and permute") // line 1576
+          generate_comment("after resize and permute") // line 1576
 
-          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If_B (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in))}
+          def rec(rnns: Seq[BatchRNN], in: TensorR): TensorR @diff = If (rnns.isEmpty) {in} {rec(rnns.tail, rnns.head(in))}
           val step4 = rec(rnns, step3)
-          //generateRawComment("after RNN layers")// line 8711
+          //generate_comment("after RNN layers")// line 8711
 
-          val step5 = If_B (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }
-          //generateRawComment("after maybe lookahead") // line 8450
+          val step5 = If (bidirectional) {step4} { lookahead.get.apply(step4).hardTanh(0, 20, inPlace=true) }
+          //generate_comment("after maybe lookahead") // line 8450
           // TODO igore eval_mode (which needs a softmax layer) for now
           fc(step5)  // T * B * num_alphabet
         }
@@ -152,11 +148,11 @@ object DeepSpeech {
 
       def lossFun(input: TensorR, percent: Rep[Array[Float]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val probs = net(input).softmax_batch(2)
-        generateRawComment("before CTC loss") // line 8572
+        generate_comment("before CTC loss") // line 8572
         val outputLength = NewArray[Int](probs.x.shape(1))
         for (i <- 0 until probs.x.shape(1)) outputLength(i) = unchecked[Int]("(int)", percent(i) * probs.x.shape(0))
         val loss = probs.ctcLoss(outputLength, target, targetSize)
-        generateRawComment("after CTC loss") // line 8641
+        generate_comment("after CTC loss") // line 8641
         TensorR(loss)
       }
 
@@ -176,7 +172,7 @@ object DeepSpeech {
       val addr = getMallocAddr()
       val addrCuda = getCudaMallocAddr()
 
-      generateRawComment("training loop starts here")
+      generate_comment("training loop starts here")
       for (epoch <- 0 until nbEpoch: Rep[Range]) {
         val trainTimer = Timer2()
         var imgIdx = var_new(0)

@@ -1,16 +1,15 @@
 package lantern
 
 import scala.util.continuations._
-import org.scala_lang.virtualized.virtualize
-import org.scala_lang.virtualized.SourceContext
 
-import scala.virtualization.lms._
-import scala.virtualization.lms.common._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
 
-trait TensorDsl extends DslOps with Diff {
+import lms.core.stub._
+import lms.macros.SourceContext
+import lms.core.virtualize
+
+trait TensorDsl extends Dsl with Diff {
 
   /**
     Memory Management:
@@ -56,13 +55,13 @@ trait TensorDsl extends DslOps with Diff {
 
   @virtualize
   def assert(b: Rep[Boolean], s: String = "ERROR not specified"): Unit = if (debug) {
-    if (!b) error(s)
+    if (!b) { printf(s); exit(1) }
   }
+
   @virtualize
   def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = if (debug) {
-    if (!cond) {printf(msg + "\\n", args : _*); error("")} else {}
+    if (!cond) { printf(msg + "\\n", args : _*); exit(1)} else {}
   }
-  def exit() = unchecked[Unit]("exit(0)")
 
   object Random {
     def rand() = unchecked[Float]("(float)rand()/RAND_MAX")
@@ -456,7 +455,7 @@ trait TensorDsl extends DslOps with Diff {
     // - matrix-matrix multiplication.
     //   [M1 x M2] dot [M2 x M3] => [M1 x M3]
     def dot(that: Tensor) = {
-      generateRawComment(s"dot: ${this.shape.seq}, ${that.shape.seq}")
+      generate_comment(s"dot: ${this.shape.seq}, ${that.shape.seq}")
       (this.rank, that.rank) match {
         case (1, 1) => assert(this.shape(0) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
         case (2, 1) | (2, 2) => assert(this.shape(1) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
@@ -480,7 +479,7 @@ trait TensorDsl extends DslOps with Diff {
     def add_dotTrans2(that: Tensor, y: Tensor): Unit = backend.add_dotTrans2(this, that, y)
 
     def gemm(that: Tensor, transX: Boolean, transY: Boolean, alpha: Float): Tensor = {
-      generateRawComment(s"gemm: ${this.shape.seq}, ${that.shape.seq}")
+      generate_comment(s"gemm: ${this.shape.seq}, ${that.shape.seq}")
       backend.gemm(this, transX, that, transY, alpha)
     }
 
@@ -624,7 +623,7 @@ trait TensorDsl extends DslOps with Diff {
     // NOTE: this function is fixed to run on CPU!
     def amax() = {
       val res = var_new[Float](0.0f)
-      for (i <- DataLoop(this.scalarCount)) var_assign(res, if (Math.abs(res) > Math.abs(this.data(i))) res else this.data(i))
+      for (i <- DataLoop(this.scalarCount)) __assign(res, if (Math.abs(res) > Math.abs(this.data(i))) res else this.data(i))
       res
     }
 
@@ -750,7 +749,7 @@ trait TensorDsl extends DslOps with Diff {
     def addMul(a: Rep[Float], b: Tensor) = {
       assert(this.shape == b.shape)
 
-      generateRawComment("Generate code for addMul")
+      generate_comment("Generate code for addMul")
       for (i <- DataLoop(this.scalarCount)) {
         this.data(i) = this.data(i) + a * b.data(i)
       }
@@ -870,7 +869,7 @@ trait TensorDsl extends DslOps with Diff {
       assertC(others.forallR{t=> (0 until this.rank: Range).forallR{i => t.shape(i) == this.shape(i) || i == dim}},
               "all dimensions except the concatenation dimension should be the same")
 
-      generateRawComment("back prop for concat")
+      generate_comment("back prop for concat")
       backend.concat(dim: Int, this +: others)
     }
 
@@ -948,7 +947,7 @@ trait TensorDsl extends DslOps with Diff {
     def linearTanh(x: Tensor, b: Tensor) = {
       // this is W. We want (W.dot(x)+b).tanh()
       assert(this.rank == 2 && x.rank == 1 && b.rank == 1, "limited generalization")
-      generateRawComment("forward for linearTanh")
+      generate_comment("forward for linearTanh")
       // val res_dot = backend.mallocArray[Float](this.shape(0))
       // val res_add = backend.mallocArray[Float](this.shape(0))
       val res_tanh = backend.mallocArray[Float](this.shape(0))
@@ -969,7 +968,7 @@ trait TensorDsl extends DslOps with Diff {
     def linear2Tanh(x: Tensor, W2: Tensor, x2: Tensor, b: Tensor) = {
       // this is W. We want (W.dot(x) + W2.dot(x2) + b).tanh()
       assert(this.rank == 2 && x.rank == 1 && W2.rank == 2 && x2.rank == 1 && b.rank == 1, "limited generalization")
-      generateRawComment("forward for linear2Tanh")
+      generate_comment("forward for linear2Tanh")
       val res_tanh = backend.mallocArray[Float](this.shape(0))
       val offSet = var_new(0)
       for (i <- DataLoop(this.shape(0))) {
@@ -1116,11 +1115,6 @@ trait TensorDsl extends DslOps with Diff {
     def assertShapeNotEqual(a: Dimensions, b: Dimensions, errorPrefix: String = "") = {
       assertC(!ifShapeEqual(a, b), s"$errorPrefix: tensor shapes are equal %s, %s \\n", a.toString, b.toString)
     }
-//   @virtualize
-//   def assertShapeEqual(a: Dimensions, b: Dimensions, errorPrefix: String = "") = {
-//     assert(a.dims.size == b.dims.size, s"$errorPrefix: tensors are not of the same rank, got ${a.dims.size} and ${b.dims.size}")
-//     assertC((a.dims zip b.dims).forallR{case (a, b) => a == b}, "$errorPrefix: tensor shapes are not equal %s, %s\\n", a.toString, b.toString)
-//   }
 
     @virtualize
     def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.0001f) = {
@@ -1133,7 +1127,7 @@ trait TensorDsl extends DslOps with Diff {
       }
       if (i < a.scalarCount) {
         printf("%s: tensor data are not equal at index %d, %.4f != %.4f\\n", errorPrefix, i, a.data(i), b.data(i))
-        error("")
+        exit(1)
       }
     }
   }
@@ -1171,7 +1165,7 @@ trait TensorDsl extends DslOps with Diff {
     def + (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (ya, xShape, yShape) = backend.+(x, that.x)
       val y = TensorR(ya); k(y)
-      generateRawComment("back prop for + op")
+      generate_comment("back prop for + op")
       backend.add_grad(this, that, y, xShape, yShape)
     }
 
@@ -1182,7 +1176,7 @@ trait TensorDsl extends DslOps with Diff {
     def - (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (ya, xShape, yShape) = backend.-(x, that.x)
       val y = TensorR(ya); k(y)
-      generateRawComment("back prop for - op")
+      generate_comment("back prop for - op")
       backend.minus_grad(this, that, y, xShape, yShape)
     }
 
@@ -1194,7 +1188,7 @@ trait TensorDsl extends DslOps with Diff {
     def * (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (ya, xShape, yShape) = backend.*(x, that.x)
       val y = TensorR(ya); k(y)
-      generateRawComment("backprop for * op")
+      generate_comment("backprop for * op")
       backend.mul_grad(this, that, y, xShape, yShape)
     }
 
@@ -1206,7 +1200,7 @@ trait TensorDsl extends DslOps with Diff {
     def / (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (ya, xShape, yShape) = backend./(x, that.x)
       val y = TensorR(ya); k(y)
-      generateRawComment("backprop for / op")
+      generate_comment("backprop for / op")
       backend.div_grad(this, that, y, xShape, yShape)
     }
 
@@ -1226,9 +1220,9 @@ trait TensorDsl extends DslOps with Diff {
     }
 
     def gemm(that: TensorR, transX: Boolean, transY: Boolean, alpha: Float): TensorR @diff = shift { (k: TensorR => Unit) =>
-      generateRawComment("foward of gemm")
+      generate_comment("foward of gemm")
       val ty = TensorR(x.gemm(that.x, transX, transY, alpha)); k(ty)
-      generateRawComment(s"backprop for gemm ${x.shape.seq}, ${that.x.shape.seq}")
+      generate_comment(s"backprop for gemm ${x.shape.seq}, ${that.x.shape.seq}")
       backend.gemm_grad(this, transX, that, transY, alpha, ty)
     }
 
@@ -1240,37 +1234,37 @@ trait TensorDsl extends DslOps with Diff {
 
     def permute(dims: Int*): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.permute(dims: _*)); k(y)
-      generateRawComment(s"backprop for permute ${dims}")
+      generate_comment(s"backprop for permute ${dims}")
       backend.permute_grad(this, y, dims: _*)
     }
 
     def exp(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(backend.exp(x)); k(y)
-      generateRawComment("backprop for exp")
+      generate_comment("backprop for exp")
       backend.exp_grad(this, y)
     }
 
     def log(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(backend.log(x)); k(y)
-      generateRawComment("backprop for log")
+      generate_comment("backprop for log")
       backend.log_grad(this, y)
     }
 
     def sqrt(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(backend.sqrt(x)); k(y)
-      generateRawComment("backprop for sqrt")
+      generate_comment("backprop for sqrt")
       backend.sqrt_grad(this, y)
     }
 
     def square(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.square()); k(y)
-      generateRawComment("backprop for square")
+      generate_comment("backprop for square")
       backend.square_grad(this, y)
     }
 
     def mask4D(lengths: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       x.mask4D(lengths); k(this)
-      generateRawComment("backprop for mask4D, not sure if gradient should be masked as well?")
+      generate_comment("backprop for mask4D, not sure if gradient should be masked as well?")
     }
 
     def relu(inPlace: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -1305,13 +1299,13 @@ trait TensorDsl extends DslOps with Diff {
 
     def sum(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = new TensorR(x.sum(), Tensor.zeros(1)); k(y)
-      generateRawComment("'sum' gradient.")
+      generate_comment("'sum' gradient.")
       backend.sum_grad(this, y)
     }
 
     def mean(): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = new TensorR(x.mean(), Tensor.zeros(1)); k(y)
-      generateRawComment("'mean' gradient")
+      generate_comment("'mean' gradient")
       backend.mean_grad(this, y)
     }
 
@@ -1374,7 +1368,7 @@ trait TensorDsl extends DslOps with Diff {
     def nllLossB(target: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       assert (this.x.rank == 2, s"nllLossB() function only takes tensor of rank 2, got ${this.x.shape}")
       val y = TensorR(x.nllLossB(target)); k(y)
-      generateRawComment("'nllLossB' gradient.")
+      generate_comment("'nllLossB' gradient.")
       backend.nllLoss_grad(this, y, target)
     }
 
@@ -1400,7 +1394,7 @@ trait TensorDsl extends DslOps with Diff {
       }
       val y = TensorR(output); k(y)
 
-      generateRawComment("conv2D back-propagate")
+      generate_comment("conv2D back-propagate")
       val paddings = if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else {if (pads.size == 1) (pads(0), pads(0)) else ???}}
       val stridess = if (strides.size == 2) (strides(0), strides(1)) else ???
       finputOption match {
@@ -1446,7 +1440,7 @@ trait TensorDsl extends DslOps with Diff {
 
     def repeat0(context: Int): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(this.x.repeat0(context)); k(y)
-      generateRawComment("back prop for repeat0")
+      generate_comment("back prop for repeat0")
       backend.repeat0_grad(this, y, context)
     }
 
@@ -1558,10 +1552,6 @@ trait TensorDsl extends DslOps with Diff {
     if (c) RST(k1(a)) else RST(k1(b))
   }
 
-  def If_B(c: Boolean)(a: => TensorR @diff)(b: => TensorR @diff): TensorR @diff = shift { k: (TensorR => Unit) =>
-    if (c) RST(k(a)) else RST (k(b))
-  }
-
   @virtualize
   def If(c: Boolean)(a: => TensorR @diff)(b: => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
     if (c) RST(k(a)) else RST(k(b))
@@ -1653,7 +1643,7 @@ trait TensorDsl extends DslOps with Diff {
 
     val dims = x.x.shape.toSeq
 
-    val f1 = fun { (i: Rep[Int], t1: Rep[((Array[Float], Array[Float])) => Unit], x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
+    val f1 = fun { (i: Rep[Int], t1: Rep[(Array[Float], Array[Float]) => Unit], x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
       val t2: (TensorR => Unit) = { (x: TensorR) =>
         t1(x.x.data, x.d.data)
       }
@@ -1661,7 +1651,7 @@ trait TensorDsl extends DslOps with Diff {
       t3(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
     }
 
-    val k2: Rep[((Array[Float], Array[Float])) => Unit] = fun { (x1: Rep[Array[Float]], x2: Rep[Array[Float]]) =>
+    val k2: Rep[(Array[Float], Array[Float]) => Unit] = fun { (x1: Rep[Array[Float]], x2: Rep[Array[Float]]) =>
       k1(new TensorR(Tensor(x1, dims: _*), Tensor(x2, dims: _*)))
     }
     f1(i, k2, x.x.data, x.d.data)
@@ -1763,15 +1753,15 @@ trait TensorDsl extends DslOps with Diff {
   def gradR_loss(f: TensorR => TensorR @diff)(x: Tensor): Tensor = {
     val x1 = TensorR(x) // this should be a dummy tensor
     // val result = Tensor.zeros(1)                  // this should be the loss
-    generateRawComment("allocate memory to save the final loss in CPU Tensor")
+    generate_comment("allocate memory to save the final loss in CPU Tensor")
     val res = backend.mallocArray[Float](1)
     val result = Tensor(res, 1)
     reset {
       val y = f(x1)
-      generateRawComment("make sure the size of loss is 1")
+      generate_comment("make sure the size of loss is 1")
       assertC(y.x.scalarCount == unit(1), "Loss function must return a Tensor of size 1, got %d\\n", y.x.scalarCount)
       y.d.setAsOne()
-      generateRawComment(s"backend is $backend")
+      generate_comment(s"backend is $backend")
       backend.copyFloatArray(res, y.x.data, 1)
       // if (backend.isInstanceOf[BackendCPU]) BackendCPU().copyFloatArray(res, y.x.data, 1)
       // else unchecked[Unit]("CUDA_CALL(cudaMemcpy(", res, ", ", y.x.data, ", ", 1, " * sizeof(float), cudaMemcpyDeviceToHost))")
