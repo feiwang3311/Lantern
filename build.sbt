@@ -28,7 +28,7 @@ parallelExecution in Test := false
 
 lazy val lantern = (project in file(".")).dependsOn(lms % "test->test; compile->compile")
 
-lazy val lms = project.in(file("../lms-clean"))
+lazy val lms = ProjectRef(file("../lms-clean"), "lms-clean")
 
 //cps
 
