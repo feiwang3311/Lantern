@@ -15,14 +15,45 @@ trait LanternGenC extends DslGenC {
   val IR: DslExp
   import IR._
 
-  override def traverse(n: Node): Unit = n match {
-    case n @ Node(s, "new Array[Float]",List(x),_) => emitValDef(s, shallow(n) + ";")
-    case n @ Node(s, "exit", List(x), _) => super.traverse(n)
-    case _ => super.traverse(n)
+  override def remap(m: Manifest[_]): String = m.toString match {
+    case f if f.startsWith("scala.Function") =>
+      val targs = m.typeArguments.dropRight(1)
+      val res = remap(m.typeArguments.last)
+      def remapInFunction[A](m: Manifest[A]): Array[String] = {
+        val s = m.toString
+        if (s.startsWith("scala.Tuple")) m.typeArguments.map(t => remap(t)).toArray
+        else scala.Array(remap(m))
+      }
+      val targsUnboxed = targs.flatMap(t => remapInFunction(t))
+      "function<" + res + "(" + targsUnboxed.mkString(",") + ")>"
+    case _ => super.remap(m)
+  }
+
+  override def quoteBlock1(y: lms.core.Backend.Block, argType: Boolean = false) = {
+    def eff = quoteEff(y.ein)
+    def typed(s:lms.core.Backend.Sym) = if (argType) s"${remap(typeMap(s))} ${quote(s)}" else quote(s)
+    def ltyped(xs:List[lms.core.Backend.Sym]) = xs.map(typed(_)).mkString(", ")
+    def paren(s:String) = if (argType) "("+s+")" else s
+    if (y.in.length == 0) {
+      quoteBlock(traverse(y))
+    } else {
+      val xs = y.in
+      val l = captureLines(traverse(y))
+      val b = l.mkString("\n")
+      s"[&]${paren(ltyped(xs))} {$b}"
+    }
   }
 
   override def shallow(n: Node): String = n match {
-    case n @ Node(s, "new Array[Float]",List(x),_) => s"(float*)myMalloc(${shallow1(x)} * sizeof(float))"
+    case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
+      def parse(op: String): String = {
+        if (op.startsWith("Array[")) {
+          val inner = op.drop(6).dropRight(1)
+          parse(inner) + "*"
+        } else op.toLowerCase() // NOTE: only applies to simple numeric types
+      }
+      val ctype = parse(op.drop(4))
+      s"(${ctype})myMalloc(${shallow1(x)} * sizeof(${ctype.dropRight(1)}))"
     case _ => super.shallow(n)
   }
 

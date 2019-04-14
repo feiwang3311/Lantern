@@ -255,7 +255,6 @@ class AdLMSVectorTest extends LanternFunSuite {
         */
       }
     }
-    System.out.println(softmax.code)
     runTest(softmax)
   }
 
@@ -398,8 +397,9 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(expectedGrad, grad)
       }
     }
+    System.out.println(testResize.code)
     runTest(testResize)
-  } //
+  }
 
   test("testTrans") {
     val testTrans = new LanternDriverC[String, Unit] with TensorDslCPU {
@@ -544,7 +544,8 @@ class AdLMSVectorTest extends LanternFunSuite {
        Tensor.assertEqual(by1.d, dby, "dby")
       }
     }
-    array2_3.eval("abc")
+    System.out.println(array2_3.code)
+    runTest(array2_3)
   }
 
   test("array2_4"){
@@ -622,7 +623,8 @@ class AdLMSVectorTest extends LanternFunSuite {
         else Tensor.assertEqual(grad, grad2)
       }
     }
-    array3.eval("abc")
+    System.out.println(array3.code)
+    runTest(array3)
   }
 
   test("array4") {

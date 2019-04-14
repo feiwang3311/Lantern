@@ -1117,7 +1117,7 @@ trait TensorDsl extends Dsl with Diff {
     }
 
     @virtualize
-    def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.0001f) = {
+    def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.0001f): Unit = {
       val errorPrefix = if (mark.nonEmpty) s"ERROR ($mark)" else "ERROR"
       assertShapeEqual(a.shape, b.shape)
 
