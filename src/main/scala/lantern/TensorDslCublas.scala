@@ -189,7 +189,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
         |CUDA_CALL(cudaFree(gpuMallocBase));
       """.stripMargin)
 
-    override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = ??? // NewGPUArray[T](length)
+    override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = NewArray[T](length)
 
     override def copyFloatArray(dest: Rep[Array[Float]], src: Rep[Array[Float]], length: Rep[Int]): Unit =
       gpu_array_copy_device_to_device(src, dest, length)
