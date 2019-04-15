@@ -44,6 +44,12 @@ trait LanternGenC extends DslGenC {
     }
   }
 
+  override def traverse(n: Node): Unit = n match {
+    case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
+      emitValDef(s, shallow(n))
+    case _ => super.traverse(n)
+  }
+
   override def shallow(n: Node): String = n match {
     case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
       def parse(op: String): String = {

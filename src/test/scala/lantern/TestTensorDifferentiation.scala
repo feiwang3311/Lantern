@@ -397,7 +397,6 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(expectedGrad, grad)
       }
     }
-    System.out.println(testResize.code)
     runTest(testResize)
   }
 
@@ -544,7 +543,6 @@ class AdLMSVectorTest extends LanternFunSuite {
        Tensor.assertEqual(by1.d, dby, "dby")
       }
     }
-    System.out.println(array2_3.code)
     runTest(array2_3)
   }
 
@@ -623,7 +621,6 @@ class AdLMSVectorTest extends LanternFunSuite {
         else Tensor.assertEqual(grad, grad2)
       }
     }
-    System.out.println(array3.code)
     runTest(array3)
   }
 
@@ -648,7 +645,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         // FIXME: Implement the correct gradient and assertEqual
       }
     }
-    array4.eval("abc")
+    runTest(array4)
   }
 
   test("array4_1") {
@@ -724,10 +721,8 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(grad, grad1)
       }
     }
-
-    array4_2.eval("abc")
+    runTest(array4_2)
   }
-
 
   test("array4_4") {
     val array4_4 = new LanternDriverC[String, Unit] with TensorDslCPU {
@@ -767,8 +762,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(save_uu_grad, uu.d)
       }
     }
-
-    array4_4.eval("abc")
+    runTest(array4_4)
   }
 
   test("array5") {
@@ -784,8 +778,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(grad, v * 2.0f)
       }
     }
-
-    array5.eval("abc")
+    runTest(array5)
   }
 
   test("array6") {
@@ -801,7 +794,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(grad, Tensor.zeros(length))
       }
     }
-    array6.eval("abc")
+    runTest(array6)
   }
 
   test("array7") {
@@ -854,9 +847,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(grad, v.exp())
       }
     }
-
-    array8.eval("abc")
-
+    runTest(array8)
   }
 
   test("array9") {
@@ -872,8 +863,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(grad, Tensor.ones(length) / v)
       }
     }
-
-    array9.eval("abc")
+    runTest(array9)
   }
 
   test("array10") {
@@ -905,8 +895,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(grad, grad1)
       }
     }
-
-    array10.eval("abc")
+    runTest(array10)
   }
 
   test("array11") {
@@ -1130,7 +1119,7 @@ class AdLMSVectorTest extends LanternFunSuite {
         Tensor.assertEqual(varInput.d, Tensor.ones_like(input), "DROPOUT BACK 1 - D")
       }
     }
-    dropout_back_test1.eval("abc")
+    runTest(dropout_back_test1)
   }
 
   val gen_dir = "/tmp/"
