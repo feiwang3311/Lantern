@@ -124,6 +124,7 @@ trait LanternGenC extends DslGenC {
     |  }
     |  return res;
     |}
+    |long HEAP_SIZE = 8589934608; //  4294967304; // this is for GPU
     |int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
     |  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
     |  result->tv_sec = diff / 1000000;
@@ -172,15 +173,28 @@ trait LanternGenCublas extends LanternGenC {
   }
 
   override def shallow(n: Node): String = n match {
-    case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
+    case n @ Node(s, op, List(x), _) if op.startsWith("new GPUArray[") =>
+//    case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
       def parse(op: String): String = {
-        if (op.startsWith("Array[")) {
+        if (op.startsWith("GPUArray[")) {
+          val inner = op.drop(9).dropRight(1)
+          parse(inner) + "*"
+        } else if (op.startsWith("Array[")) {
           val inner = op.drop(6).dropRight(1)
           parse(inner) + "*"
         } else op.toLowerCase() // NOTE: only applies to simple numeric types
       }
       val ctype = parse(op.drop(4))
-      s"(${ctype})myGPUMalloc(${shallow1(x)} * sizeof(${ctype.dropRight(1)}))"
+      s"(${ctype})myGpuMalloc(${shallow1(x)} * sizeof(${ctype.dropRight(1)}))"
+    case n @ Node(s, op, List(x,y,size),_) if op.startsWith("h2dCopy[") =>
+      val ty = op.drop(8).dropRight(1).toLowerCase
+      s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyHostToDevice))"
+    case n @ Node(s, op, List(x,y,size),_) if op.startsWith("d2hCopy[") =>
+      val ty = op.drop(8).dropRight(1).toLowerCase
+      s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToHost))"
+    case n @ Node(s, op, List(x,y,size),_) if op.startsWith("d2dCopy[") =>
+      val ty = op.drop(8).dropRight(1).toLowerCase
+      s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToHost))"
     case _ => super.shallow(n)
   }
 
@@ -598,6 +612,16 @@ trait LanternGenCublas extends LanternGenC {
       |  }
       |}
       |
+      |""".stripMargin
+}
+
+trait LanternGenCudnn extends LanternGenCublas {
+  val IR: DslExp
+  import IR._
+
+  override def templateHeaders: Seq[String] = super.templateHeaders ++ Seq("<cudnn.h>")
+  override def templateRawCode: String = super.templateRawCode +
+     """
       |cudnnConvolutionFwdAlgo_t       algo_0      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_0      = false;
       |cudnnConvolutionBwdDataAlgo_t   algo_bwd_0  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_0  = false;
       |cudnnConvolutionBwdFilterAlgo_t algo_bwf_0  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_0  = false;
@@ -635,16 +659,6 @@ trait LanternGenCublas extends LanternGenC {
       |cudnnConvolutionBwdDataAlgo_t   algo_bwd_11 = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_11 = false;
       |cudnnConvolutionBwdFilterAlgo_t algo_bwf_11 = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_11 = false;
       |
-      |""".stripMargin
-}
-
-trait LanternGenCudnn extends LanternGenCublas {
-  val IR: DslExp
-  import IR._
-
-  override def templateHeaders: Seq[String] = super.templateHeaders ++ Seq("<cudnn.h>")
-  override def templateRawCode: String = super.templateRawCode +
-    """
       |#define CUDNN_CALL(f) { \
       |  cudnnStatus_t stat = (f); \
       |  if (stat != CUDNN_STATUS_SUCCESS) { \
@@ -715,18 +729,19 @@ trait LanternGenCudnn extends LanternGenCublas {
 
 // TODO: bad design!! NNModule should not depend on backend!
 abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverC[A, B]
-with TensorDsl with NNModule with NNModuleCudnn with Dataset with ONNXLib with ScannerOpsExp with TimerOpsExp { q =>
+with TensorDsl with NNModule with Dataset with ONNXLib with ScannerOpsExp with TimerOpsExp { q =>
   override val codegen = new LanternGenC {
     val IR: q.type = q
   }
 
   val dir = "/tmp/"
   val fileName = s"lantern-snippet-${scala.util.Random.alphanumeric.take(4).mkString}"
+  val filetype = ".cpp"
 
   def codeToFile(name: Option[String] = None) = {
     val outFileName = name match {
       case Some(s) => s
-      case None => dir + fileName + ".cpp"
+      case None => dir + fileName + filetype
     }
     System.out.println(s"code => $outFileName")
     val outFile = new PrintWriter(new File(outFileName))
@@ -770,20 +785,27 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBas
 }
 
 abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCublas { q =>
+  override val codegen = new LanternGenCublas {
+    val IR: q.type = q
+  }
+
+  backend = BackendCublas()
+
+  override val filetype = ".cu"
 
   override lazy val f: A => Unit = {
     // TBD: should read result of type B?
-    val out = new java.io.PrintWriter("/tmp/snippet.cpp")
+    val out = new java.io.PrintWriter("/tmp/snippet.cu")
     out.println(code)
     out.close
     (new java.io.File("/tmp/snippet")).delete
     import scala.sys.process._
     // TODO: would like to use time("cc") { .. }, but messes with captureOut
-    (s"nvcc -std=c++11 -O3 /tmp/snippet.cpp -o /tmp/snippet -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lpthread": ProcessBuilder).lines.foreach(Console.println _)
+    (s"nvcc -std=c++11 -O3 /tmp/snippet.cu -o /tmp/snippet --expt-extended-lambda -Wno-deprecated-gpu-targets -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lstdc++ -lcublas": ProcessBuilder).lines.foreach(Console.println _)
     (a: A) => (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
 
 }
 
-abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCublas with TensorDslCudnn { q =>
+abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with NNModuleCudnn with TensorDslCublas with TensorDslCudnn { q =>
 }
