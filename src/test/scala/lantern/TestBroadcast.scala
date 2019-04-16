@@ -85,7 +85,7 @@ class BroadCastingTest extends LanternFunSuite {
         Tensor.assertEqual(b.d, Tensor(Array[Float](3, 3), 2, 1))
       }
     }
-    test2.eval("a")
+    runTest(test2)
   }
 
   test("add_broadcast3") {
@@ -107,7 +107,7 @@ class BroadCastingTest extends LanternFunSuite {
         Tensor.assertEqual(b.d, Tensor(Array[Float](2, 2, 2), 1, 3))
       }
     }
-    test3.eval("a")
+    runTest(test3)
   }
 
   test("add_broadcast4") {
@@ -129,7 +129,7 @@ class BroadCastingTest extends LanternFunSuite {
         Tensor.assertEqual(b.d, Tensor(Array[Float](4, 4), 2))
       }
     }
-    test4.eval("a")
+    runTest(test4)
   }
 
   test("add_broadcast5") {
@@ -153,8 +153,7 @@ class BroadCastingTest extends LanternFunSuite {
         Tensor.assertEqual(b.d, Tensor(Array[Float](2,2,2,2), 2, 1, 2))
       }
     }
-    test5.eval("a")
-    // System.out.println(test5.code)
+    runTest(test5)
   }
 
   test("minus_broadcast5") {
@@ -175,7 +174,7 @@ class BroadCastingTest extends LanternFunSuite {
         Tensor.assertEqual(b.d, Tensor(Array[Float](-2,-2,-2,-2), 2, 1, 2))
       }
     }
-    test5.eval("a")
+    runTest(test5)
   }
 
   test("mult_broadcast5") {
@@ -196,7 +195,7 @@ class BroadCastingTest extends LanternFunSuite {
         Tensor.assertEqual(b.d, Tensor(Array[Float](4,6,12,14), 2, 1, 2))
       }
     }
-    test5.eval("a")
+    runTest(test5)
   }
 
   test("div_broadcast5") {
@@ -216,6 +215,6 @@ class BroadCastingTest extends LanternFunSuite {
         Tensor.assertEqual(b.d, Tensor(Array[Float](-4, -1.5f, -3, -0.875f), 2, 1, 2))
       }
     }
-    test5.eval("a")
+    runTest(test5)
   }
 }

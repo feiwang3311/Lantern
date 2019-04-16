@@ -166,15 +166,8 @@ trait LanternGenCublas extends LanternGenC {
   val IR: DslExp
   import IR._
 
-  override def traverse(n: Node): Unit = n match {
-    case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
-      emitValDef(s, shallow(n))
-    case _ => super.traverse(n)
-  }
-
   override def shallow(n: Node): String = n match {
     case n @ Node(s, op, List(x), _) if op.startsWith("new GPUArray[") =>
-//    case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
       def parse(op: String): String = {
         if (op.startsWith("GPUArray[")) {
           val inner = op.drop(9).dropRight(1)
@@ -807,5 +800,20 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriv
 
 }
 
-abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with NNModuleCudnn with TensorDslCublas with TensorDslCudnn { q =>
+abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverCublas[A, B] with NNModuleCudnn with TensorDslCudnn { q =>
+  override val codegen = new LanternGenCudnn {
+    val IR: q.type = q
+  }
+  backend = BackendCudnn()
+  override lazy val f: A => Unit = {
+    // TBD: should read result of type B?
+    val out = new java.io.PrintWriter("/tmp/snippet.cu")
+    out.println(code)
+    out.close
+    (new java.io.File("/tmp/snippet")).delete
+    import scala.sys.process._
+    // TODO: would like to use time("cc") { .. }, but messes with captureOut
+    (s"nvcc -std=c++11 -O3 /tmp/snippet.cu -o /tmp/snippet --expt-extended-lambda -Wno-deprecated-gpu-targets -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lstdc++ -lcublas -lcudnn": ProcessBuilder).lines.foreach(Console.println _)
+    (a: A) => (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
+  }
 }

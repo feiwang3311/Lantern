@@ -1038,7 +1038,7 @@ class TestCudnn extends LanternFunSuite {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val input = Tensor.fromData(Seq(2, 3), 1, 2, 3, 4, 5, 6)
-        val target: Rep[Array[Int]] = GPUArray[Int](1, 0)
+        val target: Rep[Array[Int]] = Array[Int](1, 0).toGPU(2)
         val result = input.logSoftmaxB().nllLossB(target)
         val grad = gradR(x => x.logSoftmaxB().nllLossB(target))(input)
 

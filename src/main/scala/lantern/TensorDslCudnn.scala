@@ -1155,8 +1155,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       val output = Tensor.zeros_like(input)
-      val reserveSpace: Rep[Array[Float]] = unchecked[Array[Float]]("(float*)NULL")
-      val sizeInBytes: Rep[Int] = unchecked[Int]("0")
+      val reserveSpace = var_new(unchecked[Array[Float]]("(float*)NULL"))
+      val sizeInBytes = var_new(unchecked[Int]("0"))
       val padShape = input.shape.padTo(4, unit(1)) // pad the dimension to 4D
       unchecked[Unit](
         s"""
@@ -1556,9 +1556,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       val resShape: Seq[Rep[Int]] = Seq(seqLength, batchSize, hiddenSize * numDirections)
       val res = Tensor(mallocArray[Float](resShape.product1), resShape: _*)
 
-      val reserveSpace = unchecked[Array[Float]]("(float*)NULL")
-      val reserveSpaceSize = unchecked[Int]("0")
-
       val counter = nextKernel
       nextKernel += 1
 
@@ -1633,11 +1630,13 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
          |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
          |    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, &workspaceSize_$counter));
          |void* workspace_$counter = myGpuMalloc(workspaceSize_$counter);
-         """.stripMargin): _* 
+         """.stripMargin): _*
       )
 
       // If training, create reserve space and call `ForwardTraining` function.
-      if (training)
+      if (training) {
+        val reserveSpace = var_new(unchecked[Array[Float]]("(float*)NULL"))
+        val reserveSpaceSize = var_new(unchecked[Int]("0"))
         unchecked[Unit](
           Seq(s"""
             |{// Reserve space used by `ForwardTraining` function.
@@ -1654,9 +1653,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
             s"    hx_desc_$counter,", hxData, s", hx_desc_$counter,", cxData, s", w_desc_$counter, ", w.data, s", y_descs_$counter, ", res.data, ",\n" +
             s"    hx_desc_$counter, ", hyData, s", hx_desc_$counter, NULL, workspace_$counter, workspaceSize_$counter, reserveSpace, reserveSize));\n") ++
           Seq(s"}"): _*)
-
-        // If inference, call `ForwardInference` function.
-      else
+        (res, hy, Some((reserveSpace, reserveSpaceSize)), counter)
+      } else { // If inference, call `ForwardInference` function.
         unchecked[Unit](
           Seq(
              "CUDNN_CALL(cudnnRNNForwardInference(\n" +
@@ -1665,11 +1663,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
             s"    hx_desc_$counter,", hyData, s", hx_desc_$counter, NULL, workspace_$counter, workspaceSize_$counter));\n"
           ) ++
           Seq(s"myGpuFree(workspaceSize_$counter);\n"): _*)
-
-      if (training)
-        (res, hy, Some(reserveSpace, reserveSpaceSize), counter)
-      else
         (res, hy, None, counter)
+      }
     }
 
     def cudnnRNNForwardInference(mode: RnnMode,
