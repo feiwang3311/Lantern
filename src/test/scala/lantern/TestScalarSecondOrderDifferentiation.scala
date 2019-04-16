@@ -16,7 +16,7 @@ class ScalarSecondOrderTest extends FunSuite {
       def snippet(a: Rep[String]): Rep[Unit] = {
         val (grad, hessV) = grad_two_inputs((x1, x2) => x1 * x2)(2.0, 3.0)((4.0, 5.0))
         assert (grad == (3.0, 2.0))
-        assert (hessV == (5.0, 4.0)) 
+        assert (hessV == (5.0, 4.0))
         ()
       }
     }
@@ -184,7 +184,7 @@ class ScalarSecondOrderTest extends FunSuite {
         def dy_x2x2(x1: Double, x2: Double) = 120 * x1 * x1 * x1 * x1
 
         assertVectorEqual(grad, (dy_x1(x1, x2), dy_x2(x1, x2)))
-        assertVectorEqual(hessV, (dy_x1x1(x1, x2) * 0.4 + dy_x1x2(x1, x2) * 0.6, 
+        assertVectorEqual(hessV, (dy_x1x1(x1, x2) * 0.4 + dy_x1x2(x1, x2) * 0.6,
                                   dy_x1x2(x1, x2) * 0.4 + dy_x2x2(x1, x2) * 0.6))
         ()
       }
