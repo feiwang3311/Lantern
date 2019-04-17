@@ -15,6 +15,8 @@ trait LanternGenC extends DslGenC {
   val IR: DslExp
   import IR._
 
+  class Unknown
+
   override def remap(m: Manifest[_]): String = m.toString match {
     case f if f.startsWith("scala.Function") =>
       val targs = m.typeArguments.dropRight(1)
@@ -45,21 +47,13 @@ trait LanternGenC extends DslGenC {
   }
 
   override def traverse(n: Node): Unit = n match {
-    case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
-      emitValDef(s, shallow(n))
     case _ => super.traverse(n)
   }
 
   override def shallow(n: Node): String = n match {
-    case n @ Node(s, op, List(x), _) if op.startsWith("new Array[") =>
-      def parse(op: String): String = {
-        if (op.startsWith("Array[")) {
-          val inner = op.drop(6).dropRight(1)
-          parse(inner) + "*"
-        } else op.toLowerCase() // NOTE: only applies to simple numeric types
-      }
-      val ctype = parse(op.drop(4))
-      s"(${ctype})myMalloc(${shallow1(x)} * sizeof(${ctype.dropRight(1)}))"
+    case n @ Node(s, "NewArray", List(x), _) =>
+      val ctype = remap(typeMap.get(s).map(_.typeArguments.head).getOrElse(manifest[Unknown]))
+      s"($ctype*)myMalloc(${shallow(x)} * sizeof($ctype))"
     case _ => super.shallow(n)
   }
 
@@ -167,18 +161,9 @@ trait LanternGenCublas extends LanternGenC {
   import IR._
 
   override def shallow(n: Node): String = n match {
-    case n @ Node(s, op, List(x), _) if op.startsWith("new GPUArray[") =>
-      def parse(op: String): String = {
-        if (op.startsWith("GPUArray[")) {
-          val inner = op.drop(9).dropRight(1)
-          parse(inner) + "*"
-        } else if (op.startsWith("Array[")) {
-          val inner = op.drop(6).dropRight(1)
-          parse(inner) + "*"
-        } else op.toLowerCase() // NOTE: only applies to simple numeric types
-      }
-      val ctype = parse(op.drop(4))
-      s"(${ctype})myGpuMalloc(${shallow1(x)} * sizeof(${ctype.dropRight(1)}))"
+    case n @ Node(s, "NewArray", List(x), _) =>
+      val ctype = remap(typeMap.get(s).map(_.typeArguments.head).getOrElse(manifest[Unknown]))
+      s"($ctype*)myGpuMalloc(${shallow(x)} * sizeof($ctype))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("h2dCopy[") =>
       val ty = op.drop(8).dropRight(1).toLowerCase
       s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyHostToDevice))"

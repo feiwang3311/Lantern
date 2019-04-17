@@ -27,7 +27,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         ()
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("add0") {
@@ -48,7 +48,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         ()
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("add_tanh") {
@@ -91,7 +91,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps[1].data)  # tensor([-0.081731, -0.000290, -0.136219, -0.163462])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
 
@@ -135,7 +135,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps[1].data)  # tensor([ 0.000000,  0.027244, -0.127940, -0.127940])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("mult_tanh") {
@@ -178,7 +178,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps[1].data)  # tensor([0.572076, 0.168311, 1.182885, 0.781767])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("div_tanh") {
@@ -221,7 +221,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps[1].data)  # tensor([0.004414, 0.009238, 0.044744, 0.177028])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("basic3") {
@@ -250,7 +250,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         ()
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("basic3.1") {
@@ -279,7 +279,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         ()
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("basic4") {
@@ -308,7 +308,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         ()
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("vv_dot1") {
@@ -330,7 +330,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         Tensor.assertEqual(getHessV(start1), d1 * 2)
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("vv_dot2") {
@@ -359,7 +359,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         Tensor.assertEqual(getHessV(start2), d1)
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("mv_dot1") {
@@ -388,7 +388,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(2), 1.0f, 1.2f))
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("mm_dot1") {
@@ -417,7 +417,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         Tensor.assertEqual(getHessV(start2), Tensor.fromData(Seq(2,2), 1.0f, 1.0f, 1.2f, 1.2f))
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("tanh0") {
@@ -455,7 +455,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // >> tensor([-0.255880, -0.068109, -0.011781, -0.001876])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("exp0") {
@@ -489,7 +489,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // x.grad # tensor([ 1.087313,  3.694528, 12.051323, 38.218704])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("log0") {
@@ -523,7 +523,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // x.grad # tensor([-0.400000, -0.125000, -0.066667, -0.043750])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("sqrt0") {
@@ -557,7 +557,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // x.grad # tensor([-0.100000, -0.044194, -0.028868, -0.021875])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("square0") {
@@ -591,7 +591,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // x.grad # tensor([0.800000, 1.000000, 1.200000, 1.400000])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("relu0") {
@@ -625,7 +625,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps[0].data)  # tensor([0., 0., 0., 0.])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("relu1") {
@@ -668,7 +668,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps[1].data)  # tensor([-0.000000, -0.378740,  0.000000,  0.612031])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("hardTanh1") {
@@ -713,7 +713,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps[1].data)  # tensor([0.000000,  0.000000, -8.640000,  4.560000])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("conv0") { // for kernel
@@ -757,7 +757,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps.data) # tensor([[[[ -4.214802,  -8.429605], [-12.644407, -16.859209]]]])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("conv1") { // for input
@@ -801,7 +801,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps.data) # tensor([[[[-0.023039, -0.019863], [ 0.058940, -0.057398]]]])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("conv2") { // for both kernel and input
@@ -851,7 +851,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // print(hvps[1].data) # tensor([[[[ -4.201046,  -8.451446], [-12.701845, -16.952246]]]])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("vv_dot3") {
@@ -889,7 +889,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         Tensor.assertEqual(getHessV(bias), Tensor.scalar(-4.887950f))
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("conv2.1") { // for both kernel and input (with bias)
@@ -954,7 +954,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // tensor([-4.887950])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
 
@@ -1036,7 +1036,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         //   [3.204655, 3.609499]]]])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("conv4") { // for both kernel and input, multiple channels
@@ -1201,7 +1201,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         //   [0.461327, 0.577221]]]])
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("conv5") { // for both kernel and input, multiple channels and batches
@@ -1311,7 +1311,7 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // better_print(hvps[1].data)
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 
   test("conv6") { // for both kernel and input, multiple channels and batches and bias
@@ -1429,6 +1429,6 @@ class TensorSecondOrderTest extends LanternFunSuite {
         // better_print(hvps[2].data)
       }
     }
-    g1.eval("a")
+    runTest(g1)
   }
 }
