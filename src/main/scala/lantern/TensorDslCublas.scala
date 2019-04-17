@@ -36,7 +36,7 @@ trait GPUOpsExp extends Base with ArrayOpsExpOpt {
     val DeviceToHost = Value("cudaMemcpyDeviceToHost")
     val DeviceToDevice = Value("cudaMemcpyDeviceToDevice")
   }
-  def gpu_array_new[T: Manifest](x: Exp[Int]) = Wrap[Array[T]](Adapter.g.reflectEffect("new GPUArray["+manifest[T]+"]", Unwrap(x))(Adapter.STORE))
+  def gpu_array_new[T: Manifest](x: Exp[Int]) = Wrap[Array[T]](Adapter.g.reflectEffect("NewGpuArray", Unwrap(x))(Adapter.STORE))
   def gpu_array_fromseq[T: Manifest](xs: Seq[Rep[T]]): Rep[Array[T]] = Wrap[Array[T]](Adapter.g.reflectEffect("new GPUArrayFromSeq["+manifest[T]+"]", Unwrap(xs))(Adapter.STORE))
   def gpu_array_copy_device_to_host[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
     Wrap[Unit](Adapter.g.reflectEffect("d2hCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len))(Adapter.STORE))

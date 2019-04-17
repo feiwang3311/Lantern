@@ -161,7 +161,7 @@ trait LanternGenCublas extends LanternGenC {
   import IR._
 
   override def shallow(n: Node): String = n match {
-    case n @ Node(s, "NewArray", List(x), _) =>
+    case n @ Node(s, "NewGpuArray", List(x), _) =>
       val ctype = remap(typeMap.get(s).map(_.typeArguments.head).getOrElse(manifest[Unknown]))
       s"($ctype*)myGpuMalloc(${shallow(x)} * sizeof($ctype))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("h2dCopy[") =>
@@ -765,6 +765,7 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBas
 abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCublas { q =>
   override val codegen = new LanternGenCublas {
     val IR: q.type = q
+    override def templateRawCode: String = super.templateRawCode + (permutationKernelMap.values map (_._1) mkString("\n\n"))
   }
 
   backend = BackendCublas()
@@ -788,6 +789,9 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriv
 abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverCublas[A, B] with NNModuleCudnn with TensorDslCudnn { q =>
   override val codegen = new LanternGenCudnn {
     val IR: q.type = q
+    override def templateRawCode: String = super.templateRawCode + (permutationKernelMap.values map (_._1) mkString("\n\n")) +
+        (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n")) +
+        (elementWiseUpdateWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
   }
   backend = BackendCudnn()
   override lazy val f: A => Unit = {
