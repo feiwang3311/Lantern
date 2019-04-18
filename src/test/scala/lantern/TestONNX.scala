@@ -530,7 +530,7 @@ class ONNXTest extends LanternFunSuite {
         def lossFun(dummy: TensorR) = func(TensorR(input)).nllLossB(target).sum()
 
         val loss = gradR_loss(lossFun)(Tensor.zeros(1))
-        println(loss.data(0))
+        printf("loss is %lf\\n", loss.data(0))
       }
     }
 

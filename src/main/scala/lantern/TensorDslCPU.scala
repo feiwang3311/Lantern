@@ -475,12 +475,13 @@ trait TensorDslCPU extends TensorDsl {
     // https://github.com/pytorch/pytorch/blob/0a8c8c1dbead2f845e524ae32c19167d80363148/aten/src/THNN/generic/SpatialConvolutionMM.c
     type RAF = Rep[Array[Float]]
     def memsetFloatZero(where: RAF, howmany: Rep[Int]) = {
-      unchecked[Unit]("memset(", where, ", 0, 4 * ", howmany, ");")
+      unchecked[Unit]("memset(", where, ", 0, 4 * ", howmany, ")")
     }
     def memcpyFloat(dst: RAF, src: RAF, howmany: Rep[Int]) = {
-      unchecked[Unit]("memcpy(", dst, ", ", src, ", 4 * ", howmany, ");")
+      unchecked[Unit]("memcpy(", dst, ", ", src, ", 4 * ", howmany, ")")
     }
 
+    @virtualize
     def unfoldedCopy(finput: RAF, input: RAF, kW: Rep[Int], kH: Rep[Int], dW: Int, dH: Int, padW: Int, padH: Int,
     nInputPlane: Rep[Int], inputWidth: Rep[Int], inputHeight: Rep[Int], outputWidth: Rep[Int], outputHeight: Rep[Int]) {
       for (k <- (0 until nInputPlane * kH * kW): Rep[Range]) {
@@ -493,29 +494,32 @@ trait TensorDslCPU extends TensorDsl {
         if (padW > 0 || padH > 0) {
           for (y <- (0 until outputHeight): Rep[Range]) {
             val iy = y * dH - padH + kh
-            __ifThenElse ((iy < 0 || iy >= inputHeight), {
-              memsetFloatZero(slice(dst, y*outputWidth), outputWidth); ()
-            }, {
+            if (iy < 0 || iy >= inputHeight)
+              memsetFloatZero(slice(dst, y*outputWidth), outputWidth)
+            else {
               if (dW == 1) {
-                val ix = 0 - padW + kw;
-                val lpad = __ifThenElse ((padW-kw > 0), padW-kw, 0)
-                val rpad = __ifThenElse ((padW-(kW-kw-1) > 0), padW-(kW-kw-1), 0)
-                __ifThenElse ((outputWidth-rpad-lpad <= 0), {
+                val ix = padW - kw
+                val lpad = if (ix > 0) ix else 0
+                val temp = padW-(kW-kw-1)
+                val rpad = if (temp > 0) temp else 0
+                if (outputWidth-rpad-lpad <= 0)
                   memsetFloatZero(slice(dst, y*outputWidth), outputWidth)
-                }, {
-                  __ifThenElse ((lpad > 0), memsetFloatZero(slice(dst, y*outputWidth), lpad), ())
+                else {
+                  if (lpad > 0) memsetFloatZero(slice(dst, y*outputWidth), lpad)
                   generate_comment("may have segfault here")
-                  memcpyFloat(slice(dst, y*outputWidth+lpad), slice(src, iy*inputWidth+ix+lpad), outputWidth-rpad-lpad)
-                  __ifThenElse ((rpad > 0), memsetFloatZero(slice(dst, y*outputWidth+outputWidth-rpad), rpad), ())
-                })
+                  memcpyFloat(slice(dst, y*outputWidth+lpad), slice(src, iy*inputWidth-ix+lpad), outputWidth-rpad-lpad)
+                  if (rpad > 0) memsetFloatZero(slice(dst, y*outputWidth+outputWidth-rpad), rpad)
+                }
               } else {
                 for (x <- (0 until outputWidth): Rep[Range]) {
                   val ix = x * dW - padW + kw
-                  __ifThenElse ((ix < 0 || ix >= inputWidth), memsetFloatZero(slice(dst, y*outputWidth+x), 1),
-                    memcpyFloat(slice(dst, y*outputWidth+x), slice(src, iy*inputWidth+ix), 1))
+                  if (ix < 0 || ix >= inputWidth)
+                    memsetFloatZero(slice(dst, y*outputWidth+x), 1)
+                  else
+                    memcpyFloat(slice(dst, y*outputWidth+x), slice(src, iy*inputWidth+ix), 1)
                 }
               }
-            })
+            }
           }
         } else {
           for (y <- (0 until outputHeight): Rep[Range]) {
