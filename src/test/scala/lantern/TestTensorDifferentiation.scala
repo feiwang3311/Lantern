@@ -57,6 +57,48 @@ class LanternFunSuite extends FunSuite {
 
 class AdLMSVectorTest extends LanternFunSuite {
 
+    test("recursion0") {
+    val rec = new LanternDriverC[String, Unit] with TensorDslCPU {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+
+          lazy val f: Rep[Float => Unit] = fun { (x: Rep[Float]) =>
+            if (x < 0.0f)
+              f(x - 1)
+            else
+              ()
+          }
+          var x = 3
+          f(x)
+
+      }
+    }
+    System.out.println(rec.code)
+  }
+
+  test("recursion") {
+    val rec = new LanternDriverC[String, Unit] with TensorDslCPU {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        var i = 0
+        while (i < 10) {
+          lazy val f: Rep[Float => Unit] = fun { (x: Rep[Float]) =>
+            if (x < 0.0f)
+              f(x - i)
+            else
+              ()
+          }
+          var x = 3
+          f(x)
+          i = i + 1
+        }
+      }
+    }
+    System.out.println(rec.code)
+  }
+
   test("IF") {
     val IF_Test = new LanternDriverC[String, Unit] with TensorDslCPU {
       override val fileName = currentTestName
