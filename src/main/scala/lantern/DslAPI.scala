@@ -597,45 +597,19 @@ trait LanternGenCudnn extends LanternGenCublas {
   val IR: DslExp
   import IR._
 
+  def convAlgoTemplate(x: Int): String =
+  s"""
+    |cudnnConvolutionFwdAlgo_t       algo_$x      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_$x      = false;
+    |cudnnConvolutionBwdDataAlgo_t   algo_bwd_$x  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_$x  = false;
+    |cudnnConvolutionBwdFilterAlgo_t algo_bwf_$x  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_$x  = false;
+   """.stripMargin
+
+  val convOpIndex = ((0 until 12): Range).toList
+  def buildConvAlgoTemplate(): String = convOpIndex.map(convAlgoTemplate).mkString("\n")
+
   override def templateHeaders: Seq[String] = super.templateHeaders ++ Seq("<cudnn.h>")
-  override def templateRawCode: String = super.templateRawCode +
+  override def templateRawCode: String = super.templateRawCode + buildConvAlgoTemplate() +
      """
-      |cudnnConvolutionFwdAlgo_t       algo_0      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_0      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_0  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_0  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_0  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_0  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_1      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_1      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_1  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_1  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_1  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_1  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_2      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_2      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_2  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_2  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_2  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_2  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_3      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_3      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_3  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_3  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_3  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_3  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_4      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_4      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_4  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_4  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_4  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_4  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_5      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_5      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_5  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_5  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_5  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_5  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_6      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_6      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_6  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_6  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_6  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_6  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_7      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_7      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_7  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_7  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_7  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_7  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_8      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_8      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_8  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_8  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_8  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_8  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_9      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_9      = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_9  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_9  = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_9  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_9  = false;
-      |cudnnConvolutionFwdAlgo_t       algo_10     = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_10     = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_10 = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_10 = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_10 = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_10 = false;
-      |cudnnConvolutionFwdAlgo_t       algo_11     = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_11     = false;
-      |cudnnConvolutionBwdDataAlgo_t   algo_bwd_11 = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_11 = false;
-      |cudnnConvolutionBwdFilterAlgo_t algo_bwf_11 = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_11 = false;
       |
       |#define CUDNN_CALL(f) { \
       |  cudnnStatus_t stat = (f); \
@@ -789,9 +763,12 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriv
 abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverCublas[A, B] with NNModuleCudnn with TensorDslCudnn { q =>
   override val codegen = new LanternGenCudnn {
     val IR: q.type = q
-    override def templateRawCode: String = super.templateRawCode + (permutationKernelMap.values map (_._1) mkString("\n\n")) +
-        (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n")) +
-        (elementWiseUpdateWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
+
+    override val convOpIndex = convOpIndexSet.toList
+    override def templateRawCode: String = super.templateRawCode +
+      (permutationKernelMap.values map (_._1) mkString("\n\n")) +
+      (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n")) +
+      (elementWiseUpdateWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
   }
   backend = BackendCudnn()
   override lazy val f: A => Unit = {

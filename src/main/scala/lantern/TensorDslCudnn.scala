@@ -14,6 +14,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
 
   val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
   val elementWiseUpdateWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
+  val convOpIndexSet = scala.collection.mutable.ListBuffer.empty[Int]
   val attributesMap = new scala.collection.mutable.HashMap[Int, String]()
   def printAttributes() = unchecked[Unit](attributesMap.values.mkString("\n"))
 
@@ -447,6 +448,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       val one = NewArray[Float](1); one(0) = 1
 
       val counter = nextKernel
+      convOpIndexSet += counter
+
       nextKernel += 1
 
       attributesMap(counter) = "// Attributes;"
@@ -511,13 +514,13 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
          """.stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnFindConvolutionForwardAlgorithmEx(\n" +
-         s"    cudnnHandle, in_desc_$counter, ", input.data, s", filt_desc_$counter, ", filter.data, ",\n" + 
+         s"    cudnnHandle, in_desc_$counter, ", input.data, s", filt_desc_$counter, ", filter.data, ",\n" +
          s"    conv_desc_$counter, out_desc_$counter, ", res.data, s", CUDNN_CONVOLUTION_FWD_ALGO_COUNT, &perf_count_$counter,\n" +
          s"    perfResults_$counter, maxSpace_$counter, max_sz_$counter));\n" +
          s"myGpuFree(max_sz_$counter);\n" +
-         s"algo_$counter = perfResults_$counter[0].algo;\n" + 
+         s"algo_$counter = perfResults_$counter[0].algo;\n" +
          s"init_algo_$counter = true;\n}\n"): _*)
-      else 
+      else
       unchecked[Unit](
         s"""
           |int returned_algo_count_$counter;
@@ -724,7 +727,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
          s"myGpuFree(max_sz_bwf_$counter);\n" +
          s"algo_bwf_$counter = perfResults_bwf_$counter[0].algo;\n" +
          s"init_algo_bwf_$counter = true;\n}\n"): _*)
-    else                  
+    else
       unchecked[Unit](
         s"""
           |int returned_algo_counter_bwf_$counter;
@@ -955,7 +958,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
         else {System.out.println(s"bias rank is not 1 or 4, but ${bias.rank}"); ???}
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
-      
+
       val counter = nextKernel
       nextKernel += 1
 
@@ -1068,7 +1071,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
                                                momentum: Double = 0.1, epsilon: Double = 1e-5): Int = {
       val zero = NewArray[Float](1); zero(0) = 0
       val one = NewArray[Float](1); one(0) = 1
-     
+
       val counter = nextKernel
       nextKernel += 1
 
