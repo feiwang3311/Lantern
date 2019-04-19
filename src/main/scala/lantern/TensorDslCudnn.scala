@@ -487,7 +487,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       if (true)
       unchecked[Unit](
         Seq(s"""
-          |if (init_algo_$counter) {} else {
+          |if (!init_algo_$counter) {
           |cudnnConvolutionFwdAlgo_t algos_$counter[] = {
           |      CUDNN_CONVOLUTION_FWD_ALGO_GEMM,
           |      CUDNN_CONVOLUTION_FWD_ALGO_FFT,
@@ -506,8 +506,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
           |         && max_sz_$counter < sz)
           |         max_sz_$counter = sz;
           |}
-          |size_t avail_$counter = (long)gpuMallocBase + HEAP_SIZE - (long)gpuMallocAddr;
-          |if (max_sz_$counter > avail_$counter) max_sz_$counter = avail_$counter;
+          |max_sz_$counter = CAP_AVAIL(max_sz_$counter);
           |cudnnConvolutionFwdAlgoPerf_t perfResults_$counter[8];
           |int perf_count_$counter;
           |void* maxSpace_$counter = myGpuMalloc(max_sz_$counter);
@@ -623,7 +622,10 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       unchecked[Unit](
         Seq(
         s"""
-          |if (init_algo_bwd_$counter) {} else {
+          |if (!init_algo_bwd_$counter) {
+          |  int input_size_$counter = """.stripMargin, inputGrad.scalarCount, s""";
+          |  if (input_size_$counter * sizeof(float) <= AVAL_GPU_MEM) {
+          |void* input_pointer_$counter = myGpuMalloc(input_size_$counter * sizeof(float));
           |cudnnConvolutionBwdDataAlgo_t algos_bwd_$counter[] = {
           |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_0,
           |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
@@ -640,21 +642,20 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
           |        algos_bwd_$counter[c], &sz) && max_sz_bwd_$counter < sz)
           |        max_sz_bwd_$counter = sz;
           |}
+          |max_sz_bwd_$counter = CAP_AVAIL(max_sz_bwd_$counter);
           |cudnnConvolutionBwdDataAlgoPerf_t perfResults_bwd_$counter[6];
           |int perf_count_bwd_$counter;
-          |int input_size_$counter = """.stripMargin, inputGrad.scalarCount, s""";
           |void* maxSpace_bwd_$counter = myGpuMalloc(max_sz_bwd_$counter);
-          |void* input_pointer_$counter = myGpuMalloc(input_size_$counter * sizeof(float));
          """.stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnFindConvolutionBackwardDataAlgorithmEx(\n" +
          s"    cudnnHandle, filt_desc_$counter, ", filter.data, s", out_desc_$counter, ", resGrad.data, ",\n" +
          s"    conv_desc_$counter, in_desc_$counter, input_pointer_$counter, 6, &perf_count_bwd_$counter, \n" +
          s"    perfResults_bwd_$counter, maxSpace_bwd_$counter, max_sz_bwd_$counter));\n" +
-         s"myGpuFree(input_size_$counter * sizeof(float));\n" +
          s"myGpuFree(max_sz_bwd_$counter);\n" +
+         s"myGpuFree(input_size_$counter * sizeof(float));\n" +
          s"algo_bwd_$counter = perfResults_bwd_$counter[0].algo;\n" + 
-         s"init_algo_bwd_$counter = true;\n}\n"): _*)
+         s"init_algo_bwd_$counter = true;\n}\n}\n"): _*)
       else
       unchecked[Unit](
         s"""
@@ -695,7 +696,10 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       if (true)
       unchecked[Unit](
         Seq(s"""
-          |if (init_algo_bwf_$counter) {} else {
+          |if (!init_algo_bwf_$counter) {
+          |  int filter_size_$counter = """.stripMargin, filterGrad.scalarCount, s""";
+          |  if (filter_size_$counter * sizeof(float) <= AVAIL_GPU_MEM) {
+          |void* filter_pointer_$counter = myGpuMalloc(filter_size_$counter * sizeof(float)); // filter can be overwritten by FindAlgo call!
           |cudnnConvolutionBwdFilterAlgo_t algos_bwf_$counter[] = {
           |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
           |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1,
@@ -712,21 +716,20 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
           |        algos_bwf_$counter[c], &sz) && max_sz_bwf_$counter < sz)
           |        max_sz_bwf_$counter = sz;
           |}
+          |max_sz_bwf_$counter = CAP_AVAIL(max_sz_bwf_$counter);
           |cudnnConvolutionBwdFilterAlgoPerf_t perfResults_bwf_$counter[6];
           |int perf_count_bwf_$counter;
           |void* maxSpace_bwf_$counter = myGpuMalloc(max_sz_bwf_$counter);
-          |int filter_size_$counter = """.stripMargin, filterGrad.scalarCount, s""";
-          |void* filter_pointer_$counter = myGpuMalloc(filter_size_$counter * sizeof(float)); // filter can be overwritten by FindAlgo call!
           """.stripMargin) ++
         Seq(
           "CUDNN_CALL(cudnnFindConvolutionBackwardFilterAlgorithmEx(\n" +
          s"    cudnnHandle, in_desc_$counter, ", input.data, s", out_desc_$counter, ", resGrad.data, ",\n" +
          s"    conv_desc_$counter, filt_desc_$counter, filter_pointer_$counter, 6, &perf_count_bwf_$counter,\n" +
          s"    perfResults_bwf_$counter, maxSpace_bwf_$counter, max_sz_bwf_$counter));\n" +
-         s"myGpuFree(filter_size_$counter * sizeof(float));\n" +
          s"myGpuFree(max_sz_bwf_$counter);\n" +
+         s"myGpuFree(filter_size_$counter * sizeof(float));\n" +
          s"algo_bwf_$counter = perfResults_bwf_$counter[0].algo;\n" +
-         s"init_algo_bwf_$counter = true;\n}\n"): _*)
+         s"init_algo_bwf_$counter = true;\n}\n}\n"): _*)
     else
       unchecked[Unit](
         s"""

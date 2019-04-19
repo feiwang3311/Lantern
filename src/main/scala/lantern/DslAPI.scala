@@ -221,6 +221,9 @@ trait LanternGenCublas extends LanternGenC {
       |  return;
       |}
       |
+      |#define AVAIL_GPU_MEM ((long)gpuMallocBase + HEAP_SIZE - (long)gpuMallocAddr)
+      |#define CAP_AVAIL(claim) min(AVAIL_GPU_MEM, claim)
+      |
       |template <typename T>
       |__global__ void arrayUpdate(T *data, int index, T value) {
       |  data[index] = value;
