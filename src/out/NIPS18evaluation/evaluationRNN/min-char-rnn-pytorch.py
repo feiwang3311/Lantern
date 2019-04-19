@@ -55,7 +55,7 @@ def run(write_to):
 
     def forward(self, input, hidden):
       combined = torch.cat((input, hidden), 1)
-      hidden = F.tanh(self.i2h(combined))
+      hidden = torch.tanh(self.i2h(combined))
       output = self.i2o(hidden)
       return output, hidden
 
@@ -80,10 +80,10 @@ def run(write_to):
     loss.backward()
 
     # grad clipping and stepping
-    torch.nn.utils.clip_grad_norm(rnn.parameters(), 5.0, norm_type=1)
+    torch.nn.utils.clip_grad_norm_(rnn.parameters(), 5.0, norm_type=1)
     optimizer.step()
 
-    return loss.data[0]
+    return loss.item()
 
   end = time.time()
   prepareTime = end-start

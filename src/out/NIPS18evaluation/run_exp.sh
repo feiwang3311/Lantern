@@ -7,6 +7,7 @@ echo "Note: we assume the system has python-pip python-dev python-virtualenv"
 # pip3 install --upgrade tensorflow
 # pip3 install torch torchvision
 # pip3 install dynet
+# pip3 install nltk
 # pip3 install matplotlib
 
 export OPENBLAS_NUM_THREADS=1
@@ -64,7 +65,6 @@ echo "RUN: Lantern CNN"
 numactl -C 0 ./Lantern result_Lantern.txt
 echo "Result: Lantern CNN successful"
 cd ..
-source ../python3-env/bin/activate
 echo "RUN: copy the result files and do plotting"
 cp Lantern/result_Lantern.txt result_Lantern.txt
 cp PyTorch/result_PyTorch100.txt result_PyTorch.txt
@@ -83,6 +83,7 @@ OPENBLAS_NUM_THREADS=1 numactl -C 0 ./Lantern result_Lantern.txt
 echo "Result: run sentiment in Lantern is successful"
 cd ..
 echo "Now let's run Dynet"
+source python3-env/bin/activate
 cd Dynet
 echo "RUN: run dynet without autobatching"
 numactl -C 0 python3 treelstmDynet.py result_DyNetNB.txt

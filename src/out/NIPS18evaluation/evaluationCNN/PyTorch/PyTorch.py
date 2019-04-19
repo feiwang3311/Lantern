@@ -66,7 +66,7 @@ def run(write_to):
       optimizer.zero_grad()
       output = model(data)
       loss = F.nll_loss(output, target)
-      tloss += loss.data[0]
+      tloss += loss.item()
       loss.backward()
       optimizer.step()
       if (batch_idx + 1) % (args.log_interval / args.batch_size) == 0:

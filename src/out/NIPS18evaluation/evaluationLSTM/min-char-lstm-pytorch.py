@@ -79,7 +79,7 @@ def run(write_to):
               Variable(torch.zeros(1, batch_size, self.hidden_size)))
 
   model = RNN(vocab_size, hidden_size, vocab_size)
-  loss_function = nn.NLLLoss(size_average=False, reduce=True)
+  loss_function = nn.NLLLoss(reduction='mean')
   optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
 
   end = time.time()
@@ -102,10 +102,10 @@ def run(write_to):
     tag_scores = model(inputs)
     loss = loss_function(tag_scores, Variable(lineToLongTensor1D(targets)))
     loss.backward()
-    torch.nn.utils.clip_grad_norm(model.parameters(), 5.0, norm_type=1)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0, norm_type=1)
     optimizer.step()
 
-    loss = loss.data[0]
+    loss = loss.item()
     if iter % iter_step == 0:
       print('iter %d, loss: %f' % (iter, loss))
       loss_save.append(loss)

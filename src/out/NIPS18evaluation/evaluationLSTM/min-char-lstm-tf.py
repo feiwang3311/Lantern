@@ -5,6 +5,7 @@ Minimal character-level Vanilla RNN model. Written by Xilun Wu.
 """
 import numpy as np
 import tensorflow as tf
+import tensorflow.keras as keras
 import time
 
 def run(write_to):
@@ -35,7 +36,9 @@ def run(write_to):
   W2 = tf.Variable(np.random.randn(hidden_size, vocab_size) * 0.01, dtype=tf.float32)  #hidden to output
   b2 = tf.Variable(np.zeros((1,vocab_size)), dtype=tf.float32)  # output bias
 
-  outputs, _ = tf.nn.dynamic_rnn(tf.contrib.rnn.BasicLSTMCell(hidden_size, state_is_tuple=True), tf.one_hot(batchX_placeholder, vocab_size), time_major=True, dtype = tf.float32)
+  lstm = keras.layers.RNN(tf.keras.layers.LSTMCell(hidden_size), return_sequences=True, time_major=True)
+  outputs = lstm(tf.one_hot(batchX_placeholder, vocab_size))
+  # outputs, _ = tf.nn.dynamic_rnn(tf.contrib.rnn.BasicLSTMCell(hidden_size, state_is_tuple=True), tf.one_hot(batchX_placeholder, vocab_size), time_major=True, dtype = tf.float32)
   outputs = tf.reshape(outputs, [-1, hidden_size])
   Y = tf.reshape(batchY_placeholder, [-1])
   loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits = (tf.matmul(outputs, W2) + b2), labels = Y)
