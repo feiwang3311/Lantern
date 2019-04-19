@@ -607,7 +607,7 @@ trait LanternGenCudnn extends LanternGenCublas {
     |cudnnConvolutionBwdFilterAlgo_t algo_bwf_$x  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_$x  = false;
    """.stripMargin
 
-  val convOpIndex = ((0 until 12): Range).toList
+  def convOpIndex() = ((0 until 12): Range).toList
   def buildConvAlgoTemplate(): String = convOpIndex.map(convAlgoTemplate).mkString("\n")
 
   override def templateHeaders: Seq[String] = super.templateHeaders ++ Seq("<cudnn.h>")
@@ -767,7 +767,7 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDrive
   override val codegen = new LanternGenCudnn {
     val IR: q.type = q
 
-    override val convOpIndex = convOpIndexSet.toList
+    override def convOpIndex() = convOpIndexSet.toList
     override def templateRawCode: String = super.templateRawCode +
       (permutationKernelMap.values map (_._1) mkString("\n\n")) +
       (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n")) +

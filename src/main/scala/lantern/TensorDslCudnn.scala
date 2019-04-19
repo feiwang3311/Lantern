@@ -654,7 +654,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
          s"    perfResults_bwd_$counter, maxSpace_bwd_$counter, max_sz_bwd_$counter));\n" +
          s"myGpuFree(max_sz_bwd_$counter);\n" +
          s"myGpuFree(input_size_$counter * sizeof(float));\n" +
-         s"algo_bwd_$counter = perfResults_bwd_$counter[0].algo;\n" + 
+         s"algo_bwd_$counter = perfResults_bwd_$counter[0].algo;\n" +
          s"init_algo_bwd_$counter = true;\n}\n}\n"): _*)
       else
       unchecked[Unit](
@@ -1583,7 +1583,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
          |    cudnnHandle, rnn_desc_$counter,
          |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
          |    dropout_desc_$counter, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
-         |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));         
+         |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
          """.stripMargin) ++
         cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc_$counter, $mathType));")).getOrElse(Seq()) ++
         Seq(s"""
