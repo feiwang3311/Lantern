@@ -36,31 +36,30 @@ trait LanternGenC extends DslGenC {
     def typed(s:lms.core.Backend.Sym) = if (argType) s"${remap(typeMap(s))} ${quote(s)}" else quote(s)
     def ltyped(xs:List[lms.core.Backend.Sym]) = xs.map(typed(_)).mkString(", ")
     def paren(s:String) = if (argType) "("+s+")" else s
-    if (y.in.length == 0) {
-      quoteBlock(traverse(y))
-    } else {
-      val xs = y.in
-      val l = captureLines(traverse(y))
-      val b = l.mkString("\n")
-      s"[&]${paren(ltyped(xs))} {$b}"
-    }
+    val xs = y.in
+    emit(s"[&]${paren(ltyped(xs))}$eff")
+    quoteBlockPReturn(traverse(y))
+    //val l = captureLines(traverse(y))
+    //val b = l.mkString("\n")
+    //s"[&]${paren(ltyped(xs))} {$b}"
   }
 
   override def traverse(n: Node): Unit = n match {
     case _ => super.traverse(n)
   }
 
-  override def shallow(n: Node): String = n match {
+  override def shallow(n: Node): Unit = n match {
     case n @ Node(s, "NewArray", List(x), _) =>
       val ctype = remap(typeMap.get(s).map(_.typeArguments.head).getOrElse(manifest[Unknown]))
-      s"($ctype*)myMalloc(${shallow(x)} * sizeof($ctype))"
+      emit(s"($ctype*)myMalloc("); shallow(x); emit(s" * sizeof($ctype))")
+      // emit(s"($ctype*)myMalloc(${shallow(x)} * sizeof($ctype))")
     case _ => super.shallow(n)
   }
 
-  override def shallow(n: lms.core.Backend.Def): String = n match {
+  override def shallow(n: lms.core.Backend.Def): Unit = n match {
     case InlineSym(t: Node) => shallow(t)
     case b: lms.core.Backend.Block => quoteBlock1(b)
-    case _ => quote(n)
+    case _ => emit(quote(n))
   }
 
   def templateHeaders: Seq[String] = Seq(
@@ -118,7 +117,7 @@ trait LanternGenC extends DslGenC {
     |  }
     |  return res;
     |}
-    |long HEAP_SIZE = 8589934608; //  4294967304; // this is for GPU
+    |long HEAP_SIZE = 10737418240; // 8589934608; //  4294967304; // this is for GPU
     |int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
     |  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
     |  result->tv_sec = diff / 1000000;
@@ -160,19 +159,23 @@ trait LanternGenCublas extends LanternGenC {
   val IR: DslExp
   import IR._
 
-  override def shallow(n: Node): String = n match {
+  override def shallow(n: Node): Unit = n match {
     case n @ Node(s, "NewGpuArray", List(x), _) =>
       val ctype = remap(typeMap.get(s).map(_.typeArguments.head).getOrElse(manifest[Unknown]))
-      s"($ctype*)myGpuMalloc(${shallow(x)} * sizeof($ctype))"
+      emit(s"($ctype*)myGpuMalloc("); shallow(x); emit(s" * sizeof($ctype))")
+      // s"($ctype*)myGpuMalloc(${shallow(x)} * sizeof($ctype))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("h2dCopy[") =>
-      val ty = op.drop(8).dropRight(1).toLowerCase
-      s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyHostToDevice))"
+      val ty = op.substring(8, op.length - 1).toLowerCase // op.drop(8).dropRight(1).toLowerCase
+      emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(", "); shallow(x); emit(", "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyHostToDevice))")
+      // s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyHostToDevice))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("d2hCopy[") =>
-      val ty = op.drop(8).dropRight(1).toLowerCase
-      s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToHost))"
+      val ty = op.substring(8, op.length - 1).toLowerCase // op.drop(8).dropRight(1).toLowerCase
+      emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(", "); shallow(x); emit(", "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyDeviceToHost))")
+      // s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToHost))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("d2dCopy[") =>
-      val ty = op.drop(8).dropRight(1).toLowerCase
-      s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToHost))"
+      val ty = op.substring(8, op.length - 1).toLowerCase // op.drop(8).dropRight(1).toLowerCase
+      emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(", "); shallow(x); emit(", "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyDevicetoDevice))")
+      // s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToDevice))"
     case _ => super.shallow(n)
   }
 
@@ -208,8 +211,11 @@ trait LanternGenCublas extends LanternGenC {
       |  bytes = ((bytes + (1 << N) - 1) >> N) << N;
       |  void *res = gpuMallocAddr;
       |  gpuMallocAddr = (void *)((char *)gpuMallocAddr + bytes);
-      |  if ((long)gpuMallocAddr >= (long)gpuMallocBase + HEAP_SIZE) {
-      |    fprintf(stderr, "GPU breached memory limit of HEAP_SIZE\n"); abort();
+      |  if ((long)gpuMallocAddr > (long)gpuMallocBase + HEAP_SIZE) {
+      |    fprintf(stderr, "GPU breached memory limit of HEAP_SIZE\n");
+      |    // try to throw a SegFault here so that I can use gdb to find where the error is:
+      |    int *foo = (int*)-1;
+      |    printf("%d\n", *foo);
       |  }
       |  return res;
       |}

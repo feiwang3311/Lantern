@@ -624,7 +624,9 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
         s"""
           |if (!init_algo_bwd_$counter) {
           |  int input_size_$counter = """.stripMargin, inputGrad.scalarCount, s""";
-          |  if (input_size_$counter * sizeof(float) <= AVAL_GPU_MEM) {
+          |  if (input_size_$counter * sizeof(float) > AVAIL_GPU_MEM - 1000) {
+          |    init_algo_bwd_$counter = true;
+          |  } else {
           |void* input_pointer_$counter = myGpuMalloc(input_size_$counter * sizeof(float));
           |cudnnConvolutionBwdDataAlgo_t algos_bwd_$counter[] = {
           |       CUDNN_CONVOLUTION_BWD_DATA_ALGO_0,
@@ -698,7 +700,9 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
         Seq(s"""
           |if (!init_algo_bwf_$counter) {
           |  int filter_size_$counter = """.stripMargin, filterGrad.scalarCount, s""";
-          |  if (filter_size_$counter * sizeof(float) <= AVAIL_GPU_MEM) {
+          |  if (filter_size_$counter * sizeof(float) > AVAIL_GPU_MEM - 1000) {
+          |    init_algo_bwf_$counter = true;
+          |  } else {
           |void* filter_pointer_$counter = myGpuMalloc(filter_size_$counter * sizeof(float)); // filter can be overwritten by FindAlgo call!
           |cudnnConvolutionBwdFilterAlgo_t algos_bwf_$counter[] = {
           |       CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,

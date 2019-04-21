@@ -144,7 +144,7 @@ object DeepSpeech {
       val net = DeepSpeech(labels = labels, bidirectional = true)
       // TODO: PyTorch DeepSpeech model uses SGD with Nesterov momentum.
       // val opt = SGD(net, learning_rate = 3e-8f, gradClip = 1000.0f)
-      val opt = SGD_Momentum(net, learning_rate = 3e-4f, momentum = 0.9f, gradClip = 400.0f, nesterov = true)
+      val opt = SGD_Momentum(net, learning_rate = 3e-6f, momentum = 0.9f, gradClip = 400.0f, nesterov = true)
 
       def lossFun(input: TensorR, percent: Rep[Array[Float]], target: Rep[Array[Int]], targetSize: Rep[Array[Int]]) = { (dummy: TensorR) =>
         val probs = net(input).softmax_batch(2)
