@@ -710,21 +710,15 @@ with TensorDsl with NNModule with Dataset with ONNXLib with ScannerOpsExp with T
     outFile.flush()
   }
 
-  def wrapper(x: Rep[A]): Unit = {
+  override def wrapper(x: Rep[A]): Rep[B] = {
     generate_comment("Backend setup.")
     backend.setup()
     val result = snippet(x)
 
     generate_comment("Backend cleanup.")
     backend.cleanup()
+    result
   }
-
-  override lazy val code: String = {
-    val source = new java.io.StringWriter()
-    codegen.emitSource(wrapper, "Snippet", new java.io.PrintWriter(source))
-    source.toString
-  }
-
 }
 
 abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCPU { q =>
