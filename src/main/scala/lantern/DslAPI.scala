@@ -144,9 +144,11 @@ trait LanternGenC extends DslGenC {
     |Emitting C Generated Code
     |*******************************************/
    """.stripMargin)
-    stream.println(s"$ms2 $functionName($ms1 $arg) {")
-    apply(g)
-    stream.println("}")
+//    stream.println(s"$ms2 $functionName($ms1 $arg) {")
+//    apply(g)
+//    stream.println("}")
+    val src = run(name, g)
+    src.writeTo(stream)
     stream.println("""
     /*****************************************
     End of C Generated Code
@@ -174,7 +176,7 @@ trait LanternGenCublas extends LanternGenC {
       // s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToHost))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("d2dCopy[") =>
       val ty = op.substring(8, op.length - 1).toLowerCase // op.drop(8).dropRight(1).toLowerCase
-      emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(", "); shallow(x); emit(", "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyDevicetoDevice))")
+      emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(", "); shallow(x); emit(", "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyDeviceToDevice))")
       // s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToDevice))"
     case _ => super.shallow(n)
   }
