@@ -31,7 +31,7 @@ trait LanternGenC extends DslGenC {
     case _ => super.remap(m)
   }
 
-  override def quoteBlock1(y: lms.core.Backend.Block, argType: Boolean = false) = {
+  override def quoteBlock(y: lms.core.Backend.Block, argType: Boolean = false) = {
     def eff = quoteEff(y.ein)
     def typed(s:lms.core.Backend.Sym) = if (argType) s"${remap(typeMap(s))} ${quote(s)}" else quote(s)
     def ltyped(xs:List[lms.core.Backend.Sym]) = xs.map(typed(_)).mkString(", ")
@@ -58,7 +58,7 @@ trait LanternGenC extends DslGenC {
 
   override def shallow(n: lms.core.Backend.Def): Unit = n match {
     case InlineSym(t: Node) => shallow(t)
-    case b: lms.core.Backend.Block => quoteBlock1(b)
+    case b: lms.core.Backend.Block => quoteBlock(b)
     case _ => emit(quote(n))
   }
 
