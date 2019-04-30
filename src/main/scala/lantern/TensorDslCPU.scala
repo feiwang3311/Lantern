@@ -864,7 +864,7 @@ trait TensorDslCPU extends TensorDsl {
       }
       assert(strideRow >= 1 && kernelRow >= 1, "kernel width and stride width should be at least 1")
       assert(strideCol >= 1 && kernelCol >= 1, "kernel height and stride height should be at least 1")
-      assert(input.shape(2) + 2 * padUp >= kernelRow && input.shape(3) + 2 * padUp >= kernelCol, "Image too small for maxPool_k: " + input.shape + "|" + (kernelRow, kernelCol))
+      assertC(input.shape(2) + 2 * padUp >= kernelRow && input.shape(3) + 2 * padUp >= kernelCol, "Image too small for maxPool_k: " + input.shape + "|" + (kernelRow, kernelCol))
       assert(padUp == padDown && padUp == padLeft && padUp == padRight && padUp >= 0, "pad should be the same")
 
       val resWidth = convSize(input.shape(2) + padUp + padDown, kernelRow, strideRow)

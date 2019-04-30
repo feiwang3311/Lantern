@@ -406,7 +406,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
         (bias.shape.padTo(4, unit(1)), res.shape.padTo(4, unit(1)))
       } else {
         if (bias.rank == 4 && res.rank == 4) {
-          assert((bias.shape zip res.shape).forallR{case (a, b) => a == 1 || a == b}, s"bias shape should be equal to res or be 1, got bias: ${bias.shape}, res: ${res.shape}")
+          assertC((bias.shape zip res.shape).forallR{case (a, b) => a == 1 || a == b}, s"bias shape should be equal to res or be 1, got bias: ${bias.shape}, res: ${res.shape}")
           (bias.shape, res.shape)
         } else {
           assert(bias.rank == 1 && res.rank >= 2, "if not equal shape, bias must be rank 1, and res must be rank 2 or more")
@@ -782,7 +782,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       assert(strideCol >= 1, "Column stride must be at least 1")
 
       assert(kernel.shape(1) == input.shape(1), s"In-channel count mismatch: input.shape[1] ${input.shape(1)} should match kernel.shape[1] ${kernel.shape(1)}")
-      assert(input.shape(2) + 2 * padH >= kernel.shape(2) && input.shape(3) + 2 * padW >= kernel.shape(3))
+      assertC(input.shape(2) + 2 * padH >= kernel.shape(2) && input.shape(3) + 2 * padW >= kernel.shape(3), "Error")
 
       // Execute `cudnnConvolutionForward`.
       val resWidth = convSize(input.shape(2) + padH * 2, kernel.shape(2), strideRow)

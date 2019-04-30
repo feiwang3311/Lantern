@@ -42,8 +42,8 @@ trait TensorDsl extends Dsl with Diff {
         check(dimseq.tail)
       }
     check(toDims)
-    if (count >= 2) assertC(false, "cannot have 2 or more -1s in resize!!")
-    if (count == 0) assert(prod == scalarCount, "must same size!!")
+    assertC(count < 2, "cannot have 2 or more -1s in resize!!")
+    if (count == 0) assertC(prod == scalarCount, "must same size!!")
     toDims.map(x => if (x > 0) x else scalarCount / prod)
   }
 
@@ -54,13 +54,8 @@ trait TensorDsl extends Dsl with Diff {
   def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
 
   @virtualize
-  def assert(b: Rep[Boolean], s: String = "ERROR not specified"): Unit = if (debug) {
-    if (!b) { printf(s); exit(1) }
-  }
-
-  @virtualize
-  def assertC(cond: Rep[Boolean], msg: String, args: Rep[Any]*): Unit = if (debug) {
-    if (!cond) { printf(msg + "\\n", args : _*); exit(1)} else {}
+  def assertC(cond: => Rep[Boolean], msg: => String, args: Rep[Any]*): Unit = if (debug) {
+    if (!cond) { printf(msg + "\\n", args : _*); exit(1) }
   }
 
   object Random {
@@ -386,11 +381,11 @@ trait TensorDsl extends Dsl with Diff {
 
     def shape = Dimensions(dimensions)
     val rank = dimensions.length
-    assert (rank > 0, "Tensors need to have nonEmpty dimensions")
+    assertC (rank > 0, "Tensors need to have nonEmpty dimensions")
     val scalarCount = shape.scalarCount
     val isScalar = scalarCount == unit(1)
 
-    assert(scalarCount != 0, "Tensor cannot have scalar count 0")
+    assertC(scalarCount != 0, "Tensor cannot have scalar count 0")
 
     def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
     // Slice: i inclued, j excluded
@@ -457,8 +452,8 @@ trait TensorDsl extends Dsl with Diff {
     def dot(that: Tensor) = {
       generate_comment(s"dot: ${this.shape.seq}, ${that.shape.seq}")
       (this.rank, that.rank) match {
-        case (1, 1) => assert(this.shape(0) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
-        case (2, 1) | (2, 2) => assert(this.shape(1) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
+        case (1, 1) => assertC(this.shape(0) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
+        case (2, 1) | (2, 2) => assertC(this.shape(1) == that.shape(0), s"Incompatible shapes: ${this.shape}, ${that.shape}")
         case _ => throw new IllegalArgumentException(
           s"Only vector-vector, matrix-vector, and matrix-matrix multiplication are allowed (actual shapes: ${this.shape}, ${that.shape})")
       }
@@ -706,7 +701,7 @@ trait TensorDsl extends Dsl with Diff {
     @virtualize
     def addMul(that: Tensor, y: Tensor) = {
       assert(this.rank == 2 && that.rank == 2 && y.rank == 2, s"Dimensions: ${this.shape.seq} - ${that.shape.seq} - ${y.shape.seq}")
-      assert(this.shape(0) == that.shape(0) && this.shape(1) == y.shape(1) && that.shape(1) == y.shape(0), s"Dimensions: ${this.shape.seq} + ${that.shape.seq} * ${y.shape.seq}")
+      assertC(this.shape(0) == that.shape(0) && this.shape(1) == y.shape(1) && that.shape(1) == y.shape(0), s"Dimensions: ${this.shape.seq} + ${that.shape.seq} * ${y.shape.seq}")
       var offThis = var_new(0)
       var offThatR = var_new(0)
       var offYC = var_new(0)
@@ -736,7 +731,7 @@ trait TensorDsl extends Dsl with Diff {
 
     def square(t: Rep[Float]) = t * t
     def add_mult(a: Tensor, b: Tensor) = {
-      assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_mult")
+      assertC(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_mult")
 
       val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
       val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
@@ -764,7 +759,7 @@ trait TensorDsl extends Dsl with Diff {
     }
 
     def add_div(a: Tensor, b: Tensor) = {
-      assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_div")
+      assertC(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_div")
       val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
       val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
       for (i <- DataLoop(dims0M * dims1M)) {
@@ -774,7 +769,7 @@ trait TensorDsl extends Dsl with Diff {
     }
 
     def minus_mult_div_square(a: Tensor, b: Tensor, c: Tensor) = {
-      assert(Tensor.dimCompatible(a, b)    && Tensor.dimCompatible(a, c)    && Tensor.dimCompatible(c, b)    &&
+      assertC(Tensor.dimCompatible(a, b)    && Tensor.dimCompatible(a, c)    && Tensor.dimCompatible(c, b)    &&
         Tensor.dimCompatible(this, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, c),
         "dim not competible in minus_mult_div_square")
       val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
@@ -786,7 +781,7 @@ trait TensorDsl extends Dsl with Diff {
     }
 
     def add_oneMinusSquare_mult(a: Tensor, b: Tensor) = {
-      assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_oneMinusSquare_mult")
+      assertC(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_oneMinusSquare_mult")
       val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
       val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
       for (i <- DataLoop(dims0M * dims1M)) {
@@ -798,7 +793,7 @@ trait TensorDsl extends Dsl with Diff {
     def oneMinusThenMult(t: Rep[Float]) = (1.0f - t) * t
 
     def add_oneMinusThenMult_mult(a: Tensor, b: Tensor) = {
-      assert(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_oneMinusThenMult_mult")
+      assertC(Tensor.dimCompatible(a, b) && Tensor.dimCompatible(a, this) && Tensor.dimCompatible(this, b), "dim not Compatible in add_oneMinusThenMult_mult")
       val dims0M = mmax(shape.head, mmax(a.shape.head, b.shape.head))
       val dims1M = mmax(shape.get(1), mmax(a.shape.get(1), b.shape.get(1)))
       for (i <- DataLoop(dims0M * dims1M)) {
