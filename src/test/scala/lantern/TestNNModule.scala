@@ -41,7 +41,7 @@ class ModuleTest extends FunSuite {
         // check registration
         val nameSets = scala.collection.mutable.Set[String]()
         li.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
-        assert(nameSets == Set("bias", "weight", "other/weight", "other/bias"))
+        assertC(nameSets == Set("bias", "weight", "other/weight", "other/bias"), "Error")
       }
     }
     test1.eval("a")
@@ -72,7 +72,7 @@ class ModuleTest extends FunSuite {
         // check registration
         val nameSets = scala.collection.mutable.Set[String]()
         testModule.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
-        assert(nameSets == Set("other2/bias", "bias", "weight", "other2/weight"))
+        assertC(nameSets == Set("other2/bias", "bias", "weight", "other2/weight"), "Error")
       }
     }
     test.eval("a")
@@ -101,7 +101,7 @@ class ModuleTest extends FunSuite {
         // check registration
         val nameSets = scala.collection.mutable.Set[String]()
         testModule.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
-        assert(nameSets == Set("others_index_0", "weight", "others_index_1", "others1_index_1/weight", "others1_index_1/bias", "others1_index_0/bias", "others1_index_0/weight"))
+        assertC(nameSets == Set("others_index_0", "weight", "others_index_1", "others1_index_1/weight", "others1_index_1/bias", "others1_index_0/bias", "others1_index_0/weight"), "Error")
       }
     }
     test.eval("a")
@@ -169,7 +169,7 @@ class ModuleTest extends FunSuite {
         // check registration
         val nameSets = scala.collection.mutable.Set[String]()
         fc.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
-        assert(nameSets == Set("fully_connected/bn/bias", "fully_connected/bn/scale", "fully_connected/linear/weight"))
+        assertC(nameSets == Set("fully_connected/bn/bias", "fully_connected/bn/scale", "fully_connected/linear/weight"), "Error")
       }
     }
     test.eval("a")
@@ -196,7 +196,7 @@ class ModuleTest extends FunSuite {
         // check registration
         val nameSets = scala.collection.mutable.Set[String]()
         module.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
-        assert(nameSets == Set("TestNested/randomName/dummy"))
+        assertC(nameSets == Set("TestNested/randomName/dummy"), "Error")
       }
     }
     test.eval("a")
@@ -235,9 +235,9 @@ class ModuleTest extends FunSuite {
         // check registration
         val nameSets = scala.collection.mutable.Set[String]()
         module.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
-        assert(nameSets == Set("TestNested/conv/bn1/scale", "TestNested/conv/bn1/bias",
+        assertC(nameSets == Set("TestNested/conv/bn1/scale", "TestNested/conv/bn1/bias",
           "TestNested/conv/bn2/bias", "TestNested/conv/bn2/scale", "TestNested/conv/conv1/kernel",
-          "TestNested/conv/conv1/bias", "TestNested/conv/conv2/bias", "TestNested/conv/conv2/kernel"))
+          "TestNested/conv/conv1/bias", "TestNested/conv/conv2/bias", "TestNested/conv/conv2/kernel"), "Error")
       }
     }
     test.eval("a")
