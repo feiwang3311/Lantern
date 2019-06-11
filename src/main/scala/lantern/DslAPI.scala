@@ -144,9 +144,9 @@ trait LanternGenC extends DslGenC {
     |Emitting C Generated Code
     |*******************************************/
    """.stripMargin)
-//    stream.println(s"$ms2 $functionName($ms1 $arg) {")
-//    apply(g)
-//    stream.println("}")
+    // stream.println(s"$ms2 $functionName($ms1 $arg) {")
+    // apply(g)
+    // stream.println("}")
     val src = run(name, g)
     src.writeTo(stream)
     stream.println("""

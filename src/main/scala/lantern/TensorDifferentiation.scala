@@ -1511,13 +1511,21 @@ trait TensorDsl extends Dsl with Diff {
 
   }
 
+  def tempFixEffect(f: TensorR => Unit)(x: Rep[Array[Array[Float]]])(dims: Seq[TensorDsl.this.Rep[Int]]) = {
+    val x1 = x(0)
+    val x2 = x(1)
+    f(new TensorR(Tensor(x1, dims: _*), Tensor(x2, dims: _*)))
+    x(0) = uncheckedRead[Array[Float]](x1)(x1)
+    x(1) = uncheckedRead[Array[Float]](x2)(x2)
+  }
+
   // change fun signature for memory leak issue (no more returning of array, just update the array provided by the caller)
   // this is in accordance of the destination-passing style
   // the fun take array[array[double]] of size 2, with the first array to be the x, and the second array to be the d
   def FUNc(f: TensorR => Unit): (TensorR => Unit) = { (x:TensorR) =>
     val dims = x.x.shape.toSeq
     val f1 = fun { (x: Rep[Array[Array[Float]]]) =>
-      f(new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*)))
+      tempFixEffect(f)(x)(dims)
     }
     val in = NewArray[Array[Float]](2)
     in(0) = x.x.data; in(1) = x.d.data
@@ -1570,11 +1578,13 @@ trait TensorDsl extends Dsl with Diff {
   def FUNs(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = { (i: Rep[Int]) => (x:TensorR) =>
     val dims = x.x.shape.toSeq
     val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
-      val tensor = new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*))
-      f(i)(tensor)
+      tempFixEffect(f(i))(x)(dims)
+      // f(i)(new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*)))
     }
     val in = NewArray[Array[Float]](2)
     in(0) = x.x.data; in(1) = x.d.data
+    // in(0) = uncheckedRead[Array[Float]](x.x.data)(x.x.data);
+    // in(1) = uncheckedRead[Array[Float]](x.d.data)(x.d.data)
     f1(i, in)
   }
 
