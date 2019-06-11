@@ -42,8 +42,9 @@ trait GPUOpsExp extends Base with ArrayOpsExpOpt {
     Wrap[Unit](Adapter.g.reflectMutable("d2hCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len)))
     // reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.DeviceToHost))
   def gpu_array_copy_host_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
-    Wrap[Unit](Adapter.g.reflectMutable("h2dCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len)))
+    // Wrap[Unit](Adapter.g.reflectMutable("h2dCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len)))
     // reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.HostToDevice))
+    Wrap[Unit](Adapter.g.reflectEffect("h2dCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len))(Unwrap(src))(Unwrap(dest)))
   def gpu_array_copy_device_to_device[T: Manifest](src: Rep[Array[T]], dest: Rep[Array[T]], len: Rep[Int])(implicit pos: SourceContext): Rep[Unit] =
     Wrap[Unit](Adapter.g.reflectMutable("d2dCopy["+manifest[T]+"]", Unwrap(src), Unwrap(dest), Unwrap(len)))
     // reflectEffect(GPUArrayCopy(src, dest, len, CopyDirection.DeviceToDevice))

@@ -377,8 +377,7 @@ class AdLMSTest extends FunSuite {
     val gr8 = new DslDriver[Double, Double] with DiffApi {
 
       def snippet(x: Rep[Double]): Rep[Double] = {
-        val array = NewArray[Double](3)
-        for (i <- (0 until 3): Rep[Range]) array(i) = i + 2
+        val array = staticData(scala.Array(2.0,3.0,4.0))
         val model: NumR => NumR @diff = { (x: NumR) =>
           LOOPA(x)(array)(i => x1 => {
             val t = new NumR(array(i), var_new(0.0))
