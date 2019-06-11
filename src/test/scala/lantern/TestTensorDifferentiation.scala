@@ -136,6 +136,30 @@ class AdLMSVectorTest extends LanternFunSuite {
     runTest(IF_Test)
   }
 
+
+  test("randinit") {
+    val array3 = new LanternDriverC[String, Unit] with TensorDslCPU {
+      override val fileName = currentTestName
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        // use random array as input
+        val length = 2
+        val v = Tensor.randinit(length)
+
+        // calcuate gradient
+        val grad = gradR(t => t.sum())(v)
+	printf("%f", grad.data(0))
+        // another way of implementing it
+        // val grad1 = gradR(t => (t + t).sum())(v)
+        //val grad2 = gradR(t => (t * t).sum())(v)
+        //if (v.data(0) > 0) Tensor.assertEqual(grad, grad1)
+        //else Tensor.assertEqual(grad, grad2)
+      }
+    }
+    runTest(array3)
+  }
+
   test("array100") {
     val array3 = new LanternDriverC[String, Unit] with TensorDslCPU {
       override val fileName = currentTestName
