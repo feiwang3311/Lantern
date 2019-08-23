@@ -99,7 +99,7 @@ object DeepSpeech {
         val rnns: Seq[BatchRNN] = for (layer <- 0 until numLayers: Range) yield {
           if (layer == 0) BatchRNN(s"batch_rnn${layer}", rnnInputSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
           else BatchRNN(s"batch_rnn${layer}", rnnHiddenSize, rnnHiddenSize, rnnMode, bidirectional, useBatchNorm = false)
-        } 
+        }
 
         val lookahead: Option[Lookahead] = if (bidirectional) None else Some(Lookahead(numFeatures = rnnHiddenSize, context = context))
 

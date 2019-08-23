@@ -484,7 +484,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
         cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetConvolutionMathType(conv_desc_$counter, $mathType));\n")).getOrElse(Seq()):_*
       )
 
-      if (true)
+      if (false)
       unchecked[Unit](
         Seq(s"""
           |if (!init_algo_$counter) {
@@ -618,7 +618,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
 
-      if (true)
+      if (false)
       unchecked[Unit](
         Seq(
         s"""
@@ -695,7 +695,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
       val one = NewArray[Float](1); one(0) = 1
 
-      if (true)
+      if (false)
       unchecked[Unit](
         Seq(s"""
           |if (!init_algo_bwf_$counter) {

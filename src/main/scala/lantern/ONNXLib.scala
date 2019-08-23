@@ -165,7 +165,7 @@ trait ONNXLib extends TensorDsl with ScannerOps {
     }
     def record_init(init: TensorProto): (String, (Seq[Int], Int, Int)) = {
       val dims: Seq[Int] = ParseHelper.getProtoProps(init.dims_size , init.dims(_)).map(x => x.toInt)
-      val name: String = init.name.getString
+      val name: String = if (init.name == null) "" else init.name.getString
       val datatype: Int = init.data_type
       if (datatype == TensorProto.FLOAT) {
         val rawdata: org.bytedeco.javacpp.BytePointer = init.raw_data
