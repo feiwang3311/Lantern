@@ -623,8 +623,12 @@ trait TensorDsl extends Dsl with Diff {
     }
 
     def printHead(count: Int = 10, msg: String = ""): Unit = {
-      if (msg != "")
-        printf(s"$msg (size ${this.shape.seq mkString " x "})\\n")
+      if (msg != "") {
+        // printf(s"$msg (size ${this.shape.seq.map(quote) mkString " x "})\\n")
+        val frm = s"$msg (size " + this.shape.seq.map(_ => "%d").mkString(" x ") + ")\\n"
+        printf(frm, this.shape.seq: _*)
+      }
+
       printf(s"Max Abs: ${format}|| ", this.amax())
       for (i <- 0 until count: Rep[Range]) {
         printf(format, this.data(i))
