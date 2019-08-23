@@ -5,6 +5,7 @@ import scala.util.continuations._
 import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
+import lms.core.Backend
 import lms.core.Backend._
 import lms.core.Graph
 
@@ -48,8 +49,13 @@ trait LanternGenC extends DslGenC {
     case _ => super.traverse(n)
   }
 
+  def isInt(d: Backend.Def): Boolean = d match {
+    case Backend.Const(x: Int) => true
+    case s : Backend.Sym => typeMap.get(s).fold(false)(_ == manifest[Int])
+    case _ => false
+  }
   override def shallow(n: Node): Unit = n match {
-    case n @ Node(s, "NewArray", List(x), _) =>
+    case n @ Node(s, "NewArray", List(x), _) if isInt(x) =>
       val ctype = remap(typeMap.get(s).map(_.typeArguments.head).getOrElse(manifest[Unknown]))
       emit(s"($ctype*)myMalloc("); shallow(x); emit(s" * sizeof($ctype))")
       // emit(s"($ctype*)myMalloc(${shallow(x)} * sizeof($ctype))")
