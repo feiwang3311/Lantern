@@ -155,7 +155,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
         val in1Stride = ((0 until rank): Range).map(x => s"int in1Stride$x").mkString(", ")
         val in2Stride = ((0 until rank): Range).map(x => s"int in2Stride$x").mkString(", ")
         val outStride = ((0 until rank): Range).map(x => s"int outStride$x").mkString(", ")
-        val linearToStep = ((0 until rank): Range).map(x => s"    int outIndex$x = linearIdx / outStride$x; linearIdx = linearIdx - outIndex$x * outStride$x;").mkString("\n")
+        val linearToStep = ((0 until rank): Range).map(x => s"int outIndex$x = linearIdx / outStride$x; linearIdx = linearIdx - outIndex$x * outStride$x;").mkString("\n    ")
         val in1Index = ((0 until rank): Range).map(x => s"in1Stride$x * outIndex$x").mkString(" + ")
         val in2Index = ((0 until rank): Range).map(x => s"in2Stride$x * outIndex$x").mkString(" + ")
         val kernel = s"""
@@ -163,7 +163,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
         |                ${in1Stride}, ${in2Stride}, ${outStride}) {
         |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
         |  int stride = gridDim.x * blockDim.x;
-        |  for (int i = tid; i < size; i += stride) {
+        |  for (; tid < size; tid += stride) {
         |    int linearIdx = tid;
         |    ${linearToStep}
         |    int in1Index = ${in1Index};
@@ -766,8 +766,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
 
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int) ={
       // TODO: Dedupe assertions/shape calculations with CPU implementation.
-      assert(input.rank == 4, "Input must be 4-D (first dimension is batch size)")
-      assert(kernel.rank == 4, "Kernel must be 4-D")
+      assert(input.rank == 4, s"Input must be 4-D (first dimension is batch size) but got ${input.rank}")
+      assert(kernel.rank == 4, s"Kernel must be 4-D, but got ${kernel.rank}")
       bias match {
         case Some(bias) =>
           assert(bias.rank == 1, s"Bias should be 1-D, got ${bias.shape}")

@@ -21,8 +21,10 @@ import org.bytedeco.javacpp.onnx._;
 import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
+import lms.core.Backend
 
-trait ONNXLib extends TensorDsl with ScannerOps {
+//trait ONNXLib extends TensorDsl with ScannerOps {
+trait ONNXLib extends TensorDslCudnn with ScannerOps {
 
   object ParseHelper {
 
@@ -684,7 +686,11 @@ trait ONNXLib extends TensorDsl with ScannerOps {
           case globalAveragePoolNode(input, output) => {
 
             val in = twoMaps(input)
-            val out = in.global_ave_batch()
+            // val out = in.global_ave_batch()
+            val out = (Unwrap(in.shape(2)), Unwrap(in.shape(3))) match {
+              case (Backend.Const(a:Int), Backend.Const(b:Int)) => in.averagePool2D_batch(kernels=Seq(a, b), strides=Seq(1,1))
+              case _ => throw new Exception(s"shape pannel is not fixed size ${in.shape}")
+            }
             intermediate_map_tensor += (output -> out)
           }
 

@@ -812,7 +812,7 @@ trait TensorDsl extends Dsl with Diff {
     }
 
     @virtualize
-    def averagePool2D_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]]): Tensor = paddings match {
+    def averagePool2D_batch(kernels: Seq[Int], strides: Seq[Int], paddings: Option[Seq[Int]] = None): Tensor = paddings match {
       case Some(pads) => backend.averagePool2D_batch(this, kernels, strides, pads)
       case None => backend.averagePool2D_batch(this, kernels, strides, Seq(0,0,0,0))
     }
