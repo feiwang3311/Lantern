@@ -51,7 +51,7 @@ trait ONNXLib extends TensorDslCudnn with ScannerOps {
     }
 
     def toBigEndiansInts(stream: DataInputStream): Seq[Int] = {
-      val bf = streamToByteBuffer(stream); bf.rewind()
+      val bf = streamToByteBuffer(stream); bf.asInstanceOf[Buffer].rewind()
       val intBuffer = bf.order(ByteOrder.LITTLE_ENDIAN).asLongBuffer();
       val n = intBuffer.remaining
 

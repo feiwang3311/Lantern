@@ -173,8 +173,19 @@ trait LanternGenCublas extends LanternGenC {
       emit(s"($ctype*)myGpuMalloc("); shallow(x); emit(s" * sizeof($ctype))")
       // s"($ctype*)myGpuMalloc(${shallow(x)} * sizeof($ctype))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("h2dCopy[") =>
-      val ty = op.substring(8, op.length - 1).toLowerCase // op.drop(8).dropRight(1).toLowerCase
-      emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(", "); shallow(x); emit(", "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyHostToDevice))")
+      // TODO: this is a bad fix for shallow(x), which doesn't work if x is static float array like {1.0, 2.0}
+      // The issue is in c++ -std=c++11, we can use `(const float[]){1.0, 2.0}` to initalize a static float array namelessly
+      // But we cannot do so in cuda code, which is compiled via nvcc!
+      // I found no way to initialize a nameless float array in cuda, thus we cannot use `shallow(x)`!
+      // We must to `traverse(x)' first, and use the result of it in the cudaMemcpy
+      val ty = op.substring(8, op.length - 1).toLowerCase
+      x match {
+        case nx @ InlineSym(nnx @ Node(sx, "Array" , xs, _)) =>
+          traverse(nnx)
+          emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(s", ${quote(sx)}, "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyHostToDevice))")
+        case _ =>
+          emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(", "); shallow(x); emit(", "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyHostToDevice))")
+      }
       // s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyHostToDevice))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("d2hCopy[") =>
       val ty = op.substring(8, op.length - 1).toLowerCase // op.drop(8).dropRight(1).toLowerCase
