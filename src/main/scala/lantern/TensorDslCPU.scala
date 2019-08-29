@@ -185,7 +185,9 @@ trait TensorDslCPU extends TensorDsl {
 
     override def add_cartesian(x: Tensor, y: Tensor, output: Tensor) = {
       generate_comment("backend add_cartesian")
-      assert(x.rank == 2 && y.shape == Dimensions(Seq(x.shape(1))) && output.shape == Dimensions(Seq(x.shape(0))))
+      assert(x.rank == 2)
+      assert(y.shape == Dimensions(Seq(x.shape(1))), s"y.shape ${y.shape} is not the same as x.shape(1) ${x.shape(1)}")
+      assert(output.shape == Dimensions(Seq(x.shape(0))))
       val off = var_new(0)
       for (i <- DataLoop(x.shape(0))) {
         for (j <- DataLoop(x.shape(1))) {

@@ -81,6 +81,7 @@ trait CudaGenGPUOps extends CGenBase {
 trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
 
   val permutationKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
+  val basicKernelMap = new scala.collection.mutable.HashMap[String, (String, String)]()
   var nextKernel: Int = 0
 
   def getCudaMallocAddr(): Rep[Long] = {
@@ -201,10 +202,21 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
     override def makeTensor(dims: Seq[Rep[Int]], scalars: Float*): Tensor =
       BackendCPU().makeTensor(dims, scalars: _*).toGPU()
 
+    val arrayFillKernelFun = """
+        |__global__ void arrayFill(float* data, float value, int size) {
+        |  int stride = gridDim.x * blockDim.x;
+        |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+        |  for (int i = tid; i < size; i += stride) data[i] = value;
+        |}
+        """
+
     override def fill(dims: Seq[Rep[Int]], value: Rep[Float]): Tensor = {
       val size: Rep[Int] = dims.foldLeft(unit(1)){case (a, b) => a * b}
       val resArray = mallocArray[Float](size)
       val nGrid = 28
+      if (!basicKernelMap.contains("arrayFill")) {
+        basicKernelMap("arrayFill") = (arrayFillKernelFun, "arrayFill")
+      }
       unchecked[Unit](s"arrayFill<<<${nGrid}, 512>>>(", resArray, ", ", value, ", ", size, ")")
       Tensor(resArray, dims: _*)
     }
@@ -215,6 +227,9 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       val size = x.scalarCount
       val nGrid = 28
+      if (!basicKernelMap.contains("arrayFill")) {
+        basicKernelMap("arrayFill") = (arrayFillKernelFun, "arrayFill")
+      }
       unchecked[Unit](s"arrayFill<<<${nGrid}, 512>>>(", x.data, ", ", value, ", ", size, ")")
     }
 
@@ -798,16 +813,47 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
     override def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
     override def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
 
+    val hardTanhKernelFun = """
+        |__global__ void hardTanh(float* in, float* out, float min_val, float max_val, int size) {
+        |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+        |  int stride = gridDim.x * blockDim.x;
+        |  for (int i = tid; i < size; i += stride) {
+        |    out[i] = in[i] < min_val ? min_val : (in[i] > max_val ? max_val : in[i]);
+        |  }
+        |}
+        """
+
     override def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor = {
       val size = x.scalarCount
       val res = if (inPlace) x.data else mallocArray[Float](size)
       val nGrid = 28
+      if (!basicKernelMap.contains("hardTanh")) {
+        basicKernelMap("hardTanh") = (hardTanhKernelFun, "hardTanh")
+      }
       unchecked[Unit](s"hardTanh<<<${nGrid}, 512>>>(", x.data, ", ", res, ", ", min_val, ", ", max_val, ", ", x.scalarCount, ")")
       Tensor(res, x.shape.seq: _*)
     }
+
+    val hardTanhGradKernelFun = """
+        |__global__ void hardTanh_grad(float* in_x, float* in_d, float* out_d, float min_val, float max_val, int size, bool inplace) {
+        |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+        |  int stride = gridDim.x * blockDim.x;
+        |  for (int i = tid; i < size; i += stride) {
+        |    if (inplace) {
+        |      if (in_x[i] < min_val || in_x[i] > max_val) in_d[i] = 0;
+        |    } else {
+        |      if (in_x[i] >= min_val && in_x[i] <= max_val) in_d[i] += out_d[i];
+        |    }
+        |  }
+        |}
+       """
+
     override def hardTanh_grad(input: TensorR, res: TensorR, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Unit = {
       val size = input.x.scalarCount
       val nGrid = 28
+      if (!basicKernelMap.contains("hardTanh_grad")) {
+        basicKernelMap("hardTanh_grad") = (hardTanhGradKernelFun, "hardTanh_grad")
+      }
       unchecked[Unit](s"hardTanh_grad<<<${nGrid}, 512>>>(", input.x.data, ", ", input.d.data, ", ", res.d.data, ", ", min_val, ", ", max_val, ", ", size, ", ", inPlace, ")")
     }
 
