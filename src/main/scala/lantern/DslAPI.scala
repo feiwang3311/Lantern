@@ -74,8 +74,8 @@ trait LanternGenC extends DslGenC {
     "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>", "<cblas.h>", "<algorithm>", "<numeric>")
   def templateRawCode: String = ""
 
-  override def emitAll(g: Graph, name: String)(m1:Manifest[_],m2:Manifest[_]): Unit = {
-    init(g)
+  override def emitAll(ng: Graph, name: String)(m1:Manifest[_],m2:Manifest[_]): Unit = {
+    val g = init(ng)
     val arg = quote(g.block.in.head)
     val efs = "" //quoteEff(g.block.ein)
     val stt = dce.statics.toList.map(quoteStatic).mkString(", ")
