@@ -61,7 +61,7 @@ class ModuleTest extends FunSuite {
           val weight = TensorR(Tensor.zeros(inSize, outSize))
           val other = Some(1)
           val other2 = Some(Linear1(47,48))
-          def apply(in:TensorR):TensorR@diff = bias match {
+          def apply(in:TensorR):TensorR @diff = bias match {
             case Some(b) => in.dot(weight) + b
             case None => in.dot(weight)
           }
@@ -107,13 +107,53 @@ class ModuleTest extends FunSuite {
     test.eval("a")
   }
 
+
+  test("micro_bug") {
+    val test = new LanternDriverC[String, Unit] {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val fill = NewArray[Int](4)
+        for (i <- (0 until 4): Rep[Range]) {
+          fill(i) = i
+        }
+      }
+    }
+    test.eval("a")
+  }
+
+  test("micro") {
+    val test = new LanternDriverC[String, Unit] {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        for (i <- (0 until 4): Rep[Range]) {
+          printf("index is %d", i)
+        }
+      }
+    }
+    test.eval("a")
+  }
+  test("mini") {
+    val test = new LanternDriverC[String, Unit] {
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val weight = TensorR(Tensor.ones(4, 6))
+        val x = Tensor.ones(6)
+        val res = gradR(x => weight.dot(x))(x)
+        // res.printHead(msg = "print")
+        // weight.d.printHead(msg = "print weight grad")
+        ()
+      }
+    }
+    test.eval("a")
+  }
+
   test("module") {
     val test = new LanternDriverC[String, Unit] with NNModule {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
 
         case class Linear(val inSize: Int, val outSize: Int, val name: String = "linear1d") extends Module {
-          val weight = TensorR(Tensor.zeros(outSize, inSize))
+          val weight = TensorR(Tensor.ones(outSize, inSize))
           val bias = TensorR(Tensor.zeros(outSize))
           def apply(in: TensorR): TensorR @diff = weight.dot(in) + bias
         }
@@ -135,8 +175,9 @@ class ModuleTest extends FunSuite {
         testModule.forEachNamedParameter{case (name: String, _) => nameSets.add(name); ()}
         assert(nameSets == Set("test/bias", "test/module/bias", "test/module/weight"))
 
-        val x = Tensor.zeros(6)
-        gradR(x => testModule(x))(x)
+        val x = Tensor.ones(6)
+        val res = gradR(x => testModule(x))(x)
+        res.printHead(msg="print:")
         ()
       }
     }
