@@ -32,7 +32,8 @@ trait LanternGenC extends DslGenC {
     case _ => super.remap(m)
   }
 
-  override def quoteBlock(y: lms.core.Backend.Block, argType: Boolean = false) = {
+  override def quoteBlock(y: lms.core.Backend.Block) = {
+    val argType = false
     def eff = quoteEff(y.ein)
     def typed(s:lms.core.Backend.Sym) = if (argType) s"${remap(typeMap(s))} ${quote(s)}" else quote(s)
     def ltyped(xs:List[lms.core.Backend.Sym]) = xs.map(typed(_)).mkString(", ")
