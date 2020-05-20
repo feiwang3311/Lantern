@@ -135,11 +135,19 @@ trait TensorDslCPU extends TensorDsl {
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       assertC(x.shape(0) == y.shape(0), "vector vector dot not the same %d %d", x.shape(0), y.shape(0))
       val value = var_new(0.0f)
+    
       for (i <- DataLoop(x.shape.last)) {
         value += x.data(i) * y.data(i)
       }
+
+      // val dim = x.shape(0)
+      // unchecked[Unit] (
+      //   value, " = cblas_sdot(", dim, ",", x.data, ",1,", y.data, ",1)"
+      // )
+
       val res = mallocArray[Float](1)
       res(0) = readVar(value)
+
       Tensor(res, 1)
     }
 
@@ -1111,6 +1119,27 @@ trait TensorDslCPU extends TensorDsl {
       val offset = var_new(0)
       for (batch <- DataLoop(input.d.shape(0))) {
         input.d.data(offset + target(batch)) += -1.0f * res.d.data(batch)
+        offset += input.d.shape.strides(0)
+      }
+    }
+
+    override def mseLoss(x: Tensor, target: Rep[Array[Float]]): Tensor = {
+      assert(x.rank == 2, "Input must be a 2-D tensor (batch)")
+      generate_comment("'mseLoss' forward in CPU")
+      val batchSize = x.shape(0)
+      val res = mallocArray[Float](batchSize)
+      for (i <- DataLoop(batchSize)) {
+        res(i) = target(i) - x.data(i)
+        res(i) = res(i) * res(i)
+      }
+      Tensor(res, batchSize)
+    }
+
+    override def mseLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Float]]): Unit = {
+      generate_comment("'mseLoss_grad' implementation in CPU")
+      var offset = var_new(0)
+      for (i <- DataLoop(input.d.shape(0))) {
+        input.d.data(offset + i) += 2 * input.x.data(offset + i) * res.d.data(i)
         offset += input.d.shape.strides(0)
       }
     }

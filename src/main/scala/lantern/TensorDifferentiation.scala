@@ -338,6 +338,8 @@ trait TensorDsl extends Dsl with Diff {
     // Loss functions.
     def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
     def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit
+    def mseLoss(x: Tensor, target: Rep[Array[Float]]): Tensor
+    def mseLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Float]]): Unit
 
     // CTCLoss
     def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor
@@ -606,6 +608,8 @@ trait TensorDsl extends Dsl with Diff {
 
     def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
 
+    def mseLoss(target: Rep[Array[Float]]) = backend.mseLoss(this, target)
+
     def ctcLoss(inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor =
       backend.ctcLoss(TensorR(this), inputLengths, labels, labelLengths)
 
@@ -863,7 +867,7 @@ trait TensorDsl extends Dsl with Diff {
     @virtualize
     def concat(dim: Int, others: Tensor*) = {
       assert(others.size >= 1, "there should be at least one tensor in others")
-      assert(dim >= 0 && dim < this.rank, "dim should be within range of this.nbDims")
+      assert(dim >= 0 && dim < this.rank, s"dim should be within range of ${this.rank}")
       assert(others.forall(x => x.rank == this.rank), "all tensors should have the same number of dimensions")
       assertC(others.forallR{t=> (0 until this.rank: Range).forallR{i => t.shape(i) == this.shape(i) || i == dim}},
               "all dimensions except the concatenation dimension should be the same")
@@ -985,8 +989,9 @@ trait TensorDsl extends Dsl with Diff {
 
   object Tensor {
     // this function actually SHOULD NOT be different for different backend
-    def apply(data: Rep[Array[Float]], dims: Rep[Int]*) =
+    def apply(data: Rep[Array[Float]], dims: Rep[Int]*)= {
       backend.arrayToTensor(data, dims: _*)
+    }
 
     def dimCompatible(a: Tensor, b: Tensor) = {
       (a.shape == b.shape) || a.isScalar || b.isScalar
@@ -1179,6 +1184,12 @@ trait TensorDsl extends Dsl with Diff {
       backend.minus_grad(this, that, y, xShape, yShape)
     }
 
+    def - (that: Tensor): TensorR @diff = shift { (k: TensorR => Unit) => 
+      val y = TensorR(x - that); k(y)
+      this.d += y.d
+      
+    }
+
     // this is element wise multiplication
     def * (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x * that); k(y)
@@ -1369,6 +1380,12 @@ trait TensorDsl extends Dsl with Diff {
       val y = TensorR(x.nllLossB(target)); k(y)
       generate_comment("'nllLossB' gradient.")
       backend.nllLoss_grad(this, y, target)
+    }
+
+    def mseLoss(target: Rep[Array[Float]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.mseLoss(target)); k(y)
+      generate_comment("'mseLoss' gradient")
+      backend.mseLoss_grad(this, y, target)
     }
 
     def ctcLoss(inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor =

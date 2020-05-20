@@ -926,6 +926,10 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
       unchecked[Unit]("nllLoss_grad<<<", input.d.shape(0), ", 1>>>(", input.d.shape.strides(0), ", ", res.d.data, ", ", target, ", ", input.d.data, ")")
     }
 
+    // TODO - Supun - Haven't implemented mse for GPU
+    override def mseLoss(x: Tensor, target: Rep[Array[Float]]): Tensor = ???
+    override def mseLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Float]]): Unit = ???
+
     override def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor = ???
 
     override def sum(x: Tensor): Tensor = ???
