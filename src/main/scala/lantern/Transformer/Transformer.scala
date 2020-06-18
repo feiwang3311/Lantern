@@ -14,7 +14,7 @@ object Transformer {
     val driver = new LanternDriverCudnn[String, Unit] with ScannerOpsExp with TimerOpsExp {
         @virtualize
         def snippet(a: Rep[String]): Rep[Unit] = {
-            case class MultiheadAttention(val embedDim: Int, val numHeads: Int, kDim: Int, vDim: Int, val maxKLen: Int, val maxQLen: Int, val dropOut: Float = 0.0f, val name:String ="MultiHeadAttn") extends Module {
+            case class MultiheadAttention(val embedDim: Int, val numHeads: Int, kDim: Int, vDim: Int, val bias: Boolean = false, val dropOut: Float = 0.0f, val name:String ="MultiHeadAttn") extends Module {
                 // note - pytorch: all q, k, v is transormed to embedDim size. embedDim = numHeads * h_i(size). Therefore embedDim should be divisible by numHeads
                 // attention mask (loWinIdx, hiWinIdx)
                 // attention descriptor
@@ -22,13 +22,12 @@ object Transformer {
 
                 // weights of attention model
                 // TODO - would be better if we can get the sizeWeights from cudnn side
-                val sizeWeights = embedDim * kDim + embedDim * kDim + embedDim * vDim // TODO = only works for no bias case
+                val sizeWeights = embedDim * kDim + embedDim * kDim + embedDim * vDim + {if (bias) 0 else embedDim * 3}
                 val weights: TensorR = TensorR(Tensor.rand(sizeWeights)).toGPU()
-                val linear = Linear1D(inSize = embedDim * maxQLen, outSize = 1)
 
                 def apply(query: TensorR, key: TensorR, value: TensorR) = {
                     // [T(time) N(batch) B(beamsize) V(vector-embed)]
-                    // TODO - add padding arg, add attn_mask
+                    // TODO - take attn_mask (i.e. loWinIdx, hiWinIdx) as arg
                     // assert rank 4
                     // set up attention window without mask
                     val loWinIdx = NewArray[Int](query.x.shape(1))
@@ -43,23 +42,36 @@ object Transformer {
                         kSeqArray(i) = key.x.shape(0)
                     }
 
-                    val step1 = query.multiheadAttention(key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, dropOut, 1.0f)
-                    // TODO - do I need to permute the tesors?????
-                    linear(step1.resize(-1, query.x.shape(0) * query.x.shape(3)))
+                    query.multiheadAttention(key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropOut, 1.0f)
                 }
             }
 
+            
+
             // model
             // requirements: qsize = ksize and vsize * numHeads = embedDim
-            val qsize = 5
-            val ksize = 5
-            val vsize = 5
-            val embedDim = 10
+            val qsize = 50
+            val ksize = 50
+            val vsize = 50
+            val embedDim = 100
             val numHeads = 2
-            val batchSize = 1
+            val batchSize = 10
             val beamSize = 1
-            val seqLen = 4
-            val model = MultiheadAttention(embedDim, numHeads, ksize, vsize, seqLen, seqLen, 0.5)
+            val seqLen = 4 // both klen and qlen
+            val dropOut = 0.1f
+
+            case class Model(val name: String = "test_model") extends Module {
+                val mha = MultiheadAttention(embedDim, numHeads, ksize, vsize, true, dropOut)
+                val linear = Linear1D(inSize = embedDim * seqLen, outSize = 1)
+
+                def apply(q: TensorR, k: TensorR, v: TensorR) = {
+                    val step1 = mha(q, k, v)
+                    linear(step1.permute(1, 2, 0, 3).resize(-1, q.x.shape(0) * q.x.shape(3)))
+                }
+            }
+
+            val model = Model()
+
             val q = TensorR(Tensor.rand(Seq(seqLen, batchSize, beamSize, qsize) : _*)).toGPU()
             val k = TensorR(Tensor.rand(Seq(seqLen, batchSize, beamSize, ksize) : _*)).toGPU()
             val v = TensorR(Tensor.rand(Seq(seqLen, batchSize, beamSize, vsize) : _*)).toGPU()
@@ -102,7 +114,7 @@ object Transformer {
     // }
 
     def main(args :Array[String]) = {
-        val code_file = new PrintWriter(new File("src/out/Transformers/multihead_lantern.cu"))
+        val code_file = new PrintWriter(new File("src/out/Transformers/Lantern/multihead_lantern.cu"))
         code_file.println(driver.code)
         code_file.flush()
     }

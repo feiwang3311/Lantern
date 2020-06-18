@@ -1246,15 +1246,19 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
 
     // multihead attention
     override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
-      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate :Float = 0.0f, smScaler: Float = 1.0f): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = 
+      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean,
+      dropoutRate :Float = 0.0f, smScaler: Float = 1.0f): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = 
       {
-        cudnnMultiheadAttnForward(query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, dropoutRate, smScaler)
+        cudnnMultiheadAttnForward(query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler)
       }
 
     override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
-      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int]): Unit = 
+      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]],
+       hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], 
+       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int]): Unit = 
       {
-        cudnnMultiHeadAttnBackward(output, query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, devQSeqArray, devKSeqArray, loWinIdx, hiWinIdx, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights)
+        cudnnMultiHeadAttnBackward(output, query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, 
+        devQSeqArray, devKSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights)
       }
 
 
@@ -1855,15 +1859,18 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
           |CUDNN_CALL(cudnnSetSeqDataDescriptor(${name}, CUDNN_DATA_FLOAT, CUDNN_SEQDATA_DIM_COUNT, dimA, dataAxes,""".stripMargin, batchSize * beamSize ,",", seqLenArray, ", NULL))\n"
           )
 
-    def attnDescriptorHelper(name: String, dropoutDescName: String = "NULL", numHeads: Int, qSize: Rep[Int], kSize: Rep[Int], vSize: Rep[Int], embedDim: Int, smScaler: Float = 1.0f, seqLenQ: Rep[Int], seqLenK: Rep[Int], batchSize: Rep[Int], beamSize: Rep[Int]) = 
+    def attnDescriptorHelper(name: String, dropoutDescName: String = "NULL", numHeads: Int, qSize: Rep[Int], kSize: Rep[Int], vSize: Rep[Int], embedDim: Int, bias: Boolean = false, 
+    smScaler: Float = 1.0f, seqLenQ: Rep[Int], seqLenK: Rep[Int], batchSize: Rep[Int], beamSize: Rep[Int]) = 
         // seqLenQ and seqLenK is the maximum sentence length in Q and K/V
         Seq(s"""
         |cudnnAttnDescriptor_t ${name};
         |CUDNN_CALL(cudnnCreateAttnDescriptor(&attn_desc));
-        |CUDNN_CALL(cudnnSetAttnDescriptor(${name}, CUDNN_ATTN_QUERYMAP_ALL_TO_ONE, ${numHeads}, ${smScaler}, CUDNN_DATA_FLOAT, CUDNN_DATA_FLOAT, CUDNN_DEFAULT_MATH,
+        |CUDNN_CALL(cudnnSetAttnDescriptor(${name}, CUDNN_ATTN_QUERYMAP_ALL_TO_ONE ${if (bias) "| CUDNN_ATTN_ENABLE_PROJ_BIASES" else ""}, ${numHeads}, ${smScaler}, CUDNN_DATA_FLOAT, CUDNN_DATA_FLOAT, CUDNN_DEFAULT_MATH,
         | ${dropoutDescName}, NULL,""".stripMargin, qSize , "," , kSize, ",", vSize , "," , embedDim / numHeads, "," , embedDim / numHeads, "," , embedDim / numHeads, ", 0, ", seqLenQ, "," , seqLenK, ",", batchSize, "," , beamSize, "));\n")
 
-    def cudnnMultiheadAttnForward(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate: Float = 0.0f, smScaler: Float = 1.0f): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = {
+    def cudnnMultiheadAttnForward(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, qSeqArray: Rep[Array[Int]], 
+    kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate: Float = 0.0f, smScaler: Float = 1.0f): 
+    (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = {
       // Assumes tensors in [T(time) N(batch) B(beamsize) V(vector-embed)]
       // qSeqArray, kSeqArray (input)
       // loWinIdx, hiWinIdx - attention window (input)
@@ -1904,7 +1911,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       |CUDNN_CALL(cudnnSetDropoutDescriptor(drop_desc, cudnnHandle, ${dropoutRate}, dropoutBuf, dropoutBufSize, 0));
       |""".stripMargin)
       ++
-      attnDescriptorHelper("attn_desc", "drop_desc", numHeads, query.x.shape(3), key.x.shape(3), value.x.shape(3), embedDim, smScaler, query.x.shape(0), key.x.shape(0), query.x.shape(1), query.x.shape(2))
+      attnDescriptorHelper("attn_desc", "drop_desc", numHeads, query.x.shape(3), key.x.shape(3), value.x.shape(3), embedDim, bias, smScaler, query.x.shape(0), key.x.shape(0), query.x.shape(1), query.x.shape(2))
       ++
       Seq(s"""
       |size_t sizeWeights;
@@ -1937,8 +1944,9 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
     }
 
     def cudnnMultiHeadAttnBackward(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
-      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate :Float = 0.0f, 
-      smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int]) = {
+      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], 
+      hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f,smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int],
+       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int]) = {
         unchecked[Unit](
       Seq(s"""{
       |cudnnSeqDataAxis_t dataAxes[CUDNN_SEQDATA_DIM_COUNT];
@@ -1957,7 +1965,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       |CUDNN_CALL(cudnnSetDropoutDescriptor(drop_desc, cudnnHandle, ${dropoutRate}, dropoutBuf, dropoutBufSize, 0));
       |""".stripMargin)
       ++
-      attnDescriptorHelper("attn_desc", "drop_desc", numHeads, query.x.shape(3), key.x.shape(3), value.x.shape(3), embedDim, smScaler, query.x.shape(0), key.x.shape(0), query.x.shape(1), query.x.shape(2))
+      attnDescriptorHelper("attn_desc", "drop_desc", numHeads, query.x.shape(3), key.x.shape(3), value.x.shape(3), embedDim, bias, smScaler, query.x.shape(0), key.x.shape(0), query.x.shape(1), query.x.shape(2))
       ++
       seqDataDescriptorHelper("q_desc", query.x.shape(1), query.x.shape(2), query.x.shape(0), query.x.shape(3), qSeqArray, first=true)
       ++
