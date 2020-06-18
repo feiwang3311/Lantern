@@ -643,8 +643,8 @@ trait LanternGenCudnn extends LanternGenCublas {
       |#define CUDNN_CALL(f) { \
       |  cudnnStatus_t stat = (f); \
       |  if (stat != CUDNN_STATUS_SUCCESS) { \
-      |    fprintf(stderr, "cuDNN error occurred: %d (%s:%d)\n", \
-      |            stat, __FILE__, __LINE__); \
+      |    fprintf(stderr, "cuDNN error occurred: %s %d (%s:%d)\n", \
+      |            cudnnGetErrorString(stat), stat, __FILE__, __LINE__); \
       |    exit(stat); \
       |  } \
       |}
