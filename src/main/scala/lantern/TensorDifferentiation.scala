@@ -306,6 +306,13 @@ trait TensorDsl extends Dsl with Diff {
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
+    // multihead attention
+    def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+      devqSeqArray: Rep[Array[Int]], devkSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate :Float = 0.0f, smScaler: Float = 1.0f): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]])
+
+    def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int]): Unit
+
     // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
     def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor
 
@@ -1495,6 +1502,22 @@ trait TensorDsl extends Dsl with Diff {
       // back prop
       backend.dropout_grad(this, ty, prob, helper, size)
     }
+
+    @virtualize
+    def multiheadAttention(key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate: Float = 0.0f, smScaler: Float = 1.0f): TensorR @diff = shift{ (k: TensorR => Unit) =>
+      val (y, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights, devQSeqArray, devKSeqArray) = backend.multiheadAttention(this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, dropoutRate, smScaler)
+      val ty = TensorR(y); k(ty)
+      // backprop
+      backend.multiheadAttention_grad(ty, this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, devQSeqArray, devKSeqArray, loWinIdx, hiWinIdx, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights)
+    }
+
+    // TODO - remove this, just for testing
+    // @virtualize
+    // def multiheadAttentionForwardTest(key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate: Float = 0.0f, smScaler: Float = 1.0f) = {
+    //   val (y, devWkSpace, sizeWkSpace, devReserve, sizeReserve) = backend.multiheadAttention(this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, dropoutRate, smScaler)
+    //   // printf("%f\n", y.data.toCPU(10))
+    //   printf("%f\n", y.toCPU().data(0))
+    // }
 
     def print(msg: String = "", derivative: Boolean = false): Unit = {
       this.x.print(msg)
