@@ -13,7 +13,7 @@ trait TensorDsl extends DslCPP with Diff {
 
   /**
     Memory Management:
-      finally we used a temperate solution called "memory arena". The base code will claim a large piece of code for the whole program.
+      finally we used a temporary solution called "memory arena". The base code will claim a large piece of code for the whole program.
       internally, every malloc will borrow memory from this arena.
       By using getAllocMem and setAllocMem, we can selectively return a big trunk of memory after one iteration of training.
    **/
@@ -51,7 +51,15 @@ trait TensorDsl extends DslCPP with Diff {
   def mmax(a: Rep[Int], b: Rep[Int]) = if (a >= b) a else b
   def mmax(a: Int, b: Int) = if (a >= b) a else b
 
-  def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
+  // Hacky fix for the lack of effect system working with slices and aliases in LMS_clean
+  // def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedPure[Array[T]](arr, "+", off)
+  def slice[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = sliceReadWrite(arr, off)
+  // sliceRead: slice an array only for read
+  def sliceRead[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedEffect[Array[T]](arr, "+", off)(arr)()
+  // sliceWrite: slice an array only for write
+  def sliceWrite[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedEffect[Array[T]](arr, "+", off)()(arr)
+  // sliceReadWrite: slice an array for both read and write
+  def sliceReadWrite[T: Manifest](arr: Rep[Array[T]], off: Rep[Int]) = uncheckedEffect[Array[T]](arr, "+", off)(arr)(arr)
 
   @virtualize
   def assertC(cond: => Rep[Boolean], msg: => String, args: Rep[Any]*): Unit = if (debug) {
@@ -386,9 +394,9 @@ trait TensorDsl extends DslCPP with Diff {
 
     assertC(scalarCount != 0, "Tensor cannot have scalar count 0")
 
-    def apply(i: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), shape.tail)
+    def apply(i: Rep[Int]): Tensor = new Tensor(sliceReadWrite(data, i * shape.strides(0)), shape.tail)
     // Slice: i inclued, j excluded
-    def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(slice(data, i * shape.strides(0)), (j - i) +: shape.tail)
+    def apply(i: Rep[Int], j: Rep[Int]): Tensor = new Tensor(sliceReadWrite(data, i * shape.strides(0)), (j - i) +: shape.tail)
 
     def clipAt(bound: Float) = backend.clipAt(this, bound)
     def mutate(delta: Rep[Int] => Rep[Float]) = backend.mutate(this, delta)

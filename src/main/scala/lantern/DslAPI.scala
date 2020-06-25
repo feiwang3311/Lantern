@@ -612,7 +612,7 @@ trait LanternGenCudnn extends LanternGenCublas {
 
 // TODO: bad design!! NNModule should not depend on backend!
 abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverCPP[A, B]
-with TensorDsl with NNModule with Dataset with ONNXLib with ScannerOpsExp with TimerOpsExp { q =>
+  with TensorDsl with NNModule with Dataset with ONNXLib with ScannerOpsExp with TimerOpsExp { q =>
   override val codegen = new LanternGenC {
     val IR: q.type = q
   }

@@ -37,7 +37,7 @@ trait Dataset extends TensorDsl with ScannerOps with TimerOps {
     def foreach(f: (Rep[Int], Tensor, Rep[Int]) => Unit) = {
       var off = var_new(0)
       for (index <- 0 until length: Rep[Range]) {
-        val dataPtr = slice(data, off)
+        val dataPtr = sliceRead(data, off)
         val t = Tensor(dataPtr, dims : _*)
         f(index, t, target(index))
         off += t.scalarCount
@@ -49,9 +49,9 @@ trait Dataset extends TensorDsl with ScannerOps with TimerOps {
     def foreachBatch(batchSize: Int)(f: (Rep[Int], Tensor, Rep[Array[Int]]) => Unit) = {
       var off = var_new(0)
       for (batchIndex <- 0 until (length / batchSize): Rep[Range]) {
-        val dataPtr = slice(data, off)
+        val dataPtr = sliceRead(data, off)
         val t = Tensor(dataPtr, (batchSize +: dims.toSeq): _*)
-        val targets = slice(target, batchIndex * batchSize)
+        val targets = sliceRead(target, batchIndex * batchSize)
         f(batchIndex, t, targets)
         off += t.scalarCount
       }
