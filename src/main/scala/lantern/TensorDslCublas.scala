@@ -9,6 +9,7 @@ import scala.math._
 import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
+import lms.collection.mutable.{ArrayOps}
 
 
 trait GPUOps extends Base with ArrayOps {

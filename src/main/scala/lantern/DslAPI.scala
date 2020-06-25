@@ -12,42 +12,15 @@ import lms.core.Graph
 import java.io.File
 import java.io.PrintWriter
 
-trait LanternGenC extends DslGenC {
+import lms.thirdparty._
+import lantern.thirdparty._
+import lantern.collection.mutable._
+
+trait LanternGenC extends DslGenCPP {
   val IR: DslExp
   import IR._
 
   class Unknown
-
-  override def remap(m: Manifest[_]): String = m.toString match {
-    case f if f.startsWith("scala.Function") =>
-      val targs = m.typeArguments.dropRight(1)
-      val res = remap(m.typeArguments.last)
-      def remapInFunction[A](m: Manifest[A]): Array[String] = {
-        val s = m.toString
-        if (s.startsWith("scala.Tuple")) m.typeArguments.map(t => remap(t)).toArray
-        else scala.Array(remap(m))
-      }
-      val targsUnboxed = targs.flatMap(t => remapInFunction(t))
-      "function<" + res + "(" + targsUnboxed.mkString(",") + ")>"
-    case _ => super.remap(m)
-  }
-
-  override def quoteBlock(y: lms.core.Backend.Block, argType: Boolean = false) = {
-    def eff = quoteEff(y.ein)
-    def typed(s:lms.core.Backend.Sym) = if (argType) s"${remap(typeMap(s))} ${quote(s)}" else quote(s)
-    def ltyped(xs:List[lms.core.Backend.Sym]) = xs.map(typed(_)).mkString(", ")
-    def paren(s:String) = if (argType) "("+s+")" else s
-    val xs = y.in
-    emit(s"[&]${paren(ltyped(xs))}$eff")
-    quoteBlockPReturn(traverse(y))
-    //val l = captureLines(traverse(y))
-    //val b = l.mkString("\n")
-    //s"[&]${paren(ltyped(xs))} {$b}"
-  }
-
-  override def traverse(n: Node): Unit = n match {
-    case _ => super.traverse(n)
-  }
 
   def isInt(d: Backend.Def): Boolean = d match {
     case Backend.Const(x: Int) => true
@@ -60,12 +33,6 @@ trait LanternGenC extends DslGenC {
       emit(s"($ctype*)myMalloc("); shallow(x); emit(s" * sizeof($ctype))")
       // emit(s"($ctype*)myMalloc(${shallow(x)} * sizeof($ctype))")
     case _ => super.shallow(n)
-  }
-
-  override def shallow(n: lms.core.Backend.Def): Unit = n match {
-    case InlineSym(t: Node) => shallow(t)
-    case b: lms.core.Backend.Block => quoteBlock(b)
-    case _ => emit(quote(n))
   }
 
   def templateHeaders: Seq[String] = Seq(
@@ -123,7 +90,6 @@ trait LanternGenC extends DslGenC {
     |  }
     |  return res;
     |}
-    |long HEAP_SIZE = 8589934608; // 10737418240; //  4294967304; // this is for GPU
     |int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
     |  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
     |  result->tv_sec = diff / 1000000;
@@ -134,9 +100,6 @@ trait LanternGenC extends DslGenC {
     |$templateRawCode
     |
     |void Snippet(char*);
-    |//std::random_device rd{};
-    |//std::mt19937 gen{rd()};
-    |//std::normal_distribution<> d{0, 0.01};
     |
     |int main(int argc, char *argv[]) {
     |  if (argc != 2) {
@@ -150,9 +113,6 @@ trait LanternGenC extends DslGenC {
     |Emitting C Generated Code
     |*******************************************/
    """.stripMargin)
-    // stream.println(s"$ms2 $functionName($ms1 $arg) {")
-    // apply(g)
-    // stream.println("}")
     val src = run(name, g)
     src.writeTo(stream)
     stream.println("""
@@ -650,65 +610,8 @@ trait LanternGenCudnn extends LanternGenCublas {
       |""".stripMargin
 }
 
-// abstract class DslDriverBase[A: Manifest, B: Manifest] extends DslExp { self =>
-//   // The C-like code generator.
-//   // val codegen: DslGenBase {
-//   //   val IR: self.type
-//   // }
-
-//   val dir = "/tmp"
-//   val fileName = s"lantern-snippet-${scala.util.Random.alphanumeric.take(4).mkString}"
-
-//   // The code snippet to compile.
-//   def snippet(x: Rep[A]): Rep[B]
-
-//   def eval(a: A)
-//   // Note: is it possible to implement `eval` returning `B`?
-//   // def eval(a: A): B
-
-//   // lazy val code: String = {
-//   //   val source = new java.io.StringWriter()
-//   //   codegen.emitSource[A,B](snippet, "Snippet", new java.io.PrintWriter(source))
-//   //   source.toString
-//   // }
-// }
-
-// // /**
-//   * A wrapper around `DslDriverBase` that provides a `wrapper` function that performs backend setup/cleanup.
-//   * Extend this instead of `DslDriverBase` for correct backend management.
-//   */
-// trait LanternDriver[A, B] extends DslDriverBase[A, B] with TensorDsl { self =>
-//   // Hacky workaround to support trait type parameters with context bounds.
-//   // `trait LanternDriver[A: Manifest, B: Manifest]` doesn't work.
-//   // These must be overridden in subclasses.
-//   implicit def manifestA: Manifest[A]
-//   implicit def manifestB: Manifest[B]
-
-//   def wrapper(x: Rep[A]): Rep[B] = {
-//     generate_comment("Backend setup.")
-//     backend.setup()
-//     val result = snippet(x)
-
-//     generate_comment("Backend cleanup.")
-//     backend.cleanup()
-//     result
-//   }
-
-//   // override lazy val code: String = {
-//   //   val source = new java.io.StringWriter()
-//   //   codegen.emitSource(wrapper, "Snippet", new java.io.PrintWriter(source))
-//   //   source.toString
-//   // }
-// }
-
-// abstract class LanternDriverC[A: Manifest, B: Manifest] extends DslDriverC[A, B] with LanternDriver[A, B] with TensorDslCPU /*with NNModule with Dataset with ONNXLib*/ { self =>
-//   override def manifestA: Manifest[A] = manifest[A]
-//   override def manifestB: Manifest[B] = manifest[B]
-// }
-
-
 // TODO: bad design!! NNModule should not depend on backend!
-abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverC[A, B]
+abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverCPP[A, B]
 with TensorDsl with NNModule with Dataset with ONNXLib with ScannerOpsExp with TimerOpsExp { q =>
   override val codegen = new LanternGenC {
     val IR: q.type = q
@@ -783,7 +686,7 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriv
 }
 
 abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverCublas[A, B] with NNModuleCudnn with TensorDslCudnn { q =>
-  override val codegen = new LanternGenCudnn {
+  override val codegen = new LanternGenCudnn with CCodeGenCuBLAS with CCodeGenCuDNN with CCodeGenStackArray with CCodeGenCMacro with CCodeGenLibStruct with CCodeGenLibFunction {
     val IR: q.type = q
 
     override def convOpIndex() = convOpIndexSet.toList

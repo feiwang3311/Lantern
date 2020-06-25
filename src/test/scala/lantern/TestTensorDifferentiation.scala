@@ -57,47 +57,47 @@ class LanternFunSuite extends FunSuite {
 
 class AdLMSVectorTest extends LanternFunSuite {
 
-  test("recursion0") {
-    val rec = new LanternDriverC[String, Unit] with TensorDslCPU {
-      override val fileName = currentTestName
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
+  // test("recursion0") {
+  //   val rec = new LanternDriverC[String, Unit] with TensorDslCPU {
+  //     override val fileName = currentTestName
+  //     @virtualize
+  //     def snippet(a: Rep[String]): Rep[Unit] = {
 
-          lazy val f: Rep[Float => Unit] = fun { (x: Rep[Float]) =>
-            if (x < 0.0f)
-              f(x - 1)
-            else
-              ()
-          }
-          var x = 3
-          f(x)
+  //         lazy val f: Rep[Float => Unit] = fun { (x: Rep[Float]) =>
+  //           if (x < 0.0f)
+  //             f(x - 1)
+  //           else
+  //             ()
+  //         }
+  //         var x = 3
+  //         f(x)
 
-      }
-    }
-    System.out.println(rec.code)
-  }
+  //     }
+  //   }
+  //   System.out.println(rec.code)
+  // }
 
-  test("recursion") {
-    val rec = new LanternDriverC[String, Unit] with TensorDslCPU {
-      override val fileName = currentTestName
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        var i = 0
-        while (i < 10) {
-          lazy val f: Rep[Float => Unit] = fun { (x: Rep[Float]) =>
-            if (x < 0.0f)
-              f(x - i)
-            else
-              ()
-          }
-          var x = 3
-          f(x)
-          i = i + 1
-        }
-      }
-    }
-    System.out.println(rec.code)
-  }
+  // test("recursion") {
+  //   val rec = new LanternDriverC[String, Unit] with TensorDslCPU {
+  //     override val fileName = currentTestName
+  //     @virtualize
+  //     def snippet(a: Rep[String]): Rep[Unit] = {
+  //       var i = 0
+  //       while (i < 10) {
+  //         lazy val f: Rep[Float => Unit] = fun { (x: Rep[Float]) =>
+  //           if (x < 0.0f)
+  //             f(x - i)
+  //           else
+  //             ()
+  //         }
+  //         var x = 3
+  //         f(x)
+  //         i = i + 1
+  //       }
+  //     }
+  //   }
+  //   System.out.println(rec.code)
+  // }
 
   test("SUM") {
     val IF_Test = new LanternDriverC[String, Unit] with TensorDslCPU {
@@ -149,7 +149,7 @@ class AdLMSVectorTest extends LanternFunSuite {
 
         // calcuate gradient
         val grad = gradR(t => t.sum())(v)
-	printf("%f", grad.data(0))
+	      printf("%f", grad.data(0))
         // another way of implementing it
         // val grad1 = gradR(t => (t + t).sum())(v)
         //val grad2 = gradR(t => (t * t).sum())(v)
@@ -196,9 +196,9 @@ class AdLMSVectorTest extends LanternFunSuite {
         val addr1 = getMallocAddr()
         resetMallocAddr(addr)
         val addr2 = getMallocAddr()
-
+        mem.printHead(1)
         //assertions
-        if (addr + 400 != addr1) printf("ERROR: addr did not increase by 800")
+        if (addr + 400l != addr1) printf("ERROR: addr did not increase by 400 but by %ld\n", (addr1 - addr))
         if (addr != addr2) printf("ERROR: addr did not reset to the give value")
       }
     }
@@ -524,7 +524,7 @@ class AdLMSVectorTest extends LanternFunSuite {
   }
 
   test("array2_3") {
-    val array2_3 = new LanternDriverC[String, Unit] with TensorDslCPU {
+    val array2_3 = new LanternDriverC[String, Unit] with TensorDslCPU with lms.core.CPPOps {
       override val fileName = currentTestName
 
       @virtualize
@@ -763,27 +763,25 @@ class AdLMSVectorTest extends LanternFunSuite {
       @virtualize
       def snippet(a: Rep[String]): Rep[Unit] = {
         val length = 2
-        val v = Tensor.randinit(length)
+        val v = Tensor.ones(length)
 
-        // val half = new TensorR(Tensor.halves(length), Tensor.zeros(length))
+        val half = new TensorR(Tensor.halves(length), Tensor.zeros(length))
         val grad = gradR(t => {
-          val y = LOOPS(t)(3)(i => t => t)// * half )
+          val y = LOOPS(t)(3)(i => t => t * half)
           y.sum()
         })(v)
-        printf("%f", grad.data(0))
-
-        // val save_half_grad = Tensor.zeros(length)
-        // save_half_grad.copy_data(half.d)
+        printf("%f, %f", grad.data(0), half.d.data(0))
 
         // // alternative implementation
-        // half.d.clear()
+        // val half2 = new TensorR(Tensor.halves(length), Tensor.zeros(length))
         // val grad2 = gradR( t => {
-        //   (t * half * half * half).sum()
+        //   (t * half2 * half2 * half2).sum()
         // })(v)
+        // printf("%f, %f", grad2.data(0), half2.d.data(0))
 
-        // assertion
+        // // assertion
         // Tensor.assertEqual(grad, grad2)
-        // Tensor.assertEqual(save_half_grad, half.d)
+        // Tensor.assertEqual(half.d, half2.d)
       }
     }
     runTest(array4_1)

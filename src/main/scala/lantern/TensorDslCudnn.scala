@@ -9,8 +9,9 @@ import scala.math._
 import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
+import lantern.thirdparty.{CuBLASOps, CuDNNOps}
 
-trait TensorDslCudnn extends TensorDslCublas with GPUOps {
+trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuDNNOps {
 
   val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
   val elementWiseUpdateWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()

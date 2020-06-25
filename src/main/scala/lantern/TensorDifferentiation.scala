@@ -9,7 +9,7 @@ import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
 
-trait TensorDsl extends Dsl with Diff {
+trait TensorDsl extends DslCPP with Diff {
 
   /**
     Memory Management:
@@ -285,7 +285,6 @@ trait TensorDsl extends Dsl with Diff {
     // NOTE: cuDNN accepts only two padding arguments: [padVertical, padHorizontal].
     def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int)
 
-    @virtualize
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit
 
@@ -1117,7 +1116,7 @@ trait TensorDsl extends Dsl with Diff {
 
     @virtualize
     def assertEqual(a: Tensor, b: Tensor, mark: String = "", tal: Float = 0.0001f): Unit = {
-      val errorPrefix = if (mark.nonEmpty) s"ERROR ($mark)" else "ERROR"
+      val errorPrefix = if (mark != "") s"ERROR ($mark)" else "ERROR"
       assertShapeEqual(a.shape, b.shape)
 
       val i = var_new(0)
@@ -1515,81 +1514,167 @@ trait TensorDsl extends Dsl with Diff {
 
   }
 
-  def tempFixEffect(f: TensorR => Unit)(x: Rep[Array[Array[Float]]])(dims: Seq[TensorDsl.this.Rep[Int]]) = {
-    val x1 = x(0)
-    val x2 = x(1)
-    f(new TensorR(Tensor(x1, dims: _*), Tensor(x2, dims: _*)))
-    x(0) = uncheckedRead[Array[Float]](x1)(x1)
-    x(1) = uncheckedRead[Array[Float]](x2)(x2)
-  }
-
-  // change fun signature for memory leak issue (no more returning of array, just update the array provided by the caller)
-  // this is in accordance of the destination-passing style
-  // the fun take array[array[double]] of size 2, with the first array to be the x, and the second array to be the d
+  /**
+   * In LMS, the `fun` function reifies Rep[T] => Rep[U] functions to Rep[T => U] functions.
+   * In Lantern, the `FUN*` functions reify (TensorR => Unit) functions to (TensorR => Unit)
+   *    functions, where staged functions (Rep[Array[Float] => Unit]) are created from (Rep[Array[Float]] => Rep[Unit]) functions
+   */
   def FUNc(f: TensorR => Unit): (TensorR => Unit) = { (x:TensorR) =>
     val dims = x.x.shape.toSeq
-    val f1 = fun { (x: Rep[Array[Array[Float]]]) =>
-      tempFixEffect(f)(x)(dims)
-    }
-    val in = NewArray[Array[Float]](2)
-    in(0) = x.x.data; in(1) = x.d.data
-    f1(in) // f1 should take Array[Array[Float]] and update the gradient of x
+    val f1 = fun("&", { (x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
+      f(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
+    })
+    f1(x.x.data, x.d.data)
   }
 
-  def FUNm(f: ArrayBuffer[TensorR] => Unit): (ArrayBuffer[TensorR] => Unit) = { (x: ArrayBuffer[TensorR]) =>
-    val dims = x.map(_.x.shape.toSeq)
-    val f1 = fun { (x: Rep[Array[Array[Float]]]) =>
-      val tensors = ArrayBuffer[TensorR]()
-      for (u <- (0 until dims.length): Range) {
-        tensors.append(new TensorR(Tensor(x(u * 2), dims(u) : _*), Tensor(x(u*2+1), dims(u) : _*)))
-      }
-      f(tensors)
+  /**
+   * comment out this version until we can support array of arrays in LMS_clean
+    def FUNc(f: TensorR => Unit): (TensorR => Unit) = { (x:TensorR) =>
+      val dims = x.x.shape.toSeq
+      val f1 = fun("&", { (x: Rep[Array[Array[Float]]]) =>
+        tempFixEffect(f)(x)(dims)
+      })
+      val in = NewArray[Array[Float]](2)
+      in(0) = x.x.data; in(1) = x.d.data
+      f1(in) // f1 should take Array[Array[Float]] and update the gradient of x
     }
-    val in = NewArray[Array[Float]](2 * dims.length)
-    for (u <- (0 until dims.length): Range) {
-      in(u*2) = x(u).x.data; in(u*2+1) = x(u).d.data
-    }
-    f1(in)
-  }
+   */
 
+
+  /**
+   * With FUNc, we can define the conditional in Lantern. The conditional takes a Rep[Boolean] flag,
+   * 2 branches of type (=> TensorR @diff) because they must not be evaluated when passed in as arguments
+   * The conditional captures a continuation (if type TensorR => Unit) and must lift it to a staged function
+   * via our FUNc method.
+   * Then in IF, we create a staged if (via `if` under @virtualize macro). Within each branch, the staged
+   * continuation is applied to the left branch or the right branch.
+   * Note that creating the staged function via `FUNc` is necessary because otherwise the code after conditional
+   * will be duplicated in both branches.
+   */
   @virtualize
   def IF(c: Rep[Boolean])(a: =>TensorR @diff)(b: =>TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
     val k1 = FUNc(k)
-
     if (c) RST(k1(a)) else RST(k1(b))
   }
 
+  // This is the WRONG way to construct conditional, where the continuation of the conditional is duplicated.
+  // FIXME(feiw): it is currently used by DeepSpeech?? Fix it later
   @virtualize
   def If(c: Boolean)(a: => TensorR @diff)(b: => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
     if (c) RST(k(a)) else RST(k(b))
   }
 
-  @virtualize
-  def IFm(c: Rep[Boolean])(a: => ArrayBuffer[TensorR] @diff)(b: => ArrayBuffer[TensorR] @diff): ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
-    val k1 = FUNm(k)
-    if (c) RST(k1(a)) else RST(k1(b))
+  /**
+   * comment out until we can handle array of arrays in LMS_clean
+    def FUNm(f: ArrayBuffer[TensorR] => Unit): (ArrayBuffer[TensorR] => Unit) = { (x: ArrayBuffer[TensorR]) =>
+      val dims = x.map(_.x.shape.toSeq)
+      val f1 = fun("&", { (x: Rep[Array[Array[Float]]]) =>
+        val tensors = ArrayBuffer[TensorR]()
+        for (u <- (0 until dims.length): Range) {
+          tensors.append(new TensorR(Tensor(x(u * 2), dims(u) : _*), Tensor(x(u*2+1), dims(u) : _*)))
+        }
+        f(tensors)
+      })
+      val in = NewArray[Array[Float]](2 * dims.length)
+      for (u <- (0 until dims.length): Range) {
+        in(u*2) = x(u).x.data; in(u*2+1) = x(u).d.data
+      }
+      f1(in)
+    }
+   */
+
+
+  def buildArrayBuffer(size: Int, dims: ArrayBuffer[Seq[Rep[Int]]], xs: Rep[Array[Float]]*) = ArrayBuffer[TensorR](
+    ((0 until size): Range).map(i => new TensorR(Tensor(xs(i * 2), dims(i): _*), Tensor(xs(i * 2 + 1), dims(i): _*))): _*)
+
+  /**
+   * This is a variation of `FUN*` that reifies (TensorR* => Unit) functions, where there are undetermined number of TensorRs as parameters.
+   * For instance, if a conditional returns more than one TensorRs, then the continuation of the conditional will take more than
+   * one TensorRs as parameters. To lift that continuation as staged function, we will need FUNm
+   * In FUNc, the internal staged function takes 2 Rep[Array[Float]]. In this function, the internal staged function
+   * needs to take some even number of Rep[Array[Float]].
+   *
+   * Ideally, we can stage a function of type Rep[Array[Array[Float]] => Unit. However, the effect system of lms-clean
+   * is not handling aliases well, thus not handling Array of Array well. So as a compromize, we are going to have multiple
+   * staged functions for different number of parameters.
+   */
+  def FUNm(f: ArrayBuffer[TensorR] => Unit): (ArrayBuffer[TensorR] => Unit) = { (xs: ArrayBuffer[TensorR]) =>
+    val dims = xs.map(_.x.shape.toSeq)
+    xs.length match {
+      case n if n == 2 => // there are 2 TensorRs
+        val f1 = fun("&", { (x00: Rep[Array[Float]], x01: Rep[Array[Float]],
+                             x10: Rep[Array[Float]], x11: Rep[Array[Float]]) =>
+          f(buildArrayBuffer(n, dims, x00, x01, x10, x11))
+        })
+        f1(xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data)
+      case n if n == 3 => // there are 3 TensorRs
+        val f1 = fun("&", { (x00: Rep[Array[Float]], x01: Rep[Array[Float]],
+                             x10: Rep[Array[Float]], x11: Rep[Array[Float]],
+                             x20: Rep[Array[Float]], x21: Rep[Array[Float]]) =>
+          f(buildArrayBuffer(n, dims, x00, x01, x10, x11, x20, x21))
+        })
+        f1(xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data, xs(2).x.data, xs(2).d.data)
+      case n if n == 4 => // there are 4 TensorRs
+        val f1 = fun("&", { (x00: Rep[Array[Float]], x01: Rep[Array[Float]],
+                             x10: Rep[Array[Float]], x11: Rep[Array[Float]],
+                             x20: Rep[Array[Float]], x21: Rep[Array[Float]],
+                             x30: Rep[Array[Float]], x31: Rep[Array[Float]]) =>
+          f(buildArrayBuffer(n, dims, x00, x01, x10, x11, x20, x21, x30, x31))
+        })
+        f1(xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data, xs(2).x.data, xs(2).d.data, xs(3).x.data, xs(3).d.data)
+      case n => System.out.println(s"$n number of TensorRs is not yet supported"); ???
+    }
   }
 
   @virtualize
-  def LOOP(init: TensorR)(c: TensorR => Rep[Boolean])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
+  def IFm(c: Rep[Boolean])(a: => ArrayBuffer[TensorR] @diff)(b: => ArrayBuffer[TensorR] @diff): ArrayBuffer[TensorR] @diff =
+    shift { k: (ArrayBuffer[TensorR] => Unit) =>
+      val k1 = FUNm(k)
+      if (c) RST(k1(a)) else RST(k1(b))
+    }
 
+  /**
+   * For the Loop construct, we don't need to lift the continuation of the Loop to staged functions (since it is only needed once)
+   * However, we do need to create a recursive function for Loop, which depends on generating staged functions :)
+   * If the signature of the recursive function is different, we will have to implement another FUN* function for it.
+   *
+   * The expected loop behavior is that we run a loop body over a init tensor many times (thinking of the init tensor as the hidden state of RNN).
+   */
+  @virtualize
+  def LOOP(init: TensorR)(c: TensorR => Rep[Boolean])(b: TensorR => TensorR @diff): TensorR @diff = shift { k:(TensorR => Unit) =>
     lazy val loop: TensorR => Unit = FUNc { (x: TensorR) =>
       if (c(x)) RST(loop(b(x))) else RST(k(x))
     }
     loop(init)
   }
 
-  def FUNs(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = { (i: Rep[Int]) => (x:TensorR) =>
-    val dims = x.x.shape.toSeq
-    val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
-      tempFixEffect(f(i))(x)(dims)
-      // f(i)(new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*)))
+  /**
+   * Comment this out until array of arrays is supported in LMS_clean
+    def FUNs(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = { (i: Rep[Int]) => (x:TensorR) =>
+      val dims = x.x.shape.toSeq
+      val f1 = fun("&", { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
+        // tempFixEffect(f(i))(x)(dims)
+        f(i)(new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*)))
+      })
+      val in = NewArray[Array[Float]](2)
+      in(0) = x.x.data; in(1) = x.d.data
+      // in(0) = uncheckedRead[Array[Float]](x.x.data)(x.x.data);
+      // in(1) = uncheckedRead[Array[Float]](x.d.data)(x.d.data)
+      f1(i, in)
     }
-    val in = NewArray[Array[Float]](2)
-    in(0) = x.x.data; in(1) = x.d.data
-    // in(0) = uncheckedRead[Array[Float]](x.x.data)(x.x.data);
-    // in(1) = uncheckedRead[Array[Float]](x.d.data)(x.d.data)
-    f1(i, in)
+   */
+
+
+  /**
+   * If we want to keep a counter (Rep[Int]) in the recursive function (recursive loop body application), we will have to
+   * implement a variation of FUNc with the additional Rep[Int] argument.
+   */
+  def FUNs(f: Rep[Int] => TensorR => Unit): (Rep[Int] => TensorR => Unit) = { (i: Rep[Int]) => (x: TensorR) =>
+    val dims = x.x.shape.toSeq
+    val f1 = fun("&", { (i: Rep[Int], x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
+      f(i)(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
+    })
+    f1(i, x.x.data, x.d.data)
   }
 
   @virtualize
@@ -1600,25 +1685,59 @@ trait TensorDsl extends Dsl with Diff {
     loop(0)(init)
   }
 
-  def FUNsm(f: Rep[Int] => ArrayBuffer[TensorR] => Unit): (Rep[Int] => ArrayBuffer[TensorR] => Unit) = { (i: Rep[Int]) => (x:ArrayBuffer[TensorR]) =>
-    val dims = x.map(_.x.shape.seq)
-    val f1 = fun { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
-      val tensors = ArrayBuffer[TensorR]()
+  /**
+   * comment out until Array of Array is supported by LMS_clean
+    def FUNsm(f: Rep[Int] => ArrayBuffer[TensorR] => Unit): (Rep[Int] => ArrayBuffer[TensorR] => Unit) = { (i: Rep[Int]) => (x:ArrayBuffer[TensorR]) =>
+      val dims = x.map(_.x.shape.seq)
+      val f1 = fun("&", { (i: Rep[Int], x: Rep[Array[Array[Float]]]) =>
+        val tensors = ArrayBuffer[TensorR]()
+        for (u <- (0 until dims.length): Range) {
+          tensors.append(new TensorR(Tensor(x(u*2), dims(u) : _*), Tensor(x(u*2+1), dims(u) : _*)))
+        }
+        f(i)(tensors)
+      })
+      val in = NewArray[Array[Float]](2 * dims.length)
       for (u <- (0 until dims.length): Range) {
-        tensors.append(new TensorR(Tensor(x(u*2), dims(u) : _*), Tensor(x(u*2+1), dims(u) : _*)))
+        in(u*2) = x(u).x.data; in(u*2+1) = x(u).d.data
       }
-      f(i)(tensors)
+      f1(i, in)
     }
-    val in = NewArray[Array[Float]](2 * dims.length)
-    for (u <- (0 until dims.length): Range) {
-      in(u*2) = x(u).x.data; in(u*2+1) = x(u).d.data
+  */
+
+  /**
+   * Similarly, if the recursive loop body takes multiple TensorR as inputs, then another variation of FUN that handles multiple TensorRs is needed
+   */
+  def FUNsm(f: Rep[Int] => ArrayBuffer[TensorR] => Unit): (Rep[Int] => ArrayBuffer[TensorR] => Unit) = { (i: Rep[Int]) => (xs:ArrayBuffer[TensorR]) =>
+    val dims = xs.map(_.x.shape.seq)
+    xs.length match {
+      case n if n == 2 => // 2 TensorRs
+        val f1 = fun("&", { (i: Rep[Int], x00: Rep[Array[Float]], x01: Rep[Array[Float]],
+                                          x10: Rep[Array[Float]], x11: Rep[Array[Float]]) =>
+          f(i)(buildArrayBuffer(n, dims, x00, x01, x10, x11))
+        })
+        f1(i, xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data)
+      case n if n == 3 => // 3 TensorRs
+        val f1 = fun("&", { (i: Rep[Int], x00: Rep[Array[Float]], x01: Rep[Array[Float]],
+                                          x10: Rep[Array[Float]], x11: Rep[Array[Float]],
+                                          x20: Rep[Array[Float]], x21: Rep[Array[Float]]) =>
+          f(i)(buildArrayBuffer(n, dims, x00, x01, x10, x11, x20, x21))
+        })
+        f1(i, xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data, xs(2).x.data, xs(2).d.data)
+      case n if n == 4 => // 4 TensorRs
+        val f1 = fun("&", { (i: Rep[Int], x00: Rep[Array[Float]], x01: Rep[Array[Float]],
+                                          x10: Rep[Array[Float]], x11: Rep[Array[Float]],
+                                          x20: Rep[Array[Float]], x21: Rep[Array[Float]],
+                                          x30: Rep[Array[Float]], x31: Rep[Array[Float]]) =>
+          f(i)(buildArrayBuffer(n, dims, x00, x01, x10, x11, x20, x21, x30, x31))
+        })
+        f1(i, xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data, xs(2).x.data, xs(2).d.data, xs(3).x.data, xs(3).d.data)
+      case n => System.out.println(s"$n number of TensorRs is not yet supported"); ???
     }
-    f1(i, in)
   }
 
   @virtualize
   def LOOPSM(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
-  ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
+    ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
     lazy val loop: Rep[Int] => ArrayBuffer[TensorR] => Unit = FUNsm { (i: Rep[Int]) => (x: ArrayBuffer[TensorR]) =>
       if (i < c) {
         RST(loop(i+1)(b(i)(x)))
@@ -1629,41 +1748,53 @@ trait TensorDsl extends Dsl with Diff {
     loop(0)(init)
   }
 
-  def FUN0(f: ((TensorR => Unit) => TensorR => Unit)): ((TensorR => Unit) => TensorR => Unit) = { k1: (TensorR => Unit) => (x: TensorR) =>
+  /**
+   * Previous recursive functions (in LoopS and LoopSM) has been used to simulate loops (like recurrent neural networks)
+   * Starting here, we need to use recursive functions to simulate recursion in the machine learning model.
+   * NOTE(feiw): this part is very tricky and kind-of hard to understand :)
+   *
+   * In the LoopS and LoopSM cases, the recursions in the models are tail-recursions (making them essentially recurrent).
+   * In the LoopL and LoopT cases, the recursions in the models are no longer tail-recursions.
+   * In non-tail-recursive calls, the continuation after the recursive call are effectively "stacked up".
+   * Another way to view it is that, in the recurrent cases, the continuation of the Loop* remain unchanged, and simply applies to the final value of the loop
+   * However, in the recurrent cases, the continuation of the Loop* keeps growing, until the recursion reaches the base case.
+   * For that reason, we need FUNl function that takes the continuation as parameter as well :)
+   * We also have a FUN0 function but it is not use yet.
+   *
+   * Now for this category of FUN*, we are doing these things:
+   * 1. The continuation parameter needs to be lifted as staged function (see val k_staged)
+   * 2. The argument function `f` has to be staged (see val f1)
+   */
+  def FUN0(f: ((TensorR => Unit) => TensorR => Unit)): ((TensorR => Unit) => TensorR => Unit) = { k: (TensorR => Unit) => (x: TensorR) =>
     val dims = x.x.shape.toSeq
-    val f1 = fun { (t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
-      val t2: (TensorR => Unit) = { (x: TensorR) =>
-        val temp = NewArray[Array[Float]](2)
-        temp(0) = x.x.data; temp(1) = x.d.data
-        t1(temp)
-      }
-      val t3: (TensorR => Unit) = f(t2)
-      t3(new TensorR(Tensor(xx(0), dims: _*), Tensor(xx(1), dims: _*)))
-    }
-    val k2: Rep[Array[Array[Float]] => Unit] = fun { (x: Rep[Array[Array[Float]]]) =>
-      k1(new TensorR(Tensor(x(0), dims: _*), Tensor(x(1), dims: _*)))
-    }
-    val temp = NewArray[Array[Float]](2)
-    temp(0) = x.x.data; temp(1) = x.d.data
-    f1(k2, temp)
+    // Stage the k1 continuation
+    val k_staged = fun("&", { (x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
+      k(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
+    })
+    // Stage the `f` function argument
+    val f_staged = fun("&", { (k_staged: Rep[(Array[Float], Array[Float]) => Unit], x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
+      // just wrap on t1
+      val k_wrapped: (TensorR => Unit) = { (x: TensorR) => k_staged(x.x.data, x.d.data) }
+      // apply `f` so that it can be reified
+      f(k_wrapped)(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
+    })
+    f_staged(k_staged, x.x.data, x.d.data)
   }
 
-  def FUNl(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k1: (TensorR => Unit) => (x: TensorR) =>
-
+  def FUNl(f: (Rep[Int] => (TensorR => Unit) => TensorR => Unit)): (Rep[Int] => (TensorR => Unit) => TensorR => Unit) = {i: Rep[Int] => k: (TensorR => Unit) => (x: TensorR) =>
     val dims = x.x.shape.toSeq
-
-    val f1 = fun { (i: Rep[Int], t1: Rep[(Array[Float], Array[Float]) => Unit], x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
-      val t2: (TensorR => Unit) = { (x: TensorR) =>
-        t1(x.x.data, x.d.data)
-      }
-      val t3: (TensorR => Unit) = f(i)(t2)
-      t3(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
-    }
-
-    val k2: Rep[(Array[Float], Array[Float]) => Unit] = fun { (x1: Rep[Array[Float]], x2: Rep[Array[Float]]) =>
-      k1(new TensorR(Tensor(x1, dims: _*), Tensor(x2, dims: _*)))
-    }
-    f1(i, k2, x.x.data, x.d.data)
+    // Stage the continuation parameter k1
+    val k_staged: Rep[(Array[Float], Array[Float]) => Unit] = fun("&", { (x1: Rep[Array[Float]], x2: Rep[Array[Float]]) =>
+      k(new TensorR(Tensor(x1, dims: _*), Tensor(x2, dims: _*)))
+    })
+    // Stage the argument function f
+    val f_staged = fun("&", { (i: Rep[Int], k_staged: Rep[(Array[Float], Array[Float]) => Unit], x0: Rep[Array[Float]], x1: Rep[Array[Float]]) =>
+      // t2 simply wrap on top of the staged t1 function, so that it can be feed to `f` in the next line
+      val k_wrapped: (TensorR => Unit) = { (x: TensorR) => k_staged(x.x.data, x.d.data) }
+      // apply the `f` function here so that it can by reified.
+      f(i)(k_wrapped)(new TensorR(Tensor(x0, dims: _*), Tensor(x1, dims: _*)))
+    })
+    f_staged(i, k_staged, x.x.data, x.d.data)
   }
 
   @virtualize
@@ -1678,7 +1809,6 @@ trait TensorDsl extends Dsl with Diff {
   @virtualize
   def LOOPT(start: Rep[Int])(init: TensorR)(lch: Rep[Array[Int]], rch: Rep[Array[Int]])(b: (TensorR, TensorR, Rep[Int]) => TensorR @diff): TensorR @diff = shift {
     k: (TensorR => Unit) =>
-
       lazy val tree: Rep[Int] => (TensorR => Unit) => TensorR => Unit = FUNl{ (i: Rep[Int]) => (k: TensorR => Unit) => (x: TensorR) =>
         def sh_tree: (Rep[Int] => TensorR @diff) = (i: Rep[Int]) => shift{(k: TensorR => Unit) => tree(i)(k)(x)}
         RST(k( IF(i >= 0) { b(sh_tree(lch(i)), sh_tree(rch(i)), i) } { init } ))
@@ -1686,43 +1816,102 @@ trait TensorDsl extends Dsl with Diff {
       tree(start)(k)(init)
   }
 
-  def FUNlm(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit)):
-  (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit) = {i: Rep[Int] => k1: (ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
+  /**
+   * Comment this out until array of array is handled by LMS_clean
+    def FUNlm(f: (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit)):
+    (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit) = {i: Rep[Int] => k1: (ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
 
-    val length = x.length
-    val dims = x.map(_.x.shape.toSeq)
-    val f1 = fun { (i: Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
-      val t2: (ArrayBuffer[TensorR] => Unit) = { (x: ArrayBuffer[TensorR]) =>
-        val aa = NewArray[Array[Float]](2*length)
-        for (u <- (0 until length): Range) {
-          aa(u*2) = x(u).x.data; aa(u*2+1) = x(u).d.data
+      val length = x.length
+      val dims = x.map(_.x.shape.toSeq)
+      val f1 = fun("&", { (i: Rep[Int], t1: Rep[Array[Array[Float]] => Unit], xx: Rep[Array[Array[Float]]]) =>
+        val t2: (ArrayBuffer[TensorR] => Unit) = { (x: ArrayBuffer[TensorR]) =>
+          val aa = NewArray[Array[Float]](2*length)
+          for (u <- (0 until length): Range) {
+            aa(u*2) = x(u).x.data; aa(u*2+1) = x(u).d.data
+          }
+          t1(aa)
         }
-        t1(aa)
-      }
-      val t3: (ArrayBuffer[TensorR] => Unit) = f(i)(t2)
-      val tensors = ArrayBuffer[TensorR]()
+        val t3: (ArrayBuffer[TensorR] => Unit) = f(i)(t2)
+        val tensors = ArrayBuffer[TensorR]()
+        for (u <- (0 until length): Range) {
+          tensors.append(new TensorR(Tensor(xx(u*2), dims(u): _*), Tensor(xx(u*2+1), dims(u): _*)))
+        }
+        t3(tensors)
+      })
+      val k2: Rep[Array[Array[Float]] => Unit] = fun(Capture("&"), { (x: Rep[Array[Array[Float]]]) =>
+        val tensors = ArrayBuffer[TensorR]()
+        for (u <- (0 until length): Range) {
+          tensors.append(new TensorR(Tensor(x(u*2), dims(u): _*), Tensor(x(u*2+1), dims(u): _*)))
+        }
+        k1(tensors)
+      })
+      val arrays = NewArray[Array[Float]](2*length)
       for (u <- (0 until length): Range) {
-        tensors.append(new TensorR(Tensor(xx(u*2), dims(u): _*), Tensor(xx(u*2+1), dims(u): _*)))
+        arrays(u*2) = x(u).x.data; arrays(u*2+1) = x(u).d.data
       }
-      t3(tensors)
+      f1(i, k2, arrays)
     }
-    val k2: Rep[Array[Array[Float]] => Unit] = fun { (x: Rep[Array[Array[Float]]]) =>
-      val tensors = ArrayBuffer[TensorR]()
-      for (u <- (0 until length): Range) {
-        tensors.append(new TensorR(Tensor(x(u*2), dims(u): _*), Tensor(x(u*2+1), dims(u): _*)))
-      }
-      k1(tensors)
+   */
+
+
+  def FUNlm(f: Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit): (Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit) = {
+    i: Rep[Int] => k: (ArrayBuffer[TensorR] => Unit) => xs: ArrayBuffer[TensorR] =>
+
+    val dims = xs.map(_.x.shape.toSeq)
+    xs.length match {
+      case n if n == 2 =>
+        // Stage k
+        val k_staged = fun("&", { (x00: Rep[Array[Float]], x01: Rep[Array[Float]], x10: Rep[Array[Float]], x11: Rep[Array[Float]]) =>
+          k(buildArrayBuffer(n, dims, x00, x01, x10, x11))
+        })
+        // Stage f
+        val f_staged = fun("&", { (i: Rep[Int], k_staged: Rep[(Array[Float], Array[Float], Array[Float], Array[Float]) => Unit],
+                                   x00: Rep[Array[Float]], x01: Rep[Array[Float]], x10: Rep[Array[Float]], x11: Rep[Array[Float]]) =>
+          val k_wrapped: (ArrayBuffer[TensorR] => Unit) = { xs: ArrayBuffer[TensorR] =>
+            k_staged(xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data)
+          }
+          f(i)(k_wrapped)(buildArrayBuffer(n, dims, x00, x01, x10, x11))
+        })
+        f_staged(i, k_staged, xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data)
+
+      case n if n == 3 =>
+        // Stage k
+        val k_staged = fun("&", { (x00: Rep[Array[Float]], x01: Rep[Array[Float]], x10: Rep[Array[Float]], x11: Rep[Array[Float]], x20: Rep[Array[Float]], x21: Rep[Array[Float]]) =>
+          k(buildArrayBuffer(n, dims, x00, x01, x10, x11, x20, x21))
+        })
+        // stage f
+        val f_staged = fun("&", { (i: Rep[Int], k_staged: Rep[(Array[Float], Array[Float], Array[Float], Array[Float], Array[Float], Array[Float]) => Unit],
+                                   x00: Rep[Array[Float]], x01: Rep[Array[Float]], x10: Rep[Array[Float]], x11: Rep[Array[Float]], x20: Rep[Array[Float]], x21: Rep[Array[Float]]) =>
+          val k_wrapped: (ArrayBuffer[TensorR] => Unit) = { xs: ArrayBuffer[TensorR] =>
+            k_staged(xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data, xs(2).x.data, xs(2).d.data)
+          }
+          f(i)(k_wrapped)(buildArrayBuffer(n, dims, x00, x01, x10, x11, x20, x21))
+        })
+        f_staged(i, k_staged, xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data, xs(2).x.data, xs(2).d.data)
+
+      case n if n == 4 =>
+        // Stage k
+        val k_staged = fun("&", { (x00: Rep[Array[Float]], x01: Rep[Array[Float]], x10: Rep[Array[Float]], x11: Rep[Array[Float]],
+                                   x20: Rep[Array[Float]], x21: Rep[Array[Float]], x30: Rep[Array[Float]], x31: Rep[Array[Float]]) =>
+          k(buildArrayBuffer(n, dims, x00, x01, x10, x11, x20, x21, x30, x31))
+        })
+        // stage f
+        val f_staged = fun("&", { (i: Rep[Int], k_staged: Rep[(Array[Float], Array[Float], Array[Float], Array[Float], Array[Float], Array[Float], Array[Float], Array[Float]) => Unit],
+                                   x00: Rep[Array[Float]], x01: Rep[Array[Float]], x10: Rep[Array[Float]], x11: Rep[Array[Float]],
+                                   x20: Rep[Array[Float]], x21: Rep[Array[Float]], x30: Rep[Array[Float]], x31: Rep[Array[Float]]) =>
+          val k_wrapped: (ArrayBuffer[TensorR] => Unit) = { xs: ArrayBuffer[TensorR] =>
+            k_staged(xs(0).x.data, xs(0).d.data, xs(1).x.data, xs(1).d.data, xs(2).x.data, xs(2).d.data, xs(3).x.data, xs(3).d.data)
+          }
+          f(i)(k_wrapped)(buildArrayBuffer(n, dims, x00, x01, x10, x11, x20, x21, x30, x31))
+        })
+
+      case n => System.out.println(s"$n number of TensorRs is not yet supported"); ???
     }
-    val arrays = NewArray[Array[Float]](2*length)
-    for (u <- (0 until length): Range) {
-      arrays(u*2) = x(u).x.data; arrays(u*2+1) = x(u).d.data
-    }
-    f1(i, k2, arrays)
   }
 
   @virtualize
   def LOOPLM(start: Rep[Int])(init: ArrayBuffer[TensorR])(c: Rep[Int])(b: Rep[Int] => ArrayBuffer[TensorR] => ArrayBuffer[TensorR] @diff):
-  ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
+    ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
 
     lazy val loop: Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit = FUNlm { (i: Rep[Int]) => (k: ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
 
@@ -1735,7 +1924,7 @@ trait TensorDsl extends Dsl with Diff {
 
   @virtualize
   def LOOPTM(start: Rep[Int])(init: ArrayBuffer[TensorR])(lch: Rep[Array[Int]], rch: Rep[Array[Int]])
-  (b: (ArrayBuffer[TensorR], ArrayBuffer[TensorR], Rep[Int]) => ArrayBuffer[TensorR] @diff): ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
+    (b: (ArrayBuffer[TensorR], ArrayBuffer[TensorR], Rep[Int]) => ArrayBuffer[TensorR] @diff): ArrayBuffer[TensorR] @diff = shift { k: (ArrayBuffer[TensorR] => Unit) =>
 
       lazy val tree: Rep[Int] => (ArrayBuffer[TensorR] => Unit) => ArrayBuffer[TensorR] => Unit = FUNlm { (i: Rep[Int]) => (k: ArrayBuffer[TensorR] => Unit) => (x: ArrayBuffer[TensorR]) =>
 
