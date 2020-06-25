@@ -1247,18 +1247,18 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
     // multihead attention
     override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
       qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean,
-      dropoutRate :Float = 0.0f, smScaler: Float = 1.0f): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = 
+      dropoutRate :Float = 0.0f, smScaler: Float = 1.0, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = 
       {
-        cudnnMultiheadAttnForward(query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler)
+        cudnnMultiheadAttnForward(query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler, residuals)
       }
 
     override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
       qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]],
        hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], 
-       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int]): Unit = 
+       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean): Unit = 
       {
         cudnnMultiHeadAttnBackward(output, query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, 
-        devQSeqArray, devKSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights)
+        devQSeqArray, devKSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights, residuals)
       }
 
 
@@ -1869,7 +1869,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
         | ${dropoutDescName}, NULL,""".stripMargin, qSize , "," , kSize, ",", vSize , "," , embedDim / numHeads, "," , embedDim / numHeads, "," , embedDim / numHeads, ", 0, ", seqLenQ, "," , seqLenK, ",", batchSize, "," , beamSize, "));\n")
 
     def cudnnMultiheadAttnForward(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, qSeqArray: Rep[Array[Int]], 
-    kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate: Float = 0.0f, smScaler: Float = 1.0f): 
+    kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate: Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean): 
     (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = {
       // Assumes tensors in [T(time) N(batch) B(beamsize) V(vector-embed)]
       // qSeqArray, kSeqArray (input)
@@ -1886,6 +1886,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       val devReserve = var_new(unchecked[Array[Float]]("(float*)NULL"))
       val sizeReserve = var_new(unchecked[Int]("0"))
       val sizeWeights = var_new(unchecked[Int]("0"))
+
+      // TODO - this call is repeated for each block (take this out)
       val devQSeqArray = qSeqArray.toGPU(query.x.shape(1) * query.x.shape(2))
       val devKSeqArray = kSeqArray.toGPU(query.x.shape(1) * query.x.shape(2))
 
@@ -1937,7 +1939,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
       seqDataDescriptorHelper("v_desc", value.x.shape(1), value.x.shape(2), value.x.shape(0), value.x.shape(3), kSeqArray, first=false)
       ++
       Seq("CUDNN_CALL(cudnnMultiHeadAttnForward(cudnnHandle, attn_desc, -1,", loWinIdx, "," , hiWinIdx, ",", devQSeqArray, "," , devKSeqArray, ", ",  
-      "q_desc, ", query.x.data, ", NULL, k_desc, ", key.x.data , ",v_desc, ", value.x.data, ", o_desc,", output.data, ", sizeWeights,", weights.x.data ,"," 
+      "q_desc, ", query.x.data, ",", {if (residuals) query.x.data else "NULL"} , ", k_desc, ", key.x.data , ",v_desc, ", value.x.data, ", o_desc,", output.data, ", sizeWeights,", weights.x.data ,"," 
       , sizeWkspace, ",", devWkSpace, ",", sizeReserve,",", devReserve, "));\n}") : _*
       )
       (output, devWkSpace, sizeWkspace, devReserve, sizeReserve, sizeWeights, devQSeqArray, devKSeqArray)
@@ -1946,7 +1948,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps {
     def cudnnMultiHeadAttnBackward(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
       qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], 
       hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f,smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int],
-       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int]) = {
+       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean) = {
         unchecked[Unit](
       Seq(s"""{
       |cudnnSeqDataAxis_t dataAxes[CUDNN_SEQDATA_DIM_COUNT];

@@ -2,3 +2,6 @@
 .*.sw*
 target/
 src/out/
+
+timing.log
+timingInv.log

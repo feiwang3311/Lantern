@@ -309,12 +309,13 @@ trait TensorDsl extends Dsl with Diff {
     // multihead attention
     def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
       devqSeqArray: Rep[Array[Int]], devkSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, 
-      dropoutRate :Float = 0.0f, smScaler: Float = 1.0f): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]])
+      dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]],
+       Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]])
 
     def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
       qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], 
       hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate: Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], devReserve: Rep[Array[Float]], 
-      sizeReserve: Rep[Int], sizeWeights: Rep[Int]): Unit
+      sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean): Unit
 
     // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
     def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor
@@ -1508,13 +1509,13 @@ trait TensorDsl extends Dsl with Diff {
 
     @virtualize
     def multiheadAttention(key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], 
-    loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate: Float = 0.0f, smScaler: Float = 1.0f): TensorR @diff = shift{ (k: TensorR => Unit) =>
+    loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate: Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean = false): TensorR @diff = shift{ (k: TensorR => Unit) =>
       val (y, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights, devQSeqArray, devKSeqArray) = 
-      backend.multiheadAttention(this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler)
+      backend.multiheadAttention(this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler, residuals)
       val ty = TensorR(y); k(ty)
       // backprop
       backend.multiheadAttention_grad(ty, this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, devQSeqArray, devKSeqArray, loWinIdx, hiWinIdx,
-      bias, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights)
+      bias, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights, residuals)
     }
 
     // TODO - remove this, just for testing
