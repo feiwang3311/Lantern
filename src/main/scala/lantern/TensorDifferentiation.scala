@@ -1215,7 +1215,7 @@ trait TensorDsl extends Dsl with Diff {
     // element wise division
     def / (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x / that); k(y)
-      this.d.addMul(1.0f / that, y.d)
+      this.d += y.d / that
     }
     def / (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (ya, xShape, yShape) = backend./(x, that.x)
