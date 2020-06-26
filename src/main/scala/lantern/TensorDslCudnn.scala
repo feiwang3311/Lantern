@@ -13,6 +13,8 @@ import lantern.thirdparty.{CuBLASOps, CuDNNOps}
 
 trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuDNNOps {
 
+  var nextKernel: Int = 0
+
   val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
   val elementWiseUpdateWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
   val convOpIndexSet = scala.collection.mutable.ListBuffer.empty[Int]
