@@ -16,7 +16,7 @@ import lms.thirdparty._
 import lantern.thirdparty._
 import lantern.collection.mutable._
 
-trait LanternGenC extends DslGenCPP {
+trait LanternGenC extends DslGenCPP with CCodeGenLibs {
   val IR: DslExp
   import IR._
 
@@ -31,101 +31,35 @@ trait LanternGenC extends DslGenCPP {
     case n @ Node(s, "NewArray", List(x), _) if isInt(x) =>
       val ctype = remap(typeMap.get(s).map(_.typeArguments.head).getOrElse(manifest[Unknown]))
       emit(s"($ctype*)myMalloc("); shallow(x); emit(s" * sizeof($ctype))")
-      // emit(s"($ctype*)myMalloc(${shallow(x)} * sizeof($ctype))")
     case _ => super.shallow(n)
   }
 
-  def templateHeaders: Seq[String] = Seq(
-    "<assert.h>", "<err.h>", "<errno.h>", "<fcntl.h>", "<functional>",
-    "<math.h>", "<memory>", "<random>", "<stdint.h>", "<stdio.h>", "<stdlib.h>", "<string.h>", "<stdbool.h>",
-    "<sys/mman.h>", "<sys/stat.h>", "<sys/time.h>", "<time.h>", "<unistd.h>", "<cblas.h>", "<algorithm>", "<numeric>")
   def templateRawCode: String = ""
 
   override def emitAll(ng: Graph, name: String)(m1:Manifest[_],m2:Manifest[_]): Unit = {
-    val g = init(ng)
-    val arg = quote(g.block.in.head)
-    val efs = "" //quoteEff(g.block.ein)
-    val stt = dce.statics.toList.map(quoteStatic).mkString(", ")
-    val (ms1, ms2) = (remap(m1), remap(m2))
-    val functionName = name
-    stream.println(raw"""
-    |${templateHeaders.map(x => s"#include $x").mkString("\n")}
-    |
-    |using namespace std;
-    |#ifndef MAP_FILE
-    |#define MAP_FILE MAP_SHARED
-    |#endif
-    |
-    |long fsize(int fd) {
-    |  struct stat stat;
-    |  int res = fstat(fd,&stat);
-    |  return stat.st_size;
-    |}
-    |int printll(char* s) {
-    |  while (*s != '\n' && *s != ',' && *s != '\t') {
-    |    putchar(*s++);
-    |  }
-    |  return 0;
-    |}
-    |long hash(char *str0, int len) {
-    |  unsigned char* str = (unsigned char*)str0;
-    |  unsigned long hash = 5381;
-    |  int c;
-    |
-    |  while ((c = *str++) && len--)
-    |    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-    |
-    |  return hash;
-    |}
-    |
-    |long HEAP_SIZE_CPU = 1073741826;
-    |void *mallocBase = calloc(HEAP_SIZE_CPU, 1);
-    |void *mallocAddr = mallocBase;
-    |void *waterMark = mallocBase;
-    |void *myMalloc(size_t bytes) {
-    |  void *res = mallocAddr;
-    |  mallocAddr = (void *)((char *)mallocAddr + bytes);
-    |  if ((long)mallocAddr >= (long)mallocBase + HEAP_SIZE_CPU) {
-    |    fprintf(stderr, "CPU memory breached limit of HEAP_SIZE_CPU\n"); abort();
-    |  }
-    |  return res;
-    |}
-    |int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
-    |  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
-    |  result->tv_sec = diff / 1000000;
-    |  result->tv_usec = diff % 1000000;
-    |  return (diff < 0);
-    |}
-    |
-    |$templateRawCode
-    |
-    |void Snippet(char*);
-    |
-    |int main(int argc, char *argv[]) {
-    |  if (argc != 2) {
-    |    printf("usage: query <filename>\n");
-    |    return 0;
-    |  }
-    |  Snippet(argv[1]);
-    |  return 0;
-    |}
-    |/*****************************************
-    |Emitting C Generated Code
-    |*******************************************/
-   """.stripMargin)
-    val src = run(name, g)
-    src.writeTo(stream)
-    stream.println("""
-    /*****************************************
-    End of C Generated Code
-    *******************************************/
-    """)
+    registerHeader("<assert.h>", "<err.h>", "<errno.h>", "<fcntl.h>", "<functional>",
+      "<math.h>", "<memory>", "<random>", "<string.h>", "<sys/mman.h>", "<sys/stat.h>",
+      "<sys/time.h>", "<time.h>", "<unistd.h>", "<cblas.h>", "<algorithm>", "<numeric>")
+
+    // add cpu_header.h
+    val curPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
+    val tailPath = "src/main/cpp/headers/"
+    val headerFile = "\"cpu_header.h\""
+    registerHeader(s"$curPath/$tailPath", headerFile)
+
+    super.emitAll(ng, name)(m1, m2)
   }
 }
 
 trait LanternGenCublas extends LanternGenC {
   val IR: DslExp
   import IR._
+
+  override def remap(m: Manifest[_]) = {
+    val mStr = m.toString
+    if (mStr.endsWith("CublasHandleT")) "cublasHandle_t"
+    else super.remap(m)
+  }
 
   override def shallow(n: Node): Unit = n match {
     case n @ Node(s, "NewGpuArray", List(x), _) =>
@@ -158,8 +92,17 @@ trait LanternGenCublas extends LanternGenC {
     case _ => super.shallow(n)
   }
 
-  override def templateHeaders: Seq[String] =
-    super.templateHeaders ++ Seq("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
+  override def emitAll(ng: Graph, name: String)(m1: Manifest[_], m2: Manifest[_]): Unit = {
+    registerHeader("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
+
+    // add cublas_header.h
+    val curPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
+    val tailPath = "src/main/cpp/headers/"
+    val headerFile = "\"cublas_header.h\""
+    registerHeader(s"$curPath/$tailPath", headerFile)
+
+    super.emitAll(ng, name)(m1, m2)
+  }
 
   override def templateRawCode: String = super.templateRawCode +
     """
@@ -184,6 +127,7 @@ trait LanternGenCublas extends LanternGenC {
       |void *gpuMallocBase;
       |void *gpuMallocAddr;
       |
+      |long HEAP_SIZE = 1073741824; // 4294967296; // 8589934592; // 10737418240;
       |// Alignment boundary size, in bytes.
       |constexpr int N = 4; // 16
       |void *myGpuMalloc(size_t bytes) {
@@ -595,7 +539,6 @@ trait LanternGenCudnn extends LanternGenCublas {
   def convOpIndex() = ((0 until 12): Range).toList
   def buildConvAlgoTemplate(): String = convOpIndex.map(convAlgoTemplate).mkString("\n")
 
-  override def templateHeaders: Seq[String] = super.templateHeaders ++ Seq("<cudnn.h>")
   override def templateRawCode: String = super.templateRawCode + buildConvAlgoTemplate() +
      """
       |
@@ -608,6 +551,18 @@ trait LanternGenCudnn extends LanternGenCublas {
       |  } \
       |}
       |""".stripMargin
+
+  override def emitAll(ng: Graph, name: String)(m1: Manifest[_], m2: Manifest[_]): Unit = {
+    registerHeader("<cudnn.h>")
+
+    // add cublas_header.h
+    val curPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
+    val tailPath = "src/main/cpp/headers/"
+    val headerFile = "\"cublas_header.h\""
+    registerHeader(s"$curPath/$tailPath", headerFile)
+
+    super.emitAll(ng, name)(m1, m2)
+  }
 }
 
 // TODO: bad design!! NNModule should not depend on backend!
@@ -631,21 +586,13 @@ abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverCPP[
     outFile.println(this.code)
     outFile.flush()
   }
-
-  override def wrapper(x: Rep[A]): Rep[B] = {
-    generate_comment("Backend setup.")
-    backend.setup()
-    val result = snippet(x)
-
-    generate_comment("Backend cleanup.")
-    backend.cleanup()
-    result
-  }
 }
 
 abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCPU { q =>
 
   backend = BackendCPU()
+
+  compilerCommand = "g++ -std=c++11 -O3"
 
   override lazy val f: A => Unit = {
     // TBD: should read result of type B?
@@ -654,8 +601,12 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBas
     out.close
     (new java.io.File("/tmp/snippet")).delete
     import scala.sys.process._
+    val includes =
+      if (codegen.includePaths.isEmpty) ""
+      else s"-I ${codegen.includePaths.mkString(" -I ")}"
+    val pb: ProcessBuilder = s"$compilerCommand /tmp/snippet.cpp -o /tmp/snippet $libraries $includes -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lpthread"
     // TODO: would like to use time("cc") { .. }, but messes with captureOut
-    (s"g++ -std=c++11 -O3 /tmp/snippet.cpp -o /tmp/snippet -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lpthread": ProcessBuilder).lines.foreach(Console.println _)
+    pb.lines.foreach(Console.println _)
     (a: A) => (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
 
@@ -683,6 +634,17 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriv
     (a: A) => (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
 
+  override def wrapper(x: Rep[A]): Rep[B] = {
+    generate_comment("Backend setup.")
+    backend.setup()
+    val result = snippet(x)
+
+    generate_comment("Backend cleanup.")
+    backend = BackendCublas()
+    backend.cleanup()
+    result
+  }
+
 }
 
 abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverCublas[A, B] with NNModuleCudnn with TensorDslCudnn { q =>
@@ -707,4 +669,17 @@ abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDrive
     (s"nvcc -std=c++11 -O3 /tmp/snippet.cu -o /tmp/snippet --expt-extended-lambda -Wno-deprecated-gpu-targets -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lstdc++ -lcublas -lcudnn": ProcessBuilder).lines.foreach(Console.println _)
     (a: A) => (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
   }
+
+
+  override def wrapper(x: Rep[A]): Rep[B] = {
+    generate_comment("Backend setup.")
+    backend.setup()
+    val result = snippet(x)
+
+    generate_comment("Backend cleanup.")
+    backend = BackendCudnn()
+    backend.cleanup()
+    result
+  }
+
 }

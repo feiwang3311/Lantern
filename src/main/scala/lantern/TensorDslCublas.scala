@@ -79,7 +79,7 @@ trait CudaGenGPUOps extends CGenBase {
 
 }
 
-trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
+trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CLibs {
 
   val permutationKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
   val basicKernelMap = new scala.collection.mutable.HashMap[String, (String, String)]()
@@ -176,22 +176,106 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
   }
   implicit def tensorRToTransferOps(t: TensorR) = new TensorRTransferOps(t)
 
+
+  // More Principled Cublas binding approach
+  abstract class CublasHandleT
+  // lazy val here so that we only ever create one handle
+  lazy val cublasHandle = newStruct[CublasHandleT]
+
+  abstract class cublasStatusT
+  def cublasCreate(handle: Rep[CublasHandleT]) =
+    libFunction[cublasStatusT]("cublasCreate", Unwrap(handle))(Seq[Int](), Seq(0), Set(0))
+  def cublasDestroy(handle: Rep[CublasHandleT]) =
+    libFunction[cublasStatusT]("cublasDestroy", Unwrap(handle))(Seq[Int](), Seq(0), Set[Int]())
+  def cublasCall(status: Rep[cublasStatusT]) =
+    libFunction[Unit]("CUBLAS_CALL", Unwrap(status))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)
+
+  abstract class CublasOperationT
+  def cublasOpN = cmacro[CublasOperationT]("CUBLAS_OP_N")
+  def cublasOpT = cmacro[CublasOperationT]("CUBLAS_OP_T")
+
+  /*
+    matching syntax of this library function
+    cublasStatus_t cublasSgemv(cublasHandle_t handle, cublasOperation_t trans,
+                           int m, int n,
+                           const float           *alpha,
+                           const float           *A, int lda,
+                           const float           *x, int incx,
+                           const float           *beta,
+                           float           *y, int incy)
+  */
+  def cublasSgemv_(handle: Rep[CublasHandleT], trans: Rep[CublasOperationT], m: Rep[Int], n: Rep[Int], alpha: Var[Float],
+                   A: Rep[Array[Float]], lda: Rep[Int], x: Rep[Array[Float]], incx: Rep[Int], beta: Var[Float],
+                   y: Rep[Array[Float]], incy: Rep[Int]): Rep[cublasStatusT] =
+    libFunction[cublasStatusT]("cublasSgemv",
+      Unwrap(handle), Unwrap(trans), Unwrap(m), Unwrap(n), UnwrapV(alpha), Unwrap(A), Unwrap(lda), Unwrap(x), Unwrap(incx),
+      UnwrapV(beta), Unwrap(y), Unwrap(incy))(Seq(0,5,7,10), Seq(10), Set(4, 9))
+
+  /*
+    matching syntax of this library function
+    cublasStatus_t cublasSgeam(cublasHandle_t handle,
+                          cublasOperation_t transa, cublasOperation_t transb,
+                          int m, int n,
+                          const float           *alpha,
+                          const float           *A, int lda,
+                          const float           *beta,
+                          const float           *B, int ldb,
+                          float           *C, int ldc)
+  */
+  def cublasSgeam_(handle: Rep[CublasHandleT], transa: Rep[CublasOperationT], transb: Rep[CublasOperationT],
+                    m: Rep[Int], n: Rep[Int], alpha: Var[Float], A: Rep[Array[Float]], lda: Rep[Int],
+                    beta: Var[Float], B: Rep[Array[Float]], ldb: Rep[Int],
+                    C: Rep[Array[Float]], ldc: Rep[Int]): Rep[cublasStatusT] =
+    libFunction[cublasStatusT]("cublasSgeam",
+      Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m), Unwrap(n), UnwrapV(alpha),
+      Unwrap(A), Unwrap(lda), UnwrapV(beta), Unwrap(B), Unwrap(ldb), Unwrap(C), Unwrap(ldc))(Seq(0, 6, 9, 11), Seq(11), Set(5, 8))
+
+  /*
+    cublasStatus_t cublasSgemm(cublasHandle_t handle,
+                           cublasOperation_t transa, cublasOperation_t transb,
+                           int m, int n, int k,
+                           const float           *alpha,
+                           const float           *A, int lda,
+                           const float           *B, int ldb,
+                           const float           *beta,
+                           float           *C, int ldc)
+   */
+  def cublasSgemm_(handle: Rep[CublasHandleT], transa: Rep[CublasOperationT], transb: Rep[CublasOperationT],
+                   m: Rep[Int], n: Rep[Int], k: Rep[Int], alpha: Var[Float], A: Rep[Array[Float]], lda: Rep[Int],
+                   B: Rep[Array[Float]], ldb: Rep[Int], beta: Var[Float], C: Rep[Array[Float]], ldc: Rep[Int]) =
+    libFunction[cublasStatusT]("cublasSgemm",
+      Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m), Unwrap(n), Unwrap(k), UnwrapV(alpha),
+      Unwrap(A), Unwrap(lda), Unwrap(B), Unwrap(ldb), UnwrapV(beta), Unwrap(C), Unwrap(ldc))(Seq(0,7,9,12), Seq(12), Set(6, 11))
+
   /**
     * cuBLAS tensor operation backend. WIP.
     */
   class BackendCublas protected() extends Backend {
-    override def setup(): Unit = unchecked(
-      """cublasHandle_t cublasHandle;
-        |CUBLAS_CALL(cublasCreate(&cublasHandle));
+    override def setup(): Unit = {
+      cublasCall(cublasCreate(cublasHandle))
+      unchecked(
+        """
         |CUDA_CALL(cudaMalloc(&gpuMallocBase, HEAP_SIZE));
         |CUDA_CALL(cudaMemset(gpuMallocBase, 0, HEAP_SIZE));
-        |gpuMallocAddr = gpuMallocBase;
-      """.stripMargin)
+        |gpuMallocAddr = gpuMallocBase
+        """.stripMargin)
+    }
+    // unchecked(
+    //   """cublasHandle_t cublasHandle;
+    //     |CUBLAS_CALL(cublasCreate(&cublasHandle));
+    //     |CUDA_CALL(cudaMalloc(&gpuMallocBase, HEAP_SIZE));
+    //     |CUDA_CALL(cudaMemset(gpuMallocBase, 0, HEAP_SIZE));
+    //     |gpuMallocAddr = gpuMallocBase;
+    //   """.stripMargin)
 
-    override def cleanup(): Unit = unchecked(
-      """CUBLAS_CALL(cublasDestroy(cublasHandle));
-        |CUDA_CALL(cudaFree(gpuMallocBase));
-      """.stripMargin)
+    override def cleanup(): Unit = {
+      cublasCall(cublasDestroy(cublasHandle))
+      unchecked("CUDA_CALL(cudaFree(gpuMallocBase))")
+    }
+    // unchecked(
+    //   """CUBLAS_CALL(cublasDestroy(cublasHandle));
+    //     |CUDA_CALL(cudaFree(gpuMallocBase));
+    //   """.stripMargin)
 
     override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = gpu_array_new[T](length)
 
@@ -256,7 +340,14 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
     // Investigate performance impact.
     def sdot(n: Rep[Int], a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
       generate_comment("calling Sdot API function")
-      unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",", 1, ",", b, ",", 1, ",", result, "))")
+      cublasSdot_(cublasHandle, n, a, b, result)
+      // unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",", 1, ",", b, ",", 1, ",", result, "))")
+    }
+
+    def cublasSdot_(handle: Rep[CublasHandleT], n: Rep[Int], a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
+      cublasCall(libFunction[cublasStatusT]("cublasSdot",
+        Unwrap(handle), Unwrap(n), Unwrap(a), Unwrap(1), Unwrap(b), Unwrap(1), Unwrap(result))
+        (Seq(0, 2, 4), Seq(6), Set[Int]()))
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -267,13 +358,17 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
     }
 
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
+    @virtualize
     def sgemv(m: Rep[Int], n: Rep[Int], matrix: Rep[Array[Float]], vector: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_T, ",
-        n, ",", m, ",", one, ",",
-        matrix, ",", n, ",", vector, ",", 1, ",", zero, ",", result, ",", 1, "))")
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
+      cublasCall(cublasSgemv_(cublasHandle, cublasOpT, n, m, one, matrix, n, vector, 1, zero, result, 1))
+      // unchecked[Unit](
+      //   "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_T, ",
+      //   n, ",", m, ",", one, ",",
+      //   matrix, ",", n, ",", vector, ",", 1, ",", zero, ",", result, ",", 1, "))")
     }
 
     override def matrixVectorDot(x: Tensor, y: Tensor): Tensor = {
@@ -285,13 +380,17 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
     }
 
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
+    @virtualize
     def sgemm(m: Rep[Int], n: Rep[Int], k: Rep[Int], a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-        n, ",", m, ",", k, ",", one, ",",
-        b, ",", n, ",", a, ",", k, ",", zero, ",", result, ",", n, "))")
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var one = 1.0f
+      var zero = 0.0f
+      cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, n, m, k, one, b, n, a, k, zero, result, n))
+      // unchecked[Unit](
+      //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+      //   n, ",", m, ",", k, ",", one, ",",
+      //   b, ",", n, ",", a, ",", k, ",", zero, ",", result, ",", n, "))")
     }
 
     override def matrixMatrixDot(x: Tensor, y: Tensor): Tensor = {
@@ -303,24 +402,32 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
       Tensor(res, m, n)
     }
 
+    @virtualize
     override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
       // use CuBLAS instead
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
       (x.x.rank, y.x.rank) match {
         case (1, 1) =>
           val dim = x.x.shape(0)
-          val scale = output.d.toCPU()  // TODO (Fei Wang) fix this for optimization
+          // val scale = output.d.toCPU()  // TODO (Fei Wang) fix this for optimization
+          var scale = output.d.toCPU().data(0)
           // x.d.addMul(output.d.data(0), y.x)
-          if (!x.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-            dim, ",", 1, ",", one, ",",
-            x.d.data, ",", dim, ",", scale.data, ", ", y.x.data, ", ", dim, ", ", x.d.data, ",", dim, "))")
+          if (!x.isInput) cublasCall(cublasSgeam_(cublasHandle, cublasOpN, cublasOpN, dim, 1, one, x.d.data, dim, scale,
+                                     y.x.data, dim, x.d.data, dim))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+          //   dim, ",", 1, ",", one, ",",
+          //   x.d.data, ",", dim, ",", scale.data, ", ", y.x.data, ", ", dim, ", ", x.d.data, ",", dim, "))")
           // y.d.addMul(output.d.data(0), x.x)
-          if (!y.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-            dim, ",", 1, ",", one, ",",
-            y.d.data, ",", dim, ",", scale.data, ", ", x.x.data, ", ", dim, ", ", y.d.data, ",", dim, "))")
+          if (!y.isInput) cublasCall(cublasSgeam_(cublasHandle, cublasOpN, cublasOpN, dim, 1, one, y.d.data, dim, scale,
+                                     x.x.data, dim, y.d.data, dim))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+          //   dim, ",", 1, ",", one, ",",
+          //   y.d.data, ",", dim, ",", scale.data, ", ", x.x.data, ", ", dim, ", ", y.d.data, ",", dim, "))")
         case (2, 1) =>
           if (!x.isInput) add_cartesian(x.d, y.x, output.d)
           if (!y.isInput) add_composition(y.d, x.x, output.d)
@@ -330,39 +437,54 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
           if (!y.isInput) add_dotTrans1(y.d, x.x, output.d)
       }
     }
+    @virtualize
     override def add_cartesian(x: Tensor, y: Tensor, output: Tensor): Unit = {
       val dim1 = x.shape(0); val dim2 = x.shape(1)
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-        dim2, ", ", dim1, ", ", 1, ", ", one, ", ",
-        y.data, ", ", dim2, ", ", output.data, ", ", 1, ", ", one, ", ", x.data, ", ", dim2, "))")
+      // val one = NewArray[Float](1); one(0) = 1
+      var one = 1.0f
+      cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, dim2, dim1, 1, one, y.data, dim2, output.data, 1, one, x.data, dim2))
+      // unchecked[Unit](
+      //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+      //   dim2, ", ", dim1, ", ", 1, ", ", one, ", ",
+      //   y.data, ", ", dim2, ", ", output.data, ", ", 1, ", ", one, ", ", x.data, ", ", dim2, "))")
     }
+
+    @virtualize
     override def add_composition(x: Tensor, y: Tensor, output: Tensor): Unit = {
       val dim1 = y.shape(0); val dim2 = y.shape(1)
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
-         dim2, ",", dim1, ",", one, ",",
-         y.data, ",", dim2, ",", output.data, ",", 1, ",", one, ",", x.data, ",", 1, "))")
+      // val one = NewArray[Float](1); one(0) = 1
+      var one = 1.0f
+      cublasCall(cublasSgemv_(cublasHandle, cublasOpN, dim2, dim1, one, y.data, dim2, output.data, 1, one, x.data, 1))
+      // unchecked[Unit](
+      //   "CUBLAS_CALL(cublasSgemv(cublasHandle, CUBLAS_OP_N, ",
+      //    dim2, ",", dim1, ",", one, ",",
+      //    y.data, ",", dim2, ",", output.data, ",", 1, ",", one, ",", x.data, ",", 1, "))")
     }
     // more complication because cublas requires column-major
+    @virtualize
     override def add_dotTrans1(x: Tensor, y: Tensor, output: Tensor): Unit = {
       val dim1 = y.shape(0); val dim2 = y.shape(1); val dim3 = output.shape(1)
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
-        dim3, ",", dim2, ",", dim1, ",", one, ",",
-        output.data, ",", dim3, ",", y.data, ",", dim2, ",", one, ",", x.data, ",", dim3, "))")
+      // val one = NewArray[Float](1); one(0) = 1
+      var one = 1.0f
+      cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpT, dim3, dim2, dim1, one, output.data, dim3, y.data, dim2,
+                 one, x.data, dim3))
+      // unchecked[Unit](
+      //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+      //   dim3, ",", dim2, ",", dim1, ",", one, ",",
+      //   output.data, ",", dim3, ",", y.data, ",", dim2, ",", one, ",", x.data, ",", dim3, "))")
     }
     // more complication because cublas requires column-major
+    @virtualize
     override def add_dotTrans2(x: Tensor, y: Tensor, output: Tensor): Unit = {
       val dim1 = x.shape(0); val dim2 = x.shape(1); val dim3 = output.shape(1)
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
-         dim2, ",", dim1, ",", dim3, ",", one, ",",
-         output.data, ",", dim3, ",", y.data, ",", dim3, ",", one, ",", x.data, ",", dim2, "))")
+      // val one = NewArray[Float](1); one(0) = 1
+      var one = 1.0f
+      cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpN, dim2, dim1, dim3, one, output.data, dim3, y.data, dim3,
+                 one, x.data, dim2))
+      // unchecked[Unit](
+      //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+      //    dim2, ",", dim1, ",", dim3, ",", one, ",",
+      //    output.data, ",", dim3, ",", y.data, ",", dim3, ",", one, ",", x.data, ",", dim2, "))")
     }
 
     override def +(x: Tensor, y: Rep[Float]): Tensor = ??? //elementwiseUnaryOp(x)(s => Seq(s + " + ", y))
@@ -400,45 +522,52 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
     override def plusEqual_grad(base: TensorR, adder: TensorR): Unit = ???
 
     override def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit = {
-      val alpha1 = NewArray[Float](1); alpha1(0) = alpha
-      val beta1 = NewArray[Float](1); beta1(0) = beta
+      // val alpha1 = NewArray[Float](1); alpha1(0) = alpha
+      // val beta1 = NewArray[Float](1); beta1(0) = beta
+      val alpha1 = var_new(alpha)
+      val beta1 = var_new(beta)
       (transX, transY) match {
         case (false, false) =>
           Tensor.assertShapeEqual(x.shape, y.shape)
           Tensor.assertShapeEqual(x.shape, output.shape)
           val m = x.shape(0)
           val n = x.shape.drop(1).product1
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-            n, ",", m, ",", alpha1, ",",
-            x.data, ",", n, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
+          cublasCall(cublasSgeam_(cublasHandle, cublasOpN, cublasOpN, n, m, alpha1, x.data, n, beta1, y.data, n, output.data, n))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+          //   n, ",", m, ",", alpha1, ",",
+          //   x.data, ",", n, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
         case (false, true) =>
           assert(x.rank == 2 && y.rank == 2)
           assert(x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0), "is this assertion correct in terms of types?")
           val m = x.shape(0)
           val n = x.shape(1)
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
-            n, ",", m, ",", alpha1, ",",
-            x.data, ",", n, ",", beta1, ", ", y.data, ", ", m, ", ", output.data, ",", n, "))")
+          generate_comment("is error here?")
+          cublasCall(cublasSgeam_(cublasHandle, cublasOpN, cublasOpT, n, m, alpha1, x.data, n, beta1, y.data, m, output.data, n))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+          //   n, ",", m, ",", alpha1, ",",
+          //   x.data, ",", n, ",", beta1, ", ", y.data, ", ", m, ", ", output.data, ",", n, "))")
         case (true, false) =>
           assert(x.rank == 2 && y.rank == 2)
           assert(x.shape(0) == y.shape(1) && x.shape(1) == y.shape(0))
           val m = x.shape(1)
           val n = x.shape(0)
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
-            n, ",", m, ",", alpha1, ",",
-            x.data, ",", m, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
+          cublasCall(cublasSgeam_(cublasHandle, cublasOpT, cublasOpN, n, m, alpha1, x.data, m, beta1, y.data, n, output.data, n))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+          //   n, ",", m, ",", alpha1, ",",
+          //   x.data, ",", m, ",", beta1, ", ", y.data, ", ", n, ", ", output.data, ",", n, "))")
         case (true, true) =>
           assert(x.rank == 2 && y.rank == 2)
           Tensor.assertShapeEqual(x.shape, y.shape)
           val m = x.shape(1)
           val n = x.shape(0)
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
-            n, ",", m, ",", alpha1, ",",
-            x.data, ",", m, ",", beta1, ", ", y.data, ", ", m, ", ", output.data, ",", n, "))")
+          cublasCall(cublasSgeam_(cublasHandle, cublasOpT, cublasOpT, n, m, alpha1, x.data, m, beta1, y.data, m, output.data, n))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
+          //   n, ",", m, ",", alpha1, ",",
+          //   x.data, ",", m, ",", beta1, ", ", y.data, ", ", m, ", ", output.data, ",", n, "))")
       }
     }
 
@@ -670,104 +799,138 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp {
       permuteHelper(y.d, x.d, revDims:_*)
     }
 
+    @virtualize
     override def gemm(x: Tensor, transX: Boolean, y: Tensor, transY: Boolean, alpha: Float): Tensor = {
+      var zero = 0.0f
+      var alpha1 = alpha
       (transX, transY) match {
         case (false, false) =>
           val m = x.shape(0)
           val n = y.shape(1)
           val k = y.shape(0)
           val res = mallocArray[Float](m * n)
-          val zero = NewArray[Float](1); zero(0) = 0
-          val Alpha = NewArray[Float](1); Alpha(0) = alpha
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-            n, ",", m, ",", k, ",", Alpha, ",",
-            y.data, ",", n, ",", x.data, ",", k, ",", zero, ",", res, ",", n, "))")
+          // val zero = NewArray[Float](1); zero(0) = 0
+          // val Alpha = NewArray[Float](1); Alpha(0) = alpha
+          cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, n, m, k, alpha1, y.data, n, x.data, k, zero, res, n))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+          //   n, ",", m, ",", k, ",", Alpha, ",",
+          //   y.data, ",", n, ",", x.data, ",", k, ",", zero, ",", res, ",", n, "))")
           Tensor(res, m, n)
         case (false, true) =>
           val m = x.shape(0)
           val n = y.shape(0)
           val k = y.shape(1)
           val res = mallocArray[Float](m * n)
-          val zero = NewArray[Float](1); zero(0) = 0
-          val Alpha = NewArray[Float](1); Alpha(0) = alpha
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
-            n, ",", m, ",", k, ",", Alpha, ",",
-            y.data, ",", k, ",", x.data, ",", k, ",", zero, ",", res, ",", n, "))")
+          // val zero = NewArray[Float](1); zero(0) = 0
+          // val Alpha = NewArray[Float](1); Alpha(0) = alpha
+          cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpN, n, m, k, alpha1, y.data, k, x.data, k, zero, res, n))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+          //   n, ",", m, ",", k, ",", Alpha, ",",
+          //   y.data, ",", k, ",", x.data, ",", k, ",", zero, ",", res, ",", n, "))")
           Tensor(res, m, n)
         case (true, false) =>
           val m = x.shape(1)
           val n = y.shape(1)
           val k = y.shape(0)
           val res = mallocArray[Float](m * n)
-          val zero = NewArray[Float](1); zero(0) = 0
-          val Alpha = NewArray[Float](1); Alpha(0) = alpha
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
-            n, ",", m, ",", k, ",", Alpha, ",",
-            y.data, ",", n, ",", x.data, ",", m, ",", zero, ",", res, ",", n, "))")
+          // val zero = NewArray[Float](1); zero(0) = 0
+          // val Alpha = NewArray[Float](1); Alpha(0) = alpha
+          cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpT, n, m, k, alpha1, y.data, n, x.data, m, zero, res, n))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+          //   n, ",", m, ",", k, ",", Alpha, ",",
+          //   y.data, ",", n, ",", x.data, ",", m, ",", zero, ",", res, ",", n, "))")
           Tensor(res, m, n)
         case (true, true) =>
           val m = x.shape(1)
           val n = y.shape(0)
           val k = y.shape(1)
           val res = mallocArray[Float](m * n)
-          val zero = NewArray[Float](1); zero(0) = 0
-          val Alpha = NewArray[Float](1); Alpha(0) = alpha
-          unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
-            n, ",", m, ",", k, ",", Alpha, ",",
-            y.data, ",", k, ",", x.data, ",", m, ",", zero, ",", res, ",", n, "))")
+          // val zero = NewArray[Float](1); zero(0) = 0
+          // val Alpha = NewArray[Float](1); Alpha(0) = alpha
+          cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpT, n, m, k, alpha1, y.data, k, x.data, m, zero, res, n))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
+          //   n, ",", m, ",", k, ",", Alpha, ",",
+          //   y.data, ",", k, ",", x.data, ",", m, ",", zero, ",", res, ",", n, "))")
           Tensor(res, m, n)
       }
     }
 
+    @virtualize
     override def gemm_grad(x: TensorR, transX: Boolean, y: TensorR, transY: Boolean, alpha: Float, output: TensorR): Unit = {
-      val alpha1 = NewArray[Float](1); alpha1(0) = alpha;
-      val one = NewArray[Float](1); one(0) = 1.0f;
+      // val alpha1 = NewArray[Float](1); alpha1(0) = alpha;
+      // val one = NewArray[Float](1); one(0) = 1.0f;
+      var alpha1 = alpha
+      var one = 1.0f
       generate_comment("backprop of gemm")
       (transX, transY) match {
         case (false, false) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
-          if (!x.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
-            dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
-            y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
-          if (!y.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
-            dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
-            output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", one, ",", y.d.data, ",", dim3, "))")
+          if (!x.isInput)
+            cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpN, dim2, dim1, dim3, alpha1, y.x.data, dim3, output.d.data,
+                       dim3, one, x.d.data, dim2))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+          //   dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
+          //   y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
+          if (!y.isInput)
+            cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpT, dim3, dim2, dim1, alpha1, output.d.data, dim3, x.x.data,
+                       dim2, one, y.d.data, dim3))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+          //   dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
+          //   output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", one, ",", y.d.data, ",", dim3, "))")
         case (false, true) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(0)
-          if (!x.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-            dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
-            y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
-          if (!y.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
-            dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
-            x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
+          if (!x.isInput)
+            cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, dim2, dim1, dim3, alpha1, y.x.data, dim2, output.d.data,
+                       dim3, one, x.d.data, dim2))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+          //   dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
+          //   y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
+          if (!y.isInput)
+            cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpT, dim2, dim3, dim1, alpha1, x.x.data, dim2, output.d.data,
+                       dim3, one, y.d.data, dim2))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
+          //   dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
+          //   x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
         case (true, false) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(1)
-          if (!x.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
-            dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
-            output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", one, ",", x.d.data, ",", dim1, "))")
-          if (!y.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-            dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
-            output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", one, ",", y.d.data, ",", dim3, "))")
+          if (!x.isInput)
+            cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpN, dim1, dim2, dim3, alpha1, output.d.data,
+                       dim3, y.x.data, dim3, one, x.d.data, dim1))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
+          //   dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
+          //   output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", one, ",", x.d.data, ",", dim1, "))")
+          if (!y.isInput)
+            cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, dim3, dim2, dim1, alpha1, output.d.data,
+                       dim3, x.x.data, dim1, one, y.d.data, dim3))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
+          //   dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
+          //   output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", one, ",", y.d.data, ",", dim3, "))")
         case (true, true) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(0)
-          if (!x.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
-            dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
-            output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", one, ",", x.d.data, ",", dim1, "))")
-          if (!y.isInput) unchecked[Unit](
-            "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
-            dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
-            x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
+          if (!x.isInput)
+            cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpT, dim1, dim2, dim3, alpha1, output.d.data,
+                       dim3, y.x.data, dim2, one, x.d.data, dim1))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
+          //   dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
+          //   output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", one, ",", x.d.data, ",", dim1, "))")
+          if (!y.isInput)
+            cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpT, dim2, dim3, dim1, alpha1, x.x.data, dim1,
+                       output.d.data, dim3, one, y.d.data, dim2))
+          // unchecked[Unit](
+          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
+          //   dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
+          //   x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
       }
     }
 
