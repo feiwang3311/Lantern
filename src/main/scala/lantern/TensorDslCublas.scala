@@ -79,7 +79,7 @@ trait CudaGenGPUOps extends CGenBase {
 
 }
 
-trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CLibs {
+trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CLibs with lms.thirdparty.CudaFunction {
 
   // val permutationKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
   // var nextKernel: Int = 0
@@ -194,6 +194,17 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
   def cublasOpT = cmacro[CublasOperationT]("CUBLAS_OP_T")
 
   /*
+    cublasStatus_t cublasSdot (cublasHandle_t handle, int n,
+                           const float           *x, int incx,
+                           const float           *y, int incy,
+                           float           *result)
+   */
+  def cublasSdot_(handle: Rep[CublasHandleT], n: Rep[Int], x: Rep[Array[Float]], incx: Rep[Int],
+                  y: Rep[Array[Float]], incy: Rep[Int], result: Rep[Array[Float]]) =
+    libFunction[cublasStatusT]("cublasSdot",
+      Unwrap(handle), Unwrap(n), Unwrap(x), Unwrap(incx), Unwrap(y), Unwrap(incy), Unwrap(result))(Seq(0, 2, 4), Seq(6), Set[Int]())
+
+  /*
     matching syntax of this library function
     cublasStatus_t cublasSgemv(cublasHandle_t handle, cublasOperation_t trans,
                            int m, int n,
@@ -246,6 +257,46 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
       Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m), Unwrap(n), Unwrap(k), UnwrapV(alpha),
       Unwrap(A), Unwrap(lda), Unwrap(B), Unwrap(ldb), UnwrapV(beta), Unwrap(C), Unwrap(ldc))(Seq(0,7,9,12), Seq(12), Set(6, 11))
 
+  // other gpu kernel function bindings
+  def cudaArrayFill_(res: Rep[Array[Float]], value: Rep[Float], size: Rep[Int]): Rep[Unit] =
+    libFunction[Unit]("arrayFill<<<28,512>>>", Unwrap(res), Unwrap(value), Unwrap(size))(Seq[Int](), Seq(0), Set[Int]())
+
+  def cudaArrayClipAt_(res: Rep[Array[Float]], bound: Rep[Float], size: Rep[Int]): Rep[Unit] =
+    libFunction[Unit]("clipAt<<<28,512>>>", Unwrap(res), Unwrap(bound), Unwrap(size))(Seq(0), Seq(0), Set[Int]())
+
+  abstract class Dim3
+  def dim3(a: Rep[Int], b: Rep[Int], c: Rep[Int]): Rep[Dim3] =
+    Wrap[Dim3](Adapter.g.reflectUnsafe("lib-struct", lms.core.Backend.Const(manifest[Dim3]), Unwrap(a), Unwrap(b), Unwrap(c)))
+
+  def permute2D_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int], shape1: Rep[Int]) =
+    cudaFunction[Unit]("permute2D", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
+      Unwrap(shape0), Unwrap(shape1))(Seq(0, 1), Seq(0), Set[Int]())
+
+  def permute3DSim_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
+      shape1: Rep[Int], shape2: Rep[Int]) =
+    cudaFunction[Unit]("permuteSim3D", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
+      Unwrap(shape0), Unwrap(shape1), Unwrap(shape2))(Seq(0, 1), Seq(0), Set[Int]())
+
+  def permute3D210_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
+      shape1: Rep[Int], shape2: Rep[Int], in_strides0: Rep[Int], in_strides1: Rep[Int], res_strides0: Rep[Int], res_strides1: Rep[Int]) =
+    cudaFunction[Unit]("permute3D_dim2to0_dim0to2", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
+      Unwrap(shape0), Unwrap(shape1), Unwrap(shape2), Unwrap(in_strides0), Unwrap(in_strides1), Unwrap(res_strides0), Unwrap(res_strides1))(Seq(0, 1), Seq(0), Set[Int]())
+
+  def permute3D120_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
+        shape1: Rep[Int], shape2: Rep[Int], in_strides0: Rep[Int], in_strides1: Rep[Int], res_strides0: Rep[Int], res_strides1: Rep[Int]) =
+      cudaFunction[Unit]("permute3D_dim2to1_dim0to2", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
+        Unwrap(shape0), Unwrap(shape1), Unwrap(shape2), Unwrap(in_strides0), Unwrap(in_strides1), Unwrap(res_strides0), Unwrap(res_strides1))(Seq(0, 1), Seq(0), Set[Int]())
+
+  def permute3D201_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
+        shape1: Rep[Int], shape2: Rep[Int], in_strides0: Rep[Int], in_strides1: Rep[Int], res_strides0: Rep[Int], res_strides1: Rep[Int]) =
+      cudaFunction[Unit]("permute3D_dim2to0_dim0to1", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
+        Unwrap(shape0), Unwrap(shape1), Unwrap(shape2), Unwrap(in_strides0), Unwrap(in_strides1), Unwrap(res_strides0), Unwrap(res_strides1))(Seq(0, 1), Seq(0), Set[Int]())
+
+  def permute3D021_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
+        shape1: Rep[Int], shape2: Rep[Int], in_strides0: Rep[Int], in_strides1: Rep[Int], res_strides0: Rep[Int], res_strides1: Rep[Int]) =
+      cudaFunction[Unit]("permute3D_dim2to1_dim0to0", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
+        Unwrap(shape0), Unwrap(shape1), Unwrap(shape2), Unwrap(in_strides0), Unwrap(in_strides1), Unwrap(res_strides0), Unwrap(res_strides1))(Seq(0, 1), Seq(0), Set[Int]())
+
   /**
     * cuBLAS tensor operation backend. WIP.
     */
@@ -259,22 +310,11 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
         |gpuMallocAddr = gpuMallocBase
         """.stripMargin)
     }
-    // unchecked(
-    //   """cublasHandle_t cublasHandle;
-    //     |CUBLAS_CALL(cublasCreate(&cublasHandle));
-    //     |CUDA_CALL(cudaMalloc(&gpuMallocBase, HEAP_SIZE));
-    //     |CUDA_CALL(cudaMemset(gpuMallocBase, 0, HEAP_SIZE));
-    //     |gpuMallocAddr = gpuMallocBase;
-    //   """.stripMargin)
 
     override def cleanup(): Unit = {
       cublasCall(cublasDestroy(cublasHandle))
       unchecked("CUDA_CALL(cudaFree(gpuMallocBase))")
     }
-    // unchecked(
-    //   """CUBLAS_CALL(cublasDestroy(cublasHandle));
-    //     |CUDA_CALL(cudaFree(gpuMallocBase));
-    //   """.stripMargin)
 
     override def mallocArray[T: Manifest](length: Rep[Int]): Rep[Array[T]] = gpu_array_new[T](length)
 
@@ -289,8 +329,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     override def fill(dims: Seq[Rep[Int]], value: Rep[Float]): Tensor = {
       val size: Rep[Int] = dims.foldLeft(unit(1)){case (a, b) => a * b}
       val resArray = mallocArray[Float](size)
-      val nGrid = 28
-      unchecked[Unit](s"arrayFill<<<${nGrid}, 512>>>(", resArray, ", ", value, ", ", size, ")")
+      cudaArrayFill_(resArray, value, size)
       Tensor(resArray, dims: _*)
     }
 
@@ -299,19 +338,14 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
 
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       val size = x.scalarCount
-      val nGrid = 28
-      unchecked[Unit](s"arrayFill<<<${nGrid}, 512>>>(", x.data, ", ", value, ", ", size, ")")
+      cudaArrayFill_(x.data, value, size)
     }
 
     // TODO: Implement random initialization using cuRAND API.
     override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor =
       BackendCPU().randinit(dims, scale, seed).toGPU()
 
-    override def clipAt(x: Tensor, bound: Float) = {
-      val size = x.scalarCount
-      val nGrid = 28
-      unchecked[Unit](s"clipAt<<<${nGrid}, 512>>>(", x.data, ", ", bound, ", ", size, ")")
-    }
+    override def clipAt(x: Tensor, bound: Float) = cudaArrayClipAt_(x.data, bound, x.scalarCount)
 
     // Cannot implement (Need kernel functions!)
     override def mutate(x: Tensor, delta: Rep[Int] => Rep[Float]): Unit = ???
@@ -324,20 +358,11 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     // NOTE: `sdot` fails when the cuBLAS pointer mode is host (as opposed to device).
     // Investigate performance impact.
     def sdot(n: Rep[Int], a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      generate_comment("calling Sdot API function")
-      cublasSdot_(cublasHandle, n, a, b, result)
-      // unchecked[Unit]("CUBLAS_CALL(cublasSdot(cublasHandle, ", n, ",", a, ",", 1, ",", b, ",", 1, ",", result, "))")
-    }
-
-    def cublasSdot_(handle: Rep[CublasHandleT], n: Rep[Int], a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      cublasCall(libFunction[cublasStatusT]("cublasSdot",
-        Unwrap(handle), Unwrap(n), Unwrap(a), Unwrap(1), Unwrap(b), Unwrap(1), Unwrap(result))
-        (Seq(0, 2, 4), Seq(6), Set[Int]()))
+      cublasCall(cublasSdot_(cublasHandle, n, a, 1, b, 1, result))
     }
 
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       val res = BackendCPU().mallocArray[Float](1)
-      generate_comment("calling sdot from vectorVectorDot function")
       sdot(x.scalarCount, x.data, y.data, res)
       Tensor(res, 1).toGPU()  // TODO (Fei Wang): if use GPU memory for result, there is segfault
     }
@@ -345,8 +370,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemv
     @virtualize
     def sgemv(m: Rep[Int], n: Rep[Int], matrix: Rep[Array[Float]], vector: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
       var zero = 0.0f
       var one = 1.0f
       cublasCall(cublasSgemv_(cublasHandle, cublasOpT, n, m, one, matrix, n, vector, 1, zero, result, 1))
@@ -367,8 +390,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     // Reference: https://docs.nvidia.com/cuda/cublas/index.html#cublas-lt-t-gt-gemm
     @virtualize
     def sgemm(m: Rep[Int], n: Rep[Int], k: Rep[Int], a: Rep[Array[Float]], b: Rep[Array[Float]], result: Rep[Array[Float]]) = {
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
       var one = 1.0f
       var zero = 0.0f
       cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, n, m, k, one, b, n, a, k, zero, result, n))
@@ -389,9 +410,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
 
     @virtualize
     override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
-      // use CuBLAS instead
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
       var zero = 0.0f
       var one = 1.0f
       (x.x.rank, y.x.rank) match {
@@ -399,14 +417,12 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
           val dim = x.x.shape(0)
           // val scale = output.d.toCPU()  // TODO (Fei Wang) fix this for optimization
           var scale = output.d.toCPU().data(0)
-          // x.d.addMul(output.d.data(0), y.x)
           if (!x.isInput) cublasCall(cublasSgeam_(cublasHandle, cublasOpN, cublasOpN, dim, 1, one, x.d.data, dim, scale,
                                      y.x.data, dim, x.d.data, dim))
           // unchecked[Unit](
           //   "CUBLAS_CALL(cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
           //   dim, ",", 1, ",", one, ",",
           //   x.d.data, ",", dim, ",", scale.data, ", ", y.x.data, ", ", dim, ", ", x.d.data, ",", dim, "))")
-          // y.d.addMul(output.d.data(0), x.x)
           if (!y.isInput) cublasCall(cublasSgeam_(cublasHandle, cublasOpN, cublasOpN, dim, 1, one, y.d.data, dim, scale,
                                      x.x.data, dim, y.d.data, dim))
           // unchecked[Unit](
@@ -425,7 +441,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     @virtualize
     override def add_cartesian(x: Tensor, y: Tensor, output: Tensor): Unit = {
       val dim1 = x.shape(0); val dim2 = x.shape(1)
-      // val one = NewArray[Float](1); one(0) = 1
       var one = 1.0f
       cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, dim2, dim1, 1, one, y.data, dim2, output.data, 1, one, x.data, dim2))
       // unchecked[Unit](
@@ -437,7 +452,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     @virtualize
     override def add_composition(x: Tensor, y: Tensor, output: Tensor): Unit = {
       val dim1 = y.shape(0); val dim2 = y.shape(1)
-      // val one = NewArray[Float](1); one(0) = 1
       var one = 1.0f
       cublasCall(cublasSgemv_(cublasHandle, cublasOpN, dim2, dim1, one, y.data, dim2, output.data, 1, one, x.data, 1))
       // unchecked[Unit](
@@ -449,7 +463,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     @virtualize
     override def add_dotTrans1(x: Tensor, y: Tensor, output: Tensor): Unit = {
       val dim1 = y.shape(0); val dim2 = y.shape(1); val dim3 = output.shape(1)
-      // val one = NewArray[Float](1); one(0) = 1
       var one = 1.0f
       cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpT, dim3, dim2, dim1, one, output.data, dim3, y.data, dim2,
                  one, x.data, dim3))
@@ -462,7 +475,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     @virtualize
     override def add_dotTrans2(x: Tensor, y: Tensor, output: Tensor): Unit = {
       val dim1 = x.shape(0); val dim2 = x.shape(1); val dim3 = output.shape(1)
-      // val one = NewArray[Float](1); one(0) = 1
       var one = 1.0f
       cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpN, dim2, dim1, dim3, one, output.data, dim3, y.data, dim3,
                  one, x.data, dim2))
@@ -507,8 +519,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
     override def plusEqual_grad(base: TensorR, adder: TensorR): Unit = ???
 
     override def geam(x: Tensor, transX: Boolean, alpha: Rep[Float], y: Tensor, transY: Boolean, beta: Rep[Float], output: Tensor): Unit = {
-      // val alpha1 = NewArray[Float](1); alpha1(0) = alpha
-      // val beta1 = NewArray[Float](1); beta1(0) = beta
       val alpha1 = var_new(alpha)
       val beta1 = var_new(beta)
       (transX, transY) match {
@@ -723,38 +733,52 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
       */
       // end of if (permutationKernelMap.contains()), the following code should call the kernel function
       // val (_, kernelName) = permutationKernelMap(dims.toSeq)
+
       if (x.rank == 2) { // this is transpose
-        unchecked[Unit](
-         "{\n",
-         s"dim3 dimGrid((", x.shape(1), s"+$TILE_DIM-1)/$TILE_DIM, (", x.shape(0), s"+$TILE_DIM-1)/$TILE_DIM, 1);\n",
-         s"dim3 dimBlock($TILE_DIM, $BLOCK_ROWS, 1);\n",
-         s"permute2D<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ");\n",
-         "}\n"
-        )
+        val dimGrid = dim3( (x.shape(1) + TILE_DIM - 1) / TILE_DIM, (x.shape(0) + TILE_DIM - 1) / TILE_DIM, 1 )
+        val dimBlock = dim3( TILE_DIM, BLOCK_ROWS, 1 )
+        permute2D_(dimGrid, dimBlock, resTensor.data, x.data, x.shape(0), x.shape(1))
+        // unchecked[Unit](
+        //  "{\n",
+        //  s"dim3 dimGrid((", x.shape(1), s"+$TILE_DIM-1)/$TILE_DIM, (", x.shape(0), s"+$TILE_DIM-1)/$TILE_DIM, 1);\n",
+        //  s"dim3 dimBlock($TILE_DIM, $BLOCK_ROWS, 1);\n",
+        //  s"permute2D<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ");\n",
+        //  "}\n"
+        // )
       } else if (x.rank == 3) { // this is permutation for 3D Tensor
         if (dims(2) == 2) { // this is the simple case (inner most dimension doesn't permute)
-          unchecked[Unit](
-            "{\n",
-           s"dim3 dimGrid(", x.shape(1), ", ", x.shape(0), ", 1);\n",
-           s"dim3 dimBlock(256, 1, 1);\n",
-           s"permuteSim3D<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ");\n",
-            "}\n"
-          )
+          val dimGrid = dim3(x.shape(1), x.shape(0), 1)
+          val dimBlock = dim3(256, 1, 1)
+          permute3DSim_(dimGrid, dimBlock, resTensor.data, x.data, x.shape(0), x.shape(1), x.shape(2))
+          // unchecked[Unit](
+          //   "{\n",
+          //  s"dim3 dimGrid(", x.shape(1), ", ", x.shape(0), ", 1);\n",
+          //  s"dim3 dimBlock(256, 1, 1);\n",
+          //  s"permuteSim3D<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ");\n",
+          //   "}\n"
+          // )
         } else { // this is the complicated case for 3D permutation
+          val dimGrid = dim3( (x.shape(2) + TILE_DIM - 1) / TILE_DIM , (x.shape(dims(2)) + TILE_DIM - 1) / TILE_DIM, if (dims(2) == 0) x.shape(1) else x.shape(0) )
+          val dimBlock = dim3( TILE_DIM, BLOCK_ROWS, 1 )
           val kernelName = (dims(2), dims(0)) match {
-            case (0, 2) => "permute3D_dim2to0_dim0to2"
-            case (1, 2) => "permute3D_dim2to1_dim0to2"
-            case (0, 1) => "permute3D_dim2to0_dim0to1"
-            case (1, 0) => "permute3D_dim2to1_dim0to0"
+            case (0, 2) => permute3D210_(dimGrid, dimBlock, resTensor.data, x.data, x.shape(0), x.shape(1), x.shape(2),
+              x.shape.strides(0), x.shape.strides(1), resTensor.shape.strides(0), resTensor.shape.strides(1))
+            case (1, 2) => permute3D120_(dimGrid, dimBlock, resTensor.data, x.data, x.shape(0), x.shape(1), x.shape(2),
+              x.shape.strides(0), x.shape.strides(1), resTensor.shape.strides(0), resTensor.shape.strides(1))
+            case (0, 1) => permute3D201_(dimGrid, dimBlock, resTensor.data, x.data, x.shape(0), x.shape(1), x.shape(2),
+              x.shape.strides(0), x.shape.strides(1), resTensor.shape.strides(0), resTensor.shape.strides(1))
+            case (1, 0) => permute3D021_(dimGrid, dimBlock, resTensor.data, x.data, x.shape(0), x.shape(1), x.shape(2),
+              x.shape.strides(0), x.shape.strides(1), resTensor.shape.strides(0), resTensor.shape.strides(1))
+            case _ => ???
           }
-          unchecked[Unit](
-            "{\n",
-           s"dim3 dimGrid((", x.shape(2), s"+$TILE_DIM-1)/$TILE_DIM,(", x.shape(dims(2)), s"+$TILE_DIM-1)/$TILE_DIM,", if(dims(2)==0) x.shape(1) else x.shape(0), ");\n",
-           s"dim3 dimBlock($TILE_DIM, $BLOCK_ROWS, 1);\n",
-           s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape.strides(0),
-                 ", ", x.shape.strides(1), ", ", resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ");\n",
-            "}\n"
-          )
+          // unchecked[Unit](
+          //   "{\n",
+          //  s"dim3 dimGrid((", x.shape(2), s"+$TILE_DIM-1)/$TILE_DIM,(", x.shape(dims(2)), s"+$TILE_DIM-1)/$TILE_DIM,", if(dims(2)==0) x.shape(1) else x.shape(0), ");\n",
+          //  s"dim3 dimBlock($TILE_DIM, $BLOCK_ROWS, 1);\n",
+          //  s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape.strides(0),
+          //        ", ", x.shape.strides(1), ", ", resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ");\n",
+          //   "}\n"
+          // )
         }
       } else { // this is the permutation for 4D Tensor
         if (dims(3) == 3) { // this is the simple case for 4D Tensor (inner most dimension doesn't permute)

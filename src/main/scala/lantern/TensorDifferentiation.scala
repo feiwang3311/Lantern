@@ -576,7 +576,7 @@ trait TensorDsl extends DslCPP with Diff {
     // FIXME: Proper tensor
     @virtualize
     def maxIndex() = {
-      assert(this.rank == 1)
+      assert(this.rank == 1, s"rank is ${this.rank}")
       val vMax = var_new(this.data(0))
       val iMax = var_new(0)
       for (idx <- 1 until this.scalarCount: Rep[Range]) {

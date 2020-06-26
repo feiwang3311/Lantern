@@ -55,7 +55,7 @@ trait LanternGenC extends DslGenCPP with CCodeGenLibs {
   }
 }
 
-trait LanternGenCublas extends LanternGenC {
+trait LanternGenCublas extends LanternGenC with CudaCodeGenLibFunction {
   val IR: DslExp
   import IR._
 
