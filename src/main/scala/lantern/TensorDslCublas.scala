@@ -10,7 +10,8 @@ import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
 import lms.collection.mutable.{ArrayOps}
-
+import lms.thirdparty._
+import lantern.thirdparty._
 
 trait GPUOps extends Base with ArrayOps {
   object NewGPUArray {
@@ -79,7 +80,7 @@ trait CudaGenGPUOps extends CGenBase {
 
 }
 
-trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CLibs with lms.thirdparty.CudaFunction {
+trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLASOps {
 
   // val permutationKernelMap = new scala.collection.mutable.HashMap[Seq[Int], (String, String)]()
   // var nextKernel: Int = 0
@@ -175,127 +176,6 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
   }
   implicit def tensorRToTransferOps(t: TensorR) = new TensorRTransferOps(t)
 
-
-  // More Principled Cublas binding approach
-  abstract class CublasHandleT
-  // lazy val here so that we only ever create one handle
-  lazy val cublasHandle = newStruct[CublasHandleT]
-
-  abstract class cublasStatusT
-  def cublasCreate(handle: Rep[CublasHandleT]) =
-    libFunction[cublasStatusT]("cublasCreate", Unwrap(handle))(Seq[Int](), Seq(0), Set(0))
-  def cublasDestroy(handle: Rep[CublasHandleT]) =
-    libFunction[cublasStatusT]("cublasDestroy", Unwrap(handle))(Seq[Int](), Seq(0), Set[Int]())
-  def cublasCall(status: Rep[cublasStatusT]) =
-    libFunction[Unit]("CUBLAS_CALL", Unwrap(status))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)
-
-  abstract class CublasOperationT
-  def cublasOpN = cmacro[CublasOperationT]("CUBLAS_OP_N")
-  def cublasOpT = cmacro[CublasOperationT]("CUBLAS_OP_T")
-
-  /*
-    cublasStatus_t cublasSdot (cublasHandle_t handle, int n,
-                           const float           *x, int incx,
-                           const float           *y, int incy,
-                           float           *result)
-   */
-  def cublasSdot_(handle: Rep[CublasHandleT], n: Rep[Int], x: Rep[Array[Float]], incx: Rep[Int],
-                  y: Rep[Array[Float]], incy: Rep[Int], result: Rep[Array[Float]]) =
-    libFunction[cublasStatusT]("cublasSdot",
-      Unwrap(handle), Unwrap(n), Unwrap(x), Unwrap(incx), Unwrap(y), Unwrap(incy), Unwrap(result))(Seq(0, 2, 4), Seq(6), Set[Int]())
-
-  /*
-    matching syntax of this library function
-    cublasStatus_t cublasSgemv(cublasHandle_t handle, cublasOperation_t trans,
-                           int m, int n,
-                           const float           *alpha,
-                           const float           *A, int lda,
-                           const float           *x, int incx,
-                           const float           *beta,
-                           float           *y, int incy)
-  */
-  def cublasSgemv_(handle: Rep[CublasHandleT], trans: Rep[CublasOperationT], m: Rep[Int], n: Rep[Int], alpha: Var[Float],
-                   A: Rep[Array[Float]], lda: Rep[Int], x: Rep[Array[Float]], incx: Rep[Int], beta: Var[Float],
-                   y: Rep[Array[Float]], incy: Rep[Int]): Rep[cublasStatusT] =
-    libFunction[cublasStatusT]("cublasSgemv",
-      Unwrap(handle), Unwrap(trans), Unwrap(m), Unwrap(n), UnwrapV(alpha), Unwrap(A), Unwrap(lda), Unwrap(x), Unwrap(incx),
-      UnwrapV(beta), Unwrap(y), Unwrap(incy))(Seq(0,5,7,10), Seq(10), Set(4, 9))
-
-  /*
-    matching syntax of this library function
-    cublasStatus_t cublasSgeam(cublasHandle_t handle,
-                          cublasOperation_t transa, cublasOperation_t transb,
-                          int m, int n,
-                          const float           *alpha,
-                          const float           *A, int lda,
-                          const float           *beta,
-                          const float           *B, int ldb,
-                          float           *C, int ldc)
-  */
-  def cublasSgeam_(handle: Rep[CublasHandleT], transa: Rep[CublasOperationT], transb: Rep[CublasOperationT],
-                    m: Rep[Int], n: Rep[Int], alpha: Var[Float], A: Rep[Array[Float]], lda: Rep[Int],
-                    beta: Var[Float], B: Rep[Array[Float]], ldb: Rep[Int],
-                    C: Rep[Array[Float]], ldc: Rep[Int]): Rep[cublasStatusT] =
-    libFunction[cublasStatusT]("cublasSgeam",
-      Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m), Unwrap(n), UnwrapV(alpha),
-      Unwrap(A), Unwrap(lda), UnwrapV(beta), Unwrap(B), Unwrap(ldb), Unwrap(C), Unwrap(ldc))(Seq(0, 6, 9, 11), Seq(11), Set(5, 8))
-
-  /*
-    cublasStatus_t cublasSgemm(cublasHandle_t handle,
-                           cublasOperation_t transa, cublasOperation_t transb,
-                           int m, int n, int k,
-                           const float           *alpha,
-                           const float           *A, int lda,
-                           const float           *B, int ldb,
-                           const float           *beta,
-                           float           *C, int ldc)
-   */
-  def cublasSgemm_(handle: Rep[CublasHandleT], transa: Rep[CublasOperationT], transb: Rep[CublasOperationT],
-                   m: Rep[Int], n: Rep[Int], k: Rep[Int], alpha: Var[Float], A: Rep[Array[Float]], lda: Rep[Int],
-                   B: Rep[Array[Float]], ldb: Rep[Int], beta: Var[Float], C: Rep[Array[Float]], ldc: Rep[Int]) =
-    libFunction[cublasStatusT]("cublasSgemm",
-      Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m), Unwrap(n), Unwrap(k), UnwrapV(alpha),
-      Unwrap(A), Unwrap(lda), Unwrap(B), Unwrap(ldb), UnwrapV(beta), Unwrap(C), Unwrap(ldc))(Seq(0,7,9,12), Seq(12), Set(6, 11))
-
-  // other gpu kernel function bindings
-  def cudaArrayFill_(res: Rep[Array[Float]], value: Rep[Float], size: Rep[Int]): Rep[Unit] =
-    libFunction[Unit]("arrayFill<<<28,512>>>", Unwrap(res), Unwrap(value), Unwrap(size))(Seq[Int](), Seq(0), Set[Int]())
-
-  def cudaArrayClipAt_(res: Rep[Array[Float]], bound: Rep[Float], size: Rep[Int]): Rep[Unit] =
-    libFunction[Unit]("clipAt<<<28,512>>>", Unwrap(res), Unwrap(bound), Unwrap(size))(Seq(0), Seq(0), Set[Int]())
-
-  abstract class Dim3
-  def dim3(a: Rep[Int], b: Rep[Int], c: Rep[Int]): Rep[Dim3] =
-    Wrap[Dim3](Adapter.g.reflectUnsafe("lib-struct", lms.core.Backend.Const(manifest[Dim3]), Unwrap(a), Unwrap(b), Unwrap(c)))
-
-  def permute2D_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int], shape1: Rep[Int]) =
-    cudaFunction[Unit]("permute2D", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
-      Unwrap(shape0), Unwrap(shape1))(Seq(0, 1), Seq(0), Set[Int]())
-
-  def permute3DSim_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
-      shape1: Rep[Int], shape2: Rep[Int]) =
-    cudaFunction[Unit]("permuteSim3D", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
-      Unwrap(shape0), Unwrap(shape1), Unwrap(shape2))(Seq(0, 1), Seq(0), Set[Int]())
-
-  def permute3D210_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
-      shape1: Rep[Int], shape2: Rep[Int], in_strides0: Rep[Int], in_strides1: Rep[Int], res_strides0: Rep[Int], res_strides1: Rep[Int]) =
-    cudaFunction[Unit]("permute3D_dim2to0_dim0to2", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
-      Unwrap(shape0), Unwrap(shape1), Unwrap(shape2), Unwrap(in_strides0), Unwrap(in_strides1), Unwrap(res_strides0), Unwrap(res_strides1))(Seq(0, 1), Seq(0), Set[Int]())
-
-  def permute3D120_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
-        shape1: Rep[Int], shape2: Rep[Int], in_strides0: Rep[Int], in_strides1: Rep[Int], res_strides0: Rep[Int], res_strides1: Rep[Int]) =
-      cudaFunction[Unit]("permute3D_dim2to1_dim0to2", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
-        Unwrap(shape0), Unwrap(shape1), Unwrap(shape2), Unwrap(in_strides0), Unwrap(in_strides1), Unwrap(res_strides0), Unwrap(res_strides1))(Seq(0, 1), Seq(0), Set[Int]())
-
-  def permute3D201_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
-        shape1: Rep[Int], shape2: Rep[Int], in_strides0: Rep[Int], in_strides1: Rep[Int], res_strides0: Rep[Int], res_strides1: Rep[Int]) =
-      cudaFunction[Unit]("permute3D_dim2to0_dim0to1", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
-        Unwrap(shape0), Unwrap(shape1), Unwrap(shape2), Unwrap(in_strides0), Unwrap(in_strides1), Unwrap(res_strides0), Unwrap(res_strides1))(Seq(0, 1), Seq(0), Set[Int]())
-
-  def permute3D021_(dimGrid: Rep[Dim3], dimBlock: Rep[Dim3], res: Rep[Array[Float]], input: Rep[Array[Float]], shape0: Rep[Int],
-        shape1: Rep[Int], shape2: Rep[Int], in_strides0: Rep[Int], in_strides1: Rep[Int], res_strides0: Rep[Int], res_strides1: Rep[Int]) =
-      cudaFunction[Unit]("permute3D_dim2to1_dim0to0", Seq(Unwrap(dimGrid), Unwrap(dimBlock)), Unwrap(res), Unwrap(input),
-        Unwrap(shape0), Unwrap(shape1), Unwrap(shape2), Unwrap(in_strides0), Unwrap(in_strides1), Unwrap(res_strides0), Unwrap(res_strides1))(Seq(0, 1), Seq(0), Set[Int]())
 
   /**
     * cuBLAS tensor operation backend. WIP.
@@ -760,7 +640,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
         } else { // this is the complicated case for 3D permutation
           val dimGrid = dim3( (x.shape(2) + TILE_DIM - 1) / TILE_DIM , (x.shape(dims(2)) + TILE_DIM - 1) / TILE_DIM, if (dims(2) == 0) x.shape(1) else x.shape(0) )
           val dimBlock = dim3( TILE_DIM, BLOCK_ROWS, 1 )
-          val kernelName = (dims(2), dims(0)) match {
+          (dims(2), dims(0)) match {
             case (0, 2) => permute3D210_(dimGrid, dimBlock, resTensor.data, x.data, x.shape(0), x.shape(1), x.shape(2),
               x.shape.strides(0), x.shape.strides(1), resTensor.shape.strides(0), resTensor.shape.strides(1))
             case (1, 2) => permute3D120_(dimGrid, dimBlock, resTensor.data, x.data, x.shape(0), x.shape(1), x.shape(2),
@@ -782,24 +662,41 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with lms.thirdparty.CL
         }
       } else { // this is the permutation for 4D Tensor
         if (dims(3) == 3) { // this is the simple case for 4D Tensor (inner most dimension doesn't permute)
-          val kernelName = (dims(0), dims(1), dims(2)) match {
-            case (0, 1, 2) => "permuteSim4DSim012"
-            case (0, 2, 1) => "permuteSim4DSim021"
-            case (1, 0, 2) => "permuteSim4DSim102"
-            case (1, 2, 0) => "permuteSim4DSim120"
-            case (2, 0, 1) => "permuteSim4DSim201"
-            case (2, 1, 0) => "permuteSim4DSim210"
+          val dimGrid = dim3(x.shape(2), x.shape(1), x.shape(0))
+          val dimBlock = dim3(256, 1, 1)
+
+          (dims(0), dims(1), dims(2)) match {
+            case (0, 1, 2) => permute4D0123_(dimGrid, dimBlock, resTensor.data, x.data,
+              x.shape.strides(0), x.shape.strides(1), x.shape.strides(2),
+              resTensor.shape.strides(0), resTensor.shape.strides(1), resTensor.shape.strides(2))
+            case (0, 2, 1) => permute4D0213_(dimGrid, dimBlock, resTensor.data, x.data,
+              x.shape.strides(0), x.shape.strides(1), x.shape.strides(2),
+              resTensor.shape.strides(0), resTensor.shape.strides(1), resTensor.shape.strides(2))
+            case (1, 0, 2) => permute4D1023_(dimGrid, dimBlock, resTensor.data, x.data,
+              x.shape.strides(0), x.shape.strides(1), x.shape.strides(2),
+              resTensor.shape.strides(0), resTensor.shape.strides(1), resTensor.shape.strides(2))
+            case (1, 2, 0) => permute4D1203_(dimGrid, dimBlock, resTensor.data, x.data,
+              x.shape.strides(0), x.shape.strides(1), x.shape.strides(2),
+              resTensor.shape.strides(0), resTensor.shape.strides(1), resTensor.shape.strides(2))
+            case (2, 0, 1) => permute4D2013_(dimGrid, dimBlock, resTensor.data, x.data,
+              x.shape.strides(0), x.shape.strides(1), x.shape.strides(2),
+              resTensor.shape.strides(0), resTensor.shape.strides(1), resTensor.shape.strides(2))
+            case (2, 1, 0) => permute4D2103_(dimGrid, dimBlock, resTensor.data, x.data,
+              x.shape.strides(0), x.shape.strides(1), x.shape.strides(2),
+              resTensor.shape.strides(0), resTensor.shape.strides(1), resTensor.shape.strides(2))
+            case _ => ???
           }
-          unchecked[Unit](
-            "{\n",
-           s"dim3 dimGrid(", x.shape(2), ", ", x.shape(1), ", ", x.shape(0), ");\n",
-           s"dim3 dimBlock(256, 1, 1);\n",
-           s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape.strides(0), ", ", x.shape.strides(1), ", ",
-                x.shape.strides(2), ", ", resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ", resTensor.shape.strides(2), ");\n",
-            "}\n"
-          )
+          // val kernelName = "permuteSim4DSim021"
+          // unchecked[Unit](
+          //   "{\n",
+          //  s"dim3 dimGrid(", x.shape(2), ", ", x.shape(1), ", ", x.shape(0), ");\n",
+          //  s"dim3 dimBlock(256, 1, 1);\n",
+          //  s"$kernelName<<<dimGrid, dimBlock>>>(", resTensor.data, ", ", x.data, ", ", x.shape.strides(0), ", ", x.shape.strides(1), ", ",
+          //       x.shape.strides(2), ", ", resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ", resTensor.shape.strides(2), ");\n",
+          //   "}\n"
+          // )
         } else { // this is the complicated case for 4D Tensor
-          System.out.println("Permutation too complex"); ???
+          System.out.println("Permutation kernel is too complex"); ???
           // unchecked[Unit](
           //   "{\n",
           //  s"int strideBIdxX = (", x.shape(3), s" + $TILE_DIM - 1)/$TILE_DIM;\n",

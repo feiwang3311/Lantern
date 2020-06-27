@@ -223,4 +223,102 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(exp)
   }
+
+  testGPU("permute-2D") {
+    val exp = new LanternDriverCublas[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fromData(Seq(2, 4), 1, 2, 3, 4, 5, 6, 7, 8)
+        val result = x.permute(1,0)
+
+        generate_comment("checking result")
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(4, 2), 1,5, 2,6, 3, 7, 4, 8)
+        Tensor.assertEqual(expected, result.toCPU())
+      }
+    }
+    runTest(exp)
+  }
+
+  testGPU("permute-3D") {
+    val exp = new LanternDriverCublas[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fromData(Seq(2,3,4),
+          0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23)
+        val result1 = x.permute(1,0,2)
+        val result2 = x.permute(2,1,0)
+        val result3 = x.permute(1,2,0)
+        val result4 = x.permute(2,0,1)
+        val result5 = x.permute(0,2,1)
+
+        generate_comment("checking result")
+        backend = BackendCPU()
+        val expected1 = Tensor.fromData(Seq(3,2,4),
+          0,  1,  2,  3, 12, 13, 14, 15,  4,  5,  6,  7, 16, 17, 18, 19,  8,  9,
+          10, 11, 20, 21, 22, 23)
+        Tensor.assertEqual(expected1, result1.toCPU())
+        val expected2 = Tensor.fromData(Seq(4,3,2),
+         0, 12,  4, 16,  8, 20,  1, 13,  5, 17,  9, 21,  2, 14,  6, 18, 10, 22,
+         3, 15,  7, 19, 11, 23)
+        Tensor.assertEqual(expected2, result2.toCPU())
+        val expected3 = Tensor.fromData(Seq(3,4,2),
+          0, 12,  1, 13,  2, 14,  3, 15,  4, 16,  5, 17,  6, 18,  7, 19,  8, 20,
+          9, 21, 10, 22, 11, 23)
+        Tensor.assertEqual(expected3, result3.toCPU())
+        val expected4 = Tensor.fromData(Seq(4,2,3),
+          0,  4,  8, 12, 16, 20,  1,  5,  9, 13, 17, 21,  2,  6, 10, 14, 18, 22,
+          3,  7, 11, 15, 19, 23)
+        Tensor.assertEqual(expected4, result4.toCPU())
+        val expected5 = Tensor.fromData(Seq(2,4,3),
+          0,  4,  8,  1,  5,  9,  2,  6, 10,  3,  7, 11, 12, 16, 20, 13, 17, 21,
+          14, 18, 22, 15, 19, 23)
+        Tensor.assertEqual(expected5, result5.toCPU())
+      }
+    }
+    runTest(exp)
+  }
+
+  testGPU("permute-4D-sim") {
+    val exp = new LanternDriverCublas[String, Unit] {
+      override val fileName = currentTestName
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val x = Tensor.fromData(Seq(2,3,2,3),
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+          19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35)
+        val result1 = x.permute(0,2,1,3)
+        val result2 = x.permute(1,0,2,3)
+        val result3 = x.permute(1,2,0,3)
+        val result4 = x.permute(2,0,1,3)
+        val result5 = x.permute(2,1,0,3)
+
+        generate_comment("checking result")
+        backend = BackendCPU()
+        val expected1 = Tensor.fromData(Seq(2,2,3,3),
+          0,  1,  2,  6,  7,  8, 12, 13, 14,  3,  4,  5,  9, 10, 11, 15, 16, 17,
+          18, 19, 20, 24, 25, 26, 30, 31, 32, 21, 22, 23, 27, 28, 29, 33, 34, 35)
+        Tensor.assertEqual(expected1, result1.toCPU())
+        val expected2 = Tensor.fromData(Seq(3,2,2,3),
+          0,  1,  2,  3,  4,  5, 18, 19, 20, 21, 22, 23,  6,  7,  8,  9, 10, 11,
+          24, 25, 26, 27, 28, 29, 12, 13, 14, 15, 16, 17, 30, 31, 32, 33, 34, 35)
+        Tensor.assertEqual(expected2, result2.toCPU())
+        val expected3 = Tensor.fromData(Seq(3,2,2,3),
+          0,  1,  2, 18, 19, 20,  3,  4,  5, 21, 22, 23,  6,  7,  8, 24, 25, 26,
+          9, 10, 11, 27, 28, 29, 12, 13, 14, 30, 31, 32, 15, 16, 17, 33, 34, 35)
+        Tensor.assertEqual(expected3, result3.toCPU())
+        val expected4 = Tensor.fromData(Seq(2,2,3,3),
+          0,  1,  2,  6,  7,  8, 12, 13, 14, 18, 19, 20, 24, 25, 26, 30, 31, 32,
+          3,  4,  5,  9, 10, 11, 15, 16, 17, 21, 22, 23, 27, 28, 29, 33, 34, 35)
+        Tensor.assertEqual(expected4, result4.toCPU())
+        val expected5 = Tensor.fromData(Seq(2,3,2,3),
+          0,  1,  2, 18, 19, 20,  6,  7,  8, 24, 25, 26, 12, 13, 14, 30, 31, 32,
+          3,  4,  5, 21, 22, 23,  9, 10, 11, 27, 28, 29, 15, 16, 17, 33, 34, 35)
+        Tensor.assertEqual(expected5, result5.toCPU())
+      }
+    }
+    runTest(exp)
+  }
 }
