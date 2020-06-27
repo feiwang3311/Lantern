@@ -124,7 +124,7 @@ trait LanternGenC extends DslGenC {
     |  }
     |  return res;
     |}
-    |long HEAP_SIZE = 10737418240; // 8589934608; //  4294967304; // this is for GPU
+    |long HEAP_SIZE = 8589934608; // 10737418240; //  4294967304; // this is for GPU
     |int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
     |  long int diff = (t2->tv_usec + 1000000 * t2->tv_sec) - (t1->tv_usec + 1000000 * t1->tv_sec);
     |  result->tv_sec = diff / 1000000;

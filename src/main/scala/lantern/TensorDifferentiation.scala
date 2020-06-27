@@ -1000,9 +1000,8 @@ trait TensorDsl extends Dsl with Diff {
 
   object Tensor {
     // this function actually SHOULD NOT be different for different backend
-    def apply(data: Rep[Array[Float]], dims: Rep[Int]*)= {
+    def apply(data: Rep[Array[Float]], dims: Rep[Int]*) =
       backend.arrayToTensor(data, dims: _*)
-    }
 
     def dimCompatible(a: Tensor, b: Tensor) = {
       (a.shape == b.shape) || a.isScalar || b.isScalar
@@ -1193,12 +1192,6 @@ trait TensorDsl extends Dsl with Diff {
       val y = TensorR(ya); k(y)
       generate_comment("back prop for - op")
       backend.minus_grad(this, that, y, xShape, yShape)
-    }
-
-    def - (that: Tensor): TensorR @diff = shift { (k: TensorR => Unit) => 
-      val y = TensorR(x - that); k(y)
-      this.d += y.d
-      
     }
 
     // this is element wise multiplication

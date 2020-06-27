@@ -135,19 +135,11 @@ trait TensorDslCPU extends TensorDsl {
     override def vectorVectorDot(x: Tensor, y: Tensor): Tensor = {
       assertC(x.shape(0) == y.shape(0), "vector vector dot not the same %d %d", x.shape(0), y.shape(0))
       val value = var_new(0.0f)
-    
       for (i <- DataLoop(x.shape.last)) {
         value += x.data(i) * y.data(i)
       }
-
-      // val dim = x.shape(0)
-      // unchecked[Unit] (
-      //   value, " = cblas_sdot(", dim, ",", x.data, ",1,", y.data, ",1)"
-      // )
-
       val res = mallocArray[Float](1)
       res(0) = readVar(value)
-
       Tensor(res, 1)
     }
 
