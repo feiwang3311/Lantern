@@ -796,65 +796,33 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
           if (!x.isInput)
             cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpN, dim2, dim1, dim3, alpha1, y.x.data, dim3, output.d.data,
                        dim3, one, x.d.data, dim2))
-          // unchecked[Unit](
-          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
-          //   dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
-          //   y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
           if (!y.isInput)
             cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpT, dim3, dim2, dim1, alpha1, output.d.data, dim3, x.x.data,
                        dim2, one, y.d.data, dim3))
-          // unchecked[Unit](
-          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
-          //   dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
-          //   output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", one, ",", y.d.data, ",", dim3, "))")
         case (false, true) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(0)
           if (!x.isInput)
             cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, dim2, dim1, dim3, alpha1, y.x.data, dim2, output.d.data,
                        dim3, one, x.d.data, dim2))
-          // unchecked[Unit](
-          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-          //   dim2, ",", dim1, ",", dim3, ",", alpha1, ",",
-          //   y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", x.d.data, ",", dim2, "))")
           if (!y.isInput)
             cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpT, dim2, dim3, dim1, alpha1, x.x.data, dim2, output.d.data,
                        dim3, one, y.d.data, dim2))
-          // unchecked[Unit](
-          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ",
-          //   dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
-          //   x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
         case (true, false) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(1)
           if (!x.isInput)
             cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpN, dim1, dim2, dim3, alpha1, output.d.data,
                        dim3, y.x.data, dim3, one, x.d.data, dim1))
-          // unchecked[Unit](
-          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N, ",
-          //   dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
-          //   output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", one, ",", x.d.data, ",", dim1, "))")
           if (!y.isInput)
             cublasCall(cublasSgemm_(cublasHandle, cublasOpN, cublasOpN, dim3, dim2, dim1, alpha1, output.d.data,
                        dim3, x.x.data, dim1, one, y.d.data, dim3))
-          // unchecked[Unit](
-          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ",
-          //   dim3, ",", dim2, ",", dim1, ",", alpha1, ",",
-          //   output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", one, ",", y.d.data, ",", dim3, "))")
         case (true, true) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(0)
           if (!x.isInput)
             cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpT, dim1, dim2, dim3, alpha1, output.d.data,
                        dim3, y.x.data, dim2, one, x.d.data, dim1))
-          // unchecked[Unit](
-          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
-          //   dim1, ",", dim2, ",", dim3, ",", alpha1, ",",
-          //   output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", one, ",", x.d.data, ",", dim1, "))")
           if (!y.isInput)
             cublasCall(cublasSgemm_(cublasHandle, cublasOpT, cublasOpT, dim2, dim3, dim1, alpha1, x.x.data, dim1,
                        output.d.data, dim3, one, y.d.data, dim2))
-          // unchecked[Unit](
-          //   "CUBLAS_CALL(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_T, ",
-          //   dim2, ",", dim3, ",", dim1, ",", alpha1, ",",
-          //   x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", one, ",", y.d.data, ",", dim2, "))")
       }
     }
 
@@ -882,10 +850,12 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
       // Note: We assume that lengths is passed to GPU already, at the beginning of each epoch
       assert(input.rank == 4, s"mask4D only deals with inputs of 4D, got ${input.rank}")
-      val nGrid = 28
-      // unchecked[Unit]("{\n__device__ int dims[4] = {", input.shape.strides(0), ", ", input.shape.strides(1), ", ", input.shape.strides(2), ", ", input.shape.strides(3), "}")
-      unchecked[Unit](s"mask4D<<<${nGrid}, 512>>>(", input.data, ", ", lengths, ", ", input.shape.strides(0), ", ", input.shape.strides(1), ", ",
-                                                     input.shape.strides(2), ", ", input.shape.strides(3), ", ", input.scalarCount, ")")
+      mask4D_(input.data, lengths, input.shape.strides(0), input.shape.strides(1), input.shape.strides(2),
+              input.shape.strides(3), input.scalarCount)
+      // val nGrid = 28
+      // // unchecked[Unit]("{\n__device__ int dims[4] = {", input.shape.strides(0), ", ", input.shape.strides(1), ", ", input.shape.strides(2), ", ", input.shape.strides(3), "}")
+      // unchecked[Unit](s"mask4D<<<${nGrid}, 512>>>(", input.data, ", ", lengths, ", ", input.shape.strides(0), ", ", input.shape.strides(1), ", ",
+      //                                                input.shape.strides(2), ", ", input.shape.strides(3), ", ", input.scalarCount, ")")
       input
     }
 
@@ -904,16 +874,18 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor = {
       val size = x.scalarCount
       val res = if (inPlace) x.data else mallocArray[Float](size)
-      val nGrid = 28
-      unchecked[Unit](s"hardTanh<<<${nGrid}, 512>>>(", x.data, ", ", res, ", ", min_val, ", ", max_val, ", ", x.scalarCount, ")")
+      hardTanh_(x.data, res, min_val, max_val, x.scalarCount)
+      // val nGrid = 28
+      // unchecked[Unit](s"hardTanh<<<${nGrid}, 512>>>(", x.data, ", ", res, ", ", min_val, ", ", max_val, ", ", x.scalarCount, ")")
       Tensor(res, x.shape.seq: _*)
     }
 
-    override def hardTanh_grad(input: TensorR, res: TensorR, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Unit = {
-      val size = input.x.scalarCount
-      val nGrid = 28
-      unchecked[Unit](s"hardTanh_grad<<<${nGrid}, 512>>>(", input.x.data, ", ", input.d.data, ", ", res.d.data, ", ", min_val, ", ", max_val, ", ", size, ", ", inPlace, ")")
-    }
+    override def hardTanh_grad(input: TensorR, res: TensorR, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Unit =
+      hardTanhGrad_(input.x.data, input.d.data, res.d.data, min_val, max_val, input.x.scalarCount, inPlace)
+      // val size = input.x.scalarCount
+      // val nGrid = 28
+      // unchecked[Unit](s"hardTanh_grad<<<${nGrid}, 512>>>(", input.x.data, ", ", input.d.data, ", ", res.d.data, ", ", min_val, ", ", max_val, ", ", size, ", ", inPlace, ")")
+    // }
 
     override def exp(x: Tensor) = elementwiseOpNoBroadcast(x, ElementWiseNoBroadCastOpt.Exp)
     override def exp_grad(x: TensorR, y: TensorR): Unit = elementwiseOpNoBroadcastGrad(x, y, ElementWiseNoBroadCastOpt.ExpGrad)
@@ -942,14 +914,14 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       val numBlocks = 28 // (input.scalarCount + 511) / 512
       val res = if (inplace) input.data else mallocArray[Float](input.scalarCount)
       op match {
-        case ElementWiseNoBroadCastOpt.Log =>
-          unchecked[Unit](s"elementwise_1D_1D_log<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
-        case ElementWiseNoBroadCastOpt.Exp =>
-          unchecked[Unit](s"elementwise_1D_1D_exp<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
-        case ElementWiseNoBroadCastOpt.Sqrt =>
-          unchecked[Unit](s"elementwise_1D_1D_sqrt<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
-        case ElementWiseNoBroadCastOpt.Square =>
-          unchecked[Unit](s"elementwise_1D_1D_square<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.Log => log_(input.data, res, input.scalarCount)
+          // unchecked[Unit](s"elementwise_1D_1D_log<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.Exp => exp_(input.data, res, input.scalarCount)
+          // unchecked[Unit](s"elementwise_1D_1D_exp<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.Sqrt => sqrt_(input.data, res, input.scalarCount)
+          // unchecked[Unit](s"elementwise_1D_1D_sqrt<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.Square => square_(input.data, res, input.scalarCount)
+          // unchecked[Unit](s"elementwise_1D_1D_square<<<${numBlocks},", "512>>>(", input.data, ",", res, ", ", input.scalarCount, ")")
         case _ => ???
       }
       Tensor(res, input.shape: _*)
@@ -959,30 +931,30 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     def elementwiseOpNoBroadcastGrad(input: TensorR, output: TensorR, op: ElementWiseNoBroadCastOpt.Value): Unit = {
       val numBlocks = 28 // (input.x.scalarCount + 511) / 512
       op match {
-        case ElementWiseNoBroadCastOpt.LogGrad =>
-          unchecked[Unit](s"elementwise_1D_1D_log_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
-        case ElementWiseNoBroadCastOpt.ExpGrad =>
-          unchecked[Unit](s"elementwise_1D_1D_exp_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
-        case ElementWiseNoBroadCastOpt.SqrtGrad =>
-          unchecked[Unit](s"elementwise_1D_1D_sqrt_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
-        case ElementWiseNoBroadCastOpt.SquareGrad =>
-          unchecked[Unit](s"elementwise_1D_1D_square_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.LogGrad => log_grad_(input.x.data, input.d.data, output.x.data, output.d.data, input.x.scalarCount)
+          // unchecked[Unit](s"elementwise_1D_1D_log_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.ExpGrad => exp_grad_(input.x.data, input.d.data, output.x.data, output.d.data, input.x.scalarCount)
+          // unchecked[Unit](s"elementwise_1D_1D_exp_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.SqrtGrad => sqrt_grad_(input.x.data, input.d.data, output.x.data, output.d.data, input.x.scalarCount)
+          // unchecked[Unit](s"elementwise_1D_1D_sqrt_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
+        case ElementWiseNoBroadCastOpt.SquareGrad => square_grad_(input.x.data, input.d.data, output.x.data, output.d.data, input.x.scalarCount)
+          // unchecked[Unit](s"elementwise_1D_1D_square_grad<<<${numBlocks},", "512>>>(", input.x.data, ", ", input.d.data, ", ", output.x.data, ", ", output.d.data, ", ", input.x.scalarCount, ")")
         case _ => ???
       }
     }
 
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
       assert(x.rank == 2, "Input must be a 2-D tensor")
-
       val batchSize = x.shape(0)
       val res = Tensor(mallocArray[Float](batchSize), batchSize)
-      unchecked[Unit]("nllLoss<<<", batchSize, ", 1>>>(", x.data, ", ", x.shape.strides(0), ", ", res.data, ", ", target, ")")
+      nllLoss_(x.data, target, res.data, batchSize, x.shape.strides(0))
+      // unchecked[Unit]("nllLoss<<<", batchSize, ", 1>>>(", x.data, ", ", x.shape.strides(0), ", ", res.data, ", ", target, ")")
       res
     }
 
-    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit = {
-      unchecked[Unit]("nllLoss_grad<<<", input.d.shape(0), ", 1>>>(", input.d.shape.strides(0), ", ", res.d.data, ", ", target, ", ", input.d.data, ")")
-    }
+    override def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit =
+      nllLossGrad_(input.d.data, target, res.d.data, input.d.shape(0), input.d.shape.strides(0))
+      // unchecked[Unit]("nllLoss_grad<<<", input.d.shape(0), ", 1>>>(", input.d.shape.strides(0), ", ", res.d.data, ", ", target, ", ", input.d.data, ")")
 
     override def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor = ???
 
@@ -1002,25 +974,31 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       val dim0 = tensors(0).shape(0)
       val dim1 = tensors(0).shape(1) + tensors(1).shape(1)
       val dim2 = tensors(0).shape(2)
-      val dim3 = tensors(0).shape(3)
-      val resShape = Seq(dim0, dim1, dim2, dim3)
+      val dim3_ = tensors(0).shape(3)
+      val resShape = Seq(dim0, dim1, dim2, dim3_)
       val res = this.mallocArray[Float](resShape.product1)
-      val resTensor = Tensor(res, dim0, dim1, dim2, dim3)
-      val sizeLow = dim2 * dim3
+      val resTensor = Tensor(res, dim0, dim1, dim2, dim3_)
+      val sizeLow = dim2 * dim3_
       val sizeHigh = dim0
       val sizeDim1 = tensors(0).shape(1)
       val sizeDim2 = tensors(1).shape(1)
 
-      val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
-      unchecked[Unit](
-        "{\n",
-        s"dim3 grid(${nGrid}, 2);\n",
-        "concat2D_1D_greg<<<grid, 512>>>(", tensors(0).data, ", ", sizeDim1, ", ", tensors(0).scalarCount, ", ",
-        tensors(1).data, ", ", sizeDim2, ", ", tensors(1).scalarCount, ", ",
-        res, ", ", 1, ", ",
-        dim0, ", ", dim1, ", ", dim2, ", ", dim3, ", ",
-        resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ",resTensor.shape.strides(2), ", ",resTensor.shape.strides(3), ");\n",
-        "}")
+      val grid = dim3(28, 2)
+      concat4D_(grid, tensors(0).data, sizeDim1, tensors(0).scalarCount,
+                      tensors(1).data, sizeDim2, tensors(1).scalarCount,
+                      res, 1, dim0, dim1, dim2, dim3_,
+                      resTensor.shape.strides(0), resTensor.shape.strides(1), resTensor.shape.strides(2), resTensor.shape.strides(3))
+
+      // val nGrid = 28 // tensors(0).scalarCount / 512 / 5 + 1
+      // unchecked[Unit](
+      //   "{\n",
+      //   s"dim3 grid(${nGrid}, 2);\n",
+      //   "concat2D_1D_greg<<<grid, 512>>>(", tensors(0).data, ", ", sizeDim1, ", ", tensors(0).scalarCount, ", ",
+      //   tensors(1).data, ", ", sizeDim2, ", ", tensors(1).scalarCount, ", ",
+      //   res, ", ", 1, ", ",
+      //   dim0, ", ", dim1, ", ", dim2, ", ", dim3, ", ",
+      //   resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ",resTensor.shape.strides(2), ", ",resTensor.shape.strides(3), ");\n",
+      //   "}")
       resTensor
     }
 
@@ -1032,22 +1010,29 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       val dim0 = tensorRs(0).x.shape(0)
       val dim1 = tensorRs(0).x.shape(1) + tensorRs(1).x.shape(1)
       val dim2 = tensorRs(0).x.shape(2)
-      val dim3 = tensorRs(0).x.shape(3)
-      val sizeLow = dim2 * dim3
+      val dim3_ = tensorRs(0).x.shape(3)
+      val sizeLow = dim2 * dim3_
       val sizeHigh = dim0
       val sizeDim1 = tensorRs(0).x.shape(1)
       val sizeDim2 = tensorRs(1).x.shape(1)
 
-      val nGrid = 28 //tensorRs(0).x.scalarCount / 512 / 5 + 1
-      unchecked[Unit](
-        "{\n",
-        s"dim3 grid(${nGrid}, 2);\n",
-        "concat2D_1D_greg_grad<<<grid, 512>>>(", tensorRs(0).d.data, ", ", sizeDim1, ", ", tensorRs(0).d.scalarCount, ", ",
-        tensorRs(1).d.data, ", ", sizeDim2, ", ", tensorRs(1).d.scalarCount, ", ",
-        output.d.data, ", ", 1, ", ",
-        dim0, ", ", dim1, ", ", dim2, ", ", dim3, ", ",
-        output.d.shape.strides(0), ", ", output.d.shape.strides(1), ", ", output.d.shape.strides(2), ", ", output.d.shape.strides(3), ");\n",
-        "}")
+      val grid = dim3(28, 2)
+      concat4D_grad_(grid, tensorRs(0).d.data, sizeDim1, tensorRs(0).d.scalarCount,
+                           tensorRs(1).d.data, sizeDim2, tensorRs(1).d.scalarCount,
+                           output.d.data, 1,
+                           dim0, dim1, dim2, dim3_,
+                           output.d.shape.strides(0), output.d.shape.strides(1), output.d.shape.strides(2), output.d.shape.strides(3))
+
+      // val nGrid = 28 //tensorRs(0).x.scalarCount / 512 / 5 + 1
+      // unchecked[Unit](
+      //   "{\n",
+      //   s"dim3 grid(${nGrid}, 2);\n",
+      //   "concat2D_1D_greg_grad<<<grid, 512>>>(", tensorRs(0).d.data, ", ", sizeDim1, ", ", tensorRs(0).d.scalarCount, ", ",
+      //   tensorRs(1).d.data, ", ", sizeDim2, ", ", tensorRs(1).d.scalarCount, ", ",
+      //   output.d.data, ", ", 1, ", ",
+      //   dim0, ", ", dim1, ", ", dim2, ", ", dim3, ", ",
+      //   output.d.shape.strides(0), ", ", output.d.shape.strides(1), ", ", output.d.shape.strides(2), ", ", output.d.shape.strides(3), ");\n",
+      //   "}")
     }
 
     override def repeat0(in: Tensor, context: Int): Tensor = ???
@@ -1055,15 +1040,18 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
 
     override def adagrad_update(tr: TensorR, t: Tensor, learning_rate: Float, gradClip: Float, descent: Boolean): Unit = {
       assert(descent, s"TODO: only handle gradient descent (not ascent) so far")
+      adagrad_(tr.x.data, tr.d.data, t.data, gradClip, learning_rate, t.scalarCount)
       // assert(tr.x.shape == t.shape, s"tensor and momentum should have the same shape, got ${tr.x.shape} and ${t.shape}")
-      val gridDimX = 28 // (t.scalarCount + 511) / 512
+      // val gridDimX = 28 // (t.scalarCount + 511) / 512
       // assert(gridDimX < 65535, s"gridDimX should not breach the limit, got ${gridDimX}")
-      unchecked[Unit](s"adagrad_update_1D_1D<<<${gridDimX}, 512>>>(", tr.x.data, ", ", tr.d.data, ", ", t.data, ", ", gradClip, ", ", learning_rate, ", ", t.scalarCount, ")")
+      // unchecked[Unit](s"adagrad_update_1D_1D<<<${gridDimX}, 512>>>(", tr.x.data, ", ", tr.d.data, ", ", t.data, ", ", gradClip, ", ", learning_rate, ", ", t.scalarCount, ")")
     }
     override def momentum_update(tr: TensorR, t: Tensor, learning_rate: Float, momentum: Float, gradClip: Float, nesterov: Boolean, descent: Boolean) = {
       assert(descent, s"TODO: only handle gradient descent (not ascent) so far")
-      val gridDimX = 28
-      unchecked[Unit](s"momentum_update_1D_1D<<<${gridDimX}, 512>>>(", tr.x.data, ", ", tr.d.data, ", ", t.data, ", ", learning_rate, ", ", momentum, ", ", gradClip, ", ", nesterov, ", ", t.scalarCount, ")")
+      momentum_(tr.x.data, tr.d.data, t.data, learning_rate, momentum, gradClip, nesterov, t.scalarCount)
+      // val gridDimX = 28
+      // unchecked[Unit](s"momentum_update_1D_1D<<<${gridDimX}, 512>>>(", tr.x.data, ", ", tr.d.data, ", ", t.data, ", ",
+      // learning_rate, ", ", momentum, ", ", gradClip, ", ", nesterov, ", ", t.scalarCount, ")")
     }
   }
 
