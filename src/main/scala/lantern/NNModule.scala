@@ -251,6 +251,173 @@ trait NNModule extends TensorDsl {
     }
   }
 
+  /** MultiheadAttention
+   *
+   * @param embedDim Vector Embedding size of Query. All Q, K, V are projected to embedDim. Also, the final output size.
+   * @param numHeads Number of attention heads
+   * @param kDim (initial) Vector Embedding size of Key
+   * @param vDim (initial) Vector Embedding size of Value
+   * @param bias whether to use bias or not in projections
+   * @param dropOut dropout rate
+   * @param residuals whether to use the residual connection (see original paper)
+   */
+
+  case class MultiheadAttention(val embedDim: Int, val numHeads: Int, kDim: Int, vDim: Int,
+                                val bias: Boolean = false, val dropOut: Float = 0.0f, residuals: Boolean = false,
+                                val name: String = "MultiHeadAttn") extends Module {
+    // embedDim should be divisible by numHeads
+    // embedDim is the final output size
+
+    // weights of attention model
+    // TODO - would be better if we can get the sizeWeights from cudnn side
+    val sizeWeights: Int = embedDim * kDim + embedDim * kDim + embedDim * vDim + {
+      if (bias) 0 else embedDim * 3
+    }
+    val weights: TensorR = TensorR(Tensor.rand(sizeWeights))
+    val finalLinear = Linear1D(inSize = embedDim, outSize = embedDim)
+
+    def apply(query: TensorR, key: TensorR, value: TensorR, attnMask: Boolean = false) = {
+      // Assumes shape = [T(time) N(batch) B(beamsize) V(vector-embed)]
+      // TODO - take attn_mask (i.e. loWinIdx, hiWinIdx) as arg
+      // set up attention window
+      val loWinIdx = NewArray[Int](query.x.shape(1))
+      val hiWinIdx = NewArray[Int](query.x.shape(1))
+      val qSeqArray = NewArray[Int](query.x.shape(1))
+      val kSeqArray = NewArray[Int](key.x.shape(1))
+
+      for (i <- 0 until query.x.shape(1)) {
+        loWinIdx(i) = 0
+        if (attnMask)
+          hiWinIdx(i) = i + 1 // end idx is exclusive
+        else
+          hiWinIdx(i) = query.x.shape(0)
+        qSeqArray(i) = query.x.shape(0)
+        kSeqArray(i) = key.x.shape(0)
+      }
+
+      val step1 = query.multiheadAttention(key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropOut, 1.0f, residuals)
+      finalLinear(step1.resize(-1, embedDim)).resize(query.x.shape(0), query.x.shape(1), query.x.shape(2), embedDim)
+    }
+  }
+
+  case class LayerNorm(dim_size: Int, epsilon: Float = 0.00005, featureDim: Int = 3, name: String = "Layer Norm") extends Module {
+    // performs layer norm on the last dimension
+    val weights = TensorR(Tensor.ones(dim_size))
+    val bias = TensorR(Tensor.zeros(dim_size))
+
+    def apply(input: TensorR) = {
+      val mean = (input.sum(featureDim) / dim_size).resize(input.x.shape(0), input.x.shape(1),input.x.shape(2), 1)
+      val mean_squared = mean * mean
+      val squared = input * input
+      val squared_mean = (squared.sum(featureDim) / dim_size).resize(input.x.shape(0), input.x.shape(1),input.x.shape(2), 1)
+
+      val variance = (squared_mean - mean_squared + epsilon).sqrt()
+      val normalized = (input - mean) / variance
+
+      normalized * weights + bias
+    }
+  }
+
+  case class TransformerEncoderLayer(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f,
+                                     name: String = "transformer-encoder-layer") extends Module {
+    val enMHA = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residuals = true)
+    val enLinear1 = Linear1D(inSize = embedDim, outSize = dimFeedForward)
+    val enLinear2 = Linear1D(inSize = dimFeedForward, outSize = embedDim)
+    val enLayerNorm1 = LayerNorm(embedDim)
+    val enLayerNorm2 = LayerNorm(embedDim)
+
+    def apply(src: TensorR, attnMask: Boolean = false) = {
+      val step1 = enMHA(src, src, src)
+      val step2 = enLayerNorm1(step1)
+      val step3 = enLinear1(step2.resize(-1, embedDim))
+      val step4 = step3.relu()
+      val step5 = enLinear2(step4).resize(src.x.shape: _*)
+      val step6 = step5 + step2
+      enLayerNorm2(step6)
+    }
+  }
+
+  case class TransformerDecoderLayer(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f,
+                                     name: String = "transformer-decoder-layer") extends Module {
+    val deMHA1 = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residuals = true)
+    val deMHA2 = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residuals = true)
+    val deLinear1 = Linear1D(inSize = embedDim, outSize = dimFeedForward)
+    val deLinear2 = Linear1D(inSize = dimFeedForward, outSize = embedDim)
+    val deLayerNorm1 = LayerNorm(embedDim)
+    val deLayerNorm2 = LayerNorm(embedDim)
+    val deLayerNorm3 = LayerNorm(embedDim)
+
+    def apply(tgt: TensorR, memory: TensorR, attnMask: Boolean = false) = {
+      val step1 = deMHA1(tgt, tgt, tgt)
+      val step2 = deLayerNorm1(step1)
+      val step3 = deMHA2(step2, memory, memory)
+      val step4 = deLayerNorm2(step3)
+      val step5 = deLinear1(step4.resize(-1, embedDim))
+      val step6 = step5.relu()
+      val step7 = deLinear2(step6).resize(tgt.x.shape: _*)
+      val step8 = step7 + step4
+      deLayerNorm3(step8)
+    }
+  }
+
+  case class TransformerEncoder(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f,
+                                numLayers: Int = 1, name: String = "transformer-encoder") extends Module {
+    // TODO - initialize numLayers encoderLayers (below is hardcoded)
+    val layer1 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+    val layer2 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+    val layer3 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+    val layer4 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+
+    // TODO - check this with the original paper
+    val encoderNorm = LayerNorm(embedDim)
+
+    def apply(src: TensorR, attnMask: Boolean = false) = {
+      val step1 = layer1(src, attnMask)
+      val step2 = layer2(src, attnMask)
+      val step3 = layer3(src, attnMask)
+      val step4 = layer4(src, attnMask)
+      encoderNorm(step4)
+    }
+  }
+
+  case class TransformerDecoder(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f,
+                                numLayers: Int = 1, name: String = "transformer-decoder") extends Module {
+    // TODO - initialize numLayers encoderLayers (below is hardcoded)
+    val layer1 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+    val layer2 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+    val layer3 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+    val layer4 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+    val layers = (0 until numLayers : Range) map (_ => TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut))
+
+    // TODO - check this with the original paper
+    val decoderNorm = LayerNorm(embedDim)
+
+    def apply(tgt: TensorR, memory: TensorR, attnMask: Boolean = true) = {
+      val step1 = layer1(tgt, memory, attnMask)
+      val step2 = layer2(tgt, memory, attnMask)
+      val step3 = layer3(tgt, memory, attnMask)
+      val step4 = layer4(tgt, memory, attnMask)
+      decoderNorm(step4)
+    }
+  }
+
+  case class Transformer(embedDim: Int, seqLen: Int, nheads: Int = 8, numEncoderLayers: Int = 6,
+                         numDecoderLayers: Int = 6, dimFeedForward: Int = 2048, dropOut: Float = 0.0f,
+                         name: String = "transformer") extends Module {
+    val finalLinear = Linear1D(inSize = embedDim * seqLen, outSize = 1)
+    // val blocks = (0 until numBlocks: Range) map (_ => TransformerBlock(embedDim, nheads, dimFeedForward, dropOut))
+    val encoderStack = TransformerEncoder(embedDim, nheads, dimFeedForward, dropOut, numEncoderLayers)
+    val decoderStack = TransformerDecoder(embedDim, nheads, dimFeedForward, dropOut, numEncoderLayers)
+
+    def apply(src: TensorR, tgt: TensorR) = {
+      val encoderOut = encoderStack(src, attnMask = false)
+      val decoderOut = decoderStack(tgt, encoderOut, attnMask = true)
+
+      // calculate the final output layer using decoder output
+      finalLinear(decoderOut.permute(1, 2, 0, 3).resize(-1, embedDim * seqLen)) // this is a dummy final layer to produce a single output value
+    }
+  }
+
   abstract class Optim {
     val module: Module
     module.registerParameters(s"${module.name}/")
