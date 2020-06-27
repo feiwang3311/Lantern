@@ -33,7 +33,6 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
     Wrap[Unit](Adapter.g.reflectWrite("myGpuFree-f", Unwrap(size))(Adapter.CTRL)) // FIXME(feiw) fix write effect to arena ??
   }
 
-
   // More Principled Cublas binding approach
   abstract class CublasHandleT
   // lazy val here so that we only ever create one handle
@@ -275,6 +274,77 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
       clip: Rep[Float], nesterov: Rep[Boolean], size: Rep[Int]) =
     libFunction[Unit]("momentum_update_1D_1D<<<28, 512>>>", Unwrap(x), Unwrap(d), Unwrap(m), Unwrap(lr),
       Unwrap(momentum), Unwrap(clip), Unwrap(nesterov), Unwrap(size))(Seq(0, 1, 2), Seq(0, 1, 2), Set[Int]())
+
+  def arithScalar_(op: String, in: Rep[Array[Float]], out: Rep[Array[Float]], mult: Rep[Float], size: Rep[Int]) =
+    libFunction[Unit]( op match {
+      case "+" => "addScalar<<<28, 512>>>"
+      case "-" => "minusScalar<<<28, 512>>>"
+      case "*" => "multScalar<<<28, 512>>>"
+      case "/" => "divScalar<<<28, 512>>>"
+    }, Unwrap(in), Unwrap(out), Unwrap(mult), Unwrap(size))(Seq(0), Seq(1), Set[Int]())
+
+  def elementWiseWithBroadCastRank1_(
+      op: String, size: Rep[Int],
+      in1: Rep[Array[Float]], in1Stride0: Rep[Int],
+      in2: Rep[Array[Float]], in2Stride0: Rep[Int],
+      out: Rep[Array[Float]], outStride0: Rep[Int]) =
+    libFunction[Unit](
+      op match {
+        case "+" => "elementWiseWithBroadCastRank1Add<<<28, 512>>>"
+        case "-" => "elementWiseWithBroadCastRank1Minus<<<28, 512>>>"
+        case "*" => "elementWiseWithBroadCastRank1Mult<<<28, 512>>>"
+        case "/" => "elementWiseWithBroadCastRank1Div<<<28, 512>>>"
+      },
+      Unwrap(in1), Unwrap(in2), Unwrap(out), Unwrap(size), Unwrap(in1Stride0), Unwrap(in2Stride0),
+      Unwrap(outStride0))(Seq(0, 1), Seq(2), Set[Int]())
+
+  def elementWiseWithBroadCastRank2_(
+      op: String, size: Rep[Int],
+      in1: Rep[Array[Float]], in1Stride0: Rep[Int], in1Stride1: Rep[Int],
+      in2: Rep[Array[Float]], in2Stride0: Rep[Int], in2Stride1: Rep[Int],
+      out: Rep[Array[Float]], outStride0: Rep[Int], outStride1: Rep[Int]) =
+    libFunction[Unit](
+      op match {
+        case "+" => "elementWiseWithBroadCastRank2Add<<<28, 512>>>"
+        case "-" => "elementWiseWithBroadCastRank2Minus<<<28, 512>>>"
+        case "*" => "elementWiseWithBroadCastRank2Mult<<<28, 512>>>"
+        case "/" => "elementWiseWithBroadCastRank2Div<<<28, 512>>>"
+      },
+      Unwrap(in1), Unwrap(in2), Unwrap(out), Unwrap(size), Unwrap(in1Stride0), Unwrap(in1Stride1), Unwrap(in2Stride0),
+      Unwrap(in2Stride1), Unwrap(outStride0), Unwrap(outStride1))(Seq(0, 1), Seq(2), Set[Int]())
+
+  def elementWiseWithBroadCastRank3_(
+      op: String, size: Rep[Int],
+      in1: Rep[Array[Float]], in1Stride0: Rep[Int], in1Stride1: Rep[Int], in1Stride2: Rep[Int],
+      in2: Rep[Array[Float]], in2Stride0: Rep[Int], in2Stride1: Rep[Int], in2Stride2: Rep[Int],
+      out: Rep[Array[Float]], outStride0: Rep[Int], outStride1: Rep[Int], outStride2: Rep[Int]) =
+    libFunction[Unit](
+      op match {
+        case "+" => "elementWiseWithBroadCastRank3Add<<<28, 512>>>"
+        case "-" => "elementWiseWithBroadCastRank3Minus<<<28, 512>>>"
+        case "*" => "elementWiseWithBroadCastRank3Mult<<<28, 512>>>"
+        case "/" => "elementWiseWithBroadCastRank3Div<<<28, 512>>>"
+      },
+      Unwrap(in1), Unwrap(in2), Unwrap(out), Unwrap(size), Unwrap(in1Stride0), Unwrap(in1Stride1), Unwrap(in1Stride2),
+      Unwrap(in2Stride0), Unwrap(in2Stride1), Unwrap(in2Stride2),
+      Unwrap(outStride0), Unwrap(outStride1), Unwrap(outStride2))(Seq(0, 1), Seq(2), Set[Int]())
+
+  def elementWiseWithBroadCastRank4_(
+      op: String, size: Rep[Int],
+      in1: Rep[Array[Float]], in1Stride0: Rep[Int], in1Stride1: Rep[Int], in1Stride2: Rep[Int], in1Stride3: Rep[Int],
+      in2: Rep[Array[Float]], in2Stride0: Rep[Int], in2Stride1: Rep[Int], in2Stride2: Rep[Int], in2Stride3: Rep[Int],
+      out: Rep[Array[Float]], outStride0: Rep[Int], outStride1: Rep[Int], outStride2: Rep[Int], outStride3: Rep[Int]) =
+    libFunction[Unit](
+      op match {
+        case "+" => "elementWiseWithBroadCastRank4Add<<<28, 512>>>"
+        case "-" => "elementWiseWithBroadCastRank4Minus<<<28, 512>>>"
+        case "*" => "elementWiseWithBroadCastRank4Mult<<<28, 512>>>"
+        case "/" => "elementWiseWithBroadCastRank4Div<<<28, 512>>>"
+      },
+      Unwrap(in1), Unwrap(in2), Unwrap(out), Unwrap(size),
+      Unwrap(in1Stride0), Unwrap(in1Stride1), Unwrap(in1Stride2), Unwrap(in1Stride3),
+      Unwrap(in2Stride0), Unwrap(in2Stride1), Unwrap(in2Stride2), Unwrap(in2Stride3),
+      Unwrap(outStride0), Unwrap(outStride1), Unwrap(outStride2), Unwrap(outStride3))(Seq(0, 1), Seq(2), Set[Int]())
 
 }
 

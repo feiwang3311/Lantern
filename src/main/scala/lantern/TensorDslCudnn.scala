@@ -15,8 +15,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
   var nextKernel: Int = 0
 
-  val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
-  val elementWiseUpdateWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
+  // val elementWiseWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
+  // val elementWiseUpdateWithBroadCastKernelMap = new scala.collection.mutable.HashMap[(Int, String), (String, String)]()
   val convOpIndexSet = scala.collection.mutable.ListBuffer.empty[Int]
   val attributesMap = new scala.collection.mutable.HashMap[Int, String]()
   def printAttributes() = unchecked[Unit](attributesMap.values.mkString("\n"))
@@ -153,143 +153,111 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       unchecked("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
     }
 
-    def elementWiseWithBroadCastKernel(rank: Int, op: String): String = {
-      if (!elementWiseWithBroadCastKernelMap.contains((rank, op))) {
-        val in1Stride = ((0 until rank): Range).map(x => s"int in1Stride$x").mkString(", ")
-        val in2Stride = ((0 until rank): Range).map(x => s"int in2Stride$x").mkString(", ")
-        val outStride = ((0 until rank): Range).map(x => s"int outStride$x").mkString(", ")
-        val linearToStep = ((0 until rank): Range).map(x => s"int outIndex$x = linearIdx / outStride$x; linearIdx = linearIdx - outIndex$x * outStride$x;").mkString("\n    ")
-        val in1Index = ((0 until rank): Range).map(x => s"in1Stride$x * outIndex$x").mkString(" + ")
-        val in2Index = ((0 until rank): Range).map(x => s"in2Stride$x * outIndex$x").mkString(" + ")
-        val kernel = s"""
-        |__global__ void elementWiseWithBroadCast${nextKernel}(float* in1, float* in2, float* out, int size,
-        |                ${in1Stride}, ${in2Stride}, ${outStride}) {
-        |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-        |  int stride = gridDim.x * blockDim.x;
-        |  for (; tid < size; tid += stride) {
-        |    int linearIdx = tid;
-        |    ${linearToStep}
-        |    int in1Index = ${in1Index};
-        |    int in2Index = ${in2Index};
-        |    out[tid] = in1[in1Index] ${op} in2[in2Index];
-        |  }
-        |}
-        """.stripMargin
-        val kernelName = s"elementWiseWithBroadCast${nextKernel}"
-        elementWiseWithBroadCastKernelMap((rank, op)) = (kernel, kernelName)
-        // don't forget to increment counter!!
-        nextKernel += 1
-      }
-      val (kernel, kernelName) = elementWiseWithBroadCastKernelMap((rank, op))
-      kernelName
-    }
+    // def elementWiseWithBroadCastKernel(rank: Int, op: String): String = {
+    //   if (!elementWiseWithBroadCastKernelMap.contains((rank, op))) {
+    //     val in1Stride = ((0 until rank): Range).map(x => s"int in1Stride$x").mkString(", ")
+    //     val in2Stride = ((0 until rank): Range).map(x => s"int in2Stride$x").mkString(", ")
+    //     val outStride = ((0 until rank): Range).map(x => s"int outStride$x").mkString(", ")
+    //     val linearToStep = ((0 until rank): Range).map(x => s"int outIndex$x = linearIdx / outStride$x; linearIdx = linearIdx - outIndex$x * outStride$x;").mkString("\n    ")
+    //     val in1Index = ((0 until rank): Range).map(x => s"in1Stride$x * outIndex$x").mkString(" + ")
+    //     val in2Index = ((0 until rank): Range).map(x => s"in2Stride$x * outIndex$x").mkString(" + ")
+    //     val kernel = s"""
+    //     |__global__ void elementWiseWithBroadCast_${rank}_${op}(float* in1, float* in2, float* out, int size,
+    //     |                ${in1Stride}, ${in2Stride}, ${outStride}) {
+    //     |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    //     |  int stride = gridDim.x * blockDim.x;
+    //     |  for (; tid < size; tid += stride) {
+    //     |    int linearIdx = tid;
+    //     |    ${linearToStep}
+    //     |    int in1Index = ${in1Index};
+    //     |    int in2Index = ${in2Index};
+    //     |    out[tid] = in1[in1Index] ${op} in2[in2Index];
+    //     |  }
+    //     |}
+    //     """.stripMargin
+    //     System.out.println(kernel)
+    //     val kernelName = s"elementWiseWithBroadCast${nextKernel}"
+    //     elementWiseWithBroadCastKernelMap((rank, op)) = (kernel, kernelName)
+    //     // don't forget to increment counter!!
+    //     nextKernel += 1
+    //   }
+    //   val (kernel, kernelName) = elementWiseWithBroadCastKernelMap((rank, op))
+    //   kernelName
+    // }
 
-    def elementWiseWithBroadCast(in1: Tensor, in2: Tensor, op: String): (Tensor, Dimensions, Dimensions) = {
-      Tensor.dimBroadcast(in1.shape, in2.shape) match {
-        case Some((xShape, yShape, resShape)) => {
-          val resData = mallocArray[Float](resShape.scalarCount)
-          val res = new Tensor(resData, resShape)
-          val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
-          val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
-          val kernelName = elementWiseWithBroadCastKernel(resShape.dims.size, op)
-          val nGrid = 28
-          if (resShape.dims.size == 1) {
-            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ", res.scalarCount, ", ",
-              xStridesShadow(0), ", ", yStridesShadow(0), ", ", resShape.strides(0), ")")
-          } else if (resShape.dims.size == 2) {
-            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ", res.scalarCount, ", ",
-              xStridesShadow(0), ", ", xStridesShadow(1), ", ", yStridesShadow(0), ", ", yStridesShadow(1), ", ", resShape.strides(0), ", ", resShape.strides(1), ")")
-          } else if (resShape.dims.size == 3) {
-            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ", res.scalarCount, ", ",
-              xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ",
-              yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ",
-              resShape.strides(0), ", ", resShape.strides(1), ", ", resShape.strides(2), ")")
-          } else if (resShape.dims.size == 4) {
-            unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", resData, ", ", res.scalarCount, ", ",
-              xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ", xStridesShadow(3), ", ",
-              yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ", yStridesShadow(3), ", ",
-              resShape.strides(0), ", ", resShape.strides(1), ", ", resShape.strides(2), ", ", resShape.strides(3), ")")
-          } else {
-            assert(false, s"elementWiseWithBroadCast only handle tensors with rank no larger than 4, got ${resShape.dims.size}")
-          }
-          (res, xShape, yShape)
-        }
-        case _ => ???
-      }
-    }
+    // def elementWiseUpdateWithBroadCastKernel(rank: Int, op: String): String = {
+    //   if (!elementWiseUpdateWithBroadCastKernelMap.contains((rank, op))) {
+    //     val in1Stride = ((0 until rank): Range).map(x => s"int in1Stride$x").mkString(", ")
+    //     val in2Stride = ((0 until rank): Range).map(x => s"int in2Stride$x").mkString(", ")
+    //     val linearToStep = ((0 until rank): Range).map(x => s"    int in1Index$x = linearIdx / in1Stride$x; linearIdx = linearIdx - in1Index$x * in1Stride$x;").mkString("\n")
+    //     val in1Index = ((0 until rank): Range).map(x => s"in1Stride$x * in1Index$x").mkString(" + ")
+    //     val in2Index = ((0 until rank): Range).map(x => s"in2Stride$x * in1Index$x").mkString(" + ")
+    //     val kernel = s"""
+    //     |__global__ void elementWiseUpdateWithBroadCast${nextKernel}(float* in1, float* in2, int size,
+    //     |                ${in1Stride}, ${in2Stride}) {
+    //     |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    //     |  int stride = gridDim.x * blockDim.x;
+    //     |  for (int i = tid; i < size; i += stride) {
+    //     |    int linearIdx = tid;
+    //     |    ${linearToStep}
+    //     |    int in1Index = ${in1Index};
+    //     |    int in2Index = ${in2Index};
+    //     |    in1[in1Index] ${op} in2[in2Index];
+    //     |  }
+    //     |}
+    //     """
+    //     System.out.println(kernel)
+    //     val kernelName = s"elementWiseUpdateWithBroadCast${nextKernel}"
+    //     elementWiseUpdateWithBroadCastKernelMap((rank, op)) = (kernel, kernelName)
+    //     // don't forget to increment counter!!
+    //     nextKernel += 1
+    //   }
+    //   val (kernel, kernelName) = elementWiseUpdateWithBroadCastKernelMap((rank, op))
+    //   kernelName
+    // }
 
-    def elementWiseUpdateWithBroadCastKernel(rank: Int, op: String): String = {
-      if (!elementWiseUpdateWithBroadCastKernelMap.contains((rank, op))) {
-        val in1Stride = ((0 until rank): Range).map(x => s"int in1Stride$x").mkString(", ")
-        val in2Stride = ((0 until rank): Range).map(x => s"int in2Stride$x").mkString(", ")
-        val linearToStep = ((0 until rank): Range).map(x => s"    int in1Index$x = linearIdx / in1Stride$x; linearIdx = linearIdx - in1Index$x * in1Stride$x;").mkString("\n")
-        val in1Index = ((0 until rank): Range).map(x => s"in1Stride$x * in1Index$x").mkString(" + ")
-        val in2Index = ((0 until rank): Range).map(x => s"in2Stride$x * in1Index$x").mkString(" + ")
-        val kernel = s"""
-        |__global__ void elementWiseUpdateWithBroadCast${nextKernel}(float* in1, float* in2, int size,
-        |                ${in1Stride}, ${in2Stride}) {
-        |  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-        |  int stride = gridDim.x * blockDim.x;
-        |  for (int i = tid; i < size; i += stride) {
-        |    int linearIdx = tid;
-        |    ${linearToStep}
-        |    int in1Index = ${in1Index};
-        |    int in2Index = ${in2Index};
-        |    in1[in1Index] ${op} in2[in2Index];
-        |  }
-        |}
-        """
-        val kernelName = s"elementWiseUpdateWithBroadCast${nextKernel}"
-        elementWiseUpdateWithBroadCastKernelMap((rank, op)) = (kernel, kernelName)
-        // don't forget to increment counter!!
-        nextKernel += 1
-      }
-      val (kernel, kernelName) = elementWiseUpdateWithBroadCastKernelMap((rank, op))
-      kernelName
-    }
+    // @virtualize
+    // def elementWiseUpdateWithBroadCast(in1: Tensor, in2: Tensor, op: String) = {
+    //     Tensor.dimBroadcast(in1.shape, in2.shape) match {
+    //       case Some((xShape, yShape, resShape)) => {
+    //         if (xShape.broadcasted) {
+    //           assertC(false, "TODO: so far only handles in1 += in2 where in1 is large!!")
+    //         } // TODO: so far only handles in1 += in2 where in1 is larger
+    //         else {
+    //           val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+    //           val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
+    //           val kernelName = elementWiseUpdateWithBroadCastKernel(resShape.dims.size, op)
+    //           val nGrid = 28
+    //           if (resShape.dims.size == 1) {
+    //             unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
+    //               xStridesShadow(0), ", ", yStridesShadow(0), ")")
+    //           } else if (resShape.dims.size == 2) {
+    //             unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
+    //               xStridesShadow(0), ", ", xStridesShadow(1), ", ", yStridesShadow(0), ", ", yStridesShadow(1), ")")
+    //           } else if (resShape.dims.size == 3) {
+    //             unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
+    //               xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ",
+    //               yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ")")
+    //           } else if (resShape.dims.size == 4) {
+    //             unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
+    //               xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ", xStridesShadow(3), ", ",
+    //               yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ", yStridesShadow(3), ")")
+    //           } else {
+    //             assert(false, s"elementWiseUpdateWithBroadCast only handle tensors with rank no larger than 4, got ${resShape.dims.size}")
+    //           }
+    //           ()
+    //         }
+    //       }
+    //       case _ => ???
+    //     }
+    // }
 
-    @virtualize
-    def elementWiseUpdateWithBroadCast(in1: Tensor, in2: Tensor, op: String) = {
-        Tensor.dimBroadcast(in1.shape, in2.shape) match {
-          case Some((xShape, yShape, resShape)) => {
-            if (xShape.broadcasted) {
-              assertC(false, "TODO: so far only handles in1 += in2 where in1 is large!!")
-            } // TODO: so far only handles in1 += in2 where in1 is larger
-            else {
-              val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
-              val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) 0 else a}
-              val kernelName = elementWiseUpdateWithBroadCastKernel(resShape.dims.size, op)
-              val nGrid = 28
-              if (resShape.dims.size == 1) {
-                unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
-                  xStridesShadow(0), ", ", yStridesShadow(0), ")")
-              } else if (resShape.dims.size == 2) {
-                unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
-                  xStridesShadow(0), ", ", xStridesShadow(1), ", ", yStridesShadow(0), ", ", yStridesShadow(1), ")")
-              } else if (resShape.dims.size == 3) {
-                unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
-                  xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ",
-                  yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ")")
-              } else if (resShape.dims.size == 4) {
-                unchecked[Unit](s"${kernelName}<<<${nGrid}, 512>>>(", in1.data, ", ", in2.data, ", ", in1.scalarCount, ", ",
-                  xStridesShadow(0), ", ", xStridesShadow(1), ", ", xStridesShadow(2), ", ", xStridesShadow(3), ", ",
-                  yStridesShadow(0), ", ", yStridesShadow(1), ", ", yStridesShadow(2), ", ", yStridesShadow(3), ")")
-              } else {
-                assert(false, s"elementWiseUpdateWithBroadCast only handle tensors with rank no larger than 4, got ${resShape.dims.size}")
-              }
-              ()
-            }
-          }
-          case _ => ???
-        }
-    }
-
-    override def +(x: Tensor, y: Rep[Float]): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
-      unchecked[Unit](s"addScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
-      Tensor(res, x.shape: _*)
-    }
-    override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "+")
+    // override def +(x: Tensor, y: Rep[Float]): Tensor = {
+    //   val res = mallocArray[Float](x.scalarCount)
+    //   unchecked[Unit](s"addScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
+    //   Tensor(res, x.shape: _*)
+    // }
+    // override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "+")
     @virtualize
     override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
@@ -303,15 +271,15 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       }
     }
 
-    override def +=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"addScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
-    override def +=(x: Tensor, y: Tensor): Unit = elementWiseUpdateWithBroadCast(x, y, "+=")
+    // override def +=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"addScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
+    // override def +=(x: Tensor, y: Tensor): Unit = elementWiseUpdateWithBroadCast(x, y, "+=")
 
-    override def -(x: Tensor, y: Rep[Float]): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
-      unchecked[Unit](s"minusScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
-      Tensor(res, x.shape: _*)
-    }
-    override def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "-")
+    // override def -(x: Tensor, y: Rep[Float]): Tensor = {
+    //   val res = mallocArray[Float](x.scalarCount)
+    //   unchecked[Unit](s"minusScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
+    //   Tensor(res, x.shape: _*)
+    // }
+    // override def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "-")
     @virtualize
     override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
@@ -326,15 +294,10 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       }
     }
 
-    override def -=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"minusScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
-    override def -=(x: Tensor, y: Tensor): Unit = elementWiseUpdateWithBroadCast(x, y, "-=")
+    // override def -=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"minusScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
+    // override def -=(x: Tensor, y: Tensor): Unit = elementWiseUpdateWithBroadCast(x, y, "-=")
 
-    override def *(x: Tensor, y: Rep[Float]): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
-      unchecked[Unit](s"multScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
-      Tensor(res, x.shape: _*)
-    }
-    override def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "*")
+    // override def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "*")
     @virtualize
     override def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
@@ -350,15 +313,14 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       }
     }
 
-    override def *=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"multScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
-    override def *=(x: Tensor, y: Tensor): Unit = ???
+    // override def *=(x: Tensor, y: Tensor): Unit = elementWiseUpdateWithBroadCast(x, y, "*=")
 
-    override def /(x: Tensor, y: Rep[Float]): Tensor = {
-      val res = mallocArray[Float](x.scalarCount)
-      unchecked[Unit](s"divScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
-      Tensor(res, x.shape: _*)
-    }
-    override def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "/")
+    // override def /(x: Tensor, y: Rep[Float]): Tensor = {
+    //   val res = mallocArray[Float](x.scalarCount)
+    //   unchecked[Unit](s"divScalar<<<28, 512>>>(", x.data, ", ", res, ", ", y, ", ", x.scalarCount, ")")
+    //   Tensor(res, x.shape: _*)
+    // }
+    // override def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "/")
     @virtualize
     override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
       val one = NewArray[Float](1); one(0) = 1
@@ -375,8 +337,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       }
     }
 
-    override def /=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"divScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
-    override def /=(x: Tensor, y: Tensor): Unit = ???
+    // override def /=(x: Tensor, y: Rep[Float]): Unit = unchecked[Unit](s"divScalar<<<28, 512>>>(", x.data, ", ", x.data, ", ", y, ", ", x.scalarCount, ")")
+    // override def /=(x: Tensor, y: Tensor): Unit = elementWiseUpdateWithBroadCast(x, y, "/=")
 
     override def repeat0(in: Tensor, context: Int): Tensor = {
       assert(in.rank <= 3, s"only support input with no more than 3D, got ${in.rank}")

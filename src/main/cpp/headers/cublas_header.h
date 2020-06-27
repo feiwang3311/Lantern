@@ -371,6 +371,254 @@ __global__ void elementwise_1D_1D_square_grad(float* in_x, float* in_d, float* o
     if (tid < size) in_d[tid] += out_d[tid] * 2 * in_x[tid];
 }
 
+/**
+ * elementWiseWithBroadCast kernels
+ */
+
+__global__ void elementWiseWithBroadCastRank1Add(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in2Stride0, int outStride0) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int in1Index = in1Stride0 * outIndex0;
+    int in2Index = in2Stride0 * outIndex0;
+    out[tid] = in1[in1Index] + in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank1Div(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in2Stride0, int outStride0) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int in1Index = in1Stride0 * outIndex0;
+    int in2Index = in2Stride0 * outIndex0;
+    out[tid] = in1[in1Index] / in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank1Mult(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in2Stride0, int outStride0) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int in1Index = in1Stride0 * outIndex0;
+    int in2Index = in2Stride0 * outIndex0;
+    out[tid] = in1[in1Index] * in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank1Minus(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in2Stride0, int outStride0) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int in1Index = in1Stride0 * outIndex0;
+    int in2Index = in2Stride0 * outIndex0;
+    out[tid] = in1[in1Index] - in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank2Add(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in2Stride0, int in2Stride1, int outStride0, int outStride1) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1;
+    out[tid] = in1[in1Index] + in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank2Div(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in2Stride0, int in2Stride1, int outStride0, int outStride1) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1;
+    out[tid] = in1[in1Index] / in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank2Mult(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in2Stride0, int in2Stride1, int outStride0, int outStride1) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1;
+    out[tid] = in1[in1Index] * in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank2Minus(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in2Stride0, int in2Stride1, int outStride0, int outStride1) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1;
+    out[tid] = in1[in1Index] - in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank3Add(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in1Stride2, int in2Stride0, int in2Stride1, int in2Stride2,
+                int outStride0, int outStride1, int outStride2) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int outIndex2 = linearIdx / outStride2; linearIdx = linearIdx - outIndex2 * outStride2;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1 + in1Stride2 * outIndex2;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1 + in2Stride2 * outIndex2;
+    out[tid] = in1[in1Index] + in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank3Div(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in1Stride2, int in2Stride0, int in2Stride1, \
+                int in2Stride2, int outStride0, int outStride1, int outStride2) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int outIndex2 = linearIdx / outStride2; linearIdx = linearIdx - outIndex2 * outStride2;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1 + in1Stride2 * outIndex2;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1 + in2Stride2 * outIndex2;
+    out[tid] = in1[in1Index] / in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank3Mult(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in1Stride2, int in2Stride0, int in2Stride1,
+                int in2Stride2, int outStride0, int outStride1, int outStride2) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int outIndex2 = linearIdx / outStride2; linearIdx = linearIdx - outIndex2 * outStride2;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1 + in1Stride2 * outIndex2;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1 + in2Stride2 * outIndex2;
+    out[tid] = in1[in1Index] * in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank3Minus(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in1Stride2, int in2Stride0, int in2Stride1,
+                int in2Stride2, int outStride0, int outStride1, int outStride2) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int outIndex2 = linearIdx / outStride2; linearIdx = linearIdx - outIndex2 * outStride2;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1 + in1Stride2 * outIndex2;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1 + in2Stride2 * outIndex2;
+    out[tid] = in1[in1Index] - in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank4Add(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in1Stride2, int in1Stride3, int in2Stride0,
+                int in2Stride1, int in2Stride2, int in2Stride3, int outStride0, int outStride1,
+                int outStride2, int outStride3) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int outIndex2 = linearIdx / outStride2; linearIdx = linearIdx - outIndex2 * outStride2;
+    int outIndex3 = linearIdx / outStride3; linearIdx = linearIdx - outIndex3 * outStride3;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1 + in1Stride2 * outIndex2 + in1Stride3 * outIndex3;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1 + in2Stride2 * outIndex2 + in2Stride3 * outIndex3;
+    out[tid] = in1[in1Index] + in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank4Div(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in1Stride2, int in1Stride3, int in2Stride0,
+                int in2Stride1, int in2Stride2, int in2Stride3, int outStride0, int outStride1,
+                int outStride2, int outStride3) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int outIndex2 = linearIdx / outStride2; linearIdx = linearIdx - outIndex2 * outStride2;
+    int outIndex3 = linearIdx / outStride3; linearIdx = linearIdx - outIndex3 * outStride3;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1 + in1Stride2 * outIndex2 + in1Stride3 * outIndex3;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1 + in2Stride2 * outIndex2 + in2Stride3 * outIndex3;
+    out[tid] = in1[in1Index] / in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank4Mult(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in1Stride2, int in1Stride3, int in2Stride0,
+                int in2Stride1, int in2Stride2, int in2Stride3, int outStride0, int outStride1,
+                int outStride2, int outStride3) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int outIndex2 = linearIdx / outStride2; linearIdx = linearIdx - outIndex2 * outStride2;
+    int outIndex3 = linearIdx / outStride3; linearIdx = linearIdx - outIndex3 * outStride3;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1 + in1Stride2 * outIndex2 + in1Stride3 * outIndex3;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1 + in2Stride2 * outIndex2 + in2Stride3 * outIndex3;
+    out[tid] = in1[in1Index] * in2[in2Index];
+  }
+}
+
+__global__ void elementWiseWithBroadCastRank4Minus(float* in1, float* in2, float* out, int size,
+                int in1Stride0, int in1Stride1, int in1Stride2, int in1Stride3, int in2Stride0,
+                int in2Stride1, int in2Stride2, int in2Stride3, int outStride0, int outStride1,
+                int outStride2, int outStride3) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = gridDim.x * blockDim.x;
+  for (; tid < size; tid += stride) {
+    int linearIdx = tid;
+    int outIndex0 = linearIdx / outStride0; linearIdx = linearIdx - outIndex0 * outStride0;
+    int outIndex1 = linearIdx / outStride1; linearIdx = linearIdx - outIndex1 * outStride1;
+    int outIndex2 = linearIdx / outStride2; linearIdx = linearIdx - outIndex2 * outStride2;
+    int outIndex3 = linearIdx / outStride3; linearIdx = linearIdx - outIndex3 * outStride3;
+    int in1Index = in1Stride0 * outIndex0 + in1Stride1 * outIndex1 + in1Stride2 * outIndex2 + in1Stride3 * outIndex3;
+    int in2Index = in2Stride0 * outIndex0 + in2Stride1 * outIndex1 + in2Stride2 * outIndex2 + in2Stride3 * outIndex3;
+    out[tid] = in1[in1Index] - in2[in2Index];
+  }
+}
+
 __global__ void clipAt(float* in, float bound, int size) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int stride = gridDim.x * blockDim.x;

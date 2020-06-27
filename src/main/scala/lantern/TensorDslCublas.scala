@@ -364,33 +364,111 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       //    output.data, ",", dim3, ",", y.data, ",", dim3, ",", one, ",", x.data, ",", dim2, "))")
     }
 
-    override def +(x: Tensor, y: Rep[Float]): Tensor = ??? //elementwiseUnaryOp(x)(s => Seq(s + " + ", y))
-    override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = ??? //elementwiseBinaryOp(x, y) { _ + " + " + _ }
+    def elementWiseWithBroadCast(in1: Tensor, in2: Tensor, op: String): (Tensor, Dimensions, Dimensions) = {
+      Tensor.dimBroadcast(in1.shape, in2.shape) match {
+        case Some((xShape, yShape, resShape)) => {
+          val resData = mallocArray[Float](resShape.scalarCount)
+          val res = new Tensor(resData, resShape)
+          val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) unit(0) else a}
+          val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) unit(0) else a}
+          resShape.dims.size match {
+            case 1 => elementWiseWithBroadCastRank1_(
+              op, res.scalarCount,
+              in1.data, xStridesShadow(0),
+              in2.data, yStridesShadow(0),
+              resData, resShape.strides(0))
+            case 2 => elementWiseWithBroadCastRank2_(
+              op, res.scalarCount,
+              in1.data, xStridesShadow(0), xStridesShadow(1),
+              in2.data, yStridesShadow(0), yStridesShadow(1),
+              resData, resShape.strides(0), resShape.strides(1))
+            case 3 => elementWiseWithBroadCastRank3_(
+              op, res.scalarCount,
+              in1.data, xStridesShadow(0), xStridesShadow(1), xStridesShadow(2),
+              in2.data, yStridesShadow(0), yStridesShadow(1), yStridesShadow(2),
+              resData, resShape.strides(0), resShape.strides(1), resShape.strides(2))
+            case 4 => elementWiseWithBroadCastRank4_(
+              op, res.scalarCount,
+              in1.data, xStridesShadow(0), xStridesShadow(1), xStridesShadow(2), xStridesShadow(3),
+              in2.data, yStridesShadow(0), yStridesShadow(1), yStridesShadow(2), yStridesShadow(3),
+              resData, resShape.strides(0), resShape.strides(1), resShape.strides(2), resShape.strides(3))
+            case _ => assert(false, s"elementWiseWithBroadCast only handle tensors with rank no larger than 4, got ${resShape.dims.size}")
+          }
+          (res, xShape, yShape)
+        }
+        case _ => ???
+      }
+    }
+
+    def elementWiseWithBroadCastUpdate(in1: Tensor, in2: Tensor, op: String): Unit = {
+      Tensor.dimBroadcast(in1.shape, in2.shape) match {
+        case Some((xShape, yShape, resShape)) => {
+          assertC(!xShape.broadcasted, "in elementwise update, the xShape cannot be broadcasted!")
+          val xStridesShadow = (xShape.strides zip xShape.dims) map {case (a, b) => if (b == unit(1)) unit(0) else a}
+          val yStridesShadow = (yShape.strides zip yShape.dims) map {case (a, b) => if (b == unit(1)) unit(0) else a}
+          resShape.dims.size match {
+            case 1 => elementWiseWithBroadCastRank1_(
+              op, in1.scalarCount,
+              in1.data, xStridesShadow(0),
+              in2.data, yStridesShadow(0),
+              in1.data, xStridesShadow(0))
+            case 2 => elementWiseWithBroadCastRank2_(
+              op, in1.scalarCount,
+              in1.data, xStridesShadow(0), xStridesShadow(1),
+              in2.data, yStridesShadow(0), yStridesShadow(1),
+              in1.data, xStridesShadow(0), xStridesShadow(1))
+            case 3 => elementWiseWithBroadCastRank3_(
+              op, in1.scalarCount,
+              in1.data, xStridesShadow(0), xStridesShadow(1), xStridesShadow(2),
+              in2.data, yStridesShadow(0), yStridesShadow(1), yStridesShadow(2),
+              in1.data, xStridesShadow(0), xStridesShadow(1), xStridesShadow(2))
+            case 4 => elementWiseWithBroadCastRank4_(
+              op, in1.scalarCount,
+              in1.data, xStridesShadow(0), xStridesShadow(1), xStridesShadow(2), xStridesShadow(3),
+              in2.data, yStridesShadow(0), yStridesShadow(1), yStridesShadow(2), yStridesShadow(3),
+              in1.data, xStridesShadow(0), xStridesShadow(1), xStridesShadow(2), xStridesShadow(3))
+            case _ => assert(false, s"elementWiseWithBroadCastUpdate only handle tensors with rank no larger than 4, got ${resShape.dims.size}")
+          }
+        }
+        case _ => ???
+      }
+    }
+
+    def arithWithScalar(op: String, x: Tensor, y: Rep[Float]): Tensor = {
+      val res = mallocArray[Float](x.scalarCount)
+      arithScalar_(op, x.data, res, y, x.scalarCount)
+      Tensor(res, x.shape: _*)
+    }
+
+    def arithWithScalarUpdate(op: String, x: Tensor, y: Rep[Float]): Unit = arithScalar_(op, x.data, x.data, y, x.scalarCount)
+
+    override def +(x: Tensor, y: Rep[Float]): Tensor = arithWithScalar("+", x, y)
+    override def +(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "+")
     override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = ???
 
-    override def +=(x: Tensor, y: Rep[Float]): Unit = ??? //elementwiseInplaceUnaryOp(x)(s => Seq(s + " + ", y))
-    override def +=(x: Tensor, y: Tensor): Unit = ??? //elementwiseInplaceBinaryOp(x, y) { _ + " + " + _ }
+    override def +=(x: Tensor, y: Rep[Float]): Unit = arithWithScalarUpdate("+", x, y)
+    override def +=(x: Tensor, y: Tensor): Unit = elementWiseWithBroadCastUpdate(x, y, "+")
 
-    override def -(x: Tensor, y: Rep[Float]): Tensor = ??? //elementwiseUnaryOp(x)(s => Seq(s + " - ", y))
-    override def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = ??? //elementwiseBinaryOp(x, y) { _ + " - " + _ }
+    override def -(x: Tensor, y: Rep[Float]): Tensor = arithWithScalar("-", x, y)
+    override def -(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "-")
     override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = ???
 
-    override def -=(x: Tensor, y: Rep[Float]): Unit = ??? //elementwiseInplaceUnaryOp(x)(s => Seq(s + " - ", y))
-    override def -=(x: Tensor, y: Tensor): Unit = ??? //elementwiseInplaceBinaryOp(x, y) { _ + " - " + _ }
+    override def -=(x: Tensor, y: Rep[Float]): Unit = arithWithScalarUpdate("-", x, y)
+    override def -=(x: Tensor, y: Tensor): Unit = elementWiseWithBroadCastUpdate(x, y, "-")
 
-    override def *(x: Tensor, y: Rep[Float]): Tensor = ??? //elementwiseUnaryOp(x)(s => Seq(s + " * ", y))
-    override def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = ??? //elementwiseBinaryOp(x, y) { _ + " * " + _ }
+    override def *(x: Tensor, y: Rep[Float]): Tensor = arithWithScalar("*", x, y)
+    override def *(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "*")
     override def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = ???
 
-    override def *=(x: Tensor, y: Rep[Float]): Unit = ??? //elementwiseInplaceUnaryOp(x)(s => Seq(s + " * ", y))
-    override def *=(x: Tensor, y: Tensor): Unit = ??? //elementwiseInplaceBinaryOp(x, y) { _ + " * " + _ }
+    override def *=(x: Tensor, y: Rep[Float]): Unit = arithWithScalarUpdate("*", x, y)
+    override def *=(x: Tensor, y: Tensor): Unit = elementWiseWithBroadCastUpdate(x, y, "*")
 
-    override def /(x: Tensor, y: Rep[Float]): Tensor = ??? //elementwiseUnaryOp(x)(s => Seq(s + " / ", y))
-    override def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = ??? //elementwiseBinaryOp(x, y) { _ + " / " + _ }
+    override def /(x: Tensor, y: Rep[Float]): Tensor = arithWithScalar("/", x, y)
+    override def /(x: Tensor, y: Tensor): (Tensor, Dimensions, Dimensions) = elementWiseWithBroadCast(x, y, "/")
     override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = ???
 
-    override def /=(x: Tensor, y: Rep[Float]): Unit = ??? //elementwiseInplaceUnaryOp(x)(s => Seq(s + " / ", y))
-    override def /=(x: Tensor, y: Tensor): Unit = ??? //elementwiseInplaceBinaryOp(x, y) { _ + " / " + _ }
+    override def /=(x: Tensor, y: Rep[Float]): Unit = arithWithScalarUpdate("/", x, y)
+    override def /=(x: Tensor, y: Tensor): Unit = elementWiseWithBroadCastUpdate(x, y, "/")
 
     override def plusBias(main: Tensor, bias: Tensor): Tensor = ???
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = ???
@@ -957,14 +1035,14 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       // unchecked[Unit]("nllLoss_grad<<<", input.d.shape(0), ", 1>>>(", input.d.shape.strides(0), ", ", res.d.data, ", ", target, ", ", input.d.data, ")")
 
     // multihead attention
-    override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
-      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, 
-      dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], 
+    override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int,
+      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean,
+      dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int],
       Rep[Array[Int]], Rep[Array[Int]]) = ???
 
-    override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+    override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int,
       qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]],
-       hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], 
+       hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int],
        devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean): Unit = ???
 
 

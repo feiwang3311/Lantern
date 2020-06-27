@@ -6,122 +6,6 @@ import lms.macros.SourceContext
 
 class TestCudnn extends LanternFunSuite {
 
-  testGPU("gemm") {
-    val gemm = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cublas-gemm"
-      @virtualize
-      def snippet(x: Rep[String]): Rep[Unit] = {
-        val m1 = Tensor.rand(2,3)
-        val m2 = Tensor.rand(3,4)
-        val viaDot = (m1 dot m2) * 0.5f
-        val viaGemm = m1.gemm(m2, false, false, 0.5f)
-        Tensor.assertEqual(viaDot.toCPU(), viaGemm.toCPU())
-
-        val m3 = Tensor.rand(4,3)
-        val temp = m3.trans()
-        val viaDot01 = (m1 dot temp) * 0.5f
-        val viaGemm01 = m1.gemm(m3, false, true, 0.5f)
-        Tensor.assertEqual(viaDot01.toCPU(), viaGemm01.toCPU())
-
-        val m4 = Tensor.rand(3,2)
-        val viaDot10 = (m4.trans() dot m2) * 0.5f
-        val viaGemm10 = m4.gemm(m2, true, false, 0.5f)
-        Tensor.assertEqual(viaDot10.toCPU(), viaGemm10.toCPU())
-
-        val viaDot11 = (m4.trans() dot m3.trans()) * 0.5f
-        val viaGemm11 = m4.gemm(m3, true, true, 0.5f)
-        Tensor.assertEqual(viaDot11.toCPU(), viaGemm11.toCPU())
-      }
-    }
-    runTest(gemm)
-  }
-
-  testGPU("binary-ops") {
-    val binops = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cublas-binops"
-
-      @virtualize
-      def snippet(x: Rep[String]): Rep[Unit] = {
-        val x = Tensor.fromData(Seq(2, 2), 1, 2, 3, 4)
-        val y1 = Tensor.fromData(Seq(2, 2), 4, 5, 6, 7)
-        val y2 = Tensor.fromData(Seq(2, 2), 5, 7, 9, 11)
-        val y3 = Tensor.fromData(Seq(2, 2), 2, 3, 4, 5)
-        val result = ((((x + y1) / y2) * y3) - x).toCPU()
-
-        backend = BackendCPU()
-        val expected = Tensor.ones(2, 2)
-        Tensor.assertEqual(result, expected)
-      }
-    }
-    runTest(binops)
-  }
-
-  testGPU("binary-ops-broadcast1") {
-    val binops = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cublas-binops-broadcast1"
-
-      @virtualize
-      def snippet(x: Rep[String]): Rep[Unit] = {
-        val x = Tensor.fromData(Seq(2, 1, 4), 1, 2, 3, 4, 5, 6, 7, 8)
-        val y = Tensor.fromData(Seq(1, 3, 1), 1, 2, 3)
-        val result = (x + y).toCPU()
-
-        backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(2, 3, 4),
-          2, 3, 4, 5,
-          3, 4, 5, 6,
-          4, 5, 6, 7,
-          6, 7, 8, 9,
-          7, 8, 9, 10,
-          8, 9, 10, 11)
-        Tensor.assertEqual(result, expected)
-      }
-    }
-    runTest(binops)
-  }
-//  testGPU("binary-ops-broadcast2") {
-//    val binops = new LanternDriverCublas[String, Unit] {
-//      override val fileName = "lantern-cublas-binops-broadcast2"
-
-//      @virtualize
-//      def snippet(x: Rep[String]): Rep[Unit] = {
-//        val x = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
-//        val y = Tensor.fromData(Seq(3, 1, 1), 1, 2, 3)
-//        x += y
-//        x -= y
-//        x *= y
-//        x /= y
-//        val result = x.toCPU()
-
-//        backend = BackendCPU()
-//        val expected = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
-//        Tensor.assertEqual(result, expected)
-//      }
-//    }
-//    runTest(binops)
-//  }
-
-  testGPU("binary-ops-tensor-scalar") {
-    val binops = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cublas-binops-tensor-scalar"
-
-      @virtualize
-      def snippet(x: Rep[String]): Rep[Unit] = {
-        val x = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
-        x += 4
-        x -= 4
-        x *= -8
-        x /= -8
-        val result = x.toCPU()
-
-        backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(3, 1, 2), 1, 2, 3, 4, 5, 6)
-        Tensor.assertEqual(result, expected)
-      }
-    }
-    runTest(binops)
-  }
-
   testGPU("broadCastingPlus1") {
     val plus = new LanternDriverCudnn[String, Unit] {
       override val fileName = currentTestName
@@ -132,7 +16,7 @@ class TestCudnn extends LanternFunSuite {
         Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](7,7,7,7,7,7), 2, 3))
         Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](7,7,7,7,7,7), 2, 3))
 
-	// test backprop
+	      // test backprop
         val a = TensorR(tensor1)
         val b = TensorR(tensor2)
         def loss(dummy: TensorR) = (a + b).sum()
@@ -153,7 +37,8 @@ class TestCudnn extends LanternFunSuite {
         val tensor2 = Tensor.fromData(Seq(2, 1), 1,2)
         Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](2,3,4,6,7,8), 2, 3))
         Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](2,3,4,6,7,8), 2, 3))
-	// test backprop
+
+        // test backprop
         val a = TensorR(tensor1)
         val b = TensorR(tensor2)
         def loss(dummy: TensorR) = (a + b).sum()
@@ -174,7 +59,8 @@ class TestCudnn extends LanternFunSuite {
         val tensor2 = Tensor.fromData(Seq(1, 3), 3,4,5)
         Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](4,6,8,7,9,11), 2,3))
         Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](4,6,8,7,9,11), 2,3))
-	// test backprop
+
+        // test backprop
         val a = TensorR(tensor1)
         val b = TensorR(tensor2)
         def loss(dummy: TensorR) = (a + b).sum()
@@ -195,7 +81,8 @@ class TestCudnn extends LanternFunSuite {
         val tensor2 = Tensor.fromData(Seq(2), 1,2)
         Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](2,4,4,6,6,8,8,10), 2,2,2))
         Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](2,4,4,6,6,8,8,10), 2,2,2))
-	// test backprop
+
+        // test backprop
         val a = TensorR(tensor1)
         val b = TensorR(tensor2)
         def loss(dummy: TensorR) = (a + b).sum()
@@ -216,7 +103,8 @@ class TestCudnn extends LanternFunSuite {
         val tensor2 = Tensor.fromData(Seq(2,1,2), 1,2,3,4)
         Tensor.assertEqual((tensor1 + tensor2).toCPU(), Tensor(Array[Float](2,4,4,6,8,10,10,12), 2,2,2))
         Tensor.assertEqual((tensor2 + tensor1).toCPU(), Tensor(Array[Float](2,4,4,6,8,10,10,12), 2,2,2))
-	// test backprop
+
+        // test backprop
         val a = TensorR(tensor1)
         val b = TensorR(tensor2)
         def loss(dummy: TensorR) = (a + b).sum()
@@ -236,6 +124,7 @@ class TestCudnn extends LanternFunSuite {
         val tensor1 = Tensor.fromData(Seq(2,2,2), 1,2,3,4,5,6,7,8)
         val tensor2 = Tensor.fromData(Seq(2,1,2), 1,2,3,4)
         Tensor.assertEqual((tensor1 - tensor2).toCPU(), Tensor(Array[Float](0,0,2,2,2,2,4,4), 2,2,2))
+
         // test backprop
         val a = TensorR(tensor1)
         val b = TensorR(tensor2)
@@ -256,6 +145,7 @@ class TestCudnn extends LanternFunSuite {
         val tensor1 = Tensor.fromData(Seq(2,2,2), 1,2,3,4,5,6,7,8)
         val tensor2 = Tensor.fromData(Seq(2,1,2), 1,2,3,4)
         Tensor.assertEqual((tensor1 * tensor2).toCPU(), Tensor(Array[Float](1,4,3,8,15,24,21,32), 2,2,2))
+
         // test backprop
         val a = TensorR(tensor1)
         val b = TensorR(tensor2)
@@ -276,7 +166,8 @@ class TestCudnn extends LanternFunSuite {
         val tensor1 = Tensor.fromData(Seq(2,2,2), 1,2,3,4,5,6,7,8)
         val tensor2 = Tensor.fromData(Seq(2,1,2), 1,2,2,4)
         Tensor.assertEqual((tensor1 / tensor2).toCPU(), Tensor(Array[Float](1,1,3,2,2.5f,1.5f,3.5f,2), 2,2,2))
-	// test backprop
+
+        // test backprop
         val a = TensorR(tensor1)
         val b = TensorR(tensor2)
         def loss(dummy: TensorR) = (a / b).sum()
@@ -347,26 +238,27 @@ class TestCudnn extends LanternFunSuite {
     runTest(permute)
   }
 
+  /*
   testGPU("permute2") {
     val permute = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-permute"
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
         val x = Tensor.fromData(Seq(3, 4, 4, 3),
-           0,    1,    2,    3,    4,   -5,   -6,   -7,    8,    9,   10,
-         11,  -12,  -13,  -14,   15,   16,   17,  -18,  -19,  -20,  -21,
-         22,   23,   24,   25,  -26,   27,  -28,   29,   30,   31,   32,
-         33,   34,   35,  -36,  -37,  -38,   39,   40,   41,  -42,   43,
-        -44,  -45,   46,  -47,   48,   49,   50,   51,   52,  -53,  -54,
-        -55,   56,  -57,   58,   59,  -60,   61,  -62,   63,   64,  -65,
-        -66,  -67,  -68,  -69,   70,  -71,  -72,   73,  -74,  -75,   76,
-        -77,   78,   79,   80,  -81,  -82,  -83,  -84,   85,   86,   87,
-         88,  -89,  -90,  -91,  -92,  -93,  -94,   95,   96,  -97,  -98,
-         99, -100, -101,  102,  103, -104, -105,  106, -107,  108,  109,
-       -110, -111, -112, -113,  114, -115,  116,  117,  118, -119, -120,
-       -121,  122,  123, -124,  125,  126, -127,  128, -129,  130, -131,
-       -132,  133, -134, -135, -136, -137, -138, -139,  140, -141,  142,
-       -143)
+            0,    1,    2,    3,    4,   -5,   -6,   -7,    8,    9,   10,
+          11,  -12,  -13,  -14,   15,   16,   17,  -18,  -19,  -20,  -21,
+          22,   23,   24,   25,  -26,   27,  -28,   29,   30,   31,   32,
+          33,   34,   35,  -36,  -37,  -38,   39,   40,   41,  -42,   43,
+          -44,  -45,   46,  -47,   48,   49,   50,   51,   52,  -53,  -54,
+          -55,   56,  -57,   58,   59,  -60,   61,  -62,   63,   64,  -65,
+          -66,  -67,  -68,  -69,   70,  -71,  -72,   73,  -74,  -75,   76,
+          -77,   78,   79,   80,  -81,  -82,  -83,  -84,   85,   86,   87,
+          88,  -89,  -90,  -91,  -92,  -93,  -94,   95,   96,  -97,  -98,
+          99, -100, -101,  102,  103, -104, -105,  106, -107,  108,  109,
+          -110, -111, -112, -113,  114, -115,  116,  117,  118, -119, -120,
+          -121,  122,  123, -124,  125,  126, -127,  128, -129,  130, -131,
+          -132,  133, -134, -135, -136, -137, -138, -139,  140, -141,  142,
+          -143)
         val perms = List(0,1,2,3).permutations.toList.drop(1)
         val resGrad = perms map { perm =>
           val result = x.permute(perm:_*)
@@ -733,7 +625,7 @@ class TestCudnn extends LanternFunSuite {
       }
     }
     runTest(permute)
-  }
+  }*/
 
   testGPU("sumDim") {
     val sumDim = new LanternDriverCudnn[String, Unit] {

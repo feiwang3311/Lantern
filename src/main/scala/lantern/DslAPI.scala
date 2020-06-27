@@ -17,8 +17,6 @@ import lantern.thirdparty._
 import lantern.collection.mutable._
 
 trait LanternGenC extends DslGenCPP with CCodeGenLibs {
-  val IR: DslExp
-  import IR._
 
   class Unknown
   def isInt(d: Backend.Def): Boolean = d match {
@@ -55,8 +53,6 @@ trait LanternGenC extends DslGenCPP with CCodeGenLibs {
 }
 
 trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
-  val IR: DslExp
-  import IR._
 
   override def remap(m: Manifest[_]) = {
     val mStr = m.toString
@@ -111,40 +107,18 @@ trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
   }
 }
 
-trait LanternGenCudnn extends LanternGenCublas {
-  val IR: DslExp
-  import IR._
-
-  def convAlgoTemplate(x: Int): String =
-  s"""
-    |cudnnConvolutionFwdAlgo_t       algo_$x      = CUDNN_CONVOLUTION_FWD_ALGO_GEMM;     bool init_algo_$x      = false;
-    |cudnnConvolutionBwdDataAlgo_t   algo_bwd_$x  = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0;   bool init_algo_bwd_$x  = false;
-    |cudnnConvolutionBwdFilterAlgo_t algo_bwf_$x  = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0; bool init_algo_bwf_$x  = false;
-   """.stripMargin
-
-  def convOpIndex() = ((0 until 12): Range).toList
-  def buildConvAlgoTemplate(): String = convOpIndex.map(convAlgoTemplate).mkString("\n")
-
-  override def templateRawCode: String = super.templateRawCode + buildConvAlgoTemplate() +
-     """
-      |
-      |#define CUDNN_CALL(f) { \
-      |  cudnnStatus_t stat = (f); \
-      |  if (stat != CUDNN_STATUS_SUCCESS) { \
-      |    fprintf(stderr, "cuDNN error occurred: %s %d (%s:%d)\n", \
-      |            cudnnGetErrorString(stat), stat, __FILE__, __LINE__); \
-      |    exit(stat); \
-      |  } \
-      |}
-      |""".stripMargin
+trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenStackArray with CCodeGenLibs {
 
   override def emitAll(ng: Graph, name: String)(m1: Manifest[_], m2: Manifest[_]): Unit = {
     registerHeader("<cudnn.h>")
 
+    //--expt-extended-lambda -Wno-deprecated-gpu-targets -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lstdc++ -lcublas -lcudnn
+    registerLibrary("--expt-extended-lambda", "-Wno-deprecated-gpu-targets", "-lcudnn")
+
     // add cublas_header.h
     val curPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
     val tailPath = "src/main/cpp/headers/"
-    val headerFile = "\"cublas_header.h\""
+    val headerFile = "\"cudnn_header.h\""
     registerHeader(s"$curPath/$tailPath", headerFile)
 
     super.emitAll(ng, name)(m1, m2)
@@ -203,38 +177,18 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriv
 }
 
 abstract class LanternDriverCudnn[A: Manifest, B: Manifest] extends LanternDriverCublas[A, B] with NNModuleCudnn with TensorDslCudnn { q =>
-  override val codegen = new LanternGenCudnn with CCodeGenCuBLAS with CCodeGenCuDNN with CCodeGenStackArray with CCodeGenCMacro with CCodeGenLibStruct with CCodeGenLibFunction {
+  override val codegen = new LanternGenCudnn {
     val IR: q.type = q
-
-    override def convOpIndex() = convOpIndexSet.toList
-    override def templateRawCode: String = super.templateRawCode +
-      // (permutationKernelMap.values map (_._1) mkString("\n\n")) +
-      (elementWiseWithBroadCastKernelMap.values map(_._1) mkString("\n\n")) +
-      (elementWiseUpdateWithBroadCastKernelMap.values map(_._1) mkString("\n\n"))
   }
-  backend = BackendCudnn()
-  override lazy val f: A => Unit = {
-    // TBD: should read result of type B?
-    val out = new java.io.PrintWriter("/tmp/snippet.cu")
-    out.println(code)
-    out.close
-    (new java.io.File("/tmp/snippet")).delete
-    import scala.sys.process._
-    // TODO: would like to use time("cc") { .. }, but messes with captureOut
-    (s"nvcc -std=c++11 -O3 /tmp/snippet.cu -o /tmp/snippet --expt-extended-lambda -Wno-deprecated-gpu-targets -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lstdc++ -lcublas -lcudnn": ProcessBuilder).lines.foreach(Console.println _)
-    (a: A) => (s"/tmp/snippet $a": ProcessBuilder).lines.foreach(Console.println _)
-  }
-
 
   override def wrapper(x: Rep[A]): Rep[B] = {
     generate_comment("Backend setup.")
+    backend = BackendCudnn()
     backend.setup()
     val result = snippet(x)
 
     generate_comment("Backend cleanup.")
-    backend = BackendCudnn()
-    backend.cleanup()
+    BackendCudnn().cleanup()
     result
   }
-
 }
