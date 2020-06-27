@@ -1112,6 +1112,16 @@ trait TensorDslCPU extends TensorDsl {
       input.d += Tensor(helper, input.x.shape: _*) * output.d  // TODO (Fei Wang): should optimized by fusing loops
     }
 
+    // multihead attention
+    override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f,
+       smScaler: Float = 1.0f, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = ???
+
+    override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], 
+      hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], 
+      devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean): Unit = ???
+
     override def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor = {
       assert(x.rank == 2, "Input must be a 2-D tensor")
       generate_comment("nllLoss forward in CPU")
@@ -1130,6 +1140,27 @@ trait TensorDslCPU extends TensorDsl {
       val offset = var_new(0)
       for (batch <- DataLoop(input.d.shape(0))) {
         input.d.data(offset + target(batch)) += -1.0f * res.d.data(batch)
+        offset += input.d.shape.strides(0)
+      }
+    }
+
+    override def mseLoss(x: Tensor, target: Rep[Array[Float]]): Tensor = {
+      assert(x.rank == 2, "Input must be a 2-D tensor (batch)")
+      generate_comment("'mseLoss' forward in CPU")
+      val batchSize = x.shape(0)
+      val res = mallocArray[Float](batchSize)
+      for (i <- DataLoop(batchSize)) {
+        res(i) = target(i) - x.data(i)
+        res(i) = res(i) * res(i)
+      }
+      Tensor(res, batchSize)
+    }
+
+    override def mseLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Float]]): Unit = {
+      generate_comment("'mseLoss_grad' implementation in CPU")
+      var offset = var_new(0)
+      for (i <- DataLoop(input.d.shape(0))) {
+        input.d.data(offset + i) += 2 * input.x.data(offset + i) * res.d.data(i)
         offset += input.d.shape.strides(0)
       }
     }

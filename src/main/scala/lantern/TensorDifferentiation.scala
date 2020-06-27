@@ -313,6 +313,17 @@ trait TensorDsl extends DslCPP with Diff {
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
+    // multihead attention
+    def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+      devqSeqArray: Rep[Array[Int]], devkSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, 
+      dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]],
+       Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]])
+
+    def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], 
+      hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate: Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], devReserve: Rep[Array[Float]], 
+      sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean): Unit
+
     // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
     def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor
 
@@ -345,6 +356,8 @@ trait TensorDsl extends DslCPP with Diff {
     // Loss functions.
     def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
     def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit
+    def mseLoss(x: Tensor, target: Rep[Array[Float]]): Tensor
+    def mseLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Float]]): Unit
 
     // CTCLoss
     def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor
@@ -613,6 +626,8 @@ trait TensorDsl extends DslCPP with Diff {
 
     def nllLossB(target: Rep[Array[Int]]) = backend.nllLoss(this, target)
 
+    def mseLoss(target: Rep[Array[Float]]) = backend.mseLoss(this, target)
+
     def ctcLoss(inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor =
       backend.ctcLoss(TensorR(this), inputLengths, labels, labelLengths)
 
@@ -870,7 +885,7 @@ trait TensorDsl extends DslCPP with Diff {
     @virtualize
     def concat(dim: Int, others: Tensor*) = {
       assert(others.size >= 1, "there should be at least one tensor in others")
-      assert(dim >= 0 && dim < this.rank, "dim should be within range of this.nbDims")
+      assert(dim >= 0 && dim < this.rank, s"dim should be within range of ${this.rank}")
       assert(others.forall(x => x.rank == this.rank), "all tensors should have the same number of dimensions")
       assertC(others.forallR{t=> (0 until this.rank: Range).forallR{i => t.shape(i) == this.shape(i) || i == dim}},
               "all dimensions except the concatenation dimension should be the same")
@@ -1201,7 +1216,7 @@ trait TensorDsl extends DslCPP with Diff {
     // element wise division
     def / (that: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x / that); k(y)
-      this.d.addMul(1.0f / that, y.d)
+      this.d += y.d / that
     }
     def / (that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       val (ya, xShape, yShape) = backend./(x, that.x)
@@ -1378,6 +1393,12 @@ trait TensorDsl extends DslCPP with Diff {
       backend.nllLoss_grad(this, y, target)
     }
 
+    def mseLoss(target: Rep[Array[Float]]): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.mseLoss(target)); k(y)
+      generate_comment("'mseLoss' gradient")
+      backend.mseLoss_grad(this, y, target)
+    }
+
     def ctcLoss(inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor =
       backend.ctcLoss(this, inputLengths, labels, labelLengths)
 
@@ -1484,6 +1505,17 @@ trait TensorDsl extends DslCPP with Diff {
       val ty = TensorR(y); k(ty)
       // back prop
       backend.dropout_grad(this, ty, prob, helper, size)
+    }
+
+    @virtualize
+    def multiheadAttention(key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], 
+    loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate: Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean = false): TensorR @diff = shift{ (k: TensorR => Unit) =>
+      val (y, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights, devQSeqArray, devKSeqArray) = 
+      backend.multiheadAttention(this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler, residuals)
+      val ty = TensorR(y); k(ty)
+      // backprop
+      backend.multiheadAttention_grad(ty, this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, devQSeqArray, devKSeqArray, loWinIdx, hiWinIdx,
+      bias, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights, residuals)
     }
 
     def print(msg: String = "", derivative: Boolean = false): Unit = {
