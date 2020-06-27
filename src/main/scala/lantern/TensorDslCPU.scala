@@ -477,27 +477,34 @@ trait TensorDslCPU extends TensorDsl {
     // https://github.com/pytorch/pytorch/blob/0a8c8c1dbead2f845e524ae32c19167d80363148/aten/src/THNN/generic/SpatialConvolutionMM.c
     type RAF = Rep[Array[Float]]
     def memsetFloatZero(where: RAF, howmany: Rep[Int]) = {
-      unchecked[Unit]("memset(", where, ", 0, 4 * ", howmany, ")")
+      uncheckedEffect[Unit]("memset(", where, ", 0, 4 * ", howmany, ")")()(where)
     }
     def memcpyFloat(dst: RAF, src: RAF, howmany: Rep[Int]) = {
-      unchecked[Unit]("memcpy(", dst, ", ", src, ", 4 * ", howmany, ")")
+      uncheckedEffect[Unit]("memcpy(", dst, ", ", src, ", 4 * ", howmany, ")")(src)(dst)
+    }
+    def memAccumFloat(dst: RAF, src: RAF, howmany: Rep[Int]) = {
+      unchecked[Unit]("for(int count = 0; count < ", howmany, "; ++count, ++", dst, ", ++", src, ") {\n  *", dst, " += *", src, ";\n}")
+    }
+    def memAccumFloat(dst: RAF, dst_off: Rep[Int], src: RAF, src_off: Rep[Int]) = {
+      unchecked[Unit](dst, "[", dst_off, "] += ", src, "[", src_off, "]")
     }
 
     @virtualize
     def unfoldedCopy(finput: RAF, input: RAF, kW: Rep[Int], kH: Rep[Int], dW: Int, dH: Int, padW: Int, padH: Int,
-    nInputPlane: Rep[Int], inputWidth: Rep[Int], inputHeight: Rep[Int], outputWidth: Rep[Int], outputHeight: Rep[Int]) {
+      nInputPlane: Rep[Int], inputWidth: Rep[Int], inputHeight: Rep[Int], outputWidth: Rep[Int], outputHeight: Rep[Int]) {
+
       for (k <- (0 until nInputPlane * kH * kW): Rep[Range]) {
         val nip = k / (kH * kW)
         val rest = k % (kH * kW)
         val kh = rest / kW
         val kw = rest % kW
-        val dst = slice(finput, nip*kH*kW*outputHeight*outputWidth + kh*kW*outputHeight*outputWidth + kw*outputWidth*outputWidth)
-        val src = slice(input,  nip*inputHeight*inputWidth)
+        val dst = sliceWrite(finput, nip*kH*kW*outputHeight*outputWidth + kh*kW*outputHeight*outputWidth + kw*outputWidth*outputWidth)
+        val src = sliceRead(input,  nip*inputHeight*inputWidth)
         if (padW > 0 || padH > 0) {
           for (y <- (0 until outputHeight): Rep[Range]) {
             val iy = y * dH - padH + kh
             if (iy < 0 || iy >= inputHeight)
-              memsetFloatZero(slice(dst, y*outputWidth), outputWidth)
+              memsetFloatZero(sliceWrite(dst, y*outputWidth), outputWidth)
             else {
               if (dW == 1) {
                 val ix = padW - kw
@@ -505,20 +512,20 @@ trait TensorDslCPU extends TensorDsl {
                 val temp = padW-(kW-kw-1)
                 val rpad = if (temp > 0) temp else 0
                 if (outputWidth-rpad-lpad <= 0)
-                  memsetFloatZero(slice(dst, y*outputWidth), outputWidth)
+                  memsetFloatZero(sliceWrite(dst, y*outputWidth), outputWidth)
                 else {
-                  if (lpad > 0) memsetFloatZero(slice(dst, y*outputWidth), lpad)
+                  if (lpad > 0) memsetFloatZero(sliceWrite(dst, y*outputWidth), lpad)
                   generate_comment("may have segfault here")
-                  memcpyFloat(slice(dst, y*outputWidth+lpad), slice(src, iy*inputWidth-ix+lpad), outputWidth-rpad-lpad)
-                  if (rpad > 0) memsetFloatZero(slice(dst, y*outputWidth+outputWidth-rpad), rpad)
+                  memcpyFloat(sliceWrite(dst, y*outputWidth+lpad), sliceRead(src, iy*inputWidth-ix+lpad), outputWidth-rpad-lpad)
+                  if (rpad > 0) memsetFloatZero(sliceWrite(dst, y*outputWidth+outputWidth-rpad), rpad)
                 }
               } else {
                 for (x <- (0 until outputWidth): Rep[Range]) {
                   val ix = x * dW - padW + kw
                   if (ix < 0 || ix >= inputWidth)
-                    memsetFloatZero(slice(dst, y*outputWidth+x), 1)
+                    memsetFloatZero(sliceWrite(dst, y*outputWidth+x), 1)
                   else
-                    memcpyFloat(slice(dst, y*outputWidth+x), slice(src, iy*inputWidth+ix), 1)
+                    memcpyFloat(sliceWrite(dst, y*outputWidth+x), sliceRead(src, iy*inputWidth+ix), 1)
                 }
               }
             }
@@ -527,9 +534,9 @@ trait TensorDslCPU extends TensorDsl {
           for (y <- (0 until outputHeight): Rep[Range]) {
             val iy = y * dH + kh
             val ix = kw
-            if (dW == 1) memcpyFloat(slice(dst, y*outputWidth), slice(src, iy*inputWidth+ix), outputWidth)
+            if (dW == 1) memcpyFloat(sliceWrite(dst, y*outputWidth), sliceRead(src, iy*inputWidth+ix), outputWidth)
             else for (x <- (0 until outputWidth): Rep[Range])
-              memcpyFloat(slice(dst, y*outputWidth+x), slice(src, iy*inputWidth+ix+x*dW), 1)
+              memcpyFloat(sliceWrite(dst, y*outputWidth+x), sliceRead(src, iy*inputWidth+ix+x*dW), 1)
           }
         }
       }
@@ -606,6 +613,7 @@ trait TensorDslCPU extends TensorDsl {
         val dim1 = nOutputPlane
         val dim2 = outputWidth * outputHeight
         val dim3 = kW * kH * nInputPlane
+        generate_comment("conv bwd for param")
         unchecked[Unit](
           "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
           dim1, ",", dim3, ",", dim2, ",", scale, ",",
@@ -615,7 +623,7 @@ trait TensorDslCPU extends TensorDsl {
           case Some(gradBias) =>
             for (i <- (0 until nOutputPlane): Rep[Range]) {
               val sum = var_new(0.0f)
-              val data = slice(gradOutput_t, i * outputWidth * outputHeight)
+              val data = sliceRead(gradOutput_t, i * outputWidth * outputHeight)
               for (k <- (0 until outputWidth * outputHeight): Rep[Range]) {
                 sum += data(k)
               }
@@ -642,6 +650,7 @@ trait TensorDslCPU extends TensorDsl {
         val dim1 = kW * kH * nInputPlane
         val dim2 = nOutputPlane
         val dim3 = outputHeight * outputWidth
+        generate_comment("conv bwd for input")
         unchecked[Unit](
           "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
           dim1, ",", dim3, ",", dim2, ",", 1, ",",
@@ -655,7 +664,7 @@ trait TensorDslCPU extends TensorDsl {
       for (nip <- (0 until nInputPlane): Rep[Range]) {
         for (kh <- (0 until kH): Rep[Range]) {
           for (kw <- (0 until kW): Rep[Range]) {
-            val src = slice(finput, nip*kH*kW*outputHeight*outputWidth + kh*kW*outputHeight*outputWidth + kw*outputHeight*outputWidth)
+            val src = sliceRead(finput, nip*kH*kW*outputHeight*outputWidth + kh*kW*outputHeight*outputWidth + kw*outputHeight*outputWidth)
             val dst = slice(input, nip*inputHeight*inputWidth)
             if (padW > 0 || padH > 0) {
               for (y <- (0 until outputHeight): Rep[Range]) {
@@ -666,12 +675,17 @@ trait TensorDslCPU extends TensorDsl {
                     val lpad: Rep[Int] = __ifThenElse((padW-kw > 0), padW-kw, 0)
                     val rpad: Rep[Int] = __ifThenElse((padW-(kW-kw-1) > 0), padW-(kW-kw-1), 0)
                     val dst_slice = slice(dst, iy*inputWidth+ix+lpad)
-                    val src_slice = slice(src, y*outputWidth+lpad)
-                    for (i <- 0 until (outputWidth - lpad - rpad)) dst_slice(i) += src_slice(i)
+                    val src_slice = sliceRead(src, y*outputWidth+lpad)
+                    memAccumFloat(dst_slice, src_slice, (outputWidth - lpad - rpad))
+                    // for (i <- 0 until (outputWidth - lpad - rpad))
+                    //   dst_slice(i) += src_slice(i)
                   } else {
                     for (x <- (0 until outputWidth): Rep[Range]) {
                       val ix = x*dW - padW + kw
-                      __ifThenElse ((ix < 0 || ix >= inputWidth), (), dst(iy*inputWidth+ix) += src(y*outputWidth+x))
+                      __ifThenElse ((ix < 0 || ix >= inputWidth), (),
+                        // dst(iy*inputWidth+ix) += src(y*outputWidth+x)
+                        memAccumFloat(dst, iy*inputWidth+ix, src, y*outputWidth+x)
+                      )
                     }
                   }
                   ()
@@ -683,11 +697,16 @@ trait TensorDslCPU extends TensorDsl {
                 val ix = kw
                 if (dW == 1) {
                   val dst_slice = slice(dst, iy*inputWidth+ix)
-                  val src_slice = slice(src, y*outputWidth)
-                  for (i <- (0 until outputWidth): Rep[Range]) dst_slice(i) += src_slice(i)
+                  val src_slice = sliceRead(src, y*outputWidth)
+                  memAccumFloat(dst_slice, src_slice, outputWidth)
+                  // for (i <- (0 until outputWidth): Rep[Range]) {
+                  //   dst_slice(i) += src_slice(i)
+                  // }
                 } else {
+                  memAccumFloat(dst, src, outputWidth)
                   for (x <- (0 until outputWidth): Rep[Range]) {
-                    dst(iy*inputWidth+ix+x*dW) += src(y*outputWidth+x)
+                    memAccumFloat(dst, iy*inputWidth+ix+x*dW, src, y*outputWidth+x)
+                    // dst(iy*inputWidth+ix+x*dW) += src(y*outputWidth+x)
                   }
                 }
               }
