@@ -1511,14 +1511,6 @@ trait TensorDsl extends Dsl with Diff {
       bias, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights, residuals)
     }
 
-    // TODO - remove this, just for testing
-    // @virtualize
-    // def multiheadAttentionForwardTest(key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], dropoutRate: Float = 0.0f, smScaler: Float = 1.0f) = {
-    //   val (y, devWkSpace, sizeWkSpace, devReserve, sizeReserve) = backend.multiheadAttention(this, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, dropoutRate, smScaler)
-    //   // printf("%f\n", y.data.toCPU(10))
-    //   printf("%f\n", y.toCPU().data(0))
-    // }
-
     def print(msg: String = "", derivative: Boolean = false): Unit = {
       this.x.print(msg)
       if (derivative) {
