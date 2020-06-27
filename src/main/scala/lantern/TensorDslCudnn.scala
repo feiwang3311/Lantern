@@ -255,7 +255,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
       val bias_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
       val out_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, resShape)
-      cudnn_call(cudnnAddTensor(khandle, scaled, bias_desc, bias.data, one, out_desc, res.data))
+      cudnnCall(cudnnAddTensor(cudnnHandle, scaled, bias_desc, bias.data, one, out_desc, res.data))
 
       // unchecked[Unit](
       //   Seq("""
@@ -305,14 +305,14 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
       var returned_algo_count = 0
       val perfResults = NewStackArray[CudnnConvolutionFwdAlgoPerfT](8)
-      cudnn_call(cudnnGetConvolutionForwardAlgorithm_v7(khandle, in_desc, filt_desc, conv_desc, out_desc, 8,
+      cudnnCall(cudnnGetConvolutionForwardAlgorithm_v7(cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, 8,
         returned_algo_count, perfResults))
       val algo = perfResults(0).algo
 
       var wsSize = SizeT(0)
-      cudnn_call(cudnnGetConvolutionForwardWorkspaceSize(khandle, in_desc, filt_desc, conv_desc, out_desc, algo, wsSize))
+      cudnnCall(cudnnGetConvolutionForwardWorkspaceSize(cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, algo, wsSize))
       val wsArray = gpuArenaMalloc[Float](wsSize)
-      cudnn_call(cudnnConvolutionForward_a(khandle, one, in_desc, input.data, filt_desc, filter.data,
+      cudnnCall(cudnnConvolutionForward_a(cudnnHandle, one, in_desc, input.data, filt_desc, filter.data,
         conv_desc, algo, wsArray, wsSize, zero, out_desc, res.data))
       gpuArenaFree(wsSize)
 
@@ -482,7 +482,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
       // var returned_algo_count_bwd = 0
       // val perfResultsBwd = StackArray[CudnnConvolutionBwdDataAlgoPerfT](6)
-      // cudnn_call(cudnnGetConvolutionBackwardDataAlgorithm_v7(khandle, ???))
+      // cudnnCall(cudnnGetConvolutionBackwardDataAlgorithm_v7(cudnnHandle, ???))
 
 
       if (false)

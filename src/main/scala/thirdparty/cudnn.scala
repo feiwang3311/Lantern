@@ -79,93 +79,78 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   def kconvolution = cmacro[CudnnConvolutionMode]("CUDNN_CONVOLUTION")
   def kcross_correlation = cmacro[CudnnConvolutionMode]("CUDNN_CROSS_CORRELATION")
 
+  abstract class CudnnHandleT
+  lazy val cudnnHandle = newStruct[CudnnHandleT]
+
   // cudnnStatus_t and CUDNN_CALL
   abstract class CudnnStatusT
-  def cudnn_call(status: Rep[CudnnStatusT]): Rep[Unit] = {
-    Wrap[Unit](Adapter.g.reflectWrite("cudnn-call", Unwrap(status))(Adapter.CTRL)) // ??? need read key?
-  }
-
-  // cudnnHandle_t struct
-  abstract class CudnnHandleT
-  def getCudnnHandleT = newStruct[CudnnHandleT]
-  def cudnnCreate(handle: Rep[CudnnHandleT]): Rep[CudnnStatusT] = {
-    Wrap[CudnnStatusT](Adapter.g.reflectWrite("cudnnCreate-f", Unwrap(handle))(Unwrap(handle)))
-  }
-  def cudnnDestroy(handle: Rep[CudnnHandleT]): Rep[CudnnStatusT] = {
-    Wrap[CudnnStatusT](Adapter.g.reflectWrite("cudnnDestroy-f", Unwrap(handle))(Unwrap(handle)))
-  }
-  // macros for working with hard coded cudnnHandle
-  def khandle = cmacro[CudnnHandleT]("cudnnHandle")
-
+  def cudnnCreate(handle: Rep[CudnnHandleT]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnCreate", Unwrap(handle))(Seq[Int](), Seq(0), Set(0))
+  def cudnnDestroy(handle: Rep[CudnnHandleT]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnDestroy", Unwrap(handle))(Seq[Int](), Seq(0), Set[Int]())
+  def cudnnCall(status: Rep[CudnnStatusT]): Rep[Unit] =
+    libFunction[Unit]("CUDNN_CALL", Unwrap(status))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)
 
   // cudnnTensorDescriptor_t struct
   abstract class CudnnTensorDescriptorT
   def getCudnnTensorDescriptorT = newStruct[CudnnTensorDescriptorT]
-  def cudnnCreateTensorDescriptor(desc: Rep[CudnnTensorDescriptorT]): Rep[CudnnStatusT] = {
-    Wrap[CudnnStatusT](Adapter.g.reflectWrite("cudnnCreateTensorDescriptor-f", Unwrap(desc))(Unwrap(desc)))
-  }
+  def cudnnCreateTensorDescriptor(desc: Rep[CudnnTensorDescriptorT]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnCreateTensorDescriptor", Unwrap(desc))(Seq[Int](), Seq(0), Set(0))
   def cudnnSetTensor4dDescriptor(desc: Rep[CudnnTensorDescriptorT], layout: Rep[TensorFormat], dtype: Rep[CuDNNDataType], n: Rep[Int],
-    h: Rep[Int], c: Rep[Int], w: Rep[Int]): Rep[CudnnStatusT] = {
-    Wrap[CudnnStatusT](Adapter.g.reflectEffect("cudnnSetTensor4dDescriptor-f", Unwrap(desc), Unwrap(layout), Unwrap(dtype),
-      Unwrap(n), Unwrap(h), Unwrap(c), Unwrap(w))(Unwrap(desc))(Unwrap(desc)))
-  }
+      h: Rep[Int], c: Rep[Int], w: Rep[Int]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnSetTensor4dDescriptor", Unwrap(desc), Unwrap(layout), Unwrap(dtype),
+      Unwrap(n), Unwrap(h), Unwrap(c), Unwrap(w))(Seq(0), Seq(0), Set[Int]())
   def cudnnSetTensorNdDescriptor(desc: Rep[CudnnTensorDescriptorT], dtype: Rep[CuDNNDataType],  nbDims: Rep[Int],
-    dimA: Rep[Array[Int]], strideA: Rep[Array[Int]]): Rep[CudnnStatusT] = {
-    Wrap[CudnnStatusT](Adapter.g.reflectEffect("cudnnSetTensorNdDescriptor-f",
-      Unwrap(desc), Unwrap(dtype), Unwrap(nbDims), Unwrap(dimA), Unwrap(strideA))(Unwrap(desc))(Unwrap(desc)))
-  }
+      dimA: Rep[Array[Int]], strideA: Rep[Array[Int]]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnSetTensorNdDescriptor", Unwrap(desc), Unwrap(dtype), Unwrap(nbDims),
+      Unwrap(dimA), Unwrap(strideA))(Seq(0), Seq(0), Set[Int]())
 
   def cudnnGetTensor4dDescriptor(layout: Rep[TensorFormat], dtype: Rep[CuDNNDataType], shape: Seq[Rep[Int]]) = {
     val desc = getCudnnTensorDescriptorT
-    cudnn_call(cudnnCreateTensorDescriptor(desc))
-    cudnn_call(cudnnSetTensor4dDescriptor(desc, layout, dtype, shape(0), shape(1), shape(2), shape(3)))
+    cudnnCall(cudnnCreateTensorDescriptor(desc))
+    cudnnCall(cudnnSetTensor4dDescriptor(desc, layout, dtype, shape(0), shape(1), shape(2), shape(3)))
     desc
   }
 
   // cudnnFilterDescriptor_t struct
   abstract class CudnnFilterDescriptorT
   def getCudnnFilterDescriptorT = newStruct[CudnnFilterDescriptorT]
-  def cudnnCreateFilterDescriptor(desc: Rep[CudnnFilterDescriptorT]): Rep[CudnnStatusT] = {
-    Wrap[CudnnStatusT](Adapter.g.reflectWrite("cudnnCreateFilterDescriptor-f", Unwrap(desc))(Unwrap(desc)))
-  }
+  def cudnnCreateFilterDescriptor(desc: Rep[CudnnFilterDescriptorT]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnCreateFilterDescriptor", Unwrap(desc))(Seq[Int](), Seq(0), Set(0))
   def cudnnSetFilter4dDescriptor(desc: Rep[CudnnFilterDescriptorT], dtype: Rep[CuDNNDataType], layout: Rep[TensorFormat], n: Rep[Int],
-    h: Rep[Int], c: Rep[Int], w: Rep[Int]): Rep[CudnnStatusT] = {
-    Wrap[CudnnStatusT](Adapter.g.reflectEffect("cudnnSetFilter4dDescriptor-f", Unwrap(desc), Unwrap(dtype), Unwrap(layout),
-      Unwrap(n), Unwrap(h), Unwrap(c), Unwrap(w))(Unwrap(desc))(Unwrap(desc)))
-  }
+      h: Rep[Int], c: Rep[Int], w: Rep[Int]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnSetFilter4dDescriptor", Unwrap(desc), Unwrap(dtype), Unwrap(layout),
+      Unwrap(n), Unwrap(h), Unwrap(c), Unwrap(w))(Seq(0), Seq(0), Set[Int]())
 
   def cudnnGetFilter4dDescriptor(layout: Rep[TensorFormat], dtype: Rep[CuDNNDataType], shape: Seq[Rep[Int]]) = {
     val desc = getCudnnFilterDescriptorT
-    cudnn_call(cudnnCreateFilterDescriptor(desc))
-    cudnn_call(cudnnSetFilter4dDescriptor(desc, dtype, layout, shape(0), shape(1), shape(2), shape(3)))
+    cudnnCall(cudnnCreateFilterDescriptor(desc))
+    cudnnCall(cudnnSetFilter4dDescriptor(desc, dtype, layout, shape(0), shape(1), shape(2), shape(3)))
     desc
   }
 
   // cudnnConvolutionDescriptor_t struct
   abstract class CudnnConvolutionDescriptorT
   def getCudnnConvolutionDescriptorT = newStruct[CudnnConvolutionDescriptorT]
-  def cudnnCreateConvolutionDescriptor(desc: Rep[CudnnConvolutionDescriptorT]): Rep[CudnnStatusT] = {
-    Wrap[CudnnStatusT](Adapter.g.reflectWrite("cudnnCreateConvolutionDescriptor-f", Unwrap(desc))(Unwrap(desc)))
-  }
+  def cudnnCreateConvolutionDescriptor(desc: Rep[CudnnConvolutionDescriptorT]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnCreateConvolutionDescriptor", Unwrap(desc))(Seq[Int](), Seq(0), Set(0))
   def cudnnSetConvolution2dDescriptor(desc: Rep[CudnnConvolutionDescriptorT], padding1: Rep[Int], padding2: Rep[Int],
-    strides1: Rep[Int], strides2: Rep[Int], dilation1: Rep[Int], dilation2: Rep[Int], conv_mode: Rep[CudnnConvolutionMode],
-    dtype: Rep[CuDNNDataType]) = {
-      Wrap[CudnnStatusT](Adapter.g.reflectEffect("cudnnSetConvolution2dDescriptor-f", Unwrap(desc), Unwrap(padding1),
-        Unwrap(padding2), Unwrap(strides1), Unwrap(strides2), Unwrap(dilation1), Unwrap(dilation2), Unwrap(conv_mode),
-        Unwrap(dtype))(Unwrap(desc))(Unwrap(desc)))
-  }
-  def cudnnSetConvolutionMathType(desc: Rep[CudnnConvolutionDescriptorT], mathType: Rep[MathType]) = {
-    Wrap[CudnnStatusT](Adapter.g.reflectWrite("cudnnSetConvolutionMathType-f", Unwrap(desc), Unwrap(mathType))(Unwrap(desc)))
-  }
+      strides1: Rep[Int], strides2: Rep[Int], dilation1: Rep[Int], dilation2: Rep[Int], conv_mode: Rep[CudnnConvolutionMode],
+      dtype: Rep[CuDNNDataType]) =
+    libFunction[CudnnStatusT]("cudnnSetConvolution2dDescriptor", Unwrap(desc), Unwrap(padding1),
+      Unwrap(padding2), Unwrap(strides1), Unwrap(strides2), Unwrap(dilation1), Unwrap(dilation2), Unwrap(conv_mode),
+      Unwrap(dtype))(Seq(0), Seq(0), Set[Int]())
+  def cudnnSetConvolutionMathType(desc: Rep[CudnnConvolutionDescriptorT], mathType: Rep[MathType]) =
+    libFunction[CudnnStatusT]("cudnnSetConvolutionMathType", Unwrap(desc), Unwrap(mathType))(Seq(0), Seq(0), Set[Int]())
 
   def cudnnGetConvolution2dDescriptor(paddings: (Int, Int), strides: (Int, Int), dilations: (Int, Int),
     convMode: Rep[CudnnConvolutionMode], dtype: Rep[CuDNNDataType], mathType: Option[Rep[MathType]]) = {
       val desc = getCudnnConvolutionDescriptorT
-      cudnn_call(cudnnCreateConvolutionDescriptor(desc))
-      cudnn_call(cudnnSetConvolution2dDescriptor(desc, paddings._1, paddings._2, strides._1, strides._2, dilations._1, dilations._2,
+      cudnnCall(cudnnCreateConvolutionDescriptor(desc))
+      cudnnCall(cudnnSetConvolution2dDescriptor(desc, paddings._1, paddings._2, strides._1, strides._2, dilations._1, dilations._2,
         convMode, dtype))
       mathType match {
-        case Some(mt: Rep[MathType]) => cudnn_call(cudnnSetConvolutionMathType(desc, mt))
+        case Some(mt: Rep[MathType]) => cudnnCall(cudnnSetConvolutionMathType(desc, mt))
         case _ => ()
       }
       desc
@@ -191,11 +176,11 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   }
   def getCudnnConvolutionBwdDataAlgoPerfT = newStruct[CudnnConvolutionBwdDataAlgoPerfT]
   def cudnnGetConvolutionBackwardDataAlgorithm_v7(handle: Rep[CudnnHandleT], wDesc: Rep[CudnnFilterDescriptorT],
-    yDesc: Rep[CudnnTensorDescriptorT], convDesc: Rep[CudnnConvolutionDescriptorT], xDesc: Rep[CudnnTensorDescriptorT],
-    requestedAlgoCount: Rep[Int], returnedAlgoCountBwd: Var[Int], perfResultsBwd: Rep[Array[CudnnConvolutionBwdDataAlgoPerfT]]) = {
-      libFunction[CudnnStatusT]("cudnnGetConvolutionBackwardDataAlgorithm_v7", Unwrap(handle), Unwrap(wDesc), Unwrap(yDesc),
-        Unwrap(convDesc), Unwrap(xDesc), Unwrap(requestedAlgoCount), UnwrapV(returnedAlgoCountBwd), Unwrap(perfResultsBwd))(Seq[Int](),
-        Seq(6, 7), Set(6))
+      yDesc: Rep[CudnnTensorDescriptorT], convDesc: Rep[CudnnConvolutionDescriptorT], xDesc: Rep[CudnnTensorDescriptorT],
+      requestedAlgoCount: Rep[Int], returnedAlgoCountBwd: Var[Int], perfResultsBwd: Rep[Array[CudnnConvolutionBwdDataAlgoPerfT]]) = {
+    libFunction[CudnnStatusT]("cudnnGetConvolutionBackwardDataAlgorithm_v7", Unwrap(handle), Unwrap(wDesc), Unwrap(yDesc),
+      Unwrap(convDesc), Unwrap(xDesc), Unwrap(requestedAlgoCount), UnwrapV(returnedAlgoCountBwd), Unwrap(perfResultsBwd))(Seq[Int](),
+      Seq(6, 7), Set(6))
   }
 
   // cudnnConvolutionFwdAlgoPerf_t struct
@@ -205,43 +190,31 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   }
   def getCudnnConvolutionFwdAlgoPerfT = newStruct[CudnnConvolutionFwdAlgoPerfT]
   def cudnnGetConvolutionForwardAlgorithm_v7(handle: Rep[CudnnHandleT], xDesc: Rep[CudnnTensorDescriptorT], wDesc: Rep[CudnnFilterDescriptorT],
-    convDesc: Rep[CudnnConvolutionDescriptorT], yDesc: Rep[CudnnTensorDescriptorT], requestedAlgoCount: Rep[Int],
-    returnedAlgoCount: Var[Int], perfResult: Rep[Array[CudnnConvolutionFwdAlgoPerfT]]) = {
-      Wrap[CudnnStatusT](Adapter.g.reflectWrite("cudnnGetConvolutionForwardAlgorithm_v7-f", Unwrap(handle),
-      Unwrap(xDesc), Unwrap(wDesc), Unwrap(convDesc), Unwrap(yDesc), Unwrap(requestedAlgoCount), UnwrapV(returnedAlgoCount), Unwrap(perfResult))
-      (UnwrapV(returnedAlgoCount), Unwrap(perfResult)))
-  }
+      convDesc: Rep[CudnnConvolutionDescriptorT], yDesc: Rep[CudnnTensorDescriptorT], requestedAlgoCount: Rep[Int],
+      returnedAlgoCount: Var[Int], perfResult: Rep[Array[CudnnConvolutionFwdAlgoPerfT]]) =
+    libFunction[CudnnStatusT]("cudnnGetConvolutionForwardAlgorithm_v7", Unwrap(handle), Unwrap(xDesc),
+      Unwrap(wDesc), Unwrap(convDesc), Unwrap(yDesc), Unwrap(requestedAlgoCount), UnwrapV(returnedAlgoCount),
+      Unwrap(perfResult))(Seq(0), Seq(6, 7), Set(6))
 
   // conv work space
   def cudnnGetConvolutionForwardWorkspaceSize(handle: Rep[CudnnHandleT], xDesc: Rep[CudnnTensorDescriptorT], wDesc: Rep[CudnnFilterDescriptorT],
-    convDesc: Rep[CudnnConvolutionDescriptorT], yDesc: Rep[CudnnTensorDescriptorT], algo: Rep[CudnnConvolutionFwdAlgoT],
-    sizeInBytes: Var[SizeT]) = {
-      Wrap[CudnnStatusT](Adapter.g.reflectWrite("cudnnGetConvolutionForwardWorkspaceSize-f", Unwrap(handle), Unwrap(xDesc),
-      Unwrap(wDesc), Unwrap(convDesc), Unwrap(yDesc), Unwrap(algo), UnwrapV(sizeInBytes))(UnwrapV(sizeInBytes)))
-  }
+      convDesc: Rep[CudnnConvolutionDescriptorT], yDesc: Rep[CudnnTensorDescriptorT], algo: Rep[CudnnConvolutionFwdAlgoT],
+      sizeInBytes: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetConvolutionForwardWorkspaceSize", Unwrap(handle), Unwrap(xDesc),
+      Unwrap(wDesc), Unwrap(convDesc), Unwrap(yDesc), Unwrap(algo), UnwrapV(sizeInBytes))(Seq(0), Seq(6), Set(6))
+
   // conv forward
   def cudnnConvolutionForward_a[T:Manifest](handle: Rep[CudnnHandleT], alpha: Var[T], xDesc: Rep[CudnnTensorDescriptorT], input: Rep[Array[T]],
-    wDesc: Rep[CudnnFilterDescriptorT], filter: Rep[Array[T]], convDesc: Rep[CudnnConvolutionDescriptorT], algo: Rep[CudnnConvolutionFwdAlgoT],
-    wsArray: Rep[Array[T]], wsSize: Rep[SizeT], beta: Var[T], yDesc: Rep[CudnnTensorDescriptorT], output: Rep[Array[T]]) = {
-      libFunction[CudnnStatusT]("cudnnConvolutionForward", Unwrap(handle), UnwrapV(alpha), Unwrap(xDesc),
+      wDesc: Rep[CudnnFilterDescriptorT], filter: Rep[Array[T]], convDesc: Rep[CudnnConvolutionDescriptorT], algo: Rep[CudnnConvolutionFwdAlgoT],
+      wsArray: Rep[Array[T]], wsSize: Rep[SizeT], beta: Var[T], yDesc: Rep[CudnnTensorDescriptorT], output: Rep[Array[T]]) = {
+    libFunction[CudnnStatusT]("cudnnConvolutionForward", Unwrap(handle), UnwrapV(alpha), Unwrap(xDesc),
       Unwrap(input), Unwrap(wDesc), Unwrap(filter), Unwrap(convDesc), Unwrap(algo), Unwrap(wsArray), Unwrap(wsSize), UnwrapV(beta), Unwrap(yDesc),
       Unwrap(output))(Seq(1, 3, 5, 10, 12), Seq(9, 12), Set(1, 10))
-      // Wrap[CudnnStatusT](Adapter.g.reflectEffect("cudnnConvolutionForward-f", Unwrap(handle), UnwrapV(alpha), Unwrap(xDesc),
-      // Unwrap(input), Unwrap(wDesc), Unwrap(filter), Unwrap(convDesc), Unwrap(algo), Unwrap(wsArray), Unwrap(wsSize), UnwrapV(beta), Unwrap(yDesc),
-      // Unwrap(output))(Unwrap(input), Unwrap(filter), Unwrap(output), UnwrapV(alpha), UnwrapV(beta))(Unwrap(wsArray), Unwrap(output)))
   }
 
-  // cudnnAddTensor
-  // def cudnnAddTensor[T:Manifest](handle: Rep[CudnnHandleT], alpha: Rep[Array[T]], aDesc: Rep[CudnnTensorDescriptorT],
-  //   A: Rep[Array[T]], beta: Rep[Array[T]], cDesc: Rep[CudnnTensorDescriptorT], C: Rep[Array[T]]) = {
-  //     Wrap[CudnnStatusT](Adapter.g.reflectEffect("cudnnAddTensor-f", Unwrap(handle), Unwrap(alpha), Unwrap(aDesc),
-  //       Unwrap(A), Unwrap(beta), Unwrap(cDesc), Unwrap(C))(Unwrap(A), Unwrap(C), Unwrap(alpha), Unwrap(beta))(Unwrap(C)))
-  // }
-
   def cudnnAddTensor[T:Manifest](handle: Rep[CudnnHandleT], alpha: Var[T], aDesc: Rep[CudnnTensorDescriptorT],
-    A: Rep[Array[T]], beta: Var[T], cDesc: Rep[CudnnTensorDescriptorT], C: Rep[Array[T]]) = {
-      libFunction[CudnnStatusT]("cudnnAddTensor", Unwrap(handle), UnwrapV(alpha), Unwrap(aDesc), Unwrap(A),
-        UnwrapV(beta), Unwrap(cDesc), Unwrap(C))(Seq(1, 3, 4, 6), Seq(6), Set(1, 4))
-    }
-}
+      A: Rep[Array[T]], beta: Var[T], cDesc: Rep[CudnnTensorDescriptorT], C: Rep[Array[T]]) =
+    libFunction[CudnnStatusT]("cudnnAddTensor", Unwrap(handle), UnwrapV(alpha), Unwrap(aDesc), Unwrap(A),
+      UnwrapV(beta), Unwrap(cDesc), Unwrap(C))(Seq(1, 3, 4, 6), Seq(6), Set(1, 4))
 
+}

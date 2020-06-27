@@ -38,12 +38,12 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   // lazy val here so that we only ever create one handle
   lazy val cublasHandle = newStruct[CublasHandleT]
 
-  abstract class cublasStatusT
+  abstract class CublasStatusT
   def cublasCreate(handle: Rep[CublasHandleT]) =
-    libFunction[cublasStatusT]("cublasCreate", Unwrap(handle))(Seq[Int](), Seq(0), Set(0))
+    libFunction[CublasStatusT]("cublasCreate", Unwrap(handle))(Seq[Int](), Seq(0), Set(0))
   def cublasDestroy(handle: Rep[CublasHandleT]) =
-    libFunction[cublasStatusT]("cublasDestroy", Unwrap(handle))(Seq[Int](), Seq(0), Set[Int]())
-  def cublasCall(status: Rep[cublasStatusT]) =
+    libFunction[CublasStatusT]("cublasDestroy", Unwrap(handle))(Seq[Int](), Seq(0), Set[Int]())
+  def cublasCall(status: Rep[CublasStatusT]) =
     libFunction[Unit]("CUBLAS_CALL", Unwrap(status))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)
 
   abstract class CublasOperationT
@@ -58,7 +58,7 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
    */
   def cublasSdot_(handle: Rep[CublasHandleT], n: Rep[Int], x: Rep[Array[Float]], incx: Rep[Int],
                   y: Rep[Array[Float]], incy: Rep[Int], result: Rep[Array[Float]]) =
-    libFunction[cublasStatusT]("cublasSdot",
+    libFunction[CublasStatusT]("cublasSdot",
       Unwrap(handle), Unwrap(n), Unwrap(x), Unwrap(incx), Unwrap(y), Unwrap(incy), Unwrap(result))(Seq(0, 2, 4), Seq(6), Set[Int]())
 
   /*
@@ -73,8 +73,8 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   */
   def cublasSgemv_(handle: Rep[CublasHandleT], trans: Rep[CublasOperationT], m: Rep[Int], n: Rep[Int], alpha: Var[Float],
                    A: Rep[Array[Float]], lda: Rep[Int], x: Rep[Array[Float]], incx: Rep[Int], beta: Var[Float],
-                   y: Rep[Array[Float]], incy: Rep[Int]): Rep[cublasStatusT] =
-    libFunction[cublasStatusT]("cublasSgemv",
+                   y: Rep[Array[Float]], incy: Rep[Int]): Rep[CublasStatusT] =
+    libFunction[CublasStatusT]("cublasSgemv",
       Unwrap(handle), Unwrap(trans), Unwrap(m), Unwrap(n), UnwrapV(alpha), Unwrap(A), Unwrap(lda), Unwrap(x), Unwrap(incx),
       UnwrapV(beta), Unwrap(y), Unwrap(incy))(Seq(0,5,7,10), Seq(10), Set(4, 9))
 
@@ -92,8 +92,8 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   def cublasSgeam_(handle: Rep[CublasHandleT], transa: Rep[CublasOperationT], transb: Rep[CublasOperationT],
                     m: Rep[Int], n: Rep[Int], alpha: Var[Float], A: Rep[Array[Float]], lda: Rep[Int],
                     beta: Var[Float], B: Rep[Array[Float]], ldb: Rep[Int],
-                    C: Rep[Array[Float]], ldc: Rep[Int]): Rep[cublasStatusT] =
-    libFunction[cublasStatusT]("cublasSgeam",
+                    C: Rep[Array[Float]], ldc: Rep[Int]): Rep[CublasStatusT] =
+    libFunction[CublasStatusT]("cublasSgeam",
       Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m), Unwrap(n), UnwrapV(alpha),
       Unwrap(A), Unwrap(lda), UnwrapV(beta), Unwrap(B), Unwrap(ldb), Unwrap(C), Unwrap(ldc))(Seq(0, 6, 9, 11), Seq(11), Set(5, 8))
 
@@ -110,7 +110,7 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   def cublasSgemm_(handle: Rep[CublasHandleT], transa: Rep[CublasOperationT], transb: Rep[CublasOperationT],
                    m: Rep[Int], n: Rep[Int], k: Rep[Int], alpha: Var[Float], A: Rep[Array[Float]], lda: Rep[Int],
                    B: Rep[Array[Float]], ldb: Rep[Int], beta: Var[Float], C: Rep[Array[Float]], ldc: Rep[Int]) =
-    libFunction[cublasStatusT]("cublasSgemm",
+    libFunction[CublasStatusT]("cublasSgemm",
       Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m), Unwrap(n), Unwrap(k), UnwrapV(alpha),
       Unwrap(A), Unwrap(lda), Unwrap(B), Unwrap(ldb), UnwrapV(beta), Unwrap(C), Unwrap(ldc))(Seq(0,7,9,12), Seq(12), Set(6, 11))
 
