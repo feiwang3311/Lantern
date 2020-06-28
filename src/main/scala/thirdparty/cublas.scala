@@ -27,9 +27,11 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
     def apply(x: Int) = new SizeT(x)
   }
   def gpuArenaMalloc[T:Manifest](size: Rep[SizeT]): Rep[Array[T]] = {
+    // libFunction[Array[T]]("myGpuMalloc", Unwrap(size))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)
     Wrap[Array[T]](Adapter.g.reflectWrite("myGpuMalloc-f", Unwrap(size))(Adapter.CTRL)) // FIXME(feiw) fix write effect to arena??
   }
   def gpuArenaFree(size: Rep[SizeT]): Rep[Unit] = {
+    // libFunction[Unit]("myGpuFree", Unwrap(size))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)
     Wrap[Unit](Adapter.g.reflectWrite("myGpuFree-f", Unwrap(size))(Adapter.CTRL)) // FIXME(feiw) fix write effect to arena ??
   }
 
@@ -345,6 +347,20 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
       Unwrap(in1Stride0), Unwrap(in1Stride1), Unwrap(in1Stride2), Unwrap(in1Stride3),
       Unwrap(in2Stride0), Unwrap(in2Stride1), Unwrap(in2Stride2), Unwrap(in2Stride3),
       Unwrap(outStride0), Unwrap(outStride1), Unwrap(outStride2), Unwrap(outStride3))(Seq(0, 1), Seq(2), Set[Int]())
+
+
+  // addScalarInArrayInPlace(float* in, float* add, float scale, int size)
+  def addScalarInArrayInPlace_(in: Rep[Array[Float]], add: Rep[Array[Float]], scale: Rep[Float], size: Rep[Int]) =
+    libFunction[Unit]("addScalarInArrayInPlace<<<28, 512>>>", Unwrap(in), Unwrap(add), Unwrap(scale), Unwrap(size))(Seq(0, 1), Seq(0, 1), Set[Int]())
+
+  // sum_grad(float* in, int inSize0, int inSize1, int inSize2, int inSize3, int nElement,
+  //                        float* out, int outStride0, int outStride1, int outStride2, int dim)
+  def sumGrad_(in: Rep[Array[Float]], inSize0: Rep[Int], inSize1: Rep[Int], inSize2: Rep[Int], inSize3: Rep[Int],
+      nElement: Rep[Int], out: Rep[Array[Float]], outStride0: Rep[Int], outStride1: Rep[Int], outStride2: Rep[Int], dim: Rep[Int])=
+    libFunction[Unit]("sum_grad<<<28, 512>>>", Unwrap(in), Unwrap(inSize0), Unwrap(inSize1), Unwrap(inSize2), Unwrap(inSize3),
+      Unwrap(nElement), Unwrap(out), Unwrap(outStride0), Unwrap(outStride1), Unwrap(outStride2),
+      Unwrap(dim))(Seq(0, 6), Seq(0, 6), Set[Int]())
+
 
 }
 

@@ -112,6 +112,15 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
     cudnnCall(cudnnSetTensor4dDescriptor(desc, layout, dtype, shape(0), shape(1), shape(2), shape(3)))
     desc
   }
+  def cudnnGetTensor3dDescriptor(dtype: Rep[CuDNNDataType], dim0: Rep[Int], dim1: Rep[Int], dim2: Rep[Int],
+      stride0: Rep[Int], stride1: Rep[Int], stride2: Rep[Int]) = {
+    val desc = getCudnnTensorDescriptorT
+    cudnnCall(cudnnCreateTensorDescriptor(desc))
+    val dims = StackArray(dim0, dim1, dim2)
+    val strides = StackArray(stride0, stride1, stride2)
+    cudnnCall(cudnnSetTensorNdDescriptor(desc, dtype, 3, dims, strides))
+    desc
+  }
 
   // cudnnFilterDescriptor_t struct
   abstract class CudnnFilterDescriptorT
@@ -152,8 +161,8 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       Unwrap(reduceTensorIndicesType))(Seq[Int](), Seq(0), Set[Int]())
   def cudnnGetReduceTensorDescriptorT(reduceTensorOp: Rep[ReduceTensorOp], reduceTensorCompType: Rep[CuDNNDataType]) = {
     val desc = getCudnnReduceTensorDescriptorT
-    cudnnCreateReduceTensorDescriptor(desc)
-    cudnnSetReduceTensorDescriptor(desc, reduceTensorOp, reduceTensorCompType, knot_prop, kreduceTensorNoIndices, k32bitIndices)
+    cudnnCall(cudnnCreateReduceTensorDescriptor(desc))
+    cudnnCall(cudnnSetReduceTensorDescriptor(desc, reduceTensorOp, reduceTensorCompType, knot_prop, kreduceTensorNoIndices, k32bitIndices))
     desc
   }
   def cudnnGetReductionWorkspaceSize(handle: Rep[CudnnHandleT], reduceDesc: Rep[CudnnReduceTensorDescriptorT],
@@ -166,7 +175,7 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       C: Rep[Array[Float]]) =
     libFunction("cudnnReduceTensor", Unwrap(handle), Unwrap(reduceDesc), Unwrap(indices), Unwrap(indicesSizeInBytes),
       Unwrap(workSpace), Unwrap(workspaceSizeInBytes), UnwrapV(alpha), Unwrap(aDesc), Unwrap(A), UnwrapV(beta),
-      Unwrap(cDesc), Unwrap(C))(Seq(0, 6, 8, 9), Seq(2, 4, 11), Set(6, 9))
+      Unwrap(cDesc), Unwrap(C))(Seq(0, 5, 6, 8, 9), Seq(2, 4, 11), Set(6, 9))
 
   // cudnnActivationDescriptor_t struct
   abstract class CudnnActivationDescriptorT
@@ -194,6 +203,26 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
     libFunction[CudnnStatusT]("cudnnActivationBackward", Unwrap(handle), Unwrap(activationDesc), UnwrapV(alpha),
       Unwrap(yDesc), Unwrap(y), Unwrap(dyDesc), Unwrap(dy), Unwrap(xDesc), Unwrap(x), UnwrapV(beta), Unwrap(dxDesc),
       Unwrap(dx))(Seq(0, 1, 2, 4, 6, 8), Seq(11), Set(2, 9))
+
+  // Softmax
+  abstract class CudnnSoftmaxAlgorithmT
+  def cudnnSoftmaxFast = cmacro[CudnnSoftmaxAlgorithmT]("CUDNN_SOFTMAX_FAST")
+  def cudnnSoftmaxAccurate = cmacro[CudnnSoftmaxAlgorithmT]("CUDNN_SOFTMAX_ACCURATE")
+  def cudnnSoftmaxLog = cmacro[CudnnSoftmaxAlgorithmT]("CUDNN_SOFTMAX_LOG")
+  abstract class CudnnSoftmaxMode
+  def cudnnSoftmaxModeInstance = cmacro[CudnnSoftmaxMode]("CUDNN_SOFTMAX_MODE_INSTANCE")
+  def cudnnSoftmaxModeChannel = cmacro[CudnnSoftmaxMode]("CUDNN_SOFTMAX_MODE_CHANNEL")
+  def cudnnSoftmaxForward_(handle: Rep[CudnnHandleT], algo: Rep[CudnnSoftmaxAlgorithmT], mode: Rep[CudnnSoftmaxMode],
+      alpha: Var[Float], xDesc: Rep[CudnnTensorDescriptorT], x: Rep[Array[Float]], beta: Var[Float], yDesc: Rep[CudnnTensorDescriptorT],
+      y: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnSoftmaxForward", Unwrap(handle), Unwrap(algo), Unwrap(mode), UnwrapV(alpha),
+      Unwrap(xDesc), Unwrap(x), UnwrapV(beta), Unwrap(yDesc), Unwrap(y))(Seq(0, 1, 2, 3, 5, 6), Seq(8), Set(3, 6))
+  def cudnnSoftmaxBackward_(handle: Rep[CudnnHandleT], algo: Rep[CudnnSoftmaxAlgorithmT], mode: Rep[CudnnSoftmaxMode],
+      alpha: Var[Float], yDesc: Rep[CudnnTensorDescriptorT], yData: Rep[Array[Float]], dyDesc: Rep[CudnnTensorDescriptorT],
+      dy: Rep[Array[Float]], beta: Var[Float], dxDesc: Rep[CudnnTensorDescriptorT], dx: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnSoftmaxBackward", Unwrap(handle), Unwrap(algo), Unwrap(mode),
+      UnwrapV(alpha), Unwrap(yDesc), Unwrap(yData), Unwrap(dyDesc), Unwrap(dy), UnwrapV(beta), Unwrap(dxDesc),
+      Unwrap(dx))(Seq(0, 3, 5, 7, 8), Seq(10), Set(3, 8))
 
   // cudnnConvolutionDescriptor_t struct
   abstract class CudnnConvolutionDescriptorT
@@ -282,5 +311,36 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       A: Rep[Array[T]], beta: Var[T], cDesc: Rep[CudnnTensorDescriptorT], C: Rep[Array[T]]) =
     libFunction[CudnnStatusT]("cudnnAddTensor", Unwrap(handle), UnwrapV(alpha), Unwrap(aDesc), Unwrap(A),
       UnwrapV(beta), Unwrap(cDesc), Unwrap(C))(Seq(1, 3, 4, 6), Seq(6), Set(1, 4))
+
+  // cudnnCTCLossDescriptor_t
+  abstract class CudnnCTCLossDescriptorT
+  def getCudnnCTCLossDescriptorT = newStruct[CudnnCTCLossDescriptorT]
+  def cudnnCreateCTCLossDescriptor(desc: Rep[CudnnCTCLossDescriptorT]) =
+    libFunction[CudnnStatusT]("cudnnCreateCTCLossDescriptor", Unwrap(desc))(Seq[Int](), Seq(0), Set(0))
+  def cudnnSetCTCLossDescriptor(desc: Rep[CudnnCTCLossDescriptorT], dtype: Rep[CuDNNDataType]) =
+    libFunction[CudnnStatusT]("cudnnSetCTCLossDescriptor", Unwrap(desc), Unwrap(dtype))(Seq(0), Seq(0), Set[Int]())
+  def cudnnGetCTCLossDescriptor(dtype: Rep[CuDNNDataType]) = {
+    val desc = getCudnnCTCLossDescriptorT
+    cudnnCall(cudnnCreateCTCLossDescriptor(desc))
+    cudnnCall(cudnnSetCTCLossDescriptor(desc, dtype))
+    desc
+  }
+  abstract class CudnnCTCLossAlgo
+  def ctcDeterm = cmacro[CudnnCTCLossAlgo]("CUDNN_CTC_LOSS_ALGO_DETERMINISTIC")
+  def ctcNonDeterm = cmacro[CudnnCTCLossAlgo]("CUDNN_CTC_LOSS_ALGO_NON_DETERMINISTIC")
+  def cudnnGetCTCLossWorkspaceSize(handle: Rep[CudnnHandleT], probsDesc: Rep[CudnnTensorDescriptorT], gradDesc: Rep[CudnnTensorDescriptorT],
+      labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]], inputLengths: Rep[Array[Int]], algo: Rep[CudnnCTCLossAlgo],
+      ctcLossDesc: Rep[CudnnCTCLossDescriptorT], sizeInBytes: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetCTCLossWorkspaceSize", Unwrap(handle), Unwrap(probsDesc), Unwrap(gradDesc),
+      Unwrap(labels), Unwrap(labelLengths), Unwrap(inputLengths), Unwrap(algo), Unwrap(ctcLossDesc),
+      UnwrapV(sizeInBytes))(Seq(0, 1, 2, 3, 4, 5, 6, 7), Seq(8), Set(8))
+  def cudnnCTCLoss_(handle: Rep[CudnnHandleT], probDesc: Rep[CudnnTensorDescriptorT], probs: Rep[Array[Float]],
+      hostLabels: Rep[Array[Int]], hostLabelLengths: Rep[Array[Int]],
+      hostInputLengths: Rep[Array[Int]], cost: Rep[Array[Float]], gradientDesc: Rep[CudnnTensorDescriptorT],
+      gradients: Rep[Array[Float]], algo: Rep[CudnnCTCLossAlgo], ctcLossDesc: Rep[CudnnCTCLossDescriptorT],
+      wsData: Rep[Array[Float]], wsSize: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnCTCLoss", Unwrap(handle), Unwrap(probDesc), Unwrap(probs), Unwrap(hostLabels),
+      Unwrap(hostLabelLengths), Unwrap(hostInputLengths), Unwrap(cost), Unwrap(gradientDesc), Unwrap(gradients),
+      Unwrap(algo), Unwrap(ctcLossDesc), Unwrap(wsData), Unwrap(wsSize))(Seq(0,1,2,3,4,5,7,9,10), Seq(6,8,10,11), Set[Int]())
 
 }

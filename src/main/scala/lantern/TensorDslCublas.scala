@@ -1052,10 +1052,20 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
 
     override def ctcLoss(prob: TensorR, inputLengths: Rep[Array[Int]], labels: Rep[Array[Int]], labelLengths: Rep[Array[Int]]): Tensor = ???
 
-    override def sum(x: Tensor): Tensor = ???
-    override def sum_grad(input: TensorR, res: TensorR): Unit = ???
-    override def mean(x: Tensor): Tensor = ???
-    override def mean_grad(input: TensorR, res: TensorR): Unit = ???
+    override def sum(x: Tensor): Tensor = ??? // implemented using cudnn functions
+    override def sum_grad(input: TensorR, res: TensorR): Unit = {
+      generate_comment("backprop for sum op")
+      assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
+      addScalarInArrayInPlace_(input.d.data, res.d.data, 1.0f, input.d.scalarCount)
+      // unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f, ", ", input.d.scalarCount, ")")
+    }
+    override def mean(x: Tensor): Tensor = ??? // implemented using cudnn functions
+    override def mean_grad(input: TensorR, res: TensorR): Unit = {
+      generate_comment("backprop for mean op")
+      assert(res.d.shape.dims == Seq(unit(1)), s"result of mean reduce should be scalar, got ${res.d.shape}")
+      addScalarInArrayInPlace_(input.d.data, res.d.data, 1.0f/input.x.scalarCount, input.d.scalarCount)
+      // unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f/input.x.scalarCount, ", ", input.d.scalarCount, ")")
+    }
     override def sum(x: Tensor, dim: Int): Tensor = ???
     override def sum_grad(input: TensorR, res: TensorR, dim: Int): Unit = ???
 

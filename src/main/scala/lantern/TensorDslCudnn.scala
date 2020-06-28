@@ -1245,29 +1245,40 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       cudnnActivationBackward(input, res, Activation.Sigmoid)
     }
 
+    @virtualize
     def cudnnSoftmaxForward(x: Tensor, mode: SoftmaxMode.Value): Tensor = {
       assert(x.rank == 4, s"Softmax kernel only takes tensors of rank 4, and reduce on dim 1. Reshape your tensor accordingly before using this function. Got ${x.shape}")
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
       val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t x_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), """));
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnSoftmaxForward(\n" +
-          s"    cudnnHandle, ${mode.toString}, CUDNN_SOFTMAX_MODE_CHANNEL,\n" +
-          "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
-          "}"): _*
-      )
+      val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, x.shape)
+      cudnnCall(cudnnSoftmaxForward_(cudnnHandle, mode match {
+        case SoftmaxMode.Fast => cudnnSoftmaxFast
+        case SoftmaxMode.Accurate => cudnnSoftmaxAccurate
+        case SoftmaxMode.Log => cudnnSoftmaxLog
+      }, cudnnSoftmaxModeChannel, one, xDesc, x.data,
+        zero, xDesc, res.data))
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t x_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), """));
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnSoftmaxForward(\n" +
+      //     s"    cudnnHandle, ${mode.toString}, CUDNN_SOFTMAX_MODE_CHANNEL,\n" +
+      //     "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
+      //     "}"): _*
+      // )
       res
     }
 
+    @virtualize
     def cudnnSoftmaxBackward(input: TensorR, res: TensorR, mode: SoftmaxMode.Value): Unit = {
       assert(input.x.rank == 4, s"SoftmaxBackward kernel only takes tensors of rank 4, and reduce on dim 1. Reshape your tensor accordingly before using this function. Got ${input.x.shape}")
       // NOTE: shape assertions are relaxed.
@@ -1275,23 +1286,30 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       // The shape of the input forward value is used in the generated code.
       Tensor.assertShapeEqual(input.x.shape, res.x.shape)
       Tensor.assertShapeEqual(input.d.shape, res.d.shape)
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t x_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnSoftmaxBackward(\n" +
-          s"    cudnnHandle, ${mode.toString}, CUDNN_SOFTMAX_MODE_CHANNEL,\n" +
-          "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ",\n" +
-          "    ", one, ", x_desc, ", input.d.data, "));\n" +
-          "}"): _*
-      )
+      // val one = NewArray[Float](1); one(0) = 1
+      var one = 1.0f
+      val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.x.shape)
+      cudnnCall(cudnnSoftmaxBackward_(cudnnHandle, mode match {
+        case SoftmaxMode.Fast => cudnnSoftmaxFast
+        case SoftmaxMode.Accurate => cudnnSoftmaxAccurate
+        case SoftmaxMode.Log => cudnnSoftmaxLog
+      }, cudnnSoftmaxModeChannel, one, xDesc, res.x.data, xDesc, res.d.data, one, xDesc, input.d.data))
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t x_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnSoftmaxBackward(\n" +
+      //     s"    cudnnHandle, ${mode.toString}, CUDNN_SOFTMAX_MODE_CHANNEL,\n" +
+      //     "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ",\n" +
+      //     "    ", one, ", x_desc, ", input.d.data, "));\n" +
+      //     "}"): _*
+      // )
     }
 
     def softmaxHelper(x: Tensor, dim: Int, mode: SoftmaxMode.Value): Tensor = {
@@ -1426,11 +1444,12 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       }
     }
 
-    override def sum_grad(input: TensorR, res: TensorR): Unit = {
-      generate_comment("backprop for sum op")
-      assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
-      unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f, ", ", input.d.scalarCount, ")")
-    }
+    // override def sum_grad(input: TensorR, res: TensorR): Unit = {
+    //   generate_comment("backprop for sum op")
+    //   assert(res.d.shape.dims == Seq(unit(1)), s"result of sum reduce should be scalar, got ${res.d.shape}")
+    //   addScalarInArrayInPlace_(input.d.data, res.d.data, 1.0f, input.d.scalarCount)
+    //   // unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f, ", ", input.d.scalarCount, ")")
+    // }
 
     override def mean(x: Tensor): Tensor = {
       val xx = x.resize(x.shape.padTo(4, unit(1)): _*)
@@ -1438,42 +1457,43 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       res.resize(1)
     }
 
-    override def mean_grad(input: TensorR, res: TensorR): Unit = {
-      generate_comment("backprop for mean op")
-      assert(res.d.shape.dims == Seq(unit(1)), s"result of mean reduce should be scalar, got ${res.d.shape}")
-      unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f/input.x.scalarCount, ", ", input.d.scalarCount, ")")
-    }
+    // override def mean_grad(input: TensorR, res: TensorR): Unit = {
+    //   generate_comment("backprop for mean op")
+    //   assert(res.d.shape.dims == Seq(unit(1)), s"result of mean reduce should be scalar, got ${res.d.shape}")
+    //   addScalarInArrayInPlace_(input.d.data, res.d.data, 1.0f/input.x.scalarCount, input.d.scalarCount)
+    //   // unchecked[Unit](s"addScalarInArrayInPlace<<<28, 512>>>(", input.d.data, ", ", res.d.data, ", ", 1.0f/input.x.scalarCount, ", ", input.d.scalarCount, ")")
+    // }
 
     @virtualize
     override def sum(x: Tensor, dim: Int): Tensor = {
       assert(dim >= 0 && dim < x.rank, s"dim should be in range, got ${dim} from ${x.shape}")
       val resShape: Seq[Rep[Int]] = x.shape.take(dim) ++ x.shape.drop(dim+1)
-      val resData = if (x.shape(dim) < 5) {
-        val resData = mallocArray[Float](resShape.scalarCount)
-        val inputStride = x.shape.strides.padTo(4, 1)
-        val outputStride = resShape.strides.padTo(3, 1)
-        generate_comment("optimization for dimension sum if size is small")
-        unchecked[Unit](
-          "sum_optimization<<<28, 512>>>(", x.data, ", ", inputStride(0), ", ", inputStride(1), ", ", inputStride(2), ", ", inputStride(3), ", ", resData, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ", ", resShape.product1, ", ", x.shape(dim), ");\n")
-        resData
-      } else {
-        val xx = x.resizeNoCheck(x.shape.padTo(4, unit(1)): _*)
-        val indices = dim +: ((x.rank until xx.rank): Range).toSeq
-        val ret = cudnnReduceTensor(xx, ReductionOp.Add, indices)
-        ret.data
-      }
-      new Tensor(resData, resShape)
+      // val resData = if (x.shape(dim) < 5) {
+      //   val resData = mallocArray[Float](resShape.scalarCount)
+      //   val inputStride = x.shape.strides.padTo(4, 1)
+      //   val outputStride = resShape.strides.padTo(3, 1)
+      //   generate_comment("optimization for dimension sum if size is small")
+      //   unchecked[Unit](
+      //     "sum_optimization<<<28, 512>>>(", x.data, ", ", inputStride(0), ", ", inputStride(1), ", ", inputStride(2), ", ", inputStride(3), ", ", resData, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ", ", resShape.product1, ", ", x.shape(dim), ");\n")
+      //   resData
+      // } else {
+      val xx = x.resizeNoCheck(x.shape.padTo(4, unit(1)): _*)
+      val indices = dim +: ((x.rank until xx.rank): Range).toSeq
+      val ret = cudnnReduceTensor(xx, ReductionOp.Add, indices)
+      // }
+      new Tensor(ret.data, resShape)
     }
 
     override def sum_grad(input: TensorR, output: TensorR, dim: Int): Unit = {
       // TODO: (Fei Wang) there are limitations in cudnnAddBiasTensor (dim 0 must be 1). So we need user-defined kernel for this!!
       assert(input.x.rank == output.x.rank + 1, s"input should be 1 rank higher than the output, got ${input.x.shape}, ${output.x.shape}")
-      val inputShape = input.x.shape.padTo(4, 1)
-      val outputStride = output.x.shape.strides.padTo(3, 1)
-      generate_comment("backprop for sum on dim op")
-      unchecked[Unit](
-        "sum_grad<<<28, 512>>>(", input.d.data, ", ", inputShape(0), ", ", inputShape(1), ", ", inputShape(2), ", ", inputShape(3), ", ", input.x.scalarCount, ", ",
-        output.d.data, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ");\n")
+      val inputShape = input.x.shape.padTo(4, unit(1))
+      val outputStride = output.x.shape.strides.padTo(3, unit(1))
+      sumGrad_(input.d.data, inputShape(0), inputShape(1), inputShape(2), inputShape(3), input.x.scalarCount,
+        output.d.data, outputStride(0), outputStride(1), outputStride(2), dim)
+      // unchecked[Unit](
+      //   "sum_grad<<<28, 512>>>(", input.d.data, ", ", inputShape(0), ", ", inputShape(1), ", ", inputShape(2), ", ", inputShape(3), ", ", input.x.scalarCount, ", ",
+      //   output.d.data, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ");\n")
     }
 
     def cudnnRNNForwardHelper(mode: RnnMode,
@@ -1733,47 +1753,55 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnCTCLoss
+    @virtualize
     def cudnnCTCLoss(probs: TensorR, labels: Rep[Array[Int]], inputLengths: Rep[Array[Int]], targetLengths: Rep[Array[Int]]): Tensor = {
       assert(probs.x.rank == 3, "Probability tensor should have rank 3: [inputLength, batchSize, alphabetSize]")
-      val inputLength = probs.x.shape(0)
-      val batchSize = probs.x.shape(1)
-      val alphabetSize = probs.x.shape(2)
-      // Note: `inputLengths` and `targetLengths` should have length equal to `batchSize`.
-      // Note: `cudnnGetCTCLossWorkspaceSize` requires that the batchSize (i.e. size of targetLengths) is NO greater than 256.
-      assertC(batchSize <= 256, "'cudnnGetCTCLossWorkspaceSize' requires batch size less than 256, got %d\\n", batchSize)
+      assertC(probs.x.shape(1) <= 256, "'cudnnGetCTCLossWorkspaceSize' requires batch size less than 256, got %d\\n", probs.x.shape(1))
 
-      val costs = Tensor(mallocArray[Float](batchSize), batchSize)
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t probs_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&probs_desc));
-          |int probs_dims[] = {""".stripMargin, inputLength, ", ", batchSize, ", ", alphabetSize, s"""};
-          |int probs_strides[] = {probs_dims[1] * probs_dims[2], probs_dims[2], 1};
-          |CUDNN_CALL(cudnnSetTensorNdDescriptor(
-          |    probs_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, probs_dims, probs_strides));
-          |
-          |cudnnTensorDescriptor_t grad_desc = probs_desc;
-          |
-          |cudnnCTCLossDescriptor_t ctc_desc;
-          |CUDNN_CALL(cudnnCreateCTCLossDescriptor(&ctc_desc));
-          |CUDNN_CALL(cudnnSetCTCLossDescriptor(ctc_desc, CUDNN_DATA_FLOAT));
-          |""".stripMargin) ++
-        Seq(
-          "size_t wsSize;\n" +
-          "CUDNN_CALL(cudnnGetCTCLossWorkspaceSize(\n" +
-          "    cudnnHandle, probs_desc, grad_desc, ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
-          "    CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, &wsSize));\n" +
-          "void *ws = myGpuMalloc(wsSize);\n\n" +
-          "CUDNN_CALL(cudnnCTCLoss(\n" +
-          "    cudnnHandle, probs_desc, ", probs.x.data, ", ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
-          "    ", costs.data, ", grad_desc, ", probs.d.data, ", CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, ws, wsSize));\n" +
-          "}"): _*)
+      val costs = Tensor(mallocArray[Float](probs.x.shape(1)), probs.x.shape(1))
+      val probDesc = cudnnGetTensor3dDescriptor(kfloat, probs.x.shape(0), probs.x.shape(1), probs.x.shape(2),
+        probs.x.shape.strides(0), probs.x.shape.strides(1), probs.x.shape.strides(2))
+      val gradDesc = probDesc
+      val ctcDesc = cudnnGetCTCLossDescriptor(kfloat)
+      var wsSize = SizeT(0)
+      cudnnCall(cudnnGetCTCLossWorkspaceSize(cudnnHandle, probDesc, gradDesc, labels, targetLengths, inputLengths, ctcDeterm,
+        ctcDesc, wsSize))
+      val wsData = gpuArenaMalloc[Float](wsSize)
+      cudnnCall(cudnnCTCLoss_(cudnnHandle, probDesc, probs.x.data, labels, targetLengths, inputLengths, costs.data, gradDesc,
+        probs.d.data, ctcDeterm, ctcDesc, wsData, wsSize))
+      gpuArenaFree(wsSize)
+
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t probs_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&probs_desc));
+      //     |int probs_dims[] = {""".stripMargin, inputLength, ", ", batchSize, ", ", alphabetSize, s"""};
+      //     |int probs_strides[] = {probs_dims[1] * probs_dims[2], probs_dims[2], 1};
+      //     |CUDNN_CALL(cudnnSetTensorNdDescriptor(
+      //     |    probs_desc, CUDNN_DATA_FLOAT, /*nbDims*/ 3, probs_dims, probs_strides));
+      //     |
+      //     |cudnnTensorDescriptor_t grad_desc = probs_desc;
+      //     |
+      //     |cudnnCTCLossDescriptor_t ctc_desc;
+      //     |CUDNN_CALL(cudnnCreateCTCLossDescriptor(&ctc_desc));
+      //     |CUDNN_CALL(cudnnSetCTCLossDescriptor(ctc_desc, CUDNN_DATA_FLOAT));
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "size_t wsSize;\n" +
+      //     "CUDNN_CALL(cudnnGetCTCLossWorkspaceSize(\n" +
+      //     "    cudnnHandle, probs_desc, grad_desc, ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
+      //     "    CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, &wsSize));\n" +
+      //     "void *ws = myGpuMalloc(wsSize);\n\n" +
+      //     "CUDNN_CALL(cudnnCTCLoss(\n" +
+      //     "    cudnnHandle, probs_desc, ", probs.x.data, ", ", labels, ", ", targetLengths, ", ", inputLengths, ",\n" +
+      //     "    ", costs.data, ", grad_desc, ", probs.d.data, ", CUDNN_CTC_LOSS_ALGO_DETERMINISTIC, ctc_desc, ws, wsSize));\n" +
+      //     "}"): _*)
       // reduce costs to scalar value
       cudnnReduceTensor(costs, ReductionOp.Avg, Seq(0), false)
     }
 
-    def seqDataDescriptorHelper(name: String, batchSize: Rep[Int], beamSize: Rep[Int], seqLen: Rep[Int], embSize: Rep[Int], seqLenArray: Rep[Array[Int]], first: Boolean = false) = 
+    def seqDataDescriptorHelper(name: String, batchSize: Rep[Int], beamSize: Rep[Int], seqLen: Rep[Int], embSize: Rep[Int], seqLenArray: Rep[Array[Int]], first: Boolean = false) =
         Seq(if (first) "int dimA[CUDNN_SEQDATA_DIM_COUNT];\n" else "",
           s"""|dimA[CUDNN_SEQDATA_BEAM_DIM] = ${Unwrap(beamSize)};
           |dimA[CUDNN_SEQDATA_BATCH_DIM] = ${Unwrap(batchSize)};

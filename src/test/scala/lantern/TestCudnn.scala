@@ -647,61 +647,6 @@ class TestCudnn extends LanternFunSuite {
     runTest(sumDim)
   }
 
-  testGPU("conv2D-forward") {
-    val conv2D = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cudnn-conv2d"
-
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        val input = Tensor.fromData(Seq(1, 1, 4, 4), 1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8)
-        val kernel = Tensor.fromData(Seq(1, 1, 2, 2), 1,2,3,4)
-        val bias = Tensor.ones(1)
-        val strides = Seq(2, 2)
-        val pads = Seq(0,0,0,0)
-        val (output, finputOption, _) = input.conv2D_batch(kernel, Some(bias), strides, pads)
-
-        generate_comment("check")
-        backend = BackendCPU()
-        val expect = Tensor.fromData(Seq(1,1,2,2), 45, 65, 45, 65)
-        Tensor.assertEqual(expect, output.toCPU(), "expect and output are")
-      }
-    }
-    runTest(conv2D)
-  }
-
-  testGPU("conv2D-bias-grad") {
-    val conv2D = new LanternDriverCudnn[String, Unit] {
-      override val fileName = "lantern-cudnn-conv2d-bias-grad"
-
-      @virtualize
-      def snippet(a: Rep[String]): Rep[Unit] = {
-        generate_comment("input")
-        val input = TensorR(Tensor.ones(1,1,4,4))
-        val kernel = TensorR(Tensor.ones(1,1,3,3))
-        val bias = TensorR(Tensor.zeros(1))
-        val strides = Seq(1,1)
-        val pads = Seq(0,0,0,0)
-        def conv(x: TensorR) = {
-          input.convBBP(kernel, Some(bias), strides, pads)
-        }
-        generate_comment("grad")
-        gradR(conv)(Tensor.zeros(1))
-
-        generate_comment("check")
-        backend = BackendCPU()
-        val expect_input_grad = Tensor.fromData(Seq(1,1,4,4),
-          1.0f, 2.0f, 2.0f, 1.0f, 2.0f, 4.0f, 4.0f, 2.0f, 2.0f, 4.0f, 4.0f, 2.0f, 1.0f, 2.0f, 2.0f, 1.0f)
-        val expect_kernel_grad = Tensor.fill(Seq(1, 1, 3, 3), 4.0f)
-        val expect_bias_grad = Tensor.fromData(Seq(1), 4.0f)
-
-        Tensor.assertEqual(expect_input_grad, input.d.toCPU(), "expect and input.gradient are")
-        Tensor.assertEqual(expect_kernel_grad, kernel.d.toCPU(), "expect and kernel.gradient are")
-        Tensor.assertEqual(expect_bias_grad, bias.d.toCPU(), "expect and bias.gradient are")
-      }
-    }
-    runTest(conv2D)
-  }
-
   testGPU("relu") {
     val relu = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-relu"
@@ -803,6 +748,60 @@ class TestCudnn extends LanternFunSuite {
     runTest(logSoftmax)
   }
 
+  testGPU("conv2D-forward") {
+    val conv2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-conv2d"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        val input = Tensor.fromData(Seq(1, 1, 4, 4), 1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8)
+        val kernel = Tensor.fromData(Seq(1, 1, 2, 2), 1,2,3,4)
+        val bias = Tensor.ones(1)
+        val strides = Seq(2, 2)
+        val pads = Seq(0,0,0,0)
+        val (output, finputOption, _) = input.conv2D_batch(kernel, Some(bias), strides, pads)
+
+        generate_comment("check")
+        backend = BackendCPU()
+        val expect = Tensor.fromData(Seq(1,1,2,2), 45, 65, 45, 65)
+        Tensor.assertEqual(expect, output.toCPU(), "expect and output are")
+      }
+    }
+    runTest(conv2D)
+  }
+
+  testGPU("conv2D-bias-grad") {
+    val conv2D = new LanternDriverCudnn[String, Unit] {
+      override val fileName = "lantern-cudnn-conv2d-bias-grad"
+
+      @virtualize
+      def snippet(a: Rep[String]): Rep[Unit] = {
+        generate_comment("input")
+        val input = TensorR(Tensor.ones(1,1,4,4))
+        val kernel = TensorR(Tensor.ones(1,1,3,3))
+        val bias = TensorR(Tensor.zeros(1))
+        val strides = Seq(1,1)
+        val pads = Seq(0,0,0,0)
+        def conv(x: TensorR) = {
+          input.convBBP(kernel, Some(bias), strides, pads)
+        }
+        generate_comment("grad")
+        gradR(conv)(Tensor.zeros(1))
+
+        generate_comment("check")
+        backend = BackendCPU()
+        val expect_input_grad = Tensor.fromData(Seq(1,1,4,4),
+          1.0f, 2.0f, 2.0f, 1.0f, 2.0f, 4.0f, 4.0f, 2.0f, 2.0f, 4.0f, 4.0f, 2.0f, 1.0f, 2.0f, 2.0f, 1.0f)
+        val expect_kernel_grad = Tensor.fill(Seq(1, 1, 3, 3), 4.0f)
+        val expect_bias_grad = Tensor.fromData(Seq(1), 4.0f)
+
+        Tensor.assertEqual(expect_input_grad, input.d.toCPU(), "expect and input.gradient are")
+        Tensor.assertEqual(expect_kernel_grad, kernel.d.toCPU(), "expect and kernel.gradient are")
+        Tensor.assertEqual(expect_bias_grad, bias.d.toCPU(), "expect and bias.gradient are")
+      }
+    }
+    runTest(conv2D)
+  }
   testGPU("maxPool2D_batch") {
     val maxPool2D = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-maxpool"
