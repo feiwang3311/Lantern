@@ -343,4 +343,44 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       Unwrap(hostLabelLengths), Unwrap(hostInputLengths), Unwrap(cost), Unwrap(gradientDesc), Unwrap(gradients),
       Unwrap(algo), Unwrap(ctcLossDesc), Unwrap(wsData), Unwrap(wsSize))(Seq(0,1,2,3,4,5,7,9,10), Seq(6,8,10,11), Set[Int]())
 
+
+  // macros for SeqData Dimensions
+  abstract class SeqDataDim
+  def seqDataTimeDim = cmacro[SeqDataDim]("CUDNN_SEQDATA_TIME_DIM")
+  def seqDataBatchDim = cmacro[SeqDataDim]("CUDNN_SEQDATA_BATCH_DIM")
+  def seqDataBeamDim = cmacro[SeqDataDim]("CUDNN_SEQDATA_BEAM_DIM")
+  def seqDataVectDim = cmacro[SeqDataDim]("CUDNN_SEQDATA_VECT_DIM")
+
+
+  // cudnnSeqDataAxis_t struct
+  abstract class CudnnSeqDataAxisT
+  def getCudnnSeqDataAxisT = newStruct[CudnnSeqDataAxisT]
+
+  // cudnnSeqDataDescriptor_t struct
+  abstract class CudnnSeqDataDescriptorT
+  def getCudnnSeqDataDescriptorT = newStruct[CudnnSeqDataDescriptorT]
+  def cudnnCreateSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT]) =
+    libFunction[CudnnStatusT]("cudnnCreateSeqDataDescriptor", Unwrap(desc))(Seq(), Seq(0), Set(0))
+  // Todo - check whether last arg Rep[Unit] works for void*?
+  def cudnnSetSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT], dataType: Rep[CuDNNDataType], nbDims: Int,
+                                dimA: Rep[Array[Int]], axes: Rep[Array[CudnnSeqDataAxisT]],
+                                seqLengthArraySize: Rep[SizeT],seqLengthArray: Rep[Array[Int]], paddingFill: Rep[Unit]) =
+    libFunction[CudnnStatusT]("cudnnSetSeqDataDescriptor", Unwrap(desc), Unwrap(dataType), Unwrap(nbDims), Unwrap(dimA),
+      Unwrap(axes), Unwrap(seqLengthArraySize), Unwrap(seqLengthArray), Unwrap(paddingFill))(Seq(1, 2, 3, 4, 5, 6, 7), Seq(0), Set())
+
+  // cudnnDropoutDescriptor_t
+  abstract class CudnnDropoutDescriptorT
+  def getCudnnDropoutDescriptorT = newStruct[CudnnDropoutDescriptorT]
+
+  def cudnnCreateDropoutDescriptor(desc: Rep[CudnnDropoutDescriptorT]) =
+    libFunction[CudnnStatusT]("cudnnCreateDropoutDescriptor", Unwrap(desc))(Seq(), Seq(1), Set(0))
+
+  def cudnnDropoutGetStatesSize(handle: Rep[CudnnHandleT], dropoutBufSize: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnDropoutGetStatesSize", Unwrap(handle), Unwrap(dropoutBufSize))(Seq(0), Seq(1), Set(1))
+
+  def cudnnSetDropoutDescriptor(dropDesc: Rep[CudnnDropoutDescriptorT], handle: Rep[CudnnHandleT], dropoutRate: Rep[Float],
+                                dropoutBuf: Rep[Unit], dropoutBufSize: Rep[SizeT], seed: Rep[Long]) =
+    libFunction[CudnnStatusT]("cudnnSetDropoutDescriptor", Unwrap(dropDesc), Unwrap(handle), Unwrap(dropoutRate), Unwrap(dropoutBuf),
+      Unwrap(dropoutBufSize), Unwrap(seed))(Seq(0, 1, 2, 4, 5), Seq(3), Set(3))
+
 }
