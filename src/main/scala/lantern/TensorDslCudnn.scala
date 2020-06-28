@@ -1121,82 +1121,107 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     }
 
     // multihead attention
-    override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+    override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int,
       qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean,
-      dropoutRate :Float = 0.0f, smScaler: Float = 1.0, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) = 
+      dropoutRate :Float = 0.0f, smScaler: Float = 1.0, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int], Rep[Array[Int]], Rep[Array[Int]]) =
       {
         cudnnMultiheadAttnForward(query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler, residuals)
       }
 
-    override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
+    override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int,
       qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]],
-       hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int], 
-       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean): Unit = 
+       hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int],
+       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean): Unit =
       {
-        cudnnMultiHeadAttnBackward(output, query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, 
+        cudnnMultiHeadAttnBackward(output, query, key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray,
         devQSeqArray, devKSeqArray, loWinIdx, hiWinIdx, bias, dropoutRate, smScaler, devWkSpace, sizeWkSpace, devReserve, sizeReserve, sizeWeights, residuals)
       }
 
-
+    @virtualize
     def cudnnActivationForward(x: Tensor, activation: Activation.Value, inPlace: Boolean = false): Tensor = {
       val xShape = x.shape.padTo(4, unit(1)) //activation functions only support tensors of rank 4
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
       val res = if (inPlace) x else Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t x_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, xShape(0), ", ", xShape(1), ", ", xShape(2), ", ", xShape(3), s"""));
-          |
-          |cudnnActivationDescriptor_t act_desc;
-          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
-          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
-          |                                        /*mode=*/ ${activation.toString},
-          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
-          |                                        /*relu_coef=*/ 0));
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnActivationForward(\n" +
-          "    cudnnHandle, act_desc,\n" +
-          "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
-          "}"): _*
-      )
+      val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, xShape)
+      val activationDesc = cudnnGetActivationDescriptor(activation match {
+        case Activation.Sigmoid => ksigmoid
+        case Activation.Relu => krelu
+        case Activation.Tanh => ktanh
+        case Activation.ClippedRelu => kclipped_relu
+        case Activation.Elu => kelu
+      })
+      cudnnCall(cudnnActivationForward_(cudnnHandle, activationDesc, one, xDesc, x.data, zero, xDesc, res.data))
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t x_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, xShape(0), ", ", xShape(1), ", ", xShape(2), ", ", xShape(3), s"""));
+      //     |
+      //     |cudnnActivationDescriptor_t act_desc;
+      //     |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
+      //     |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
+      //     |                                        /*mode=*/ ${activation.toString},
+      //     |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
+      //     |                                        /*relu_coef=*/ 0));
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnActivationForward(\n" +
+      //     "    cudnnHandle, act_desc,\n" +
+      //     "    ", one, ", x_desc, ", x.data, ", ", zero, ", x_desc, ", res.data, "));\n" +
+      //     "}"): _*
+      // )
       res
     }
 
+    @virtualize
     def cudnnActivationBackward(input: TensorR, res: TensorR, activation: Activation.Value, inPlace: Boolean = false): Unit = {
       val inputXShape = input.x.shape.padTo(4, unit(1)) // activation functions only support tensors of rank 4
       Tensor.assertShapeEqual(input.x.shape, res.x.shape)
       Tensor.assertShapeEqual(input.d.shape, res.d.shape)
-      val one = NewArray[Float](1); one(0) = 1
-      val zero = NewArray[Float](1); zero(0) = 0
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t x_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, inputXShape(0), ", ", inputXShape(1), ", ", inputXShape(2), ", ", inputXShape(3), s"""));
-          |
-          |cudnnActivationDescriptor_t act_desc;
-          |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
-          |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
-          |                                        /*mode=*/ ${activation.toString},
-          |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
-          |                                        /*relu_coef=*/ 0));
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnActivationBackward(\n" +
-          "    cudnnHandle, act_desc,\n" +
-          "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ", x_desc, ", input.x.data, ",\n",
-          "    ", (if (inPlace) zero else one), ", x_desc, ", input.d.data, "));\n" +
-          "}"): _*
-      )
+      // val one = NewArray[Float](1); one(0) = 1
+      // val zero = NewArray[Float](1); zero(0) = 0
+      var one = 1.0f
+      var zero = 0.0f
+      val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, inputXShape)
+      val activationDesc = cudnnGetActivationDescriptor(activation match {
+        case Activation.Sigmoid => ksigmoid
+        case Activation.Relu => krelu
+        case Activation.Tanh => ktanh
+        case Activation.ClippedRelu => kclipped_relu
+        case Activation.Elu => kelu
+      })
+      cudnnActivationBackward_(cudnnHandle, activationDesc, one, xDesc, res.x.data, xDesc, res.d.data, xDesc, input.x.data,
+        if (inPlace) zero else one, xDesc, input.d.data)
+
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t x_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, inputXShape(0), ", ", inputXShape(1), ", ", inputXShape(2), ", ", inputXShape(3), s"""));
+      //     |
+      //     |cudnnActivationDescriptor_t act_desc;
+      //     |CUDNN_CALL(cudnnCreateActivationDescriptor(&act_desc));
+      //     |CUDNN_CALL(cudnnSetActivationDescriptor(act_desc,
+      //     |                                        /*mode=*/ ${activation.toString},
+      //     |                                        /*reluNanOpt=*/ CUDNN_PROPAGATE_NAN,
+      //     |                                        /*relu_coef=*/ 0));
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnActivationBackward(\n" +
+      //     "    cudnnHandle, act_desc,\n" +
+      //     "    ", one, ", x_desc, ", res.x.data, ", x_desc, ", res.d.data, ", x_desc, ", input.x.data, ",\n",
+      //     "    ", (if (inPlace) zero else one), ", x_desc, ", input.d.data, "));\n" +
+      //     "}"): _*
+      // )
     }
 
     override def relu(x: Tensor, inPlace: Boolean = false): Tensor = {

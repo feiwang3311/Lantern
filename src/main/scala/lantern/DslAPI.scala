@@ -110,6 +110,8 @@ trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenS
 
   override def remap(m: Manifest[_]) = m.runtimeClass.getName match {
     case s: String if s.endsWith("CudnnHandleT") => "cudnnHandle_t"
+    case s: String if s.endsWith("CudnnTensorDescriptorT") => "cudnnTensorDescriptor_t"
+    case s: String if s.endsWith("CudnnActivationDescriptorT") => "cudnnActivationDescriptor_t"
     case _ => super.remap(m)
   }
 

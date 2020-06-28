@@ -168,6 +168,33 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       Unwrap(workSpace), Unwrap(workspaceSizeInBytes), UnwrapV(alpha), Unwrap(aDesc), Unwrap(A), UnwrapV(beta),
       Unwrap(cDesc), Unwrap(C))(Seq(0, 6, 8, 9), Seq(2, 4, 11), Set(6, 9))
 
+  // cudnnActivationDescriptor_t struct
+  abstract class CudnnActivationDescriptorT
+  def getCudnnActivationDescriptor = newStruct[CudnnActivationDescriptorT]
+  def cudnnCreateActivationDescriptor(desc: Rep[CudnnActivationDescriptorT]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnCreateActivationDescriptor", Unwrap(desc))(Seq[Int](), Seq(0), Set(0))
+  def cudnnSetActivationDescriptor(desc: Rep[CudnnActivationDescriptorT], mode: Rep[ActivationType],
+      reluNanOpt: Rep[NanOpt], coef: Rep[Double]) =
+    libFunction[CudnnStatusT]("cudnnSetActivationDescriptor", Unwrap(desc), Unwrap(mode), Unwrap(reluNanOpt),
+      Unwrap(coef))(Seq(0), Seq(0), Set[Int]())
+  def cudnnGetActivationDescriptor(mode: Rep[ActivationType]) = {
+    val desc = getCudnnActivationDescriptor
+    cudnnCall(cudnnCreateActivationDescriptor(desc))
+    cudnnCall(cudnnSetActivationDescriptor(desc, mode, kprop, 0.0))
+    desc
+  }
+  def cudnnActivationForward_(handle: Rep[CudnnHandleT], activationDesc: Rep[CudnnActivationDescriptorT], alpha: Var[Float],
+      xDesc: Rep[CudnnTensorDescriptorT], x: Rep[Array[Float]], beta: Var[Float], yDesc: Rep[CudnnTensorDescriptorT], y: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnActivationForward", Unwrap(handle), Unwrap(activationDesc), UnwrapV(alpha), Unwrap(xDesc),
+      Unwrap(x), UnwrapV(beta), Unwrap(yDesc), Unwrap(y))(Seq(0, 1, 2, 4), Seq(7), Set(2, 5))
+  def cudnnActivationBackward_(handle: Rep[CudnnHandleT], activationDesc: Rep[CudnnActivationDescriptorT], alpha: Var[Float],
+      yDesc: Rep[CudnnTensorDescriptorT], y: Rep[Array[Float]], dyDesc: Rep[CudnnTensorDescriptorT], dy: Rep[Array[Float]],
+      xDesc: Rep[CudnnTensorDescriptorT], x: Rep[Array[Float]], beta: Var[Float], dxDesc: Rep[CudnnTensorDescriptorT],
+      dx: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnActivationBackward", Unwrap(handle), Unwrap(activationDesc), UnwrapV(alpha),
+      Unwrap(yDesc), Unwrap(y), Unwrap(dyDesc), Unwrap(dy), Unwrap(xDesc), Unwrap(x), UnwrapV(beta), Unwrap(dxDesc),
+      Unwrap(dx))(Seq(0, 1, 2, 4, 6, 8), Seq(11), Set(2, 9))
+
   // cudnnConvolutionDescriptor_t struct
   abstract class CudnnConvolutionDescriptorT
   def getCudnnConvolutionDescriptorT = newStruct[CudnnConvolutionDescriptorT]
