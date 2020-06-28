@@ -14,6 +14,8 @@ import lantern.collection.mutable.{StackArrayOps}
 trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   /* LMS support for CuDNN library */
 
+  def nullptr[T:Manifest] = cmacro[Array[T]]("nullptr")
+
   // macros for data layout
   abstract class TensorFormat
   def knchw = cmacro[TensorFormat]("CUDNN_TENSOR_NCHW")
@@ -104,7 +106,6 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       dimA: Rep[Array[Int]], strideA: Rep[Array[Int]]): Rep[CudnnStatusT] =
     libFunction[CudnnStatusT]("cudnnSetTensorNdDescriptor", Unwrap(desc), Unwrap(dtype), Unwrap(nbDims),
       Unwrap(dimA), Unwrap(strideA))(Seq(0), Seq(0), Set[Int]())
-
   def cudnnGetTensor4dDescriptor(layout: Rep[TensorFormat], dtype: Rep[CuDNNDataType], shape: Seq[Rep[Int]]) = {
     val desc = getCudnnTensorDescriptorT
     cudnnCall(cudnnCreateTensorDescriptor(desc))
@@ -121,13 +122,51 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       h: Rep[Int], c: Rep[Int], w: Rep[Int]): Rep[CudnnStatusT] =
     libFunction[CudnnStatusT]("cudnnSetFilter4dDescriptor", Unwrap(desc), Unwrap(dtype), Unwrap(layout),
       Unwrap(n), Unwrap(h), Unwrap(c), Unwrap(w))(Seq(0), Seq(0), Set[Int]())
-
   def cudnnGetFilter4dDescriptor(layout: Rep[TensorFormat], dtype: Rep[CuDNNDataType], shape: Seq[Rep[Int]]) = {
     val desc = getCudnnFilterDescriptorT
     cudnnCall(cudnnCreateFilterDescriptor(desc))
     cudnnCall(cudnnSetFilter4dDescriptor(desc, dtype, layout, shape(0), shape(1), shape(2), shape(3)))
     desc
   }
+
+  abstract class CudnnReduceTensorIndicesT
+  def kreduceTensorNoIndices = cmacro[CudnnReduceTensorIndicesT]("CUDNN_REDUCE_TENSOR_NO_INDICES")
+  def kreduceTensorFlattenedIndices = cmacro[CudnnReduceTensorIndicesT]("CUDNN_REDUCE_TENSOR_FLATTENED_INDICES")
+
+  abstract class CudnnIndicesTypeT
+  def k8bitIndices = cmacro[CudnnIndicesTypeT]("CUDNN_8BIT_INDICES")
+  def k16bitIndices = cmacro[CudnnIndicesTypeT]("CUDNN_16BIT_INDICES")
+  def k32bitIndices = cmacro[CudnnIndicesTypeT]("CUDNN_32BIT_INDICES")
+  def k64bitIndices = cmacro[CudnnIndicesTypeT]("CUDNN_64BIT_INDICES")
+
+  // cudnnReduceTensorDescriptor_t struct
+  abstract class CudnnReduceTensorDescriptorT
+  def getCudnnReduceTensorDescriptorT = newStruct[CudnnReduceTensorDescriptorT]
+  def cudnnCreateReduceTensorDescriptor(desc: Rep[CudnnReduceTensorDescriptorT]): Rep[CudnnStatusT] =
+    libFunction[CudnnStatusT]("cudnnCreateReduceTensorDescriptor", Unwrap(desc))(Seq[Int](), Seq(0), Set(0))
+  def cudnnSetReduceTensorDescriptor(desc: Rep[CudnnReduceTensorDescriptorT], reduceTensorOp: Rep[ReduceTensorOp],
+      reduceTensorCompType: Rep[CuDNNDataType], reduceTensorNanOpt: Rep[NanOpt],
+      reduceTensorIndices: Rep[CudnnReduceTensorIndicesT], reduceTensorIndicesType: Rep[CudnnIndicesTypeT]) =
+    libFunction[CudnnStatusT]("cudnnSetReduceTensorDescriptor", Unwrap(desc), Unwrap(reduceTensorOp),
+      Unwrap(reduceTensorCompType), Unwrap(reduceTensorNanOpt), Unwrap(reduceTensorIndices),
+      Unwrap(reduceTensorIndicesType))(Seq[Int](), Seq(0), Set[Int]())
+  def cudnnGetReduceTensorDescriptorT(reduceTensorOp: Rep[ReduceTensorOp], reduceTensorCompType: Rep[CuDNNDataType]) = {
+    val desc = getCudnnReduceTensorDescriptorT
+    cudnnCreateReduceTensorDescriptor(desc)
+    cudnnSetReduceTensorDescriptor(desc, reduceTensorOp, reduceTensorCompType, knot_prop, kreduceTensorNoIndices, k32bitIndices)
+    desc
+  }
+  def cudnnGetReductionWorkspaceSize(handle: Rep[CudnnHandleT], reduceDesc: Rep[CudnnReduceTensorDescriptorT],
+      xDesc: Rep[CudnnTensorDescriptorT], outDesc: Rep[CudnnTensorDescriptorT], wsSize: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetReductionWorkspaceSize", Unwrap(handle), Unwrap(reduceDesc), Unwrap(xDesc),
+      Unwrap(outDesc), UnwrapV(wsSize))(Seq(0), Seq(4), Set(4))
+  def cudnnReduceTensor_(handle: Rep[CudnnHandleT], reduceDesc: Rep[CudnnReduceTensorDescriptorT], indices: Rep[Array[Int]],
+      indicesSizeInBytes: Rep[SizeT], workSpace: Rep[Array[Float]], workspaceSizeInBytes: Rep[SizeT], alpha: Var[Float],
+      aDesc: Rep[CudnnTensorDescriptorT], A: Rep[Array[Float]], beta: Var[Float], cDesc: Rep[CudnnTensorDescriptorT],
+      C: Rep[Array[Float]]) =
+    libFunction("cudnnReduceTensor", Unwrap(handle), Unwrap(reduceDesc), Unwrap(indices), Unwrap(indicesSizeInBytes),
+      Unwrap(workSpace), Unwrap(workspaceSizeInBytes), UnwrapV(alpha), Unwrap(aDesc), Unwrap(A), UnwrapV(beta),
+      Unwrap(cDesc), Unwrap(C))(Seq(0, 6, 8, 9), Seq(2, 4, 11), Set(6, 9))
 
   // cudnnConvolutionDescriptor_t struct
   abstract class CudnnConvolutionDescriptorT

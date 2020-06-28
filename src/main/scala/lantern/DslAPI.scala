@@ -54,10 +54,9 @@ trait LanternGenC extends DslGenCPP with CCodeGenLibs {
 
 trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
 
-  override def remap(m: Manifest[_]) = {
-    val mStr = m.toString
-    if (mStr.endsWith("CublasHandleT")) "cublasHandle_t"
-    else super.remap(m)
+  override def remap(m: Manifest[_]) = m.runtimeClass.getName match {
+    case s: String if s.endsWith("CublasHandleT") => "cublasHandle_t"
+    case _ => super.remap(m)
   }
 
   override def shallow(n: Node): Unit = n match {
@@ -108,6 +107,11 @@ trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
 }
 
 trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenStackArray with CCodeGenLibs {
+
+  override def remap(m: Manifest[_]) = m.runtimeClass.getName match {
+    case s: String if s.endsWith("CudnnHandleT") => "cudnnHandle_t"
+    case _ => super.remap(m)
+  }
 
   override def emitAll(ng: Graph, name: String)(m1: Manifest[_], m2: Manifest[_]): Unit = {
     registerHeader("<cudnn.h>")

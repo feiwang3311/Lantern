@@ -143,17 +143,20 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
   class BackendCudnn protected() extends BackendCublas {
     override def setup(): Unit = {
       super.setup()
-      unchecked("cudnnHandle_t cudnnHandle;\nCUDNN_CALL(cudnnCreate(&cudnnHandle));")
+      cudnnCall(cudnnCreate(cudnnHandle))
+      // unchecked("cudnnHandle_t cudnnHandle;\nCUDNN_CALL(cudnnCreate(&cudnnHandle));")
     }
 
     override def cleanup(): Unit = {
+      cudnnCall(cudnnDestroy(cudnnHandle))
       super.cleanup()
-      unchecked("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
+      // unchecked("CUDNN_CALL(cudnnDestroy(cudnnHandle));")
     }
 
     @virtualize
     override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
-      val one = NewArray[Float](1); one(0) = 1
+      // val one = NewArray[Float](1); one(0) = 1
+      var one = 1.0f
       if (!x.isInput) {
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, output.d, output.d.shape, one, one)
         else geam(x.d, false, 1.0f, output.d, false, 1.0f, x.d)
@@ -166,8 +169,10 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
     @virtualize
     override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
-      val one = NewArray[Float](1); one(0) = 1
-      val minus_one = NewArray[Float](1); minus_one(0) = -1
+      // val one = NewArray[Float](1); one(0) = 1
+      // val minus_one = NewArray[Float](1); minus_one(0) = -1
+      var one = 1.0f
+      var minus_one = -1.0f
       if (!x.isInput) {
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, output.d, output.d.shape, one, one)
         else geam(x.d, false, 1.0f, output.d, false, 1.0f, x.d)
@@ -180,7 +185,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
     @virtualize
     override def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
-      val one = NewArray[Float](1); one(0) = 1
+      // val one = NewArray[Float](1); one(0) = 1
+      var one = 1.0f
       if (!x.isInput) {
         val scaledXD = y.x * output.d
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, scaledXD, scaledXD.shape, one, one)
@@ -195,8 +201,10 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
     @virtualize
     override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
-      val one = NewArray[Float](1); one(0) = 1
-      val minus_one = NewArray[Float](1); minus_one(0) = -1
+      // val one = NewArray[Float](1); one(0) = 1
+      // val minus_one = NewArray[Float](1); minus_one(0) = -1
+      var one = 1.0f
+      var minus_one = -1.0f
       if (!x.isInput) {
         val scaledXD = output.d / y.x
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, scaledXD, scaledXD.shape, one, one)
@@ -425,7 +433,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val sameBias = (shapeBias zip main.x.shape.dims).forallR{case (x, y) => x == y}
       if (sameBias) geam(bias.d, false, 1.0f, main.d, false, 1.0f, bias.d)
       else {
-        val one = NewArray[Float](1); one(0) = 1
+        // val one = NewArray[Float](1); one(0) = 1
+        var one = 1.0f
         cudnnReduceUpdateTensor(bias.d, shapeBias, main.d, main.d.shape, one, one)
       }
     }
@@ -1286,48 +1295,70 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       softmaxBackwardHelper(input, res, dim, SoftmaxMode.Log)
     }
 
-    def cudnnReduceUpdateTensor(receiver: Tensor, rDim: Dimensions, provider: Tensor, pDim: Dimensions, alpha: Rep[Array[Float]], beta: Rep[Array[Float]], op: ReductionOp.Value = ReductionOp.Add): Unit = {
+    def cudnnReduceUpdateTensor(receiver: Tensor, rDim: Dimensions, provider: Tensor, pDim: Dimensions, alpha: Var[Float], beta: Var[Float],
+        op: ReductionOp.Value = ReductionOp.Add): Unit = {
       val rShape: Seq[Rep[Int]] = rDim.dims.padTo(4, unit(1))
       val pShape: Seq[Rep[Int]] = pDim.dims.padTo(4, unit(1))
       cudnnReduceTensorUnchecked(pShape, provider.data, rShape, receiver.data, op, alpha, beta)
     }
 
-    def cudnnReduceTensorUnchecked(xShape: Seq[Rep[Int]], xData: Rep[Array[Float]], resShape: Seq[Rep[Int]], resData: Rep[Array[Float]], op: ReductionOp.Value, alpha: Rep[Array[Float]], beta: Rep[Array[Float]]) = {
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t x_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, xShape(0), ", ", xShape(1), ", ", xShape(2), ", ", xShape(3), """));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, resShape(0), ", ", resShape(1), ", ", resShape(2), ", ", resShape(3), s"""));
-          |
-          |cudnnReduceTensorDescriptor_t reduce_desc;
-          |CUDNN_CALL(cudnnCreateReduceTensorDescriptor(&reduce_desc));
-          |CUDNN_CALL(cudnnSetReduceTensorDescriptor(
-          |    reduce_desc, ${op.toString}, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN,
-          |    CUDNN_REDUCE_TENSOR_NO_INDICES, CUDNN_32BIT_INDICES));
-          |
-          |void *indices = nullptr; // Don't store indices.
-          |
-          |// Workspace.
-          |size_t ws_size;
-          |CUDNN_CALL(cudnnGetReductionWorkspaceSize(
-          |    cudnnHandle, reduce_desc, x_desc, out_desc, &ws_size));
-          |void *ws_data = myGpuMalloc(ws_size);
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnReduceTensor(\n" +
-          s"    cudnnHandle, reduce_desc, indices, 0, ws_data, ws_size,\n" +
-          "    ", alpha, ", x_desc, ", xData, ", ", beta, ", out_desc, ", resData, "));\n" +
-          "}"): _*
-      )
+    @virtualize
+    def cudnnReduceTensorUnchecked(xShape: Seq[Rep[Int]], xData: Rep[Array[Float]], resShape: Seq[Rep[Int]],
+        resData: Rep[Array[Float]], op: ReductionOp.Value, alpha: Var[Float], beta: Var[Float]) = {
+      val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, xShape)
+      val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, resShape)
+      val reduceDesc = cudnnGetReduceTensorDescriptorT(op match {
+        case ReductionOp.Add => kradd
+        case ReductionOp.Mul => krmul
+        case ReductionOp.Min => krmin
+        case ReductionOp.Max => krmax
+        case ReductionOp.Avg => kravg
+        case ReductionOp.Amax => kramax
+        case ReductionOp.Norm1 => krnorm1
+        case ReductionOp.Norm2 => krnorm2
+        case ReductionOp.MulNoZeros => krmul_no_zeros
+      }, kfloat)
+      var wsSize = SizeT(0)
+      cudnnCall(cudnnGetReductionWorkspaceSize(cudnnHandle, reduceDesc, xDesc, outDesc, wsSize))
+      val wsData = gpuArenaMalloc[Float](wsSize)
+      cudnnCall(cudnnReduceTensor_(cudnnHandle, reduceDesc, nullptr, SizeT(0), wsData, wsSize, alpha, xDesc, xData, beta, outDesc, resData))
+      gpuArenaFree(wsSize)
+
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t x_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    x_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, xShape(0), ", ", xShape(1), ", ", xShape(2), ", ", xShape(3), """));
+      //     |
+      //     |cudnnTensorDescriptor_t out_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, resShape(0), ", ", resShape(1), ", ", resShape(2), ", ", resShape(3), s"""));
+      //     |
+      //     |cudnnReduceTensorDescriptor_t reduce_desc;
+      //     |CUDNN_CALL(cudnnCreateReduceTensorDescriptor(&reduce_desc));
+      //     |CUDNN_CALL(cudnnSetReduceTensorDescriptor(
+      //     |    reduce_desc, ${op.toString}, CUDNN_DATA_FLOAT, CUDNN_PROPAGATE_NAN,
+      //     |    CUDNN_REDUCE_TENSOR_NO_INDICES, CUDNN_32BIT_INDICES));
+      //     |
+      //     |void *indices = nullptr; // Don't store indices.
+      //     |
+      //     |// Workspace.
+      //     |size_t ws_size;
+      //     |CUDNN_CALL(cudnnGetReductionWorkspaceSize(
+      //     |    cudnnHandle, reduce_desc, x_desc, out_desc, &ws_size));
+      //     |void *ws_data = myGpuMalloc(ws_size);
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnReduceTensor(\n" +
+      //     s"    cudnnHandle, reduce_desc, indices, 0, ws_data, ws_size,\n" +
+      //     "    ", alpha, ", x_desc, ", xData, ", ", beta, ", out_desc, ", resData, "));\n" +
+      //     "}"): _*
+      // )
     }
 
     // TODO: Relax rank 4 requirement after implementing tensor descriptor helper functions.
@@ -1346,8 +1377,10 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         case None => Tensor(mallocArray[Float](unflatShape.product1), unflatShape: _*)
         case Some(array) => Tensor(array, unflatShape: _*)
       }
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
       cudnnReduceTensorUnchecked(xShape, x.data, res.shape, res.data, op, one, (if (clear) zero else one))
       val resShape: Seq[Rep[Int]] = x.shape.zipWithIndex.flatMap { case (dim, i) =>
         if (indices.contains(i)) if (flatten) None else Some(unit(1)) else Some(dim)
