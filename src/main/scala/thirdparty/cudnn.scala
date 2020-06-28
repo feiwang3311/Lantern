@@ -300,9 +300,12 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   def getCudnnSeqDataDescriptorT = newStruct[CudnnSeqDataDescriptorT]
   def cudnnCreateSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT]) =
     libFunction[CudnnStatusT]("cudnnCreateSeqDataDescriptor", Unwrap(desc))(Seq(), Seq(0), Set(0))
-  def cudnnSetSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT], nbDims: Int, dimA: Rep[Array[Int]],
-                                 axes: Rep[Array[CudnnSeqDataAxisT]], seqLengthArraySize: Rep[SizeT],
-                                 seqLengthArray: Rep[Array[Int]], paddingFill: Rep[Unit]) // Todo - check whether Rep[Unit]?
+  // Todo - check whether last arg Rep[Unit] works for void*?
+  def cudnnSetSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT], dataType: Rep[CuDNNDataType], nbDims: Int,
+                                dimA: Rep[Array[Int]], axes: Rep[Array[CudnnSeqDataAxisT]],
+                                seqLengthArraySize: Rep[SizeT],seqLengthArray: Rep[Array[Int]], paddingFill: Rep[Unit]) =
+    libFunction[CudnnStatusT]("cudnnSetSeqDataDescriptor", Unwrap(desc), Unwrap(dataType), Unwrap(nbDims), Unwrap(dimA),
+      Unwrap(axes), Unwrap(seqLengthArraySize), Unwrap(seqLengthArray), Unwrap(paddingFill))(Seq(1, 2, 3, 4, 5, 6, 7), Seq(0), Set())
 
   // cudnnDropoutDescriptor_t
   abstract class CudnnDropoutDescriptorT
