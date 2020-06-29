@@ -343,6 +343,10 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       Unwrap(hostLabelLengths), Unwrap(hostInputLengths), Unwrap(cost), Unwrap(gradientDesc), Unwrap(gradients),
       Unwrap(algo), Unwrap(ctcLossDesc), Unwrap(wsData), Unwrap(wsSize))(Seq(0,1,2,3,4,5,7,9,10), Seq(6,8,10,11), Set[Int]())
 
+  // Weight Gradient Mode
+  abstract class CudnnWGradModeT
+  def wGradModeAdd = cmacro[CudnnWGradModeT]("CUDNN_WGRAD_MODE_ADD")
+  def wGradModeSet = cmacro[CudnnWGradModeT]("CUDNN_WGRAD_MODE_SET")
 
   // macros for SeqData Dimensions
   abstract class SeqDataDim
@@ -383,4 +387,74 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
     libFunction[CudnnStatusT]("cudnnSetDropoutDescriptor", Unwrap(dropDesc), Unwrap(handle), Unwrap(dropoutRate), Unwrap(dropoutBuf),
       Unwrap(dropoutBufSize), Unwrap(seed))(Seq(0, 1, 2, 4, 5), Seq(3), Set(3))
 
+  // attenion modes
+  abstract class AttentionMode
+  // multiple Q's from same beam maps to the same K, V vectors (i.e., K, V beam size = 1)
+  def attnQueryMapAllToOne = cmacro[AttentionMode]("CUDNN_ATTN_QUERYMAP_ALL_TO_ONE")
+  // multiple Q's from same beam maps to different K, V (i.e., K, V beam size = Q beam size)
+  def attnQueryMapOneToOne = cmacro[AttentionMode]("CUDNN_ATTN_QUERYMAP_ONE_TO_ONE")
+  def attnDisableProjBias = cmacro[AttentionMode]("CUDNN_ATTN_DISABLE_PROJ_BIASES")
+  def attnEnableProjBias = cmacro[AttentionMode]("CUDNN_ATTN_ENABLE_PROJ_BIASES")
+
+  // cudnnAttnDescriptor_t
+  abstract class CudnnAttnDescriptorT
+  def getCudnnAttnDescriptorT = newStruct[CudnnAttnDescriptorT]
+
+  def cudnnCreateAttnDescriptor(desc: Rep[CudnnAttnDescriptorT]) =
+    libFunction[CudnnStatusT]("cudnnCreateAttnDescriptor", Unwrap(desc))(Seq(), Seq(0), Set(0))
+
+  def cudnnSetAttnDescriptor(desc: Rep[CudnnAttnDescriptorT], attnMode: Rep[Int], nHeads: Rep[Int], smScaler: Rep[Double],
+                             dataType: Rep[CuDNNDataType], computePrec: Rep[CuDNNDataType], mathType: Rep[MathType],
+                             attnDropoutDesc: Rep[CudnnDropoutDescriptorT], postDropoutDesc: Rep[CudnnDropoutDescriptorT],
+                             qSize: Rep[Int], kSize: Rep[Int], vSize: Rep[Int], qProjSize: Rep[Int], kProjSize: Rep[Int],
+                             vProjSize: Rep[Int], oProjSize: Rep[Int], qoMaxSeqLength: Rep[Int], kvMaxSeqLength: Rep[Int],
+                             maxBatchSize: Rep[Int], maxBeamSize: Rep[Int]) =
+    libFunction[CudnnStatusT]("cudnnSetAttnDescriptor", Unwrap(attnMode), Unwrap(nHeads), Unwrap(smScaler), Unwrap(dataType),
+      Unwrap(computePrec), Unwrap(mathType), Unwrap(attnDropoutDesc), Unwrap(postDropoutDesc), Unwrap(qSize), Unwrap(kSize),
+      Unwrap(vSize), Unwrap(qProjSize), Unwrap(kProjSize), Unwrap(vProjSize), Unwrap(oProjSize), Unwrap(qoMaxSeqLength),
+      Unwrap(kvMaxSeqLength), Unwrap(maxBatchSize), Unwrap(maxBeamSize))(1 to 19, Seq(0), Set())
+
+  def cudnnGetMultiHeadAttnBuffers(handle: Rep[CudnnHandleT], attnDesc: Rep[CudnnAttnDescriptorT], weightSizeInBytes: Rep[SizeT]
+                                   , workSpaceSizeInBytes: Rep[SizeT], reserveSpaceSizeInBytes: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetMultiHeadAttnBuffers", Unwrap(handle), Unwrap(attnDesc), Unwrap(weightSizeInBytes),
+      Unwrap(workSpaceSizeInBytes), Unwrap(reserveSpaceSizeInBytes))(Seq(0, 1), Seq(2, 3, 4), Set(2, 3, 4))
+
+  def cudnnMultiHeadAttnForward(handle: Rep[CudnnHandleT], attnDesc: Rep[CudnnAttnDescriptorT], currIdx: Rep[Int],
+                                loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], devSeqLengthsQO: Rep[Array[Int]],
+                                devSeqLengthsKV: Rep[Array[Int]], qDesc: Rep[CudnnSeqDataDescriptorT], queries: Rep[Array[Float]],
+                                residuals: Rep[Array[Float]], kDesc: Rep[CudnnSeqDataDescriptorT], keys: Rep[Array[Float]],
+                                vDesc: Rep[CudnnSeqDataDescriptorT], values: Rep[Array[Float]], oDesc: Rep[CudnnSeqDataDescriptorT],
+                                out: Rep[Array[Float]], weightSizeInBytes: Rep[SizeT], weights: Rep[Array[Float]],
+                                workSpaceSizeInBytes: Rep[SizeT], workSpace: Rep[Float], reserveSpaceSizeInBytes: Rep[SizeT],
+                                reserveSpace: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnMultiHeadAttnForward", Unwrap(handle), Unwrap(attnDesc), Unwrap(currIdx), Unwrap(loWinIdx),
+      Unwrap(hiWinIdx), Unwrap(devSeqLengthsQO), Unwrap(devSeqLengthsKV), Unwrap(qDesc), Unwrap(queries), Unwrap(residuals),
+      Unwrap(kDesc), Unwrap(keys), Unwrap(vDesc), Unwrap(values), Unwrap(oDesc), Unwrap(out), Unwrap(weightSizeInBytes),
+      Unwrap(weights), Unwrap(workSpaceSizeInBytes), Unwrap(workSpace), Unwrap(reserveSpaceSizeInBytes, Unwrap(reserveSpace)),
+      Unwrap(reserveSpace))((0 to 14) ++ Seq(16, 18, 20), Seq(15, 17, 19, 21), Set())
+
+  def cudnnMultiHeadAttnBackwardData(handle: Rep[CudnnHandleT], attnDesc: Rep[CudnnAttnDescriptorT], loWinIdx: Rep[Array[Int]],
+                                     hiWinIdx: Rep[Array[Int]], devSeqLengthsDQDO: Rep[Array[Int]], devSeqLengthsDKDV: Rep[Array[Int]],
+                                     doDesc: Rep[CudnnSeqDataDescriptorT], dout: Rep[Array[Float]], dqDesc: Rep[CudnnSeqDataDescriptorT],
+                                     dqueries: Rep[Array[Float]], queries: Rep[Array[Float]], dkDesc: Rep[CudnnSeqDataDescriptorT],
+                                     dKeys: Rep[Array[Float]], keys: Rep[Array[Float]], dvDesc: Rep[CudnnSeqDataDescriptorT],
+                                     dvalues: Rep[Array[Float]], values: Rep[Array[Float]], weightSizeInBytes: Rep[SizeT],
+                                     weights: Rep[Array[Float]], workSpaceSizeInBytes: Rep[SizeT], workSpace: Rep[Float],
+                                     reserveSpaceSizeInBytes: Rep[SizeT], reserveSpace: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnMultiHeadAttnBackwardData", Unwrap(handle), Unwrap(attnDesc), Unwrap(loWinIdx), Unwrap(hiWinIdx),
+      Unwrap(devSeqLengthsDQDO), Unwrap(devSeqLengthsDKDV), Unwrap(doDesc), Unwrap(dout), Unwrap(dqDesc), Unwrap(dqueries),
+      Unwrap(queries), Unwrap(dkDesc), Unwrap(dKeys), Unwrap(keys), Unwrap(dvDesc), Unwrap(dvalues), Unwrap(values),
+      Unwrap(weightSizeInBytes), Unwrap(weights), Unwrap(workSpaceSizeInBytes), Unwrap(workSpace), Unwrap(reserveSpaceSizeInBytes),
+      Unwrap(reserveSpace))((0 to 6) ++ Seq(8, 10, 11, 13, 14, 16, 17, 18, 19, 21), Seq(7, 9, 12, 15, 20, 22), Set())
+
+  def cudnnMultiHeadAttnBackwardWeights(handle: Rep[CudnnHandleT], attnDesc: Rep[CudnnAttnDescriptorT], addGrad: Rep[CudnnWGradModeT],
+                                        qDesc: Rep[CudnnSeqDataDescriptorT], queries: Rep[Array[Float]], kDesc: Rep[CudnnSeqDataDescriptorT],
+                                        keys: Rep[Array[Float]], vDesc: Rep[CudnnSeqDataDescriptorT], values: Rep[Array[Float]],
+                                        doDesc: Rep[CudnnSeqDataDescriptorT], dout: Rep[Array[Float]], weightSizeInBytes: Rep[SizeT],
+                                        weights: Rep[Array[Float]], dweights: Rep[Array[Float]], workSpaceSizeInBytes: Rep[SizeT],
+                                        workSpace: Rep[Float], reserveSpaceSizeInBytes: Rep[SizeT], reserveSpace: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnMultiHeadAttnBackwardWeights", Unwrap(handle), Unwrap(attnDesc), Unwrap(addGrad), Unwrap(qDesc),
+      Unwrap(queries), Unwrap(kDesc), Unwrap(keys), Unwrap(vDesc), Unwrap(values), Unwrap(doDesc), Unwrap(dout), Unwrap(weightSizeInBytes),
+      Unwrap(weights), Unwrap(dweights), Unwrap(workSpaceSizeInBytes), Unwrap(workSpace), Unwrap(reserveSpaceSizeInBytes),
+      Unwrap(reserveSpace))((0 to 12) ++ Seq(14, 16), Seq(13, 15, 17), Set())
 }
