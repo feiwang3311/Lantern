@@ -542,6 +542,15 @@ trait TensorDslCPU extends TensorDsl {
       }
     }
 
+    override def conv2DTraining(input: TensorR, kernel: TensorR, bias: Option[TensorR], resShape: Seq[Rep[Int]], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { k: (TensorR => Unit) =>
+      ???
+      // (res, Some(finput), _) = conv2D_batch(input.x, kernel.x, bias.map(_.x), strides, pads)
+      // val y = TensorR(res); k(y)
+      // val paddings = if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else {if (pads.size == 1) (pads(0), pads(0)) else ???}}
+      // val stridess = if (strides.size == 2) (strides(0), strides(1)) else ???
+      // conv2D_batch_grad(input, Some(TensorR(finput)), filter, y, bias, paddings, stridess, (1,1), 0)
+    }
+
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int) = {
       val ((dH:Int) :: (dW:Int) :: Nil) = strides.take(2).toList
       val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else if (pads.size == 4) (pads(0), pads(2)) else ???}

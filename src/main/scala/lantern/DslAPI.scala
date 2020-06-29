@@ -114,6 +114,12 @@ trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenS
     case s: String if s.endsWith("CudnnActivationDescriptorT") => "cudnnActivationDescriptor_t"
     case s: String if s.endsWith("CudnnReduceTensorDescriptorT") => "cudnnReduceTensorDescriptor_t"
     case s: String if s.endsWith("CudnnCTCLossDescriptorT") => "cudnnCTCLossDescriptor_t"
+    case s: String if s.endsWith("CudnnFilterDescriptorT") => "cudnnFilterDescriptor_t"
+    case s: String if s.endsWith("CudnnConvolutionDescriptorT") => "cudnnConvolutionDescriptor_t"
+    case s: String if s.endsWith("CudnnConvolutionBwdDataAlgoPerfT") => "cudnnConvolutionBwdDataAlgoPerf_t"
+    case s: String if s.endsWith("CudnnConvolutionBwdDataAlgoT") => "cudnnConvolutionBwdDataAlgo_t"
+    case s: String if s.endsWith("CudnnConvolutionBwdFilterAlgoPerfT") => "cudnnConvolutionBwdFilterAlgoPerf_t"
+    case s: String if s.endsWith("CudnnConvolutionBwdFilterAlgoT") => "cudnnConvolutionBwdFilterAlgo_t"
     case _ => super.remap(m)
   }
 

@@ -261,23 +261,6 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   def kconvFwdAlgoWinograd = cmacro[CudnnConvolutionFwdAlgoT]("CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD")
   def kconvFwdAlgoWinogradNonfused = cmacro[CudnnConvolutionFwdAlgoT]("CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD_NONFUSED")
 
-  // macro for cudnnConvolutionBwdDataAlgo_t
-  abstract class CudnnConvolutionBwdDataAlgoT
-
-  // cudnnConvolutionBwdDataAlgoPerf_t struct
-  abstract class CudnnConvolutionBwdDataAlgoPerfT
-  implicit class CudnnConvolutionBwdDataAlgoPerfTOps(x: Rep[CudnnConvolutionBwdDataAlgoPerfT]) {
-    val algo = readField[CudnnConvolutionBwdDataAlgoPerfT, CudnnConvolutionBwdDataAlgoT](x, "algo")
-  }
-  def getCudnnConvolutionBwdDataAlgoPerfT = newStruct[CudnnConvolutionBwdDataAlgoPerfT]
-  def cudnnGetConvolutionBackwardDataAlgorithm_v7(handle: Rep[CudnnHandleT], wDesc: Rep[CudnnFilterDescriptorT],
-      yDesc: Rep[CudnnTensorDescriptorT], convDesc: Rep[CudnnConvolutionDescriptorT], xDesc: Rep[CudnnTensorDescriptorT],
-      requestedAlgoCount: Rep[Int], returnedAlgoCountBwd: Var[Int], perfResultsBwd: Rep[Array[CudnnConvolutionBwdDataAlgoPerfT]]) = {
-    libFunction[CudnnStatusT]("cudnnGetConvolutionBackwardDataAlgorithm_v7", Unwrap(handle), Unwrap(wDesc), Unwrap(yDesc),
-      Unwrap(convDesc), Unwrap(xDesc), Unwrap(requestedAlgoCount), UnwrapV(returnedAlgoCountBwd), Unwrap(perfResultsBwd))(Seq[Int](),
-      Seq(6, 7), Set(6))
-  }
-
   // cudnnConvolutionFwdAlgoPerf_t struct
   abstract class CudnnConvolutionFwdAlgoPerfT
   implicit class CudnnConvolutionFwdAlgoPerfTOps(x: Rep[CudnnConvolutionFwdAlgoPerfT]) {
@@ -299,7 +282,7 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       Unwrap(wDesc), Unwrap(convDesc), Unwrap(yDesc), Unwrap(algo), UnwrapV(sizeInBytes))(Seq(0), Seq(6), Set(6))
 
   // conv forward
-  def cudnnConvolutionForward_a[T:Manifest](handle: Rep[CudnnHandleT], alpha: Var[T], xDesc: Rep[CudnnTensorDescriptorT], input: Rep[Array[T]],
+  def cudnnConvolutionForward_[T:Manifest](handle: Rep[CudnnHandleT], alpha: Var[T], xDesc: Rep[CudnnTensorDescriptorT], input: Rep[Array[T]],
       wDesc: Rep[CudnnFilterDescriptorT], filter: Rep[Array[T]], convDesc: Rep[CudnnConvolutionDescriptorT], algo: Rep[CudnnConvolutionFwdAlgoT],
       wsArray: Rep[Array[T]], wsSize: Rep[SizeT], beta: Var[T], yDesc: Rep[CudnnTensorDescriptorT], output: Rep[Array[T]]) = {
     libFunction[CudnnStatusT]("cudnnConvolutionForward", Unwrap(handle), UnwrapV(alpha), Unwrap(xDesc),
@@ -311,6 +294,67 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       A: Rep[Array[T]], beta: Var[T], cDesc: Rep[CudnnTensorDescriptorT], C: Rep[Array[T]]) =
     libFunction[CudnnStatusT]("cudnnAddTensor", Unwrap(handle), UnwrapV(alpha), Unwrap(aDesc), Unwrap(A),
       UnwrapV(beta), Unwrap(cDesc), Unwrap(C))(Seq(1, 3, 4, 6), Seq(6), Set(1, 4))
+
+  // macro for cudnnConvolutionBwdDataAlgo_t
+  abstract class CudnnConvolutionBwdDataAlgoT
+  // cudnnConvolutionBwdDataAlgoPerf_t struct
+  abstract class CudnnConvolutionBwdDataAlgoPerfT
+  implicit class CudnnConvolutionBwdDataAlgoPerfTOps(x: Rep[CudnnConvolutionBwdDataAlgoPerfT]) {
+    val algo = readField[CudnnConvolutionBwdDataAlgoPerfT, CudnnConvolutionBwdDataAlgoT](x, "algo")
+  }
+  def getCudnnConvolutionBwdDataAlgoPerfT = newStruct[CudnnConvolutionBwdDataAlgoPerfT]
+  def cudnnGetConvolutionBackwardDataAlgorithm_v7(handle: Rep[CudnnHandleT], wDesc: Rep[CudnnFilterDescriptorT],
+      yDesc: Rep[CudnnTensorDescriptorT], convDesc: Rep[CudnnConvolutionDescriptorT], xDesc: Rep[CudnnTensorDescriptorT],
+      requestedAlgoCount: Rep[Int], returnedAlgoCountBwd: Var[Int], perfResultsBwd: Rep[Array[CudnnConvolutionBwdDataAlgoPerfT]]) = {
+    libFunction[CudnnStatusT]("cudnnGetConvolutionBackwardDataAlgorithm_v7", Unwrap(handle), Unwrap(wDesc), Unwrap(yDesc),
+      Unwrap(convDesc), Unwrap(xDesc), Unwrap(requestedAlgoCount), UnwrapV(returnedAlgoCountBwd), Unwrap(perfResultsBwd))(Seq[Int](),
+      Seq(6, 7), Set(6))
+  }
+  def cudnnGetConvolutionBackwardDataWorkspaceSize(handle: Rep[CudnnHandleT], wDesc: Rep[CudnnFilterDescriptorT],
+      dyDesc: Rep[CudnnTensorDescriptorT], convDesc: Rep[CudnnConvolutionDescriptorT], dxDesc: Rep[CudnnTensorDescriptorT],
+      algo: Rep[CudnnConvolutionBwdDataAlgoT], sizeInBytes: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetConvolutionBackwardDataWorkspaceSize", Unwrap(handle), Unwrap(wDesc), Unwrap(dyDesc),
+      Unwrap(convDesc), Unwrap(dxDesc), Unwrap(algo), UnwrapV(sizeInBytes))(Seq(0,1,2,3,4,5), Seq(6), Set(6))
+  def cudnnConvolutionBackwardData_(handle: Rep[CudnnHandleT], alpha: Var[Float], wDesc: Rep[CudnnFilterDescriptorT],
+      w: Rep[Array[Float]], dyDesc: Rep[CudnnTensorDescriptorT], dy: Rep[Array[Float]], convDesc: Rep[CudnnConvolutionDescriptorT],
+      algo: Rep[CudnnConvolutionBwdDataAlgoT], wsData: Rep[Array[Float]], wsSize: Rep[SizeT], beta: Var[Float],
+      dxDesc: Rep[CudnnTensorDescriptorT], dx: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnConvolutionBackwardData", Unwrap(handle), UnwrapV(alpha), Unwrap(wDesc), Unwrap(w),
+      Unwrap(dyDesc), Unwrap(dy), Unwrap(convDesc), Unwrap(algo), Unwrap(wsData), Unwrap(wsSize), UnwrapV(beta), Unwrap(dxDesc),
+      Unwrap(dx))(Seq(0,1,2,3,4,5,6,7,9,10,11), Seq(8,12), Set(1,10))
+
+  def cudnnConvolutionBackwardBias_(handle: Rep[CudnnHandleT], alpha: Var[Float], dyDesc: Rep[CudnnTensorDescriptorT],
+      dy: Rep[Array[Float]], beta: Var[Float], dbDesc: Rep[CudnnTensorDescriptorT], db: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnConvolutionBackwardBias", Unwrap(handle), UnwrapV(alpha), Unwrap(dyDesc), Unwrap(dy),
+      UnwrapV(beta), Unwrap(dbDesc), Unwrap(db))(Seq(0, 1, 2, 3, 4, 5, 6), Seq(6), Set(1, 4))
+
+  // macro for cudnnConvolutionBwdFilterAlgo_t
+  abstract class CudnnConvolutionBwdFilterAlgoT
+  // cudnnConvolutionBwdFilterAlgoPerf_t struct
+  abstract class CudnnConvolutionBwdFilterAlgoPerfT
+  implicit class CudnnConvolutionBwdFilterAlgoPerfTOps(x: Rep[CudnnConvolutionBwdFilterAlgoPerfT]) {
+    val algo = readField[CudnnConvolutionBwdFilterAlgoPerfT, CudnnConvolutionBwdFilterAlgoT](x, "algo")
+  }
+  def getCudnnConvolutionBwdFilterAlgoPerfT = newStruct[CudnnConvolutionBwdFilterAlgoPerfT]
+  def cudnnGetConvolutionBackwardFilterAlgorithm_v7(handle: Rep[CudnnHandleT], xDesc: Rep[CudnnTensorDescriptorT],
+      dyDesc: Rep[CudnnTensorDescriptorT], convDesc: Rep[CudnnConvolutionDescriptorT], dwDesc: Rep[CudnnFilterDescriptorT],
+      requestedAlgoCount: Rep[Int], returnedAlgoCount: Var[Int], perfResults: Rep[Array[CudnnConvolutionBwdFilterAlgoPerfT]]) =
+    libFunction[CudnnStatusT]("cudnnGetConvolutionBackwardFilterAlgorithm_v7", Unwrap(handle), Unwrap(xDesc), Unwrap(dyDesc),
+      Unwrap(convDesc), Unwrap(dwDesc), Unwrap(requestedAlgoCount), UnwrapV(returnedAlgoCount),
+      Unwrap(perfResults))(Seq(0, 1, 2, 3, 4), Seq(6, 7), Set(6))
+  def cudnnGetConvolutionBackwardFilterWorkspaceSize(handle: Rep[CudnnHandleT], xDesc: Rep[CudnnTensorDescriptorT],
+      dyDesc: Rep[CudnnTensorDescriptorT], convDesc: Rep[CudnnConvolutionDescriptorT], dwDesc: Rep[CudnnFilterDescriptorT],
+      algo: Rep[CudnnConvolutionBwdFilterAlgoT], sizeInBytes: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetConvolutionBackwardFilterWorkspaceSize", Unwrap(handle), Unwrap(xDesc), Unwrap(dyDesc),
+      Unwrap(convDesc), Unwrap(dwDesc), Unwrap(algo), UnwrapV(sizeInBytes))(Seq(0,1,2,3,4,5), Seq(6), Set(6))
+  def cudnnConvolutionBackwardFilter_(handle: Rep[CudnnHandleT], alpha: Var[Float], xDesc: Rep[CudnnTensorDescriptorT],
+      x: Rep[Array[Float]], dyDesc: Rep[CudnnTensorDescriptorT], dy: Rep[Array[Float]], convDesc: Rep[CudnnConvolutionDescriptorT],
+      algo: Rep[CudnnConvolutionBwdFilterAlgoT], wsData: Rep[Array[Float]], wsSize: Rep[SizeT], beta: Var[Float],
+      dwDesc: Rep[CudnnFilterDescriptorT], dw: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnConvolutionBackwardFilter", Unwrap(handle), UnwrapV(alpha), Unwrap(xDesc),
+      Unwrap(x), Unwrap(dyDesc), Unwrap(dy), Unwrap(convDesc), Unwrap(algo), Unwrap(wsData), Unwrap(wsSize),
+      UnwrapV(beta), Unwrap(dwDesc), Unwrap(dw))(Seq(0,1,2,3,4,5,6,7,9,10,11), Seq(8,12), Set(1,10))
+
 
   // cudnnCTCLossDescriptor_t
   abstract class CudnnCTCLossDescriptorT

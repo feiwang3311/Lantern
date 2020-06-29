@@ -361,6 +361,14 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
       Unwrap(nElement), Unwrap(out), Unwrap(outStride0), Unwrap(outStride1), Unwrap(outStride2),
       Unwrap(dim))(Seq(0, 6), Seq(0, 6), Set[Int]())
 
+  // repeat0(float* in, float* out, int outStride0, int outStride1, int outScalarCount)
+  def repeat_(in: Rep[Array[Float]], out: Rep[Array[Float]], outStride0: Rep[Int], outStride1: Rep[Int], outScalarCount: Rep[Int]) =
+    libFunction[Unit]("repeat0<<<28, 512>>>", Unwrap(in), Unwrap(out), Unwrap(outStride0), Unwrap(outStride1),
+      Unwrap(outScalarCount))(Seq(0), Seq(1), Set[Int]())
 
+  // void shift0(float* in, float* out, int inDim0, int inStride0, int inStride1, int inScalarCount)
+  def shift_(in: Rep[Array[Float]], out: Rep[Array[Float]], inDim0: Rep[Int], inStride0: Rep[Int], inStride1: Rep[Int], inScalarCount: Rep[Int]) =
+    libFunction[Unit]("shift0<<<28, 512>>>", Unwrap(in), Unwrap(out), Unwrap(inDim0), Unwrap(inStride0), Unwrap(inStride1),
+      Unwrap(inScalarCount))(Seq(0), Seq(1), Set[Int]())
 }
 
