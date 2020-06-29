@@ -802,6 +802,7 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(conv2D)
   }
+
   testGPU("maxPool2D_batch") {
     val maxPool2D = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-maxpool"

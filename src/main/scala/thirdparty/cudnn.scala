@@ -40,13 +40,6 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   def kclipped_relu = cmacro[ActivationType]("CUDNN_ACTIVATION_CLIPPED_RELU")
   def kelu = cmacro[ActivationType]("CUDNN_ACTIVATION_ELU")
 
-  // macros for pool mode
-  abstract class PoolModes
-  def kmax = cmacro[PoolModes]("CUDNN_POOLING_MAX")
-  def kaverage_ip = cmacro[PoolModes]("CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING")
-  def kaverage_ep = cmacro[PoolModes]("CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING")
-  def kmax_d = cmacro[PoolModes]("CUDNN_POOLING_MAX_DETERMINISTIC")
-
   // macros for nan opt
   abstract class NanOpt
   def knot_prop = cmacro[NanOpt]("CUDNN_NOT_PROPAGATE_NAN")
@@ -354,6 +347,46 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
     libFunction[CudnnStatusT]("cudnnConvolutionBackwardFilter", Unwrap(handle), UnwrapV(alpha), Unwrap(xDesc),
       Unwrap(x), Unwrap(dyDesc), Unwrap(dy), Unwrap(convDesc), Unwrap(algo), Unwrap(wsData), Unwrap(wsSize),
       UnwrapV(beta), Unwrap(dwDesc), Unwrap(dw))(Seq(0,1,2,3,4,5,6,7,9,10,11), Seq(8,12), Set(1,10))
+
+  // macros for pool mode
+  abstract class PoolModes
+  def kmax = cmacro[PoolModes]("CUDNN_POOLING_MAX")
+  def kaverage_ip = cmacro[PoolModes]("CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING")
+  def kaverage_ep = cmacro[PoolModes]("CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING")
+  def kmax_d = cmacro[PoolModes]("CUDNN_POOLING_MAX_DETERMINISTIC")
+
+  // cudnnPoolingDescriptor_t
+  abstract class CudnnPoolingDescriptorT
+  def getCudnnPoolingDescriptor = newStruct[CudnnPoolingDescriptorT]
+  def cudnnCreatePoolingDescriptor(desc: Rep[CudnnPoolingDescriptorT]) =
+    libFunction[CudnnStatusT]("cudnnCreatePoolingDescriptor", Unwrap(desc))(Seq[Int](), Seq(0), Set(0))
+  def cudnnSetPooling2dDescriptor(desc: Rep[CudnnPoolingDescriptorT], mode: Rep[PoolModes], nanOpt: Rep[NanOpt],
+      windowHeight: Rep[Int], windowWidth: Rep[Int], verticalPadding: Rep[Int], horizontalPadding: Rep[Int],
+      verticalStride: Rep[Int], horizontalStride: Rep[Int]) =
+    libFunction[CudnnStatusT]("cudnnSetPooling2dDescriptor", Unwrap(desc), Unwrap(mode), Unwrap(nanOpt),
+      Unwrap(windowHeight), Unwrap(windowWidth), Unwrap(verticalPadding), Unwrap(horizontalPadding),
+      Unwrap(verticalStride), Unwrap(horizontalStride))(Seq(0,1,2), Seq(0), Set[Int]())
+  def cudnnGetPooling2dDescriptor(mode: Rep[PoolModes], nanOpt: Rep[NanOpt], windowHeight: Rep[Int],
+      windowWidth: Rep[Int], verticalPadding: Rep[Int], horizontalPadding: Rep[Int], verticalStride: Rep[Int],
+      horizontalStride: Rep[Int]): Rep[CudnnPoolingDescriptorT] = {
+    val desc = getCudnnPoolingDescriptor
+    cudnnCall(cudnnCreatePoolingDescriptor(desc))
+    cudnnCall(cudnnSetPooling2dDescriptor(desc, mode, nanOpt, windowHeight, windowWidth, verticalPadding, horizontalPadding,
+      verticalStride, horizontalStride))
+    desc
+  }
+  def cudnnPoolingForward(handle: Rep[CudnnHandleT], poolingDesc: Rep[CudnnPoolingDescriptorT], alpha: Var[Float],
+      xDesc: Rep[CudnnTensorDescriptorT], x: Rep[Array[Float]], beta: Var[Float], yDesc: Rep[CudnnTensorDescriptorT],
+      y: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnPoolingForward", Unwrap(handle), Unwrap(poolingDesc), UnwrapV(alpha), Unwrap(xDesc),
+      Unwrap(x), UnwrapV(beta), Unwrap(yDesc), Unwrap(y))(Seq(0,1,2,3,4,5,6), Seq(7), Set(2,5))
+  def cudnnPoolingBackward(handle: Rep[CudnnHandleT], poolingDesc: Rep[CudnnPoolingDescriptorT], alpha: Var[Float],
+      yDesc: Rep[CudnnTensorDescriptorT], y: Rep[Array[Float]], dyDesc: Rep[CudnnTensorDescriptorT], dy: Rep[Array[Float]],
+      xDesc: Rep[CudnnTensorDescriptorT], xData: Rep[Array[Float]], beta: Var[Float], dxDesc: Rep[CudnnTensorDescriptorT],
+      dx: Rep[Array[Float]]) =
+    libFunction("cudnnPoolingBackward", Unwrap(handle), Unwrap(poolingDesc), UnwrapV(alpha), Unwrap(yDesc), Unwrap(y),
+      Unwrap(dyDesc), Unwrap(dy), Unwrap(xDesc), Unwrap(xData), UnwrapV(beta), Unwrap(dxDesc),
+      Unwrap(dx))(Seq(0,1,2,3,4,5,6,7,8,9,10), Seq(11), Set(2,9))
 
 
   // cudnnCTCLossDescriptor_t

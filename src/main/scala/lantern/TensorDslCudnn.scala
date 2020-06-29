@@ -754,6 +754,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       }
     }
 
+    @virtualize
     def Pool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]], mode: PoolModes.Value, nanOpt: NanOpt.Value): Tensor = {
       val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
       val (verticalPadding, horizontalPadding) = pads match {
@@ -761,42 +762,58 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         case Some(pads) => (pads(0), pads(2))
       }
       val (verticalStride :: horizontalStride :: Nil) = strides.take(2).toList
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
       val (outputHeight, outputWidth) = pads match {
         case None => (convSize(input.shape(2), kernel(0), strides(0)), convSize(input.shape(3), kernel(1), strides(1)))
         case Some(pads) => (convSize(input.shape(2), kernel(0), strides(0), pads(0)), convSize(input.shape(3), kernel(1), strides(1), pads(2)))
       }
       val output = Tensor.zeros(input.shape(0), input.shape(1), outputHeight, outputWidth)
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), """) );
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, output.shape(0), ", ", output.shape(1), ", ", output.shape(2), ", ", output.shape(3), s"""));
-          |
-          |cudnnPoolingDescriptor_t poolingDesc;
-          |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
-          |CUDNN_CALL(cudnnSetPooling2dDescriptor(
-          |    poolingDesc, ${mode.toString}, ${nanOpt.toString},
-          |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
-          |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
-          |));
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnPoolingForward(\n" +
-          "    cudnnHandle, \n" +
-          "    poolingDesc, \n" +
-          "    ", one, ", in_desc, ", input.data, ", ", zero, ", out_desc, ", output.data, "));\n" +
-          "}"): _*)
+
+      var zero = 0.0f
+      var one = 1.0f
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.shape)
+      val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, output.shape)
+      val poolingDesc = cudnnGetPooling2dDescriptor(mode match {
+        case PoolModes.Max => kmax
+        case PoolModes.AverageIP => kaverage_ip
+        case PoolModes.AverageEP => kaverage_ep
+        case PoolModes.MaxD => kmax_d
+      }, nanOpt match {
+        case NanOpt.NotProp => knot_prop
+        case NanOpt.Prop => kprop
+      }, windowHeight, windowWidth, verticalPadding, horizontalPadding, verticalStride, horizontalStride)
+      cudnnCall(cudnnPoolingForward(cudnnHandle, poolingDesc, one, inDesc, input.data, zero, outDesc, output.data))
+
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t in_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, input.shape(0), ", ", input.shape(1), ", ", input.shape(2), ", ", input.shape(3), """) );
+      //     |
+      //     |cudnnTensorDescriptor_t out_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, output.shape(0), ", ", output.shape(1), ", ", output.shape(2), ", ", output.shape(3), s"""));
+      //     |
+      //     |cudnnPoolingDescriptor_t poolingDesc;
+      //     |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
+      //     |CUDNN_CALL(cudnnSetPooling2dDescriptor(
+      //     |    poolingDesc, ${mode.toString}, ${nanOpt.toString},
+      //     |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
+      //     |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
+      //     |));
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnPoolingForward(\n" +
+      //     "    cudnnHandle, \n" +
+      //     "    poolingDesc, \n" +
+      //     "    ", one, ", in_desc, ", input.data, ", ", zero, ", out_desc, ", output.data, "));\n" +
+      //     "}"): _*)
       output
     }
 
@@ -805,42 +822,59 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       (Pool2D_batch(input, kernel, strides, pads, PoolModes.Max, NanOpt.NotProp), None)
     }
 
+    @virtualize
     def Pool2D_batch_grad(input: TensorR, output: TensorR, kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int], mode: PoolModes.Value, nanOpt: NanOpt.Value): Unit = {
       val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
       val (verticalPadding, horizontalPadding) = (pads(0), pads(2))
       val (verticalStride :: horizontalStride :: Nil) = strides.take(2).toList
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, output.x.shape(0), ", ", output.x.shape(1), ", ", output.x.shape(2), ", ", output.x.shape(3), s"""));
-          |
-          |cudnnPoolingDescriptor_t poolingDesc;
-          |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
-          |CUDNN_CALL(cudnnSetPooling2dDescriptor(
-          |    poolingDesc, ${mode.toString}, ${nanOpt.toString},
-          |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
-          |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
-          |));
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnPoolingBackward(\n" +
-          "    cudnnHandle, \n" +
-          "    poolingDesc, \n" +
-          "    ", one, ", out_desc, ", output.x.data, ", out_desc, ", output.d.data, ", in_desc, ", input.x.data,
-          "  , ", zero, ", in_desc, ", input.d.data, "));\n" +
-          "}"): _*)
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.x.shape)
+      val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, output.x.shape)
+      val poolingDesc = cudnnGetPooling2dDescriptor(mode match {
+        case PoolModes.Max => kmax
+        case PoolModes.AverageIP => kaverage_ip
+        case PoolModes.AverageEP => kaverage_ep
+        case PoolModes.MaxD => kmax_d
+      }, nanOpt match {
+        case NanOpt.NotProp => knot_prop
+        case NanOpt.Prop => kprop
+      }, windowHeight, windowWidth, verticalPadding, horizontalPadding, verticalStride, horizontalStride)
+      cudnnCall(cudnnPoolingBackward(cudnnHandle, poolingDesc, one, outDesc, output.x.data, outDesc, output.d.data, inDesc, input.x.data,
+        zero, inDesc, input.d.data))
+
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t in_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, input.x.shape(0), ", ", input.x.shape(1), ", ", input.x.shape(2), ", ", input.x.shape(3), """));
+      //     |
+      //     |cudnnTensorDescriptor_t out_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, output.x.shape(0), ", ", output.x.shape(1), ", ", output.x.shape(2), ", ", output.x.shape(3), s"""));
+      //     |
+      //     |cudnnPoolingDescriptor_t poolingDesc;
+      //     |CUDNN_CALL(cudnnCreatePoolingDescriptor(&poolingDesc));
+      //     |CUDNN_CALL(cudnnSetPooling2dDescriptor(
+      //     |    poolingDesc, ${mode.toString}, ${nanOpt.toString},
+      //     |    ${windowHeight}, ${windowWidth}, ${verticalPadding},
+      //     |    ${horizontalPadding}, ${verticalStride}, ${horizontalStride}
+      //     |));
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnPoolingBackward(\n" +
+      //     "    cudnnHandle, \n" +
+      //     "    poolingDesc, \n" +
+      //     "    ", one, ", out_desc, ", output.x.data, ", out_desc, ", output.d.data, ", in_desc, ", input.x.data,
+      //     "  , ", zero, ", in_desc, ", input.d.data, "));\n" +
+      //     "}"): _*)
     }
 
     override def maxPool2D_batch_grad(input: TensorR, output: TensorR, sidx: Option[Rep[Array[Int]]], kernel: Seq[Int], strides: Seq[Int], pads: Seq[Int]): Unit = {
