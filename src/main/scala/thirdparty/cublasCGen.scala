@@ -21,7 +21,7 @@ trait CCodeGenCuBLAS extends ExtendedCCodeGen with CudaCodeGenLibFunction {
 
   override def shallow(n: Node): Unit = n match {
     case Node(s, "myGpuMalloc-f", List(size), _) =>
-      emit("myGpuMalloc("); shallow(size); emit(")")
+      emit(s"(${remap(typeMap.getOrElse(s, manifest[Unknown]))})myGpuMalloc("); shallow(size); emit(")")
     case Node(s, "myGpuFree-f", List(size), _) =>
       emit("myGpuFree("); shallow(size); emit(")")
 

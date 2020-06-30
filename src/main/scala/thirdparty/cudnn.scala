@@ -454,15 +454,38 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   def getCudnnDropoutDescriptorT = newStruct[CudnnDropoutDescriptorT]
 
   def cudnnCreateDropoutDescriptor(desc: Rep[CudnnDropoutDescriptorT]) =
-    libFunction[CudnnStatusT]("cudnnCreateDropoutDescriptor", Unwrap(desc))(Seq(), Seq(1), Set(0))
+    libFunction[CudnnStatusT]("cudnnCreateDropoutDescriptor", Unwrap(desc))(Seq(), Seq(0), Set(0))
 
-  def cudnnDropoutGetStatesSize(handle: Rep[CudnnHandleT], dropoutBufSize: Rep[SizeT]) =
-    libFunction[CudnnStatusT]("cudnnDropoutGetStatesSize", Unwrap(handle), Unwrap(dropoutBufSize))(Seq(0), Seq(1), Set(1))
+  def cudnnDropoutGetStatesSize(handle: Rep[CudnnHandleT], dropoutBufSize: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnDropoutGetStatesSize", Unwrap(handle), UnwrapV(dropoutBufSize))(Seq(0), Seq(1), Set(1))
+
+  def cudnnDropoutGetReserveSpaceSize(xDesc: Rep[CudnnTensorDescriptorT], sizeInBytes: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnDropoutGetReserveSpaceSize", Unwrap(xDesc), UnwrapV(sizeInBytes))(Seq(0), Seq(1), Set(1))
 
   def cudnnSetDropoutDescriptor(dropDesc: Rep[CudnnDropoutDescriptorT], handle: Rep[CudnnHandleT], dropoutRate: Rep[Float],
-                                dropoutBuf: Rep[Unit], dropoutBufSize: Rep[SizeT], seed: Rep[Long]) =
+                                dropoutBuf: Rep[Array[Float]], dropoutBufSize: Rep[SizeT], seed: Rep[Long]) =
     libFunction[CudnnStatusT]("cudnnSetDropoutDescriptor", Unwrap(dropDesc), Unwrap(handle), Unwrap(dropoutRate), Unwrap(dropoutBuf),
-      Unwrap(dropoutBufSize), Unwrap(seed))(Seq(0, 1, 2, 4, 5), Seq(3), Set(3))
+      Unwrap(dropoutBufSize), Unwrap(seed))(Seq(0, 1, 2, 4, 5), Seq(3), Set[Int]())
+
+  def krandTime = cmacro[Long]("time(NULL)")
+  def cudnnGetDropoutDescriptor(handle: Rep[CudnnHandleT], prob: Rep[Float], state: Rep[Array[Float]], stateSize: Rep[SizeT],
+      seed: Rep[Long]) = {
+    val desc = getCudnnDropoutDescriptorT
+    cudnnCall(cudnnCreateDropoutDescriptor(desc))
+    cudnnCall(cudnnSetDropoutDescriptor(desc, handle, prob, state, stateSize, seed))
+    desc
+  }
+
+  def cudnnDropoutForward(handle: Rep[CudnnHandleT], dropoutDesc: Rep[CudnnDropoutDescriptorT], xDesc: Rep[CudnnTensorDescriptorT],
+      x: Rep[Array[Float]], yDesc: Rep[CudnnTensorDescriptorT], y: Rep[Array[Float]], rsData: Rep[Array[Float]],
+      rsSize: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnDropoutForward", Unwrap(handle), Unwrap(dropoutDesc), Unwrap(xDesc), Unwrap(x),
+      Unwrap(yDesc), Unwrap(y), Unwrap(rsData), Unwrap(rsSize))(Seq(0,1,2,3,4,7), Seq(5,6), Set[Int]())
+
+  def cudnnDropoutBackward(handle: Rep[CudnnHandleT], dropoutDesc: Rep[CudnnDropoutDescriptorT], dyDesc: Rep[CudnnTensorDescriptorT],
+      dy: Rep[Array[Float]], dxDesc: Rep[CudnnTensorDescriptorT], dx: Rep[Array[Float]], rsData: Rep[Array[Float]], rsSize: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnDropoutBackward", Unwrap(handle), Unwrap(dropoutDesc), Unwrap(dyDesc), Unwrap(dy),
+      Unwrap(dxDesc), Unwrap(dx), Unwrap(rsData), Unwrap(rsSize))(Seq(0,1,2,3,4,6,7), Seq(5,6), Set[Int]())
 
   // attenion modes
   abstract class AttentionMode

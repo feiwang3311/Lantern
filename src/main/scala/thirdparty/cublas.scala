@@ -23,9 +23,12 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
 
   // alloc and free memory
   case class SizeT(x: Int) { override def toString() = x.toString }
-  object SizeT {
-    def apply(x: Int) = new SizeT(x)
+  implicit def sizeTRepToOps(x: Rep[SizeT])(implicit __pos: SourceContext): SizeTOps = new SizeTOps(x)(__pos)
+  implicit def sizeTVarToOps(x: Var[SizeT])(implicit __pos: SourceContext): SizeTOps = new SizeTOps(readVar(x))(__pos)
+  class SizeTOps(x: Rep[SizeT])(implicit __pos: SourceContext) {
+    def toInt: Rep[Int] = Wrap[Int](Unwrap(x))
   }
+
   def gpuArenaMalloc[T:Manifest](size: Rep[SizeT]): Rep[Array[T]] = {
     // libFunction[Array[T]]("myGpuMalloc", Unwrap(size))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)
     Wrap[Array[T]](Adapter.g.reflectWrite("myGpuMalloc-f", Unwrap(size))(Adapter.CTRL)) // FIXME(feiw) fix write effect to arena??

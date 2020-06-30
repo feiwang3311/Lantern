@@ -1138,85 +1138,118 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       }
     }
 
+    @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       val output = Tensor.zeros_like(input)
-      val reserveSpace = var_new(unchecked[Array[Float]]("(float*)NULL"))
-      val sizeInBytes = var_new(unchecked[Int]("0"))
+      // val reserveSpace = var_new(unchecked[Array[Float]]("(float*)NULL"))
+      // val sizeInBytes = var_new(unchecked[Int]("0"))
       val padShape = input.shape.padTo(4, unit(1)) // pad the dimension to 4D
-      unchecked[Unit](
-        s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, padShape(0), ", ", padShape(1), ", ", padShape(2), ", ", padShape(3), s"""));
-          |
-          |size_t stateSizeInBytes;
-          |CUDNN_CALL(cudnnDropoutGetStatesSize(
-          |    cudnnHandle, &stateSizeInBytes
-          |));
-          |void* state = myGpuMalloc(stateSizeInBytes);
-          |
-          |size_t sizeInBytes;
-          |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
-          |    in_desc, &sizeInBytes
-          |));
-          |void* reserveSpace = myGpuMalloc(sizeInBytes);
-          |
-          |""".stripMargin,
-          reserveSpace, " = (float*)reserveSpace;\n",
-          sizeInBytes, " = (int)sizeInBytes;\n",
-        s"""
-          |cudnnDropoutDescriptor_t dropoutDesc;
-          |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
-          |CUDNN_CALL(cudnnSetDropoutDescriptor(
-          |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
-          |));
-          |""".stripMargin,
 
-          "CUDNN_CALL(cudnnDropoutForward(\n" +
-          "    cudnnHandle,\n" +
-          "    dropoutDesc,\n" +
-          "    in_desc, ", input.data, ", in_desc, ", output.data, ", ", "reserveSpace, sizeInBytes));\n" +
-          "}")
-      (output, reserveSpace, sizeInBytes)
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, padShape)
+
+      var rsSize = SizeT(0)
+      cudnnCall(cudnnDropoutGetReserveSpaceSize(inDesc, rsSize))
+      val rsData = gpuArenaMalloc[Float](rsSize)
+
+      var stateSize = SizeT(0)
+      cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, stateSize))
+      val state = gpuArenaMalloc[Float](stateSize)
+
+      val dropoutDesc = cudnnGetDropoutDescriptor(cudnnHandle, prob, state, stateSize, krandTime)
+      cudnnCall(cudnnDropoutForward(cudnnHandle, dropoutDesc, inDesc, input.data, inDesc, output.data, rsData, rsSize))
+      gpuArenaFree(stateSize)
+
+      // unchecked[Unit](
+      //   s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t in_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, padShape(0), ", ", padShape(1), ", ", padShape(2), ", ", padShape(3), s"""));
+      //     |
+      //     |size_t stateSizeInBytes;
+      //     |CUDNN_CALL(cudnnDropoutGetStatesSize(
+      //     |    cudnnHandle, &stateSizeInBytes
+      //     |));
+      //     |void* state = myGpuMalloc(stateSizeInBytes);
+      //     |
+      //     |size_t sizeInBytes;
+      //     |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
+      //     |    in_desc, &sizeInBytes
+      //     |));
+      //     |void* reserveSpace = myGpuMalloc(sizeInBytes);
+      //     |
+      //     |""".stripMargin,
+      //     reserveSpace, " = (float*)reserveSpace;\n",
+      //     sizeInBytes, " = (int)sizeInBytes;\n",
+      //   s"""
+      //     |cudnnDropoutDescriptor_t dropoutDesc;
+      //     |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
+      //     |CUDNN_CALL(cudnnSetDropoutDescriptor(
+      //     |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
+      //     |));
+      //     |""".stripMargin,
+
+      //     "CUDNN_CALL(cudnnDropoutForward(\n" +
+      //     "    cudnnHandle,\n" +
+      //     "    dropoutDesc,\n" +
+      //     "    in_desc, ", input.data, ", in_desc, ", output.data, ", ", "reserveSpace, sizeInBytes));\n" +
+      //     "}")
+      // (output, reserveSpace, sizeInBytes)
+      (output, rsData, rsSize.toInt)
     }
 
+    @virtualize
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = {
       val padShape = input.x.shape.padTo(4, unit(1)) // pad the dimension to 4D
-      unchecked[Unit](
-        s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, padShape(0), ", ", padShape(1), ", ", padShape(2), ", ", padShape(3), s"""));
-          |
-          |size_t stateSizeInBytes;
-          |CUDNN_CALL(cudnnDropoutGetStatesSize(
-          |    cudnnHandle, &stateSizeInBytes
-          |));
-          |void* state = myGpuMalloc(stateSizeInBytes);
-          |
-          |size_t sizeInBytes;
-          |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
-          |    in_desc, &sizeInBytes
-          |));
-          |void* reserveSpace = myGpuMalloc(sizeInBytes);
-          |
-          |cudnnDropoutDescriptor_t dropoutDesc;
-          |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
-          |CUDNN_CALL(cudnnSetDropoutDescriptor(
-          |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
-          |));
-          |""".stripMargin,
-          "CUDNN_CALL(cudnnDropoutBackward(\n" +
-          "    cudnnHandle,\n" +
-          "    dropoutDesc,\n" +
-          "    in_desc, ", output.d.data, ", in_desc, ", input.d.data, ", (void*)", helper, ", (size_t)", size, "));\n" +
-          "}")
+
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, padShape)
+
+      var stateSize = SizeT(0)
+      cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, stateSize))
+      val state = gpuArenaMalloc[Float](stateSize)
+
+      var rsSize = SizeT(0)
+      cudnnCall(cudnnDropoutGetReserveSpaceSize(inDesc, rsSize))
+
+      val dropoutDesc = cudnnGetDropoutDescriptor(cudnnHandle, prob, state, stateSize, krandTime)
+      cudnnCall(cudnnDropoutBackward(cudnnHandle, dropoutDesc, inDesc, output.d.data, inDesc, input.d.data, helper, rsSize))
+      gpuArenaFree(stateSize)
+      gpuArenaFree(rsSize)
+
+      // unchecked[Unit](
+      //   s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t in_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, padShape(0), ", ", padShape(1), ", ", padShape(2), ", ", padShape(3), s"""));
+      //     |
+      //     |size_t stateSizeInBytes;
+      //     |CUDNN_CALL(cudnnDropoutGetStatesSize(
+      //     |    cudnnHandle, &stateSizeInBytes
+      //     |));
+      //     |void* state = myGpuMalloc(stateSizeInBytes);
+      //     |
+      //     |size_t sizeInBytes;
+      //     |CUDNN_CALL(cudnnDropoutGetReserveSpaceSize(
+      //     |    in_desc, &sizeInBytes
+      //     |));
+      //     |void* reserveSpace = myGpuMalloc(sizeInBytes);
+      //     |
+      //     |cudnnDropoutDescriptor_t dropoutDesc;
+      //     |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropoutDesc));
+      //     |CUDNN_CALL(cudnnSetDropoutDescriptor(
+      //     |    dropoutDesc, cudnnHandle, ${prob}, state, stateSizeInBytes, time(NULL)
+      //     |));
+      //     |""".stripMargin,
+      //     "CUDNN_CALL(cudnnDropoutBackward(\n" +
+      //     "    cudnnHandle,\n" +
+      //     "    dropoutDesc,\n" +
+      //     "    in_desc, ", output.d.data, ", in_desc, ", input.d.data, ", (void*)", helper, ", (size_t)", size, "));\n" +
+      //     "}")
     }
 
     // multihead attention
