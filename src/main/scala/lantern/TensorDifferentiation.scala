@@ -316,6 +316,25 @@ trait TensorDsl extends DslCPP with Diff {
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
     // multihead attention
+    // TODO - add default size descriptors, default shape
+    // Then in apply() check whether query.shape is equal to the default shape
+//    case class MultiheadAttnConfig(weights: TensorR, numHeads: Int, embedDim:Int,
+//                                   defaultDevQSeqArray: Rep[Array[Int]], defaultKSeqArray: Rep[Array[Int]], defaultLoWinIdx: Rep[Array[Int]], defaultHiWinIdx: Rep[Array[Int]], bias: Boolean,
+//                                   dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean)
+
+    abstract class MultiheadAttnConfig {
+      val weights: TensorR
+      val numHeads: Int
+      val embedDim: Int
+      val defaultQSeqArray: Rep[Array[Int]]
+      val defaultKSeqArray: Rep[Array[Int]]
+      val bias: Boolean
+      val dropoutRate: Float
+      val smScaler: Float
+      val residualConnection: Boolean
+    }
+
+
     def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int, 
       devqSeqArray: Rep[Array[Int]], devkSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean, 
       dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]],

@@ -425,17 +425,13 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   def wGradModeAdd = cmacro[CudnnWGradModeT]("CUDNN_WGRAD_MODE_ADD")
   def wGradModeSet = cmacro[CudnnWGradModeT]("CUDNN_WGRAD_MODE_SET")
 
-  // macros for SeqData Dimensions
-  abstract class SeqDataDim
-  def seqDataTimeDim = cmacro[SeqDataDim]("CUDNN_SEQDATA_TIME_DIM")
-  def seqDataBatchDim = cmacro[SeqDataDim]("CUDNN_SEQDATA_BATCH_DIM")
-  def seqDataBeamDim = cmacro[SeqDataDim]("CUDNN_SEQDATA_BEAM_DIM")
-  def seqDataVectDim = cmacro[SeqDataDim]("CUDNN_SEQDATA_VECT_DIM")
-
-
   // cudnnSeqDataAxis_t struct
   abstract class CudnnSeqDataAxisT
-  def getCudnnSeqDataAxisT = newStruct[CudnnSeqDataAxisT]
+  def seqDataDimCount = cmacro[Int]("CUDNN_SEQDATA_DIM_COUNT")
+  def seqDataTimeDim = cmacro[CudnnSeqDataAxisT]("CUDNN_SEQDATA_TIME_DIM")
+  def seqDataBatchDim = cmacro[CudnnSeqDataAxisT]("CUDNN_SEQDATA_BATCH_DIM")
+  def seqDataBeamDim = cmacro[CudnnSeqDataAxisT]("CUDNN_SEQDATA_BEAM_DIM")
+  def seqDataVectDim = cmacro[CudnnSeqDataAxisT]("CUDNN_SEQDATA_VECT_DIM")
 
   // cudnnSeqDataDescriptor_t struct
   abstract class CudnnSeqDataDescriptorT
