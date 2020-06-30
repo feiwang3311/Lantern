@@ -890,6 +890,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       Pool2D_batch_grad(input, output, kernel, strides, pads, PoolModes.AverageEP, NanOpt.NotProp)
     }
 
+    @virtualize
     def cudnnBatchNormalizationForwardInference(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                 runningMean: Tensor, runningVar: Tensor,
                                                 momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
@@ -897,103 +898,125 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1)
         else if (bias.rank == 4) bias.shape.dims
         else {System.out.println(s"bias.rank is not 1 or 4 but ${bias.rank}"); ???}
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t out_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), """));
-          |
-          |cudnnTensorDescriptor_t sbmv_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
-          |
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnBatchNormalizationForwardInference(\n" +
-          // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
-          "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", one, ", in_desc, ", x.data, ", out_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
-          "    ", bias.data, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, "));\n" +
-          "}"): _*)
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, x.shape)
+      val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, res.shape)
+      val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
+      cudnnCall(cudnnBatchNormalizationForwardInference_(cudnnHandle, knormSpatial, one, one, inDesc, x.data, outDesc, res.data,
+        sbmvDesc, scale.data, bias.data, runningMean.data, runningVar.data, epsilon))
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t in_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), """));
+      //     |
+      //     |cudnnTensorDescriptor_t out_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), """));
+      //     |
+      //     |cudnnTensorDescriptor_t sbmv_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
+      //     |
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnBatchNormalizationForwardInference(\n" +
+      //     // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+      //     "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+      //     "    ", one, ", ", one, ", in_desc, ", x.data, ", out_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
+      //     "    ", bias.data, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, "));\n" +
+      //     "}"): _*)
     }
 
     // TODO (Fei Wang): What is proper value for momentum (or should be called exponentialAverageFactor) here?
+    @virtualize
     def cudnnBatchNormalizationForwardTraining(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                runningMean: Tensor, runningVar: Tensor, saveMean: Tensor, saveInvVariance: Tensor,
                                                momentum: Double = 0.1, epsilon: Double = 1e-5): Int = {
-      val biasShape =
+      val biasShape: Seq[Rep[Int]] =
         if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1)
         else if (bias.rank == 4) bias.shape.dims
         else {System.out.println(s"bias rank is not 1 or 4, but ${bias.rank}"); ???}
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, x.shape)
+      val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, res.shape)
+      val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
+      cudnnCall(cudnnBatchNormalizationForwardTraining_(cudnnHandle, knormSpatial, one, zero, inDesc, x.data, outDesc, res.data,
+        sbmvDesc, scale.data, bias.data, momentum, runningMean.data, runningVar.data, epsilon, saveMean.data, saveInvVariance.data))
+      0
+      // val counter = nextKernel
+      // nextKernel += 1
 
-      val counter = nextKernel
-      nextKernel += 1
-
-      unchecked[Unit](
-        Seq(s"""
-          |cudnnTensorDescriptor_t in_desc_$counter;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc_$counter));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), s"""));
-          |
-          |cudnnTensorDescriptor_t out_desc_$counter;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc_$counter));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    out_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), s"""));
-          |
-          |cudnnTensorDescriptor_t sbmv_desc_$counter;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc_$counter));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    sbmv_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
-          |
-          |""".stripMargin):_*)
-      unchecked[Unit](
-        Seq(
-          "CUDNN_CALL(cudnnBatchNormalizationForwardTraining(\n" +
-          // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
-          "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", zero, s", in_desc_$counter, ", x.data, s", out_desc_$counter, ", res.data, s", sbmv_desc_$counter, ", scale.data, ",\n" +
-          "    ", bias.data, ", ", momentum, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, ",\n" +
-          "    ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
-       counter
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |cudnnTensorDescriptor_t in_desc_$counter;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc_$counter));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    in_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), s"""));
+      //     |
+      //     |cudnnTensorDescriptor_t out_desc_$counter;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc_$counter));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    out_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, res.shape(0), ", ", res.shape(1), ", ", res.shape(2), ", ", res.shape(3), s"""));
+      //     |
+      //     |cudnnTensorDescriptor_t sbmv_desc_$counter;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc_$counter));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    sbmv_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
+      //     |
+      //     |""".stripMargin):_*)
+      // unchecked[Unit](
+      //   Seq(
+      //     "CUDNN_CALL(cudnnBatchNormalizationForwardTraining(\n" +
+      //     // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+      //     "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+      //     "    ", one, ", ", zero, s", in_desc_$counter, ", x.data, s", out_desc_$counter, ", res.data, s", sbmv_desc_$counter, ", scale.data, ",\n" +
+      //     "    ", bias.data, ", ", momentum, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, ",\n" +
+      //     "    ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
+      //  counter
     }
 
+    @virtualize
     def cudnnBatchNormalizationBackward(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
                                         saveMean: Tensor, saveInvVariance: Tensor, counter: Int,
                                         momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
-      val biasShape =
+      val biasShape: Seq[Rep[Int]] =
         if (bias.x.rank == 1) Seq(1, bias.x.shape(0), 1, 1)
         else if (bias.x.rank == 4) bias.x.shape.dims
         else {System.out.println(s"bias rank is not 1 or 4, but ${bias.x.rank}"); ???}
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-
-      unchecked[Unit](
-        Seq(
-          "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
-          // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
-          "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", one, ", ", one, ", ", one, s", in_desc_$counter, ", input.x.data, ",\n" +
-          s"    out_desc_$counter, ", res.d.data, s", in_desc_$counter, ", input.d.data, s", sbmv_desc_$counter, ", scale.x.data, ",\n" +
-          "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
+      // val zero = NewArray[Float](1); zero(0) = 0
+      // val one = NewArray[Float](1); one(0) = 1
+      var zero = 0.0f
+      var one = 1.0f
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.x.shape)
+      val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, res.x.shape)
+      val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
+      cudnnCall(cudnnBatchNormalizationBackward_(cudnnHandle, knormSpatial, one, one, one, one, inDesc, input.x.data, outDesc,
+        res.d.data, inDesc, input.d.data, sbmvDesc, scale.x.data, scale.d.data, bias.d.data, epsilon, saveMean.data, saveInvVariance.data))
+      // unchecked[Unit](
+      //   Seq(
+      //     "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
+      //     // "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+      //     "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+      //     "    ", one, ", ", one, ", ", one, ", ", one, s", in_desc_$counter, ", input.x.data, ",\n" +
+      //     s"    out_desc_$counter, ", res.d.data, s", in_desc_$counter, ", input.d.data, s", sbmv_desc_$counter, ", scale.x.data, ",\n" +
+      //     "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
     }
 
     override def batchNormInference(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): Tensor = {

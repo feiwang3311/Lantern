@@ -384,9 +384,49 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       yDesc: Rep[CudnnTensorDescriptorT], y: Rep[Array[Float]], dyDesc: Rep[CudnnTensorDescriptorT], dy: Rep[Array[Float]],
       xDesc: Rep[CudnnTensorDescriptorT], xData: Rep[Array[Float]], beta: Var[Float], dxDesc: Rep[CudnnTensorDescriptorT],
       dx: Rep[Array[Float]]) =
-    libFunction("cudnnPoolingBackward", Unwrap(handle), Unwrap(poolingDesc), UnwrapV(alpha), Unwrap(yDesc), Unwrap(y),
+    libFunction[CudnnStatusT]("cudnnPoolingBackward", Unwrap(handle), Unwrap(poolingDesc), UnwrapV(alpha), Unwrap(yDesc), Unwrap(y),
       Unwrap(dyDesc), Unwrap(dy), Unwrap(xDesc), Unwrap(xData), UnwrapV(beta), Unwrap(dxDesc),
       Unwrap(dx))(Seq(0,1,2,3,4,5,6,7,8,9,10), Seq(11), Set(2,9))
+
+  // batchnorm
+  abstract class CudnnBatchNormMode
+  def knormActivation = cmacro[CudnnBatchNormMode]("CUDNN_BATCHNORM_PER_ACTIVATION")
+  def knormSpatial = cmacro[CudnnBatchNormMode]("CUDNN_BATCHNORM_SPATIAL")
+  def knormSpatialPersistent = cmacro[CudnnBatchNormMode]("CUDNN_BATCHNORM_SPATIAL_PERSISTENT")
+
+  def cudnnBatchNormalizationForwardInference_(handle: Rep[CudnnHandleT], mode: Rep[CudnnBatchNormMode],
+      alpha: Var[Float], beta: Var[Float], xDesc: Rep[CudnnTensorDescriptorT], x: Rep[Array[Float]],
+      yDesc: Rep[CudnnTensorDescriptorT], y: Rep[Array[Float]], bnScalaBiasMeanVarDesc: Rep[CudnnTensorDescriptorT],
+      bnScale: Rep[Array[Float]], bnBias: Rep[Array[Float]], estimateMean: Rep[Array[Float]],
+      estimatedVariance:Rep[Array[Float]], epsilon: Rep[Double]) =
+    libFunction[CudnnStatusT]("cudnnBatchNormalizationForwardInference", Unwrap(handle), Unwrap(mode),
+      UnwrapV(alpha), UnwrapV(beta), Unwrap(xDesc), Unwrap(x), Unwrap(yDesc), Unwrap(y), Unwrap(bnScalaBiasMeanVarDesc),
+      Unwrap(bnScale), Unwrap(bnBias), Unwrap(estimateMean), Unwrap(estimatedVariance),
+      Unwrap(epsilon))(Seq(0,1,2,3,4,5,6,8,9,10,11,12), Seq(7), Set(2,3))
+
+  def cudnnBatchNormalizationForwardTraining_(handle: Rep[CudnnHandleT], mode: Rep[CudnnBatchNormMode], alpha: Var[Float],
+      beta: Var[Float], xDesc: Rep[CudnnTensorDescriptorT], x: Rep[Array[Float]], yDesc: Rep[CudnnTensorDescriptorT],
+      y: Rep[Array[Float]], bnScalaBiasMeanVarDesc: Rep[CudnnTensorDescriptorT], bnScale: Rep[Array[Float]],
+      bnBias: Rep[Array[Float]], exponentialAverageFactor: Rep[Double], resultRunningMean: Rep[Array[Float]],
+      resultRunningVariance: Rep[Array[Float]], epsilon: Rep[Double], resultSaveMean: Rep[Array[Float]],
+      resultSaveInvVariance: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnBatchNormalizationForwardTraining", Unwrap(handle), Unwrap(mode), UnwrapV(alpha),
+      UnwrapV(beta), Unwrap(xDesc), Unwrap(x), Unwrap(yDesc), Unwrap(y), Unwrap(bnScalaBiasMeanVarDesc), Unwrap(bnScale),
+      Unwrap(bnBias), Unwrap(exponentialAverageFactor), Unwrap(resultRunningVariance), Unwrap(resultRunningVariance),
+      Unwrap(epsilon), Unwrap(resultSaveMean),
+      Unwrap(resultSaveInvVariance))(Seq(0,1,2,3,4,5,6,8,9,10,12,13), Seq(7,12,13,15,16), Set(2,3))
+
+  def cudnnBatchNormalizationBackward_(handle: Rep[CudnnHandleT], mode: Rep[CudnnBatchNormMode], alphaDataDiff: Var[Float],
+      betaDataDiff: Var[Float], alphaParamDiff: Var[Float], betaParamDiff: Var[Float], xDesc: Rep[CudnnTensorDescriptorT],
+      x: Rep[Array[Float]], dyDesc: Rep[CudnnTensorDescriptorT], dy: Rep[Array[Float]], dxDesc: Rep[CudnnTensorDescriptorT],
+      dx: Rep[Array[Float]], bnScaleBiasDiffDesc: Rep[CudnnTensorDescriptorT], bnScale: Rep[Array[Float]],
+      resultBnScaleDiff: Rep[Array[Float]], resultBnBiasDiff: Rep[Array[Float]], epsilon: Rep[Double],
+      saveMean: Rep[Array[Float]], savedInvVariance: Rep[Array[Float]]) =
+    libFunction[CudnnStatusT]("cudnnBatchNormalizationBackward", Unwrap(handle), Unwrap(mode), UnwrapV(alphaDataDiff),
+      UnwrapV(betaDataDiff), UnwrapV(alphaParamDiff), UnwrapV(betaParamDiff), Unwrap(xDesc), Unwrap(x), Unwrap(dyDesc),
+      Unwrap(dy), Unwrap(dxDesc), Unwrap(dx), Unwrap(bnScaleBiasDiffDesc), Unwrap(bnScale), Unwrap(resultBnScaleDiff),
+      Unwrap(resultBnBiasDiff), Unwrap(epsilon), Unwrap(saveMean),
+      Unwrap(savedInvVariance))(Seq(0,1,2,3,4,5,6,7,8,9,10,12,13,17,18), Seq(11,14,15), Set(2,3,4,5))
 
 
   // cudnnCTCLossDescriptor_t
