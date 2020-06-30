@@ -153,7 +153,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
     @virtualize
     override def add_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
-      var one = 1.0f
       if (!x.isInput) {
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, output.d, output.d.shape, one, one)
         else geam(x.d, false, 1.0f, output.d, false, 1.0f, x.d)
@@ -166,8 +165,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
     @virtualize
     override def minus_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
-      var one = 1.0f
-      var minus_one = -1.0f
       if (!x.isInput) {
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, output.d, output.d.shape, one, one)
         else geam(x.d, false, 1.0f, output.d, false, 1.0f, x.d)
@@ -180,7 +177,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
     @virtualize
     override def mul_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
-      var one = 1.0f
       if (!x.isInput) {
         val scaledXD = y.x * output.d
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, scaledXD, scaledXD.shape, one, one)
@@ -195,8 +191,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
     @virtualize
     override def div_grad(x: TensorR, y: TensorR, output: TensorR, xShape: Dimensions, yShape: Dimensions): Unit = {
-      var one = 1.0f
-      var minus_one = -1.0f
       if (!x.isInput) {
         val scaledXD = output.d / y.x
         if (xShape.broadcasted) cudnnReduceUpdateTensor(x.d, xShape, scaledXD, scaledXD.shape, one, one)
@@ -250,7 +244,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         }
       }
       var scaled = scale
-      var one = 1.0f
       val bias_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
       val out_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, resShape)
       cudnnCall(cudnnAddTensor(cudnnHandle, scaled, bias_desc, bias.data, one, out_desc, res.data))
@@ -282,8 +275,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     @virtualize
     def cudnnConvolutionForward(input: Tensor, filter: Tensor, res: Tensor, bias: Option[Tensor] = None,
                                 padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Int = {
-      var zero = 0f
-      var one = 1f
       val counter = nextKernel
       convOpIndexSet += counter
       nextKernel += 1
@@ -416,7 +407,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val sameBias = (shapeBias zip main.x.shape.dims).forallR{case (x, y) => x == y}
       if (sameBias) geam(bias.d, false, 1.0f, main.d, false, 1.0f, bias.d)
       else {
-        var one = 1.0f
         cudnnReduceUpdateTensor(bias.d, shapeBias, main.d, main.d.shape, one, one)
       }
     }
@@ -439,8 +429,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       assert(resGrad.rank >= 2, "Convolution result gradient must have rank no less than 2")
       if (biasGrad.rank == 1) assert(resGrad.shape(1) == biasGrad.shape(0), "Convolution result gradient shape(1) must equal to Bias gradient shape(0)")
       val resGradShape = resGrad.shape.padTo(4, unit(1))
-      // val one = NewArray[Float](1); one(0) = 1
-      var one = 1.0f
       val gradBiasDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
       val gradOutDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, resGradShape)
       cudnnCall(cudnnConvolutionBackwardBias_(cudnnHandle, one, gradOutDesc, resGrad.data, one, gradBiasDesc, biasGrad.data))
@@ -474,8 +462,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
                                      padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit = {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, but got ${resGrad.rank}")
       assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
-      // val one = NewArray[Float](1); one(0) = 1
-      var one = 1.0f
 
       // descripters that should be optimized away
       val filterDesc = cudnnGetFilter4dDescriptor(knchw, kfloat, filter.shape)
@@ -573,8 +559,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     def cudnnConvolutionBackwardFilter(filterGrad: Tensor, input: Tensor, resGrad: Tensor,
                                        padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit = {
       assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
-      // val one = NewArray[Float](1); one(0) = 1
-      var one = 1.0f
 
       // descripters that should be optimized away
       val filterDesc = cudnnGetFilter4dDescriptor(knchw, kfloat, filterGrad.shape)
@@ -671,9 +655,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val resData = mallocArray[Float](resShape.product1)
       val res = Tensor(resData, resShape: _*)
 
-      var zero = 0f
-      var one = 1f
-
       val in_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.x.shape)
       val filt_desc = cudnnGetFilter4dDescriptor(knchw, kfloat, kernel.x.shape)
       val out_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, res.shape)
@@ -762,16 +743,12 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         case Some(pads) => (pads(0), pads(2))
       }
       val (verticalStride :: horizontalStride :: Nil) = strides.take(2).toList
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
       val (outputHeight, outputWidth) = pads match {
         case None => (convSize(input.shape(2), kernel(0), strides(0)), convSize(input.shape(3), kernel(1), strides(1)))
         case Some(pads) => (convSize(input.shape(2), kernel(0), strides(0), pads(0)), convSize(input.shape(3), kernel(1), strides(1), pads(2)))
       }
       val output = Tensor.zeros(input.shape(0), input.shape(1), outputHeight, outputWidth)
 
-      var zero = 0.0f
-      var one = 1.0f
       val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.shape)
       val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, output.shape)
       val poolingDesc = cudnnGetPooling2dDescriptor(mode match {
@@ -827,10 +804,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val (windowHeight :: windowWidth :: Nil) = kernel.take(2).toList
       val (verticalPadding, horizontalPadding) = (pads(0), pads(2))
       val (verticalStride :: horizontalStride :: Nil) = strides.take(2).toList
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
-      var zero = 0.0f
-      var one = 1.0f
       val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.x.shape)
       val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, output.x.shape)
       val poolingDesc = cudnnGetPooling2dDescriptor(mode match {
@@ -898,10 +871,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1)
         else if (bias.rank == 4) bias.shape.dims
         else {System.out.println(s"bias.rank is not 1 or 4 but ${bias.rank}"); ???}
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
-      var zero = 0.0f
-      var one = 1.0f
       val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, x.shape)
       val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, res.shape)
       val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
@@ -947,10 +916,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         if (bias.rank == 1) Seq(1, bias.shape(0), 1, 1)
         else if (bias.rank == 4) bias.shape.dims
         else {System.out.println(s"bias rank is not 1 or 4, but ${bias.rank}"); ???}
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
-      var zero = 0.0f
-      var one = 1.0f
       val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, x.shape)
       val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, res.shape)
       val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
@@ -1000,10 +965,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         if (bias.x.rank == 1) Seq(1, bias.x.shape(0), 1, 1)
         else if (bias.x.rank == 4) bias.x.shape.dims
         else {System.out.println(s"bias rank is not 1 or 4, but ${bias.x.rank}"); ???}
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
-      var zero = 0.0f
-      var one = 1.0f
       val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.x.shape)
       val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, res.x.shape)
       val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, biasShape)
@@ -1041,86 +1002,97 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       }
     }
 
+    @virtualize
     def cudnnBatchNormalization1DForwardInference(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                   runningMean: Tensor, runningVar: Tensor,
                                                   momentum: Double = 0.1, epsilon: Double = 1e-5): Unit = {
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
-      unchecked[Unit](
-        Seq(s"""
-          |{
-          |cudnnTensorDescriptor_t in_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, x.shape(0), ", ", x.shape(1), """, 1, 1));
-          |
-          |cudnnTensorDescriptor_t sbmv_desc;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    1, """.stripMargin, bias.shape(0), """, 1, 1));
-          |
-          |""".stripMargin) ++
-        Seq(
-          "CUDNN_CALL(cudnnBatchNormalizationForwardInference(\n" +
-          "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
-         // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", one, ", in_desc, ", x.data, ", in_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
-          "    ", bias.data, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, "));\n" +
-          "}"): _*)
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, Seq(x.shape(0), x.shape(1), unit(1), unit(1)))
+      val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, Seq(unit(1), bias.shape(0), unit(1), unit(1)))
+      cudnnCall(cudnnBatchNormalizationForwardInference_(cudnnHandle, knormActivation, one, one, inDesc, x.data, inDesc, res.data,
+        sbmvDesc, scale.data, bias.data, runningMean.data, runningVar.data, epsilon))
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |{
+      //     |cudnnTensorDescriptor_t in_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    in_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, x.shape(0), ", ", x.shape(1), """, 1, 1));
+      //     |
+      //     |cudnnTensorDescriptor_t sbmv_desc;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    sbmv_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    1, """.stripMargin, bias.shape(0), """, 1, 1));
+      //     |
+      //     |""".stripMargin) ++
+      //   Seq(
+      //     "CUDNN_CALL(cudnnBatchNormalizationForwardInference(\n" +
+      //     "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+      //    // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+      //     "    ", one, ", ", one, ", in_desc, ", x.data, ", in_desc, ", res.data, ", sbmv_desc, ", scale.data, ",\n" +
+      //     "    ", bias.data, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, "));\n" +
+      //     "}"): _*)
     }
 
+    @virtualize
     def cudnnBatchNormalization1DForwardTraining(x: Tensor, res: Tensor, scale: Tensor, bias: Tensor,
                                                runningMean: Tensor, runningVar: Tensor, saveMean: Tensor, saveInvVariance: Tensor,
                                                momentum: Double = 0.1, epsilon: Double = 1e-5): Int = {
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, Seq(x.shape(0), x.shape(1), unit(1), unit(1)))
+      val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, Seq(unit(1), bias.shape(0), unit(1), unit(1)))
+      cudnnCall(cudnnBatchNormalizationForwardTraining_(cudnnHandle, knormActivation, one, zero, inDesc, x.data, inDesc,
+        res.data, sbmvDesc, scale.data, bias.data, momentum, runningMean.data, runningVar.data, epsilon,
+        saveMean.data, saveInvVariance.data))
+      0
+      // val counter = nextKernel
+      // nextKernel += 1
 
-      val counter = nextKernel
-      nextKernel += 1
+      // unchecked[Unit](
+      //   Seq(s"""
+      //     |cudnnTensorDescriptor_t in_desc_$counter;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc_$counter));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    in_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    """.stripMargin, x.shape(0), ", ", x.shape(1), s""", 1, 1));
+      //     |
+      //     |cudnnTensorDescriptor_t sbmv_desc_$counter;
+      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc_$counter));
+      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
+      //     |    sbmv_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+      //     |    1, """.stripMargin, bias.shape(0), """, 1, 1));
+      //     |
+      //     |""".stripMargin):_*)
 
-      unchecked[Unit](
-        Seq(s"""
-          |cudnnTensorDescriptor_t in_desc_$counter;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&in_desc_$counter));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    in_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    """.stripMargin, x.shape(0), ", ", x.shape(1), s""", 1, 1));
-          |
-          |cudnnTensorDescriptor_t sbmv_desc_$counter;
-          |CUDNN_CALL(cudnnCreateTensorDescriptor(&sbmv_desc_$counter));
-          |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-          |    sbmv_desc_$counter, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-          |    1, """.stripMargin, bias.shape(0), """, 1, 1));
-          |
-          |""".stripMargin):_*)
-
-      unchecked[Unit](
-        Seq(
-          "CUDNN_CALL(cudnnBatchNormalizationForwardTraining(\n" +
-          "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
-          // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", zero, s", in_desc_$counter, ", x.data, s", in_desc_$counter, ", res.data, s", sbmv_desc_$counter, ", scale.data, ",\n" +
-          "    ", bias.data, ", ", momentum, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, ",\n" +
-          "    ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
-      counter
+      // unchecked[Unit](
+      //   Seq(
+      //     "CUDNN_CALL(cudnnBatchNormalizationForwardTraining(\n" +
+      //     "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+      //     // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+      //     "    ", one, ", ", zero, s", in_desc_$counter, ", x.data, s", in_desc_$counter, ", res.data, s", sbmv_desc_$counter, ", scale.data, ",\n" +
+      //     "    ", bias.data, ", ", momentum, ", ", runningMean.data, ", ", runningVar.data, ", ", epsilon, ",\n" +
+      //     "    ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
+      // counter
     }
 
+    @virtualize
     def cudnnBatchNormalization1DBackward(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR,
                                         saveMean: Tensor, saveInvVariance: Tensor, counter: Int,
                                         momentum: Double = 1.0, epsilon: Double = 1e-5): Unit = {
-      val zero = NewArray[Float](1); zero(0) = 0
-      val one = NewArray[Float](1); one(0) = 1
+      val inDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, Seq(input.x.shape(0), input.x.shape(1), unit(1), unit(1)))
+      val sbmvDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, Seq(unit(1), bias.x.shape(0), unit(1), unit(1)))
+      cudnnCall(cudnnBatchNormalizationBackward_(cudnnHandle, knormActivation, one, one, one, one, inDesc, input.x.data,
+        inDesc, res.d.data, inDesc, input.d.data, sbmvDesc, scale.x.data, scale.d.data, bias.d.data, epsilon,
+        saveMean.data, saveInvVariance.data))
 
-      unchecked[Unit](
-        Seq(
-          "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
-          "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
-          // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
-          "    ", one, ", ", one, ", ", one, ", ", one, s", in_desc_$counter, ", input.x.data, ",\n" +
-         s"    in_desc_$counter, ", res.d.data, s", in_desc_$counter, ", input.d.data, s", sbmv_desc_$counter, ", scale.x.data, ",\n" +
-          "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
+      // unchecked[Unit](
+      //   Seq(
+      //     "CUDNN_CALL(cudnnBatchNormalizationBackward(\n" +
+      //     "    cudnnHandle, CUDNN_BATCHNORM_PER_ACTIVATION,\n" +
+      //     // "    cudnnHandle, CUDNN_BATCHNORM_SPATIAL,\n" +
+      //     "    ", one, ", ", one, ", ", one, ", ", one, s", in_desc_$counter, ", input.x.data, ",\n" +
+      //    s"    in_desc_$counter, ", res.d.data, s", in_desc_$counter, ", input.d.data, s", sbmv_desc_$counter, ", scale.x.data, ",\n" +
+      //     "    ", scale.d.data, ",", bias.d.data, ", ", epsilon, ", ", saveMean.data, ", ", saveInvVariance.data, "));\n"): _*)
     }
 
     @virtualize
@@ -1295,10 +1267,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     @virtualize
     def cudnnActivationForward(x: Tensor, activation: Activation.Value, inPlace: Boolean = false): Tensor = {
       val xShape = x.shape.padTo(4, unit(1)) //activation functions only support tensors of rank 4
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
-      var zero = 0.0f
-      var one = 1.0f
       val res = if (inPlace) x else Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
       val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, xShape)
       val activationDesc = cudnnGetActivationDescriptor(activation match {
@@ -1339,10 +1307,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val inputXShape = input.x.shape.padTo(4, unit(1)) // activation functions only support tensors of rank 4
       Tensor.assertShapeEqual(input.x.shape, res.x.shape)
       Tensor.assertShapeEqual(input.d.shape, res.d.shape)
-      // val one = NewArray[Float](1); one(0) = 1
-      // val zero = NewArray[Float](1); zero(0) = 0
-      var one = 1.0f
-      var zero = 0.0f
       val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, inputXShape)
       val activationDesc = cudnnGetActivationDescriptor(activation match {
         case Activation.Sigmoid => ksigmoid
@@ -1403,10 +1367,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     @virtualize
     def cudnnSoftmaxForward(x: Tensor, mode: SoftmaxMode.Value): Tensor = {
       assert(x.rank == 4, s"Softmax kernel only takes tensors of rank 4, and reduce on dim 1. Reshape your tensor accordingly before using this function. Got ${x.shape}")
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
-      var zero = 0.0f
-      var one = 1.0f
       val res = Tensor(mallocArray[Float](x.scalarCount), x.shape: _*)
       val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, x.shape)
       cudnnCall(cudnnSoftmaxForward_(cudnnHandle, mode match {
@@ -1441,8 +1401,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       // The shape of the input forward value is used in the generated code.
       Tensor.assertShapeEqual(input.x.shape, res.x.shape)
       Tensor.assertShapeEqual(input.d.shape, res.d.shape)
-      // val one = NewArray[Float](1); one(0) = 1
-      var one = 1.0f
       val xDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.x.shape)
       cudnnCall(cudnnSoftmaxBackward_(cudnnHandle, mode match {
         case SoftmaxMode.Fast => cudnnSoftmaxFast
@@ -1575,10 +1533,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         case None => Tensor(mallocArray[Float](unflatShape.product1), unflatShape: _*)
         case Some(array) => Tensor(array, unflatShape: _*)
       }
-      // val zero = NewArray[Float](1); zero(0) = 0
-      // val one = NewArray[Float](1); one(0) = 1
-      var zero = 0.0f
-      var one = 1.0f
       cudnnReduceTensorUnchecked(xShape, x.data, res.shape, res.data, op, one, (if (clear) zero else one))
       val resShape: Seq[Rep[Int]] = x.shape.zipWithIndex.flatMap { case (dim, i) =>
         if (indices.contains(i)) if (flatten) None else Some(unit(1)) else Some(dim)

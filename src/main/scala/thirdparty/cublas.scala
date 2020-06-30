@@ -42,6 +42,9 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   abstract class CublasHandleT
   // lazy val here so that we only ever create one handle
   lazy val cublasHandle = newStruct[CublasHandleT]
+  lazy val zero = var_new(0.0f)
+  lazy val one = var_new(1.0f)
+  lazy val minus_one = var_new(-1.0f)
 
   abstract class CublasStatusT
   def cublasCreate(handle: Rep[CublasHandleT]) =
