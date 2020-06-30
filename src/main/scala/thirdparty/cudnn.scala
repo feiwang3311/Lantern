@@ -15,6 +15,7 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   /* LMS support for CuDNN library */
 
   def nullptr[T:Manifest] = cmacro[Array[T]]("nullptr")
+  def cNull[T] = cmacro[T]("NULL")
 
   // macros for data layout
   abstract class TensorFormat
@@ -473,13 +474,18 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   def seqDataBeamDim = cmacro[CudnnSeqDataAxisT]("CUDNN_SEQDATA_BEAM_DIM")
   def seqDataVectDim = cmacro[CudnnSeqDataAxisT]("CUDNN_SEQDATA_VECT_DIM")
 
+  def seqDataTimeDimIdx = cmacro[Int]("CUDNN_SEQDATA_TIME_DIM")
+  def seqDataBatchDimIdx = cmacro[Int]("CUDNN_SEQDATA_BATCH_DIM")
+  def seqDataBeamDimIdx = cmacro[Int]("CUDNN_SEQDATA_BEAM_DIM")
+  def seqDataVectDimIdx = cmacro[Int]("CUDNN_SEQDATA_VECT_DIM")
+
   // cudnnSeqDataDescriptor_t struct
   abstract class CudnnSeqDataDescriptorT
   def getCudnnSeqDataDescriptorT = newStruct[CudnnSeqDataDescriptorT]
   def cudnnCreateSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT]) =
     libFunction[CudnnStatusT]("cudnnCreateSeqDataDescriptor", Unwrap(desc))(Seq(), Seq(0), Set(0))
   // Todo - check whether last arg Rep[Unit] works for void*?
-  def cudnnSetSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT], dataType: Rep[CuDNNDataType], nbDims: Int,
+  def cudnnSetSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT], dataType: Rep[CuDNNDataType], nbDims: Rep[Int],
                                 dimA: Rep[Array[Int]], axes: Rep[Array[CudnnSeqDataAxisT]],
                                 seqLengthArraySize: Rep[SizeT],seqLengthArray: Rep[Array[Int]], paddingFill: Rep[Unit]) =
     libFunction[CudnnStatusT]("cudnnSetSeqDataDescriptor", Unwrap(desc), Unwrap(dataType), Unwrap(nbDims), Unwrap(dimA),
@@ -524,13 +530,12 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       Unwrap(dxDesc), Unwrap(dx), Unwrap(rsData), Unwrap(rsSize))(Seq(0,1,2,3,4,6,7), Seq(5,6), Set[Int]())
 
   // attenion modes
-  abstract class AttentionMode
   // multiple Q's from same beam maps to the same K, V vectors (i.e., K, V beam size = 1)
-  def attnQueryMapAllToOne = cmacro[AttentionMode]("CUDNN_ATTN_QUERYMAP_ALL_TO_ONE")
+  def attnQueryMapAllToOne = cmacro[Int]("CUDNN_ATTN_QUERYMAP_ALL_TO_ONE")
   // multiple Q's from same beam maps to different K, V (i.e., K, V beam size = Q beam size)
-  def attnQueryMapOneToOne = cmacro[AttentionMode]("CUDNN_ATTN_QUERYMAP_ONE_TO_ONE")
-  def attnDisableProjBias = cmacro[AttentionMode]("CUDNN_ATTN_DISABLE_PROJ_BIASES")
-  def attnEnableProjBias = cmacro[AttentionMode]("CUDNN_ATTN_ENABLE_PROJ_BIASES")
+  def attnQueryMapOneToOne = cmacro[Int]("CUDNN_ATTN_QUERYMAP_ONE_TO_ONE")
+  def attnDisableProjBias = cmacro[Int]("CUDNN_ATTN_DISABLE_PROJ_BIASES")
+  def attnEnableProjBias = cmacro[Int]("CUDNN_ATTN_ENABLE_PROJ_BIASES")
 
   // cudnnAttnDescriptor_t
   abstract class CudnnAttnDescriptorT
@@ -550,10 +555,10 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       Unwrap(vSize), Unwrap(qProjSize), Unwrap(kProjSize), Unwrap(vProjSize), Unwrap(oProjSize), Unwrap(qoMaxSeqLength),
       Unwrap(kvMaxSeqLength), Unwrap(maxBatchSize), Unwrap(maxBeamSize))(1 to 19, Seq(0), Set())
 
-  def cudnnGetMultiHeadAttnBuffers(handle: Rep[CudnnHandleT], attnDesc: Rep[CudnnAttnDescriptorT], weightSizeInBytes: Rep[SizeT]
-                                   , workSpaceSizeInBytes: Rep[SizeT], reserveSpaceSizeInBytes: Rep[SizeT]) =
-    libFunction[CudnnStatusT]("cudnnGetMultiHeadAttnBuffers", Unwrap(handle), Unwrap(attnDesc), Unwrap(weightSizeInBytes),
-      Unwrap(workSpaceSizeInBytes), Unwrap(reserveSpaceSizeInBytes))(Seq(0, 1), Seq(2, 3, 4), Set(2, 3, 4))
+  def cudnnGetMultiHeadAttnBuffers(handle: Rep[CudnnHandleT], attnDesc: Rep[CudnnAttnDescriptorT], weightSizeInBytes: Var[SizeT]
+                                   , workSpaceSizeInBytes: Var[SizeT], reserveSpaceSizeInBytes: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetMultiHeadAttnBuffers", Unwrap(handle), Unwrap(attnDesc), UnwrapV(weightSizeInBytes),
+      UnwrapV(workSpaceSizeInBytes), UnwrapV(reserveSpaceSizeInBytes))(Seq(0, 1), Seq(2, 3, 4), Set(2, 3, 4))
 
   def cudnnMultiHeadAttnForward(handle: Rep[CudnnHandleT], attnDesc: Rep[CudnnAttnDescriptorT], currIdx: Rep[Int],
                                 loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], devSeqLengthsQO: Rep[Array[Int]],
