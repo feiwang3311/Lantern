@@ -1237,7 +1237,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       cudnnCall(cudnnCreateDropoutDescriptor(dropoutDesc))
       val dropoutBufSize = var_new[SizeT](SizeT(0))
       cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, dropoutBufSize))
-      val dropoutBuf = gpuArenaMalloc[Float](dropoutBufSize) // TODO - check - will Unit generate void* ?
+      val dropoutBuf = gpuArenaMalloc[Float](dropoutBufSize)
       cudnnCall(cudnnSetDropoutDescriptor(dropoutDesc, cudnnHandle, dropOut, dropoutBuf, dropoutBufSize, 0L))
 
       // create attention descriptor
@@ -1245,7 +1245,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       cudnnCall(cudnnCreateAttnDescriptor(attnDesc))
       // TODO - write bitwise or between AttenMode flags (2nd arg)
       // TODO - maxSeqLenK, maxSeqLenQ needs to be prespecified (otherwise descriptor is repeated)
-      cudnnCall(cudnnSetAttnDescriptor(attnDesc, attnQueryMapAllToOne, numHeads, math.sqrt(embedDim / numHeads), kfloat, kfloat,
+      cudnnCall(cudnnSetAttnDescriptor(attnDesc, if (bias) attnQueryMapAllToOne|attnEnableProjBias else attnQueryMapAllToOne, numHeads, math.sqrt(embedDim / numHeads), kfloat, kfloat,
         kdefault, dropoutDesc, cNull[CudnnDropoutDescriptorT], embedDim, kDim, vDim,
         embedDim / numHeads, embedDim / numHeads, embedDim / numHeads, 0,
         maxSeqLenQ, maxSeqLenK, maxBatchSize, maxBeamSize))
@@ -1260,9 +1260,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val devWkSpace = gpuArenaMalloc[Float](sizeWkSpace)
       val devReserve = gpuArenaMalloc[Float](sizeReserve)
 
-      // TODO - remove following (just to double check)
-      unchecked[Unit](s"""printf("Weight size check %d = %d ?\\n", """, sizeWeights, "/ sizeof(float), ", embedDim * kDim + embedDim * kDim + embedDim * vDim, ")")
-
       // TODO - is it worthwhile to do default descriptors?
       // allocate default descriptors
       MultiheadAttnConfigCuDNN(numHeads, embedDim, defaultQSeqLenArray, defaultKSeqLenArray, defaultDevQSeqArray, defaultDevKSeqArray,
@@ -1273,11 +1270,11 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     // multihead attention
     override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, attnMask: Boolean,
                                     config: MultiheadAttnConfig): (Tensor, MHAData) =
-      cudnnMultiheadAttnForward(query, key, value, weights, attnMask, config)
+      multiheadAttnForward(query, key, value, weights, attnMask, config)
 
     override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR,
                                          attnMask: Boolean, config: MultiheadAttnConfig, data: MHAData): Unit =
-      cudnnMultiHeadAttnBackward(output, query, key, value, weights, attnMask, config, data)
+      multiHeadAttnBackward(output, query, key, value, weights, attnMask, config, data)
 
     @virtualize
     def cudnnActivationForward(x: Tensor, activation: Activation.Value, inPlace: Boolean = false): Tensor = {
@@ -2053,22 +2050,11 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       cudnnReduceTensor(costs, ReductionOp.Avg, Seq(0), false)
     }
 
-    def seqDataDescriptorHelper(name: String, batchSize: Rep[Int], beamSize: Rep[Int], seqLen: Rep[Int], embSize: Rep[Int], seqLenArray: Rep[Array[Int]], first: Boolean = false) =
-        Seq(if (first) "int dimA[CUDNN_SEQDATA_DIM_COUNT];\n" else "",
-          s"""|dimA[CUDNN_SEQDATA_BEAM_DIM] = ${Unwrap(beamSize)};
-          |dimA[CUDNN_SEQDATA_BATCH_DIM] = ${Unwrap(batchSize)};
-          |dimA[CUDNN_SEQDATA_TIME_DIM] = ${Unwrap(seqLen)};
-          |dimA[CUDNN_SEQDATA_VECT_DIM] = ${Unwrap(embSize)};
-          |cudnnSeqDataDescriptor_t ${name};
-          |CUDNN_CALL(cudnnCreateSeqDataDescriptor(&${name}));
-          |CUDNN_CALL(cudnnSetSeqDataDescriptor(${name}, CUDNN_DATA_FLOAT, CUDNN_SEQDATA_DIM_COUNT, dimA, dataAxes,""".stripMargin, batchSize * beamSize ,",", seqLenArray, ", NULL))\n"
-          )
-
-    def buildSeqDescriptor(tensor: TensorR, seqLenArray: Rep[Array[Int]], dataAxes: Rep[Array[CudnnSeqDataAxisT]],
+    private def buildSeqDescriptor(tensor: TensorR, seqLenArray: Rep[Array[Int]], dataAxes: Rep[Array[CudnnSeqDataAxisT]],
                            dimA: Rep[Array[Int]]): Rep[CudnnSeqDataDescriptorT] =
       buildSeqDescriptor(tensor.x.shape(0), tensor.x.shape(1), tensor.x.shape(2), tensor.x.shape(3), seqLenArray, dataAxes, dimA)
 
-    def buildSeqDescriptor(timeSize: Rep[Int], batchSize: Rep[Int], beamSize: Rep[Int], vectSize: Rep[Int],
+    private def buildSeqDescriptor(timeSize: Rep[Int], batchSize: Rep[Int], beamSize: Rep[Int], vectSize: Rep[Int],
                            seqLenArray: Rep[Array[Int]], dataAxes: Rep[Array[CudnnSeqDataAxisT]], dimA: Rep[Array[Int]]): Rep[CudnnSeqDataDescriptorT] = {
       // Assumes dims as T N Beam V
       dimA(seqDataTimeDimIdx) = timeSize
@@ -2082,22 +2068,13 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       seqDesc
     }
 
-    def attnDescriptorHelper(name: String, dropoutDescName: String = "NULL", numHeads: Int, qSize: Rep[Int], kSize: Rep[Int], vSize: Rep[Int], embedDim: Int, bias: Boolean = false, 
-    smScaler: Float = 1.0f, seqLenQ: Rep[Int], seqLenK: Rep[Int], batchSize: Rep[Int], beamSize: Rep[Int]) = 
-        // seqLenQ and seqLenK is the maximum sentence length in Q and K/V
-        Seq(s"""
-        |cudnnAttnDescriptor_t ${name};
-        |CUDNN_CALL(cudnnCreateAttnDescriptor(&attn_desc));
-        |CUDNN_CALL(cudnnSetAttnDescriptor(${name}, CUDNN_ATTN_QUERYMAP_ALL_TO_ONE ${if (bias) "| CUDNN_ATTN_ENABLE_PROJ_BIASES" else ""}, ${numHeads}, ${smScaler}, CUDNN_DATA_FLOAT, CUDNN_DATA_FLOAT, CUDNN_DEFAULT_MATH,
-        | ${dropoutDescName}, NULL,""".stripMargin, qSize , "," , kSize, ",", vSize , "," , embedDim / numHeads, "," , embedDim / numHeads, "," , embedDim / numHeads, ", 0, ", seqLenQ, "," , seqLenK, ",", batchSize, "," , beamSize, "));\n")
-
 
     case class CudnnMHAData(qDesc: Rep[CudnnSeqDataDescriptorT],
                             kDesc: Rep[CudnnSeqDataDescriptorT],
                             vDesc: Rep[CudnnSeqDataDescriptorT],
                             oDesc: Rep[CudnnSeqDataDescriptorT]) extends MHAData
 
-    def cudnnMultiheadAttnForward(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, attnMask: Boolean,
+    private def multiheadAttnForward(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, attnMask: Boolean,
                                   config: MultiheadAttnConfig): (Tensor, MHAData) = {
       // Assumes tensors in [T(time) N(batch) B(beamsize) V(vector-embed)]
 
@@ -2123,34 +2100,12 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val dataAxes = gpuConfig.dataAxes
 
       // dropout descriptor
-//      val dropoutDesc = getCudnnDropoutDescriptorT
-//      cudnnCall(cudnnCreateDropoutDescriptor(dropoutDesc))
-//      val dropoutBufSize = var_new[SizeT](SizeT(0))
-//      cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, dropoutBufSize))
-//      val dropoutBuf = gpuArenaMalloc[Unit](dropoutBufSize) // TODO - check - will Unit generate void* ?
-//      cudnnCall(cudnnSetDropoutDescriptor(dropoutDesc, cudnnHandle, config.dropoutRate, dropoutBuf, dropoutBufSize, 0))
       val dropoutDesc = gpuConfig.dropoutDesc
 
       // attention descriptor
-//      val attnDesc = getCudnnAttnDescriptorT
-//      cudnnCall(cudnnCreateAttnDescriptor(attnDesc))
-//      // TODO - write bitwise or between AttenMode flags (2nd arg)
-//      // TODO - maxSeqLenK, maxSeqLenQ needs to be prespecified (otherwise descriptor is repeated)
-//      cudnnCall(cudnnSetAttnDescriptor(attnDesc, attnQueryMapAllToOne, config.numHeads, config.smScaler, kfloat, kfloat,
-//        kdefault, dropoutDesc, cNull[CudnnDropoutDescriptorT], query.x.shape(3), key.x.shape(3), value.x.shape(3),
-//        config.embedDim / config.numHeads, config.embedDim / config.numHeads, config.embedDim / config.numHeads, 0,
-//        config.maxSeqLenQ, config.maxSeqLenK, config.maxBatchSize, config.maxBeamSize))
       val attnDesc = gpuConfig.attnDesc
 
-//      val sizeWeights = var_new[SizeT](SizeT(0))
-//      val sizeWkSpace = var_new[SizeT](SizeT(0))
-//      val sizeReserve = var_new[SizeT](SizeT(0))
-//
-//      // TODO - can we reuse the same devWkSpace, devReserve allocation across iterations (do we need to do memset(0)?)
-//      cudnnCall(cudnnGetMultiHeadAttnBuffers(cudnnHandle, attnDesc, sizeWeights, sizeWkSpace, sizeReserve))
-//      val devWkSpace = gpuArenaMalloc[Float](sizeWkSpace)
-//      val devReserve = gpuArenaMalloc[Float](sizeReserve)
-      // TODO - initialize weights here based on sizeWeights
+      // TODO - Is it ok to reuse the same devWkSpace, devReserve allocation across iterations (do we need to do memset(0)?)
 
       // Sequence data descriptors
       val dimA = NewStackArray[Int](seqDataDimCount)
@@ -2160,65 +2115,15 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val kDesc = buildSeqDescriptor(key, kSeqLenArray, dataAxes, dimA)
       val vDesc = buildSeqDescriptor(value, kSeqLenArray, dataAxes, dimA)
 
-      // TODO - change method name
       cudnnCall(cudnnMultiHeadAttnForward(cudnnHandle, attnDesc, -1, loWinIdx, hiWinIdx, devQSeqLenArray, devKSeqLenArray,
         qDesc, query.x.data, if (config.residualConnection) query.x.data else cNull[Array[Float]], kDesc, key.x.data,
         vDesc, value.x.data, oDesc, output.data, gpuConfig.sizeWeights, weights.x.data, gpuConfig.sizeWkSpace, gpuConfig.devWkSpace, gpuConfig.sizeReserve, gpuConfig.devReserve))
 
       (output, CudnnMHAData(qDesc, kDesc, vDesc, oDesc))
-
-      //      unchecked[Unit](
-      //      Seq(s"""{
-      //      |cudnnSeqDataAxis_t dataAxes[CUDNN_SEQDATA_DIM_COUNT];
-      //      |dataAxes[0] = CUDNN_SEQDATA_TIME_DIM;
-      //      |dataAxes[1] = CUDNN_SEQDATA_BATCH_DIM;
-      //      |dataAxes[2] = CUDNN_SEQDATA_BEAM_DIM;
-      //      |dataAxes[3] = CUDNN_SEQDATA_VECT_DIM;
-      //      |""".stripMargin)
-      //      ++
-      //      Seq(s"""cudnnDropoutDescriptor_t drop_desc;
-      //      |CUDNN_CALL(cudnnCreateDropoutDescriptor(&drop_desc));
-      //      |size_t dropoutBufSize;
-      //      |void *dropoutBuf;
-      //      |CUDNN_CALL(cudnnDropoutGetStatesSize(cudnnHandle, &dropoutBufSize));
-      //      |CUDA_CALL(cudaMalloc((void **)&dropoutBuf, dropoutBufSize));
-      //      |CUDNN_CALL(cudnnSetDropoutDescriptor(drop_desc, cudnnHandle, ${dropoutRate}, dropoutBuf, dropoutBufSize, 0));
-      //      |""".stripMargin)
-      //      ++
-      //      attnDescriptorHelper("attn_desc", "drop_desc", numHeads, query.x.shape(3), key.x.shape(3), value.x.shape(3), embedDim, bias, smScaler, query.x.shape(0), key.x.shape(0), query.x.shape(1), query.x.shape(2))
-      //      ++
-      //      Seq(s"""
-      //      |size_t sizeWeights;
-      //      |size_t sizeWkspace;
-      //      |size_t sizeReserve;
-      //      |CUDNN_CALL(cudnnGetMultiHeadAttnBuffers(cudnnHandle, attn_desc, &sizeWeights, &sizeWkspace, &sizeReserve));
-      //      |void *devWkspace = myGpuMalloc(sizeWkspace);
-      //      |void *devReserve = myGpuMalloc(sizeReserve);
-      //      """.stripMargin,
-      //      devReserve, " = (float *)devReserve;\n",
-      //      sizeReserve, " = (int) sizeReserve;\n",
-      //      devWkSpace, " = (float *)devWkspace;\n",
-      //      sizeWkspace, " = (int) sizeWkspace;\n",
-      //      sizeWeights, " = (int) sizeWeights;\n"
-      //      )
-      //      ++
-      //      seqDataDescriptorHelper("q_desc", query.x.shape(1), query.x.shape(2), query.x.shape(0), query.x.shape(3), qSeqArray, first=true)
-      //      ++
-      //      seqDataDescriptorHelper("o_desc", query.x.shape(1), query.x.shape(2), query.x.shape(0), embedDim, qSeqArray, first=false)
-      //      ++
-      //      seqDataDescriptorHelper("k_desc", key.x.shape(1), key.x.shape(2), key.x.shape(0), key.x.shape(3), kSeqArray, first=false)
-      //      ++
-      //      seqDataDescriptorHelper("v_desc", value.x.shape(1), value.x.shape(2), value.x.shape(0), value.x.shape(3), kSeqArray, first=false)
-      //      ++
-      //      Seq("CUDNN_CALL(cudnnMultiHeadAttnForward(cudnnHandle, attn_desc, -1,", loWinIdx, "," , hiWinIdx, ",", devQSeqArray, "," , devKSeqArray, ", ",
-      //      "q_desc, ", query.x.data, ",", {if (residuals) query.x.data else "NULL"} , ", k_desc, ", key.x.data , ",v_desc, ", value.x.data, ", o_desc,", output.data, ", sizeWeights,", weights.x.data ,","
-      //      , sizeWkspace, ",", devWkSpace, ",", sizeReserve,",", devReserve, "));\n}") : _*
-      //      )
-      //      (output, devWkSpace, sizeWkspace, devReserve, sizeReserve, sizeWeights, devQSeqArray, devKSeqArray)
     }
 
-    def cudnnMultiHeadAttnBackward(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR,
-                                   attnMask: Boolean, config: MultiheadAttnConfig, data: MHAData) = {
+    private def multiHeadAttnBackward(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR,
+                              attnMask: Boolean, config: MultiheadAttnConfig, data: MHAData) = {
       val gpuConfig = config match {
         case conf: MultiheadAttnConfigCuDNN => conf
         case _ => throw new Exception("Should create a MultiheadAttnConfigCuDNN when running in GPU")
@@ -2238,44 +2143,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         gpuData.kDesc, key.x.data, gpuData.vDesc, value.x.data, gpuData.oDesc, output.d.data, gpuConfig.sizeWeights, weights.x.data,
         weights.d.data, gpuConfig.sizeWkSpace, gpuConfig.devWkSpace, gpuConfig.sizeReserve,
         gpuConfig.devReserve))
-
-//        unchecked[Unit](
-//      Seq(s"""{
-//      |cudnnSeqDataAxis_t dataAxes[CUDNN_SEQDATA_DIM_COUNT];
-//      |dataAxes[0] = CUDNN_SEQDATA_TIME_DIM;
-//      |dataAxes[1] = CUDNN_SEQDATA_BATCH_DIM;
-//      |dataAxes[2] = CUDNN_SEQDATA_BEAM_DIM;
-//      |dataAxes[3] = CUDNN_SEQDATA_VECT_DIM;
-//      |""".stripMargin)
-//      ++
-//      Seq(s"""cudnnDropoutDescriptor_t drop_desc;
-//      |CUDNN_CALL(cudnnCreateDropoutDescriptor(&drop_desc));
-//      |size_t dropoutBufSize;
-//      |void *dropoutBuf;
-//      |CUDNN_CALL(cudnnDropoutGetStatesSize(cudnnHandle, &dropoutBufSize));
-//      |CUDA_CALL(cudaMalloc((void **)&dropoutBuf, dropoutBufSize));
-//      |CUDNN_CALL(cudnnSetDropoutDescriptor(drop_desc, cudnnHandle, ${dropoutRate}, dropoutBuf, dropoutBufSize, 0));
-//      |""".stripMargin)
-//      ++
-//      attnDescriptorHelper("attn_desc", "drop_desc", numHeads, query.x.shape(3), key.x.shape(3), value.x.shape(3), embedDim, bias, smScaler, query.x.shape(0), key.x.shape(0), query.x.shape(1), query.x.shape(2))
-//      ++
-//      seqDataDescriptorHelper("q_desc", query.x.shape(1), query.x.shape(2), query.x.shape(0), query.x.shape(3), qSeqArray, first=true)
-//      ++
-//      seqDataDescriptorHelper("o_desc", query.x.shape(1), query.x.shape(2), query.x.shape(0), embedDim, qSeqArray, first=false)
-//      ++
-//      seqDataDescriptorHelper("k_desc", key.x.shape(1), key.x.shape(2), key.x.shape(0), key.x.shape(3), kSeqArray, first=false)
-//      ++
-//      seqDataDescriptorHelper("v_desc", value.x.shape(1), value.x.shape(2), value.x.shape(0), value.x.shape(3), kSeqArray, first=false)
-//      ++
-//      Seq("CUDNN_CALL(cudnnMultiHeadAttnBackwardData(cudnnHandle, attn_desc,", loWinIdx, "," , hiWinIdx, ",", devQSeqArray, "," , devKSeqArray, ", ",
-//      "o_desc, ", output.d.data, ",q_desc, ", query.d.data, "," , query.x.data , ",k_desc,", key.d.data, ",", key.x.data, ",v_desc,", value.d.data, ", ",
-//      value.x.data, ",", sizeWeights, ",", weights.d.data, ",", sizeWkSpace, ",", devWkSpace, ",", sizeReserve, ",", devReserve, "));\n")
-//      ++
-//      Seq("CUDNN_CALL(cudnnMultiHeadAttnBackwardWeights(cudnnHandle, attn_desc, CUDNN_WGRAD_MODE_ADD, q_desc,", query.x.data, ",k_desc, ", key.x.data, ",v_desc,",
-//      value.x.data, ",o_desc,", output.d.data, ",", sizeWeights, ",", weights.x.data, ",", weights.d.data, ",", sizeWkSpace, ",", devWkSpace, ",", sizeReserve, ",", devReserve,
-//      "));\n}")
-//       : _*
-//      )
     }
 
   }

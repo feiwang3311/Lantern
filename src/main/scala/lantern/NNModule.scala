@@ -271,16 +271,15 @@ trait NNModule extends TensorDsl {
     val config: MultiheadAttnConfig = backend.multiheadAttentionInit(embedDim, numHeads, kDim, vDim, bias, dropOut, residualConnection, maxSeqLenQ, maxSeqLenK, maxBatchSize, maxBeamSize)
 
     // weights of attention model
-    // TODO - would be better if we can get the sizeWeights from cudnn side
-    val sizeWeights: Int = embedDim * kDim + embedDim * kDim + embedDim * vDim + {
-      if (bias) 0 else embedDim * 3
+    val sizeWeights: Int = embedDim * kDim + embedDim * vDim + embedDim * embedDim + {
+      if (bias) embedDim * 3 else 0
     }
     val weights: TensorR = TensorR(Tensor.rand(sizeWeights))
     val finalLinear = Linear1D(inSize = embedDim, outSize = embedDim)
 
     def apply(query: TensorR, key: TensorR, value: TensorR, attnMask: Boolean = false) = {
       // Assumes shape = [T(time) N(batch) B(beamsize) V(vector-embed)]
-      // TODO - take attn_mask (i.e. loWinIdx, hiWinIdx) as arg
+      // TODO - take attn_mask (i.e. loWinIdx, hiWinIdx) as arg (intead of boolean)
       // set up attention window
 //      val loWinIdx = NewArray[Int](query.x.shape(0))
 //      val hiWinIdx = NewArray[Int](query.x.shape(0))
