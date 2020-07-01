@@ -18,12 +18,13 @@ object TransformerTest {
       val embedDim = 500
       val seqLen = 50
       val batchSize = 500
+      val beamSize = 1
       val nheads = 10
       val numBlocks = 4
       val dimFeedForward = 200
       val dropOut = 0.1f
 
-      val model = Transformer(embedDim, seqLen, nheads, 4, 4, dimFeedForward, dropOut)
+      val model = Transformer(embedDim, seqLen, nheads, 4, 4, dimFeedForward, dropOut, seqLen, batchSize, beamSize)
 
       val src = TensorR(Tensor.rand(Seq(seqLen, batchSize, 1, embedDim): _*))
       val tgt = TensorR(Tensor.rand(Seq(seqLen, batchSize, 1, embedDim): _*))

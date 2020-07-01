@@ -26,7 +26,8 @@ object MultiheadAttentionTest {
 
 
       case class Model(val name: String = "test_model") extends Module {
-        val mha = MultiheadAttention(embedDim, numHeads, ksize, vsize, bias = true, dropOut)
+        val mha = MultiheadAttention(embedDim, numHeads, ksize, vsize, bias = true, dropOut, residualConnection = true,
+          seqLen, seqLen, batchSize, beamSize)
         val linear = Linear1D(inSize = embedDim * seqLen, outSize = 1)
 
         def apply(q: TensorR, k: TensorR, v: TensorR) = {

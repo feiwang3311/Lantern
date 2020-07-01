@@ -962,16 +962,15 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       nllLossGrad_(input.d.data, target, res.d.data, input.d.shape(0), input.d.shape.strides(0))
       // unchecked[Unit]("nllLoss_grad<<<", input.d.shape(0), ", 1>>>(", input.d.shape.strides(0), ", ", res.d.data, ", ", target, ", ", input.d.data, ")")
 
+    override def multiheadAttentionInit(embedDim: Int, numHeads: Int, kDim: Int, vDim: Int, bias: Boolean = false, dropOut: Float,
+                                        residualConnection: Boolean, maxSeqLenQ: Rep[Int], maxSeqLenK: Rep[Int], maxBatchSize: Rep[Int],
+                                        maxBeamSize: Rep[Int]): MultiheadAttnConfig = ???
     // multihead attention
-    override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int,
-      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]], hiWinIdx: Rep[Array[Int]], bias: Boolean,
-      dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, residuals: Boolean): (Tensor, Rep[Array[Float]], Rep[Int], Rep[Array[Float]], Rep[Int], Rep[Int],
-      Rep[Array[Int]], Rep[Array[Int]]) = ???
+    override def multiheadAttention(query: TensorR, key: TensorR, value: TensorR, weights: TensorR, attnMask: Boolean,
+                                    config: MultiheadAttnConfig): (Tensor, MHAData) = ???
 
-    override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR, numHeads: Int, embedDim:Int,
-      qSeqArray: Rep[Array[Int]], kSeqArray: Rep[Array[Int]], devQSeqArray: Rep[Array[Int]], devKSeqArray: Rep[Array[Int]], loWinIdx: Rep[Array[Int]],
-       hiWinIdx: Rep[Array[Int]], bias: Boolean, dropoutRate :Float = 0.0f, smScaler: Float = 1.0f, devWkSpace: Rep[Array[Float]], sizeWkSpace: Rep[Int],
-       devReserve: Rep[Array[Float]], sizeReserve: Rep[Int], sizeWeights: Rep[Int], residuals: Boolean): Unit = ???
+    override def multiheadAttention_grad(output: TensorR, query: TensorR, key: TensorR, value: TensorR, weights: TensorR,
+                                         attnMask: Boolean, config: MultiheadAttnConfig, data: MHAData): Unit = ???
 
 
     // TODO - Supun - Haven't implemented mse for GPU

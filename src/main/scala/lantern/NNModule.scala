@@ -259,14 +259,16 @@ trait NNModule extends TensorDsl {
    * @param vDim (initial) Vector Embedding size of Value
    * @param bias whether to use bias or not in projections
    * @param dropOut dropout rate
-   * @param residuals whether to use the residual connection (see original paper)
+   * @param residualConnection whether to use the residual connection (see original paper)
    */
 
   case class MultiheadAttention(val embedDim: Int, val numHeads: Int, kDim: Int, vDim: Int,
-                                val bias: Boolean = false, val dropOut: Float = 0.0f, residuals: Boolean = false,
+                                val bias: Boolean = false, val dropOut: Float = 0.0f, residualConnection: Boolean = false,
+                                maxSeqLenQ: Rep[Int], maxSeqLenK: Rep[Int], maxBatchSize: Rep[Int], maxBeamSize: Rep[Int],
                                 val name: String = "MultiHeadAttn") extends Module {
     // embedDim should be divisible by numHeads
     // embedDim is the final output size
+    val config: MultiheadAttnConfig = backend.multiheadAttentionInit(embedDim, numHeads, kDim, vDim, bias, dropOut, residualConnection, maxSeqLenQ, maxSeqLenK, maxBatchSize, maxBeamSize)
 
     // weights of attention model
     // TODO - would be better if we can get the sizeWeights from cudnn side
@@ -280,22 +282,25 @@ trait NNModule extends TensorDsl {
       // Assumes shape = [T(time) N(batch) B(beamsize) V(vector-embed)]
       // TODO - take attn_mask (i.e. loWinIdx, hiWinIdx) as arg
       // set up attention window
-      val loWinIdx = NewArray[Int](query.x.shape(1))
-      val hiWinIdx = NewArray[Int](query.x.shape(1))
-      val qSeqArray = NewArray[Int](query.x.shape(1))
-      val kSeqArray = NewArray[Int](key.x.shape(1))
+//      val loWinIdx = NewArray[Int](query.x.shape(0))
+//      val hiWinIdx = NewArray[Int](query.x.shape(0))
+//      val qSeqArray = NewArray[Int](query.x.shape(1))
+//      val kSeqArray = NewArray[Int](key.x.shape(1))
+//
+//      for (i <- 0 until query.x.shape(0)) {
+//        loWinIdx(i) = 0
+//        if (attnMask)
+//          hiWinIdx(i) = i + 1
+//        else
+//          hiWinIdx(i) = key.x.shape(0)
+//      }
+//
+//      for (i <- 0 until query.x.shape(1)) {
+//        qSeqArray(i) = query.x.shape(0)
+//        kSeqArray(i) = key.x.shape(0)
+//      }
 
-      for (i <- 0 until query.x.shape(1)) {
-        loWinIdx(i) = 0
-        if (attnMask)
-          hiWinIdx(i) = i + 1 // end idx is exclusive
-        else
-          hiWinIdx(i) = query.x.shape(0)
-        qSeqArray(i) = query.x.shape(0)
-        kSeqArray(i) = key.x.shape(0)
-      }
-
-      val step1 = query.multiheadAttention(key, value, weights, numHeads, embedDim, qSeqArray, kSeqArray, loWinIdx, hiWinIdx, bias, dropOut, 1.0f, residuals)
+      val step1 = query.multiheadAttention(key, value, weights, attnMask, config)
       finalLinear(step1.resize(-1, embedDim)).resize(query.x.shape(0), query.x.shape(1), query.x.shape(2), embedDim)
     }
   }
@@ -319,8 +324,10 @@ trait NNModule extends TensorDsl {
   }
 
   case class TransformerEncoderLayer(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f,
+                                     maxSeqLen: Rep[Int], maxBatchSize: Rep[Int], maxBeamSize: Rep[Int],
                                      name: String = "transformer-encoder-layer") extends Module {
-    val enMHA = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residuals = true)
+    val enMHA = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residualConnection = true,
+      maxSeqLen, maxSeqLen, maxBatchSize, maxBeamSize)
     val enLinear1 = Linear1D(inSize = embedDim, outSize = dimFeedForward)
     val enLinear2 = Linear1D(inSize = dimFeedForward, outSize = embedDim)
     val enLayerNorm1 = LayerNorm(embedDim)
@@ -338,9 +345,12 @@ trait NNModule extends TensorDsl {
   }
 
   case class TransformerDecoderLayer(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f,
+                                     maxSeqLen: Rep[Int], maxBatchSize: Rep[Int], maxBeamSize: Rep[Int],
                                      name: String = "transformer-decoder-layer") extends Module {
-    val deMHA1 = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residuals = true)
-    val deMHA2 = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residuals = true)
+    val deMHA1 = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residualConnection = true,
+      maxSeqLen, maxSeqLen, maxBatchSize, maxBeamSize)
+    val deMHA2 = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residualConnection = true,
+      maxSeqLen, maxSeqLen, maxBatchSize, maxBeamSize)
     val deLinear1 = Linear1D(inSize = embedDim, outSize = dimFeedForward)
     val deLinear2 = Linear1D(inSize = dimFeedForward, outSize = embedDim)
     val deLayerNorm1 = LayerNorm(embedDim)
@@ -360,13 +370,14 @@ trait NNModule extends TensorDsl {
     }
   }
 
-  case class TransformerEncoder(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f,
-                                numLayers: Int = 1, name: String = "transformer-encoder") extends Module {
+  case class TransformerEncoder(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f, numLayers: Int = 1,
+                                maxSeqLen: Rep[Int], maxBatchSize: Rep[Int], maxBeamSize: Rep[Int],
+                                name: String = "transformer-encoder") extends Module {
     // TODO - initialize numLayers encoderLayers (below is hardcoded)
-    val layer1 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut)
-    val layer2 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut)
-    val layer3 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut)
-    val layer4 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut)
+    val layer1 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
+    val layer2 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
+    val layer3 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
+    val layer4 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
 
     // TODO - check this with the original paper
     val encoderNorm = LayerNorm(embedDim)
@@ -380,14 +391,15 @@ trait NNModule extends TensorDsl {
     }
   }
 
-  case class TransformerDecoder(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f,
-                                numLayers: Int = 1, name: String = "transformer-decoder") extends Module {
+  case class TransformerDecoder(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f, numLayers: Int = 1,
+                                maxSeqLen: Rep[Int], maxBatchSize: Rep[Int], maxBeamSize: Rep[Int],
+                                name: String = "transformer-decoder") extends Module {
     // TODO - initialize numLayers encoderLayers (below is hardcoded)
-    val layer1 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut)
-    val layer2 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut)
-    val layer3 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut)
-    val layer4 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut)
-    val layers = (0 until numLayers : Range) map (_ => TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut))
+    val layer1 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
+    val layer2 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
+    val layer3 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
+    val layer4 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
+//    val layers = (0 until numLayers : Range) map (_ => TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut))
 
     // TODO - check this with the original paper
     val decoderNorm = LayerNorm(embedDim)
@@ -403,11 +415,12 @@ trait NNModule extends TensorDsl {
 
   case class Transformer(embedDim: Int, seqLen: Int, nheads: Int = 8, numEncoderLayers: Int = 6,
                          numDecoderLayers: Int = 6, dimFeedForward: Int = 2048, dropOut: Float = 0.0f,
+                         maxSeqLen: Rep[Int], maxBatchSize: Rep[Int], maxBeamSize: Rep[Int],
                          name: String = "transformer") extends Module {
     val finalLinear = Linear1D(inSize = embedDim * seqLen, outSize = 1)
     // val blocks = (0 until numBlocks: Range) map (_ => TransformerBlock(embedDim, nheads, dimFeedForward, dropOut))
-    val encoderStack = TransformerEncoder(embedDim, nheads, dimFeedForward, dropOut, numEncoderLayers)
-    val decoderStack = TransformerDecoder(embedDim, nheads, dimFeedForward, dropOut, numEncoderLayers)
+    val encoderStack = TransformerEncoder(embedDim, nheads, dimFeedForward, dropOut, numEncoderLayers, maxSeqLen, maxBatchSize, maxBeamSize)
+    val decoderStack = TransformerDecoder(embedDim, nheads, dimFeedForward, dropOut, numEncoderLayers, maxSeqLen, maxBatchSize, maxBeamSize)
 
     def apply(src: TensorR, tgt: TensorR) = {
       val encoderOut = encoderStack(src, attnMask = false)
