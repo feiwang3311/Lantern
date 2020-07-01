@@ -17,14 +17,16 @@ object TransformerTest {
     def snippet(a: Rep[String]): Rep[Unit] = {
       val embedDim = 500
       val seqLen = 50
-      val batchSize = 500
+      val batchSize = 10
       val beamSize = 1
       val nheads = 10
-      val numBlocks = 4
+      val numEncoderLayers = 4
+      val numDecoderLayers = 4
       val dimFeedForward = 200
       val dropOut = 0.1f
 
-      val model = Transformer(embedDim, seqLen, nheads, 4, 4, dimFeedForward, dropOut, seqLen, batchSize, beamSize)
+      val model = Transformer(embedDim, seqLen, nheads, numEncoderLayers, numDecoderLayers, dimFeedForward, dropOut,
+                              seqLen, batchSize, beamSize)
 
       val src = TensorR(Tensor.rand(Seq(seqLen, batchSize, 1, embedDim): _*))
       val tgt = TensorR(Tensor.rand(Seq(seqLen, batchSize, 1, embedDim): _*))
@@ -34,7 +36,7 @@ object TransformerTest {
         res.sum()
       }
 
-      val opt = SGD(model, learning_rate = 0.0005f, gradClip = 1.0f)
+      val opt = SGD(model, learning_rate = 0.0005f, gradClip = 0.001f)
 
       val num_iter = 5
       for (i <- 0 until num_iter: Rep[Range]) {

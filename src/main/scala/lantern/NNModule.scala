@@ -372,43 +372,46 @@ trait NNModule extends TensorDsl {
   case class TransformerEncoder(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f, numLayers: Int = 1,
                                 maxSeqLen: Rep[Int], maxBatchSize: Rep[Int], maxBeamSize: Rep[Int],
                                 name: String = "transformer-encoder") extends Module {
-    // TODO - initialize numLayers encoderLayers (below is hardcoded)
-    val layer1 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
-    val layer2 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
-    val layer3 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
-    val layer4 = TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
+    val layers = (0 until numLayers: Range) map (_ => TransformerEncoderLayer(embedDim, nheads, dimFeedForward, dropOut,
+                                                                              maxSeqLen, maxBatchSize, maxBeamSize))
 
     // TODO - check this with the original paper
     val encoderNorm = LayerNorm(embedDim)
 
     def apply(src: TensorR, attnMask: Boolean = false) = {
-      val step1 = layer1(src, attnMask)
-      val step2 = layer2(src, attnMask)
-      val step3 = layer3(src, attnMask)
-      val step4 = layer4(src, attnMask)
-      encoderNorm(step4)
+      @scala.annotation.tailrec
+      def stack(prev: => TensorR @diff, i: Int = 0): TensorR @diff = {
+        if (i==numLayers)
+          prev
+        else
+          stack(layers(i)(prev, attnMask), i + 1)
+      }
+
+      val out = stack(layers(0)(src, attnMask), 1)
+      encoderNorm(out)
     }
   }
 
   case class TransformerDecoder(embedDim: Int, nheads: Int, dimFeedForward: Int, dropOut: Float = 0.0f, numLayers: Int = 1,
                                 maxSeqLen: Rep[Int], maxBatchSize: Rep[Int], maxBeamSize: Rep[Int],
                                 name: String = "transformer-decoder") extends Module {
-    // TODO - initialize numLayers encoderLayers (below is hardcoded)
-    val layer1 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
-    val layer2 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
-    val layer3 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
-    val layer4 = TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut, maxSeqLen, maxBatchSize, maxBeamSize)
-//    val layers = (0 until numLayers : Range) map (_ => TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut))
+    val layers = (0 until numLayers : Range) map (_ => TransformerDecoderLayer(embedDim, nheads, dimFeedForward, dropOut,
+                                                                                maxSeqLen, maxBatchSize, maxBeamSize))
 
     // TODO - check this with the original paper
     val decoderNorm = LayerNorm(embedDim)
 
     def apply(tgt: TensorR, memory: TensorR, attnMask: Boolean = true) = {
-      val step1 = layer1(tgt, memory, attnMask)
-      val step2 = layer2(tgt, memory, attnMask)
-      val step3 = layer3(tgt, memory, attnMask)
-      val step4 = layer4(tgt, memory, attnMask)
-      decoderNorm(step4)
+      @scala.annotation.tailrec
+      def stack(prev: => TensorR @diff, i: Int = 0): TensorR @diff = {
+        if (i==numLayers)
+          prev
+        else
+          stack(layers(i)(prev, memory, attnMask), i + 1)
+      }
+
+      val out = stack(layers(0)(tgt, memory, attnMask), 1)
+      decoderNorm(out)
     }
   }
 
@@ -419,7 +422,7 @@ trait NNModule extends TensorDsl {
     val finalLinear = Linear1D(inSize = embedDim * seqLen, outSize = 1)
     // val blocks = (0 until numBlocks: Range) map (_ => TransformerBlock(embedDim, nheads, dimFeedForward, dropOut))
     val encoderStack = TransformerEncoder(embedDim, nheads, dimFeedForward, dropOut, numEncoderLayers, maxSeqLen, maxBatchSize, maxBeamSize)
-    val decoderStack = TransformerDecoder(embedDim, nheads, dimFeedForward, dropOut, numEncoderLayers, maxSeqLen, maxBatchSize, maxBeamSize)
+    val decoderStack = TransformerDecoder(embedDim, nheads, dimFeedForward, dropOut, numDecoderLayers, maxSeqLen, maxBatchSize, maxBeamSize)
 
     def apply(src: TensorR, tgt: TensorR) = {
       val encoderOut = encoderStack(src, attnMask = false)
