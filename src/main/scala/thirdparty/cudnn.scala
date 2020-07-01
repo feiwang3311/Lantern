@@ -593,10 +593,10 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
   def getCudnnSeqDataDescriptorT = newStruct[CudnnSeqDataDescriptorT]
   def cudnnCreateSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT]) =
     libFunction[CudnnStatusT]("cudnnCreateSeqDataDescriptor", Unwrap(desc))(Seq(), Seq(0), Set(0))
-  // Todo - check whether last arg Rep[Unit] works for void*?
+
   def cudnnSetSeqDataDescriptor(desc: Rep[CudnnSeqDataDescriptorT], dataType: Rep[CuDNNDataType], nbDims: Rep[Int],
                                 dimA: Rep[Array[Int]], axes: Rep[Array[CudnnSeqDataAxisT]],
-                                seqLengthArraySize: Rep[SizeT],seqLengthArray: Rep[Array[Int]], paddingFill: Rep[Unit]) =
+                                seqLengthArraySize: Rep[SizeT],seqLengthArray: Rep[Array[Int]], paddingFill: Rep[Float]) =
     libFunction[CudnnStatusT]("cudnnSetSeqDataDescriptor", Unwrap(desc), Unwrap(dataType), Unwrap(nbDims), Unwrap(dimA),
       Unwrap(axes), Unwrap(seqLengthArraySize), Unwrap(seqLengthArray), Unwrap(paddingFill))(Seq(1, 2, 3, 4, 5, 6, 7), Seq(0), Set())
 
@@ -680,8 +680,7 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
     libFunction[CudnnStatusT]("cudnnMultiHeadAttnForward", Unwrap(handle), Unwrap(attnDesc), Unwrap(currIdx), Unwrap(loWinIdx),
       Unwrap(hiWinIdx), Unwrap(devSeqLengthsQO), Unwrap(devSeqLengthsKV), Unwrap(qDesc), Unwrap(queries), Unwrap(residuals),
       Unwrap(kDesc), Unwrap(keys), Unwrap(vDesc), Unwrap(values), Unwrap(oDesc), Unwrap(out), Unwrap(weightSizeInBytes),
-      Unwrap(weights), Unwrap(workSpaceSizeInBytes), Unwrap(workSpace), Unwrap(reserveSpaceSizeInBytes, Unwrap(reserveSpace)),
-      Unwrap(reserveSpace))((0 to 14) ++ Seq(16, 18, 20), Seq(15, 17, 19, 21), Set())
+      Unwrap(weights), Unwrap(workSpaceSizeInBytes), Unwrap(workSpace), Unwrap(reserveSpaceSizeInBytes), Unwrap(reserveSpace))((0 to 14) ++ Seq(16, 18, 20), Seq(15, 17, 19, 21), Set())
 
   def cudnnMultiHeadAttnBackwardData(handle: Rep[CudnnHandleT], attnDesc: Rep[CudnnAttnDescriptorT], loWinIdx: Rep[Array[Int]],
                                      hiWinIdx: Rep[Array[Int]], devSeqLengthsDQDO: Rep[Array[Int]], devSeqLengthsDKDV: Rep[Array[Int]],

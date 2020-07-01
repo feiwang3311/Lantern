@@ -1261,7 +1261,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val devReserve = gpuArenaMalloc[Float](sizeReserve)
 
       // TODO - remove following (just to double check)
-      unchecked[Unit](s"""printf("Weight size check %d = %d ?\n", ${sizeWeights} / sizeof(float), ${embedDim * kDim + embedDim * kDim + embedDim * vDim})""")
+      unchecked[Unit](s"""printf("Weight size check %d = %d ?\\n", """, sizeWeights, "/ sizeof(float), ", embedDim * kDim + embedDim * kDim + embedDim * vDim, ")")
 
       // TODO - is it worthwhile to do default descriptors?
       // allocate default descriptors
@@ -1293,7 +1293,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       })
       cudnnCall(cudnnActivationForward_(cudnnHandle, activationDesc, one, xDesc, x.data, zero, xDesc, res.data))
       // unchecked[Unit](
-      //   Seq(s"""
+      //   Seq(s
       //     |{
       //     |cudnnTensorDescriptor_t x_desc;
       //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc));
@@ -2078,7 +2078,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
       val seqDesc = getCudnnSeqDataDescriptorT
       cudnnCall(cudnnCreateSeqDataDescriptor(seqDesc))
-      cudnnCall(cudnnSetSeqDataDescriptor(seqDesc, kfloat, seqDataDimCount, dimA, dataAxes, cast_helper[Int, SizeT](batchSize * beamSize), seqLenArray, cNull[Unit]))
+      cudnnCall(cudnnSetSeqDataDescriptor(seqDesc, kfloat, seqDataDimCount, dimA, dataAxes, cast_helper[Int, SizeT](batchSize * beamSize), seqLenArray, cNull[Float]))
       seqDesc
     }
 
