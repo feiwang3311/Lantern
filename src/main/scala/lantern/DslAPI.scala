@@ -122,6 +122,7 @@ trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenS
     case s: String if s.endsWith("CudnnConvolutionBwdFilterAlgoT") => "cudnnConvolutionBwdFilterAlgo_t"
     case s: String if s.endsWith("CudnnPoolingDescriptorT") => "cudnnPoolingDescriptor_t"
     case s: String if s.endsWith("CudnnDropoutDescriptorT") => "cudnnDropoutDescriptor_t"
+    case s: String if s.endsWith("CudnnRNNDescriptorT") => "cudnnRNNDescriptor_t"
     case _ => super.remap(m)
   }
 

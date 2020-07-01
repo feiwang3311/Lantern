@@ -16,6 +16,7 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
 
   def nullptr[T:Manifest] = cmacro[Array[T]]("nullptr")
   def cNull[T] = cmacro[T]("NULL")
+  def NULLptr[T:Manifest] = cmacro[Array[T]]("NULL")
 
   // macros for data layout
   abstract class TensorFormat
@@ -115,6 +116,10 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
     cudnnCall(cudnnSetTensorNdDescriptor(desc, dtype, 3, dims, strides))
     desc
   }
+  def cudnnGetRNNParamsSize(handle: Rep[CudnnHandleT], rnnDesc: Rep[CudnnRNNDescriptorT], xDesc: Rep[CudnnTensorDescriptorT],
+      sizeInBytes: Var[SizeT], dataType: Rep[CuDNNDataType]) =
+    libFunction[CudnnStatusT]("cudnnGetRNNParamsSize", Unwrap(handle), Unwrap(rnnDesc), Unwrap(xDesc), UnwrapV(sizeInBytes),
+      Unwrap(dataType))(Seq(0,1,2,4), Seq(3), Set(3))
 
   // cudnnFilterDescriptor_t struct
   abstract class CudnnFilterDescriptorT
@@ -131,6 +136,19 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
     cudnnCall(cudnnSetFilter4dDescriptor(desc, dtype, layout, shape(0), shape(1), shape(2), shape(3)))
     desc
   }
+  def cudnnSetFilterNdDescriptor(filterDesc: Rep[CudnnFilterDescriptorT], dataType: Rep[CuDNNDataType], format: Rep[TensorFormat],
+      nbDims: Rep[Int], filterDimA: Rep[Array[Int]]) =
+    libFunction[CudnnStatusT]("cudnnSetFilterNdDescriptor", Unwrap(filterDesc), Unwrap(dataType), Unwrap(format),
+      Unwrap(nbDims), Unwrap(filterDimA))(Seq(0, 1, 2, 4), Seq(0), Set[Int]())
+  def cudnnGetFilter3dDescriptor(format: Rep[TensorFormat], dataType: Rep[CuDNNDataType],
+    dim0: Rep[Int], dim1: Rep[Int], dim2:Rep[Int]) = {
+    val desc = getCudnnFilterDescriptorT
+    cudnnCall(cudnnCreateFilterDescriptor(desc))
+    val dims = StackArray(dim0, dim1, dim2)
+    cudnnCall(cudnnSetFilterNdDescriptor(desc, dataType, format, 3, dims))
+    desc
+  }
+  def sizeOfFloat = cmacro[Int]("sizeof(float)")
 
   abstract class CudnnReduceTensorIndicesT
   def kreduceTensorNoIndices = cmacro[CudnnReduceTensorIndicesT]("CUDNN_REDUCE_TENSOR_NO_INDICES")
@@ -428,6 +446,97 @@ trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
       Unwrap(dy), Unwrap(dxDesc), Unwrap(dx), Unwrap(bnScaleBiasDiffDesc), Unwrap(bnScale), Unwrap(resultBnScaleDiff),
       Unwrap(resultBnBiasDiff), Unwrap(epsilon), Unwrap(saveMean),
       Unwrap(savedInvVariance))(Seq(0,1,2,3,4,5,6,7,8,9,10,12,13,17,18), Seq(11,14,15), Set(2,3,4,5))
+
+  // cudnnRNNDescriptor_t
+  abstract class CudnnRNNInputMode
+  def klinearInput = cmacro[CudnnRNNInputMode]("CUDNN_LINEAR_INPUT")
+  def kskipInput = cmacro[CudnnRNNInputMode]("CUDNN_SKIP_INPUT")
+  abstract class CudnnRNNDirectionMode
+  def kunidirection = cmacro[CudnnRNNDirectionMode]("CUDNN_UNIDIRECTIONAL")
+  def kbidirection = cmacro[CudnnRNNDirectionMode]("CUDNN_BIDIRECTIONAL")
+  abstract class CudnnRNNMode
+  def krnnRelu = cmacro[CudnnRNNMode]("CUDNN_RNN_RELU")
+  def krnnTanh = cmacro[CudnnRNNMode]("CUDNN_RNN_TANH")
+  def klstm = cmacro[CudnnRNNMode]("CUDNN_LSTM")
+  def kgru = cmacro[CudnnRNNMode]("CUDNN_GRU")
+  abstract class CudnnRNNAlgo
+  def krnnAlgoStandard = cmacro[CudnnRNNAlgo]("CUDNN_RNN_ALGO_STANDARD")
+  def krnnAlgoPersistStatic = cmacro[CudnnRNNAlgo]("CUDNN_RNN_ALGO_PERSIST_STATIC")
+  def krnnAlgoPersistDynamic = cmacro[CudnnRNNAlgo]("CUDNN_RNN_ALGO_PERSIST_DYNAMIC")
+
+  abstract class CudnnRNNDescriptorT
+  def getCudnnRNNDescriptor = newStruct[CudnnRNNDescriptorT]
+  def cudnnCreateRNNDescriptor(desc: Rep[CudnnRNNDescriptorT]) =
+    libFunction[CudnnStatusT]("cudnnCreateRNNDescriptor", Unwrap(desc))(Seq[Int](), Seq(0), Set(0))
+  def cudnnSetRNNDescriptor_v6(handle: Rep[CudnnHandleT], rnnDesc: Rep[CudnnRNNDescriptorT], hiddenSize: Rep[Int],
+      numLayers: Rep[Int], dropoutDesc: Rep[CudnnDropoutDescriptorT], inputMode: Rep[CudnnRNNInputMode],
+      direction: Rep[CudnnRNNDirectionMode], mode: Rep[CudnnRNNMode], algo: Rep[CudnnRNNAlgo], mathPrec: Rep[CuDNNDataType]) =
+    libFunction[CudnnStatusT]("cudnnSetRNNDescriptor_v6", Unwrap(handle), Unwrap(rnnDesc), Unwrap(hiddenSize), Unwrap(numLayers),
+      Unwrap(dropoutDesc), Unwrap(inputMode), Unwrap(direction), Unwrap(mode), Unwrap(algo),
+      Unwrap(mathPrec))(Seq(0,1,4,5,6,7,8,9), Seq(1), Set[Int]())
+  def cudnnGetRNNDescriptor(handle: Rep[CudnnHandleT], hiddenSize: Rep[Int], numLayers: Rep[Int],
+      dropoutDesc: Rep[CudnnDropoutDescriptorT], inputMode: Rep[CudnnRNNInputMode], direction: Rep[CudnnRNNDirectionMode],
+      mode: Rep[CudnnRNNMode], algo: Rep[CudnnRNNAlgo], mathPrec: Rep[CuDNNDataType]) = {
+    val desc = getCudnnRNNDescriptor
+    cudnnCall(cudnnCreateRNNDescriptor(desc))
+    cudnnCall(cudnnSetRNNDescriptor_v6(handle, desc, hiddenSize, numLayers, dropoutDesc, inputMode, direction, mode, algo, mathPrec))
+    desc
+  }
+
+  def cudnnSetRNNMatrixMathType(rnnDesc: Rep[CudnnRNNDescriptorT], mType: Rep[MathType]) =
+    libFunction[CudnnStatusT]("cudnnSetRNNMatrixMathType", Unwrap(rnnDesc), Unwrap(mType))(Seq(0,1), Seq(0), Set[Int]())
+
+  def cudnnGetRNNWorkspaceSize(handle: Rep[CudnnHandleT], rnnDesc: Rep[CudnnRNNDescriptorT], seqLength: Rep[Int],
+      xDesc: Rep[Array[CudnnTensorDescriptorT]], sizeInBytes: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetRNNWorkspaceSize", Unwrap(handle), Unwrap(rnnDesc), Unwrap(seqLength), Unwrap(xDesc),
+      UnwrapV(sizeInBytes))(Seq(0,1,3), Seq(4), Set(4))
+
+  def cudnnGetRNNTrainingReserveSize(handle: Rep[CudnnHandleT], rnnDesc: Rep[CudnnRNNDescriptorT], seqLength: Rep[Int],
+      xDesc: Rep[Array[CudnnTensorDescriptorT]], sizeInBytes: Var[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnGetRNNTrainingReserveSize", Unwrap(handle), Unwrap(rnnDesc), Unwrap(seqLength),
+      Unwrap(xDesc), UnwrapV(sizeInBytes))(Seq(0, 1, 3), Seq(4), Set(4))
+
+  def cudnnRNNForwardInference_(handle: Rep[CudnnHandleT], rnnDesc: Rep[CudnnRNNDescriptorT], seqLength: Rep[Int],
+      xDescs: Rep[Array[CudnnTensorDescriptorT]], x: Rep[Array[Float]], hxDesc: Rep[CudnnTensorDescriptorT], hx: Rep[Array[Float]],
+      cxDesc: Rep[CudnnTensorDescriptorT], cx: Rep[Array[Float]], wDesc: Rep[CudnnFilterDescriptorT], w: Rep[Array[Float]],
+      yDescs: Rep[Array[CudnnTensorDescriptorT]], y: Rep[Array[Float]], hyDesc: Rep[CudnnTensorDescriptorT], hy: Rep[Array[Float]],
+      cyDesc: Rep[CudnnTensorDescriptorT], cy: Rep[Array[Float]], wsData: Rep[Array[Float]], wsSize: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnRNNForwardInference", Unwrap(handle), Unwrap(rnnDesc), Unwrap(seqLength),
+      Unwrap(xDescs), Unwrap(x), Unwrap(hxDesc), Unwrap(hx), Unwrap(cxDesc), Unwrap(cx), Unwrap(wDesc), Unwrap(w),
+      Unwrap(yDescs), Unwrap(y), Unwrap(hyDesc), Unwrap(hy), Unwrap(cyDesc), Unwrap(cy), Unwrap(wsData),
+      Unwrap(wsSize))(Seq(0,1,3,4,5,6,7,8,9,10,11,13,15,17,18), Seq(12,14,16,17), Set[Int]())
+
+  def cudnnRNNForwardTraining_(handle: Rep[CudnnHandleT], rnnDesc: Rep[CudnnRNNDescriptorT], seqLength: Rep[Int],
+      xDescs: Rep[Array[CudnnTensorDescriptorT]], x: Rep[Array[Float]], hxDesc: Rep[CudnnTensorDescriptorT], hx: Rep[Array[Float]],
+      cxDesc: Rep[CudnnTensorDescriptorT], cx: Rep[Array[Float]], wDesc: Rep[CudnnFilterDescriptorT], w: Rep[Array[Float]],
+      yDescs: Rep[Array[CudnnTensorDescriptorT]], y: Rep[Array[Float]], hyDesc: Rep[CudnnTensorDescriptorT], hy: Rep[Array[Float]],
+      cyDesc: Rep[CudnnTensorDescriptorT], cy: Rep[Array[Float]], wsData: Rep[Array[Float]], wsSize: Rep[SizeT],
+      rsData: Rep[Array[Float]], rsSize: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnRNNForwardTraining", Unwrap(handle), Unwrap(rnnDesc), Unwrap(seqLength), Unwrap(xDescs),
+      Unwrap(x), Unwrap(hxDesc), Unwrap(hx), Unwrap(cxDesc), Unwrap(cx), Unwrap(wDesc), Unwrap(w), Unwrap(yDescs), Unwrap(y),
+      Unwrap(hyDesc), Unwrap(hy), Unwrap(cyDesc), Unwrap(cy), Unwrap(wsData), Unwrap(wsSize), Unwrap(rsData),
+      Unwrap(rsSize))(Seq(0,1,3,4,5,6,7,8,9,10,11,13,15,17,18,19,20), Seq(12,14,16,19), Set[Int]())
+
+  def cudnnRNNBackwardData_(handle: Rep[CudnnHandleT], rnnDesc: Rep[CudnnRNNDescriptorT], seqLength: Rep[Int],
+      yDescs: Rep[Array[CudnnTensorDescriptorT]], y: Rep[Array[Float]], dyDescs: Rep[Array[CudnnTensorDescriptorT]], dy: Rep[Array[Float]],
+      dhyDesc: Rep[CudnnTensorDescriptorT], dhy: Rep[Array[Float]], dcyDesc: Rep[CudnnTensorDescriptorT], dcy: Rep[Array[Float]],
+      wDesc: Rep[CudnnFilterDescriptorT], w: Rep[Array[Float]], hxDesc: Rep[CudnnTensorDescriptorT], hx: Rep[Array[Float]],
+      cxDesc: Rep[CudnnTensorDescriptorT], cx: Rep[Array[Float]], dxDescs: Rep[Array[CudnnTensorDescriptorT]], dx: Rep[Array[Float]],
+      dhxDesc: Rep[CudnnTensorDescriptorT], dhx: Rep[Array[Float]], dcxDesc: Rep[CudnnTensorDescriptorT], dcx: Rep[Array[Float]],
+      wsData: Rep[Array[Float]], wsSize: Rep[SizeT], rsData: Rep[Array[Float]], rsSize: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnRNNBackwardData", Unwrap(handle), Unwrap(rnnDesc), Unwrap(seqLength), Unwrap(yDescs),
+      Unwrap(y), Unwrap(dyDescs), Unwrap(dy), Unwrap(dhyDesc), Unwrap(dhy), Unwrap(dcyDesc), Unwrap(dcy), Unwrap(wDesc),
+      Unwrap(w), Unwrap(hxDesc), Unwrap(hx), Unwrap(cxDesc), Unwrap(cx), Unwrap(dxDescs), Unwrap(dx), Unwrap(dhxDesc),
+      Unwrap(dhx), Unwrap(dcxDesc), Unwrap(dcx), Unwrap(wsData), Unwrap(wsSize), Unwrap(rsData),
+      Unwrap(rsSize))(Seq(0,1,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,19,21,23,24,25,26), Seq(18,20,22,25), Set[Int]())
+
+  def cudnnRNNBackwardWeights_(handle: Rep[CudnnHandleT], rnnDesc: Rep[CudnnRNNDescriptorT], seqLength: Rep[Int],
+      xDescs: Rep[Array[CudnnTensorDescriptorT]], x: Rep[Array[Float]], hxDesc: Rep[CudnnTensorDescriptorT], hx: Rep[Array[Float]],
+      yDescs: Rep[Array[CudnnTensorDescriptorT]], y: Rep[Array[Float]], wsData: Rep[Array[Float]], wsSize: Rep[SizeT],
+      dwDesc: Rep[CudnnFilterDescriptorT], dw: Rep[Array[Float]], rsData: Rep[Array[Float]], rsSize: Rep[SizeT]) =
+    libFunction[CudnnStatusT]("cudnnRNNBackwardWeights", Unwrap(handle), Unwrap(rnnDesc), Unwrap(seqLength), Unwrap(xDescs),
+      Unwrap(x), Unwrap(hxDesc), Unwrap(hx), Unwrap(yDescs), Unwrap(y), Unwrap(wsData), Unwrap(wsSize), Unwrap(dwDesc),
+      Unwrap(dw), Unwrap(rsData), Unwrap(rsSize))(Seq(0,1,3,4,5,6,7,8,9,10,11,12,13,14), Seq(12), Set[Int]())
 
 
   // cudnnCTCLossDescriptor_t

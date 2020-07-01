@@ -1126,7 +1126,6 @@ class TestCudnn extends LanternFunSuite {
     runTest(batchNorm)
   }
 
-  /*
   testGPU("rnn-forward") {
     val rnnInference = new LanternDriverCudnn[String, Unit] {
       override val fileName = "lantern-cudnn-rnn-forward"
@@ -1161,7 +1160,6 @@ class TestCudnn extends LanternFunSuite {
     }
     runTest(rnnInference)
   }
-  */
 
   testGPU("rnn-module") {
     val rnnModule = new LanternDriverCudnn[String, Unit] {

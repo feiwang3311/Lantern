@@ -17,51 +17,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
   val convOpIndexSet = scala.collection.mutable.ListBuffer.empty[Int]
   val attributesMap = new scala.collection.mutable.HashMap[Int, String]()
-  // def printAttributes() = unchecked[Unit](attributesMap.values.mkString("\n"))
-
-  // // A map from tensor shapes to cuDNN tensor descriptors.
-  // private var tensorDescriptorCache = MutableMap[Dimensions, String]()
-  // private var tensorDescriptorCount = 0
-  // def freshDescriptorId: Int = { val tmp = tensorDescriptorCount; tensorDescriptorCount += 1; tmp }
-
-  // class TensorDescriptorOps(x: Tensor) {
-  //   def descriptor: Rep[String] = {
-  //     if (tensorDescriptorCache.contains(x.shape)) {
-  //       tensorDescriptorCache(x.shape)
-  //     } else {
-  //       val id = freshDescriptorId
-  //       val descName = s"desc$id"
-  //       if (x.rank == 4) {
-  //         unchecked[Unit](
-  //           Seq(s"""
-  //              |cudnnTensorDescriptor_t $descName;
-  //              |CUDNN_CALL(cudnnCreateTensorDescriptor(&$descName));
-  //              |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-  //              |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-  //              |    """.stripMargin, x.shape(0), ", ", x.shape(1), ", ", x.shape(2), ", ", x.shape(3), "))"): _*)
-  //       } else {
-  //         assert(x.rank >= 3, "'cudnnCreateTensorDescriptor' only supports descriptors for tensors with rank at least 3")
-  //         val dims: Seq[Any] = x.shape.flatMap(dim => Seq[Any](dim, ", "))
-  //         val strides: Seq[Any] = x.shape.strides.flatMap(stride => Seq[Any](stride, ", "))
-  //         val dimsName = s"dims$id"
-  //         val stridesName = s"strides$id"
-  //         unchecked[Unit](
-  //           Seq(
-  //              s"cudnnTensorDescriptor_t $descName;\n" +
-  //              s"CUDNN_CALL(cudnnCreateTensorDescriptor(&$descName));\n" +
-  //              s"int $dimsName[] = {") ++ dims ++ Seq("};\n" +
-  //              s"int $stridesName[] = {") ++ strides ++ Seq("};\n" +
-  //              "CUDNN_CALL(cudnnSetTensorNdDescriptor(\n" +
-  //              s"    $descName, CUDNN_DATA_FLOAT, /*nbDims*/ ${x.rank}, $dimsName, $stridesName))"): _*)
-  //       }
-  //       // Update descriptor cache.
-  //       tensorDescriptorCache(x.shape) = descName
-  //       // Return descriptor name.
-  //       descName
-  //     }
-  //   }
-  // }
-  // implicit def tensorToDescriptorOps(x: Tensor) = new TensorDescriptorOps(x)
 
   // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnActivationMode_t
   object Activation extends Enumeration {
@@ -208,9 +163,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val resShape = Seq(in.shape(0) - context, unit(context+1)) ++ in.shape.drop(1)
       val resTensor = Tensor(mallocArray[Float](resShape.product1), resShape: _*)
       repeat_(in.data, resTensor.data, resTensor.shape.strides(0), resTensor.shape.strides(1), resTensor.scalarCount)
-      // // call user-defined kernel (which is similar to concat)
-      // val nGrid = 28
-      // unchecked[Unit](s"repeat0<<<${nGrid}, 512>>>(", in.data, ", ", resTensor.data, ", ", resTensor.shape.strides(0), ", ", resTensor.shape.strides(1), ", ", resTensor.scalarCount, ")")
       resTensor
     }
 
@@ -218,9 +170,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       // use shift and reduce (TODO (Fei Wang) may need to improve with a user-kernel?)
       val temp = Tensor(mallocArray[Float](out.x.scalarCount), out.x.shape: _*)
       shift_(out.d.data, temp.data, out.x.shape(0), out.x.shape.strides(0), out.x.shape.strides(1), out.x.scalarCount)
-      // val nGrid = 28
-      // unchecked[Unit](s"shift0<<<${nGrid}, 512>>>(", out.d.data, ", ", temp.data, ", ", out.x.shape(0), ", ", out.x.shape.strides(0), ", ", out.x.shape.strides(1), ", ", out.x.scalarCount, ")")
-      // then reduce temp and add into in.d
       // TODO (Fei Wang): should not use smallerInD
       val smallerInD: Tensor = in.d(0, in.x.shape(0) - context)
       cudnnReduceTensor(temp, ReductionOp.Add, Seq(1), true, Some(smallerInD.data), false)
@@ -248,27 +197,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val out_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, resShape)
       cudnnCall(cudnnAddTensor(cudnnHandle, scaled, bias_desc, bias.data, one, out_desc, res.data))
 
-      // unchecked[Unit](
-      //   Seq("""
-      //     |{
-      //     |cudnnTensorDescriptor_t bias_desc;
-      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&bias_desc));
-      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-      //     |    bias_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-      //     |    """.stripMargin, biasShape(0), ", ", biasShape(1), ", ", biasShape(2), ", ", biasShape(3), """));
-      //     |
-      //     |cudnnTensorDescriptor_t out_desc;
-      //     |CUDNN_CALL(cudnnCreateTensorDescriptor(&out_desc));
-      //     |CUDNN_CALL(cudnnSetTensor4dDescriptor(
-      //     |    out_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-      //     |    """.stripMargin, resShape(0), ", ", resShape(1), ", ", resShape(2), ", ", resShape(3), """));
-      //     |
-      //     |""".stripMargin) ++
-      //   Seq(
-      //     "CUDNN_CALL(cudnnAddTensor(\n" +
-      //     "    cudnnHandle, ", scaled, ", bias_desc, ", bias.data, ", ", one, ", out_desc, ", res.data, "));\n" +
-      //     "}"): _*
-      // )
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionForward
@@ -415,8 +343,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       cudnnAddBiasTensor(adder, base)
       base
     }
-    override def plusEqual_grad(base: TensorR, adder: TensorR): Unit =
-      if (!adder.isInput) cudnnAddBiasTensor(base.d, adder.d)
+    override def plusEqual_grad(base: TensorR, adder: TensorR): Unit = if (!adder.isInput) cudnnAddBiasTensor(base.d, adder.d)
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardBias
     // This is effectively the gradient of `cudnnAddBiasTensor`.
@@ -685,9 +612,8 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       ??? // To be finished!
     }
 
-    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]):
-        (Tensor, Option[Tensor], Int) = {
-      // TODO: Dedupe assertions/shape calculations with CPU implementation.
+    override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int) = {
+        // TODO: Dedupe assertions/shape calculations with CPU implementation.
       assert(input.rank == 4, s"Input must be 4-D (first dimension is batch size) but got ${input.rank}")
       assert(kernel.rank == 4, s"Kernel must be 4-D, but got ${kernel.rank}")
       bias match {
@@ -1605,6 +1531,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       //   output.d.data, ", ", outputStride(0), ", ", outputStride(1), ", ", outputStride(2), ", ", dim, ");\n")
     }
 
+    @virtualize
     def cudnnRNNForwardHelper(mode: RnnMode,
                               training: Boolean,
                               x: Tensor, hx: Option[Tensor], cx: Option[Tensor], w: Tensor,
@@ -1638,115 +1565,162 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val resShape: Seq[Rep[Int]] = Seq(seqLength, batchSize, hiddenSize * numDirections)
       val res = Tensor(mallocArray[Float](resShape.product1), resShape: _*)
 
-      val counter = nextKernel
-      nextKernel += 1
+      val (dropoutState, dropoutStateSize): (Rep[Array[Float]], Rep[SizeT]) = if (dropout == 0f) { (NULLptr[Float], unit(SizeT(0))) } else {
+        var dropoutStateSize = SizeT(0)
+        cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, dropoutStateSize))
+        (gpuArenaMalloc[Float](dropoutStateSize), dropoutStateSize)
+      }
+      val dropoutDesc = cudnnGetDropoutDescriptor(cudnnHandle, dropout, dropoutState, dropoutStateSize, krandTime)
+      val rnnDesc = cudnnGetRNNDescriptor(cudnnHandle, hiddenSize, numLayers, dropoutDesc, klinearInput,
+        (if (bidirectional) kbidirection else kunidirection), mode match {
+          case RnnReluMode => krnnRelu
+          case RnnTanhMode => krnnTanh
+          case LstmMode => klstm
+          case GruMode => kgru
+        }, krnnAlgoStandard, kfloat)
+      cudnnCall(cudnnSetRNNMatrixMathType(rnnDesc, ktensor_op))
+      val xDescs = NewStackArray[CudnnTensorDescriptorT](seqLength)
+      val xDesc = cudnnGetTensor3dDescriptor(kfloat, batchSize, inputSize, 1, inputSize, 1, 1)
+      for (i <- (0 until seqLength): Rep[Range])
+        xDescs(i) = xDesc
+      val hxDesc = cudnnGetTensor3dDescriptor(kfloat, numLayers * numDirections, batchSize, hiddenSize,
+        batchSize * hiddenSize, hiddenSize, 1)
+      var paramsSize = SizeT(0)
+      cudnnCall(cudnnGetRNNParamsSize(cudnnHandle, rnnDesc, xDesc, paramsSize, kfloat))
+      val filterDesc = cudnnGetFilter3dDescriptor(knchw, kfloat, paramsSize.toInt / sizeOfFloat, 1, 1)
 
-      // set up descriptors (need a counter to avoid name clasion)
-      unchecked[Unit](
-        Seq(s"""
-         |size_t dropoutStateSize_$counter;
-         |CUDNN_CALL(cudnnDropoutGetStatesSize(cudnnHandle, &dropoutStateSize_$counter));
-         |void* dropoutStates_$counter = ${if (dropout == 0f) "NULL;" else s"myGpuMalloc(dropoutStateSize_$counter);"}
-         |
-         |cudnnDropoutDescriptor_t dropout_desc_$counter;
-         |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropout_desc_$counter));
-         |CUDNN_CALL(cudnnSetDropoutDescriptor(
-         |    dropout_desc_$counter, cudnnHandle, $dropout, dropoutStates_$counter, dropoutStateSize_$counter, time(NULL)));
-         |
-         |cudnnRNNDescriptor_t rnn_desc_$counter;
-         |CUDNN_CALL(cudnnCreateRNNDescriptor(&rnn_desc_$counter));
-         |CUDNN_CALL(cudnnSetRNNDescriptor(
-         |    cudnnHandle, rnn_desc_$counter,
-         |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
-         |    dropout_desc_$counter, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
-         |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
-         """.stripMargin) ++
-        cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc_$counter, $mathType));")).getOrElse(Seq()) ++
-        Seq(s"""
-         |int32_t seqLength_$counter = """.stripMargin, seqLength, s""";
-         |int32_t batchSize_$counter = """.stripMargin, batchSize, s""";
-         |int32_t inputSize_$counter = """.stripMargin, inputSize, s""";
-         |
-         |cudnnTensorDescriptor_t x_descs_$counter[seqLength_$counter];
-         |cudnnTensorDescriptor_t x_desc_$counter;
-         |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc_$counter));
-         |int x_dims_$counter[] = {batchSize_$counter, inputSize_$counter, 1};
-         |int x_strides_$counter[] = {x_dims_$counter[1] * x_dims_$counter[2], x_dims_$counter[2], 1};
-         |CUDNN_CALL(cudnnSetTensorNdDescriptor(
-         |    x_desc_$counter, CUDNN_DATA_FLOAT, /*nbDims*/ 3, x_dims_$counter, x_strides_$counter));
-         |for (int i = 0; i < seqLength_$counter; i++) {
-         |  x_descs_$counter[i] = x_desc_$counter;
-         |}
-         |cudnnTensorDescriptor_t hx_desc_$counter;
-         |CUDNN_CALL(cudnnCreateTensorDescriptor(&hx_desc_$counter));
-         |int hx_dims_$counter[] = {${numLayers * numDirections}, batchSize_$counter, $hiddenSize};
-         |int hx_strides_$counter[] = {hx_dims_$counter[1] * hx_dims_$counter[2], hx_dims_$counter[2], 1};
-         |CUDNN_CALL(cudnnSetTensorNdDescriptor(
-         |    hx_desc_$counter, CUDNN_DATA_FLOAT, /*nbDims*/ 3, hx_dims_$counter, hx_strides_$counter));
-         |
-         |size_t paramsSize_$counter;
-         |CUDNN_CALL(cudnnGetRNNParamsSize(
-         |    cudnnHandle, rnn_desc_$counter, x_descs_$counter[0], &paramsSize_$counter, CUDNN_DATA_FLOAT));
-         |#ifdef DEBUG
-         |assert(paramsSize_$counter / sizeof(float) == """.stripMargin, w.scalarCount, s""" && "Expected parameter size mismatch");
-         |#endif
-         |
-         |cudnnFilterDescriptor_t w_desc_$counter;
-         |CUDNN_CALL(cudnnCreateFilterDescriptor(&w_desc_$counter));
-         |int w_dims_$counter[] = {int(paramsSize_$counter / sizeof(float)), 1, 1};
-         |CUDNN_CALL(cudnnSetFilterNdDescriptor(
-         |    w_desc_$counter, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, /*nbDims*/ 3, w_dims_$counter));
-         |
-         |cudnnTensorDescriptor_t y_descs_$counter[seqLength_$counter];
-         |cudnnTensorDescriptor_t y_desc_$counter;
-         |CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc_$counter));
-         |int y_dims_$counter[] = {batchSize_$counter, ${hiddenSize * numDirections}, 1};
-         |int y_strides_$counter[] = {y_dims_$counter[1] * y_dims_$counter[2], y_dims_$counter[2], 1};
-         |CUDNN_CALL(cudnnSetTensorNdDescriptor(
-         |    y_desc_$counter, CUDNN_DATA_FLOAT, /*nbDims*/ 3, y_dims_$counter, y_strides_$counter));
-         |for (int i = 0; i < seqLength_$counter; i++) {
-         |  y_descs_$counter[i] = y_desc_$counter;
-         |}
-         |
-         |size_t workspaceSize_$counter;
-         |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
-         |    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, &workspaceSize_$counter));
-         |void* workspace_$counter = myGpuMalloc(workspaceSize_$counter);
-         """.stripMargin): _*
-      )
+      val yDescs = NewStackArray[CudnnTensorDescriptorT](seqLength)
+      val yDesc = cudnnGetTensor3dDescriptor(kfloat, batchSize, hiddenSize * numDirections, 1,
+        hiddenSize * numDirections, 1, 1)
+      for (i <- (0 until seqLength): Rep[Range])
+        yDescs(i) = yDesc
+      var wsSize = SizeT(0)
+      cudnnCall(cudnnGetRNNWorkspaceSize(cudnnHandle, rnnDesc, seqLength, xDescs, wsSize))
+      val wsData = gpuArenaMalloc[Float](wsSize)
 
       // If training, create reserve space and call `ForwardTraining` function.
       if (training) {
-        val reserveSpace = var_new(unchecked[Array[Float]]("(float*)NULL"))
-        val reserveSpaceSize = var_new(unchecked[Int]("0"))
-        unchecked[Unit](
-          Seq(s"""
-            |{// Reserve space used by `ForwardTraining` function.
-            |size_t reserveSize;
-            |CUDNN_CALL(cudnnGetRNNTrainingReserveSize(
-            |    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, &reserveSize));
-            |void* reserveSpace = myGpuMalloc(reserveSize);
-            |""".stripMargin,
-            reserveSpace, " = (float*)reserveSpace;\n",
-            reserveSpaceSize, " = (int)reserveSize;\n") ++
-          Seq(
-            "CUDNN_CALL(cudnnRNNForwardTraining(\n" +
-            s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", x.data, ",\n" +
-            s"    hx_desc_$counter,", hxData, s", hx_desc_$counter,", cxData, s", w_desc_$counter, ", w.data, s", y_descs_$counter, ", res.data, ",\n" +
-            s"    hx_desc_$counter, ", hyData, s", hx_desc_$counter, NULL, workspace_$counter, workspaceSize_$counter, reserveSpace, reserveSize));\n") ++
-          Seq(s"}"): _*)
-        (res, hy, Some((reserveSpace, reserveSpaceSize)), counter)
-      } else { // If inference, call `ForwardInference` function.
-        unchecked[Unit](
-          Seq(
-             "CUDNN_CALL(cudnnRNNForwardInference(\n" +
-            s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", x.data, ",\n" +
-            s"    hx_desc_$counter,", hxData, s", hx_desc_$counter,", cxData, s", w_desc_$counter, ", w.data, s", y_descs_$counter, ", res.data, ",\n" +
-            s"    hx_desc_$counter,", hyData, s", hx_desc_$counter, NULL, workspace_$counter, workspaceSize_$counter));\n"
-          ) ++
-          Seq(s"myGpuFree(workspaceSize_$counter);\n"): _*)
-        (res, hy, None, counter)
+        var rsSize = SizeT(0)
+        cudnnCall(cudnnGetRNNTrainingReserveSize(cudnnHandle, rnnDesc, seqLength, xDescs, rsSize))
+        val rsData = gpuArenaMalloc[Float](rsSize)
+        cudnnCall(cudnnRNNForwardTraining_(cudnnHandle, rnnDesc, seqLength, xDescs, x.data, hxDesc, hxData, hxDesc, cxData,
+          filterDesc, w.data, yDescs, res.data, hxDesc, hyData, hxDesc, NULLptr[Float], wsData, wsSize, rsData, rsSize))
+        (res, hy, Some((rsData, rsSize.toInt)), 0)
+      } else {
+        cudnnCall(cudnnRNNForwardInference_(cudnnHandle, rnnDesc, seqLength, xDescs, x.data, hxDesc, hxData, hxDesc, cxData,
+          filterDesc, w.data, yDescs, res.data, hxDesc, hyData, hxDesc, NULLptr[Float], wsData, wsSize))
+        gpuArenaFree(wsSize)
+        (res, hy, None, 0)
       }
+
+      // val counter = nextKernel
+      // nextKernel += 1
+      // set up descriptors (need a counter to avoid name clasion)
+      // unchecked[Unit](
+        // Seq(s"""
+        //  |size_t dropoutStateSize_$counter;
+        //  |CUDNN_CALL(cudnnDropoutGetStatesSize(cudnnHandle, &dropoutStateSize_$counter));
+        //  |void* dropoutStates_$counter = ${if (dropout == 0f) "NULL;" else s"myGpuMalloc(dropoutStateSize_$counter);"}
+        //  |
+        //  |cudnnDropoutDescriptor_t dropout_desc_$counter;
+        //  |CUDNN_CALL(cudnnCreateDropoutDescriptor(&dropout_desc_$counter));
+        //  |CUDNN_CALL(cudnnSetDropoutDescriptor(
+        //  |    dropout_desc_$counter, cudnnHandle, $dropout, dropoutStates_$counter, dropoutStateSize_$counter, time(NULL)));
+        //  |
+        //  |cudnnRNNDescriptor_t rnn_desc_$counter;
+        //  |CUDNN_CALL(cudnnCreateRNNDescriptor(&rnn_desc_$counter));
+        //  |CUDNN_CALL(cudnnSetRNNDescriptor(
+        //  |    cudnnHandle, rnn_desc_$counter,
+        //  |    /*hiddenSize*/ $hiddenSize, /*numLayers*/ $numLayers,
+        //  |    dropout_desc_$counter, CUDNN_LINEAR_INPUT, ${if(bidirectional) "CUDNN_BIDIRECTIONAL" else "CUDNN_UNIDIRECTIONAL"},
+        //  |    ${mode.toString}, CUDNN_RNN_ALGO_STANDARD, CUDNN_DATA_FLOAT));
+        //  """.stripMargin) ++
+        // cudnnMathType.map(mathType => Seq(s"CUDNN_CALL(cudnnSetRNNMatrixMathType(rnn_desc_$counter, $mathType));")).getOrElse(Seq()) ++
+      //   Seq(s"""
+      //    |int32_t seqLength_$counter = """.stripMargin, seqLength, s""";
+      //    |int32_t batchSize_$counter = """.stripMargin, batchSize, s""";
+      //    |int32_t inputSize_$counter = """.stripMargin, inputSize, s""";
+      //    |
+      //    |cudnnTensorDescriptor_t x_descs_$counter[seqLength_$counter];
+      //    |cudnnTensorDescriptor_t x_desc_$counter;
+      //    |CUDNN_CALL(cudnnCreateTensorDescriptor(&x_desc_$counter));
+      //    |int x_dims_$counter[] = {batchSize_$counter, inputSize_$counter, 1};
+      //    |int x_strides_$counter[] = {x_dims_$counter[1] * x_dims_$counter[2], x_dims_$counter[2], 1};
+      //    |CUDNN_CALL(cudnnSetTensorNdDescriptor(
+      //    |    x_desc_$counter, CUDNN_DATA_FLOAT, /*nbDims*/ 3, x_dims_$counter, x_strides_$counter));
+      //    |for (int i = 0; i < seqLength_$counter; i++) {
+      //    |  x_descs_$counter[i] = x_desc_$counter;
+      //    |}
+      //    |cudnnTensorDescriptor_t hx_desc_$counter;
+      //    |CUDNN_CALL(cudnnCreateTensorDescriptor(&hx_desc_$counter));
+      //    |int hx_dims_$counter[] = {${numLayers * numDirections}, batchSize_$counter, $hiddenSize};
+      //    |int hx_strides_$counter[] = {hx_dims_$counter[1] * hx_dims_$counter[2], hx_dims_$counter[2], 1};
+      //    |CUDNN_CALL(cudnnSetTensorNdDescriptor(
+      //    |    hx_desc_$counter, CUDNN_DATA_FLOAT, /*nbDims*/ 3, hx_dims_$counter, hx_strides_$counter));
+      //    |
+      //    |size_t paramsSize_$counter;
+      //    |CUDNN_CALL(cudnnGetRNNParamsSize(
+      //    |    cudnnHandle, rnn_desc_$counter, x_descs_$counter[0], &paramsSize_$counter, CUDNN_DATA_FLOAT));
+      //    |#ifdef DEBUG
+      //    |assert(paramsSize_$counter / sizeof(float) == """.stripMargin, w.scalarCount, s""" && "Expected parameter size mismatch");
+      //    |#endif
+      //    |
+      //    |cudnnFilterDescriptor_t w_desc_$counter;
+      //    |CUDNN_CALL(cudnnCreateFilterDescriptor(&w_desc_$counter));
+      //    |int w_dims_$counter[] = {int(paramsSize_$counter / sizeof(float)), 1, 1};
+      //    |CUDNN_CALL(cudnnSetFilterNdDescriptor(
+      //    |    w_desc_$counter, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, /*nbDims*/ 3, w_dims_$counter));
+      //    |
+      //    |cudnnTensorDescriptor_t y_descs_$counter[seqLength_$counter];
+      //    |cudnnTensorDescriptor_t y_desc_$counter;
+      //    |CUDNN_CALL(cudnnCreateTensorDescriptor(&y_desc_$counter));
+      //    |int y_dims_$counter[] = {batchSize_$counter, ${hiddenSize * numDirections}, 1};
+      //    |int y_strides_$counter[] = {y_dims_$counter[1] * y_dims_$counter[2], y_dims_$counter[2], 1};
+      //    |CUDNN_CALL(cudnnSetTensorNdDescriptor(
+      //    |    y_desc_$counter, CUDNN_DATA_FLOAT, /*nbDims*/ 3, y_dims_$counter, y_strides_$counter));
+      //    |for (int i = 0; i < seqLength_$counter; i++) {
+      //    |  y_descs_$counter[i] = y_desc_$counter;
+      //    |}
+      //    |
+      //    |size_t workspaceSize_$counter;
+      //    |CUDNN_CALL(cudnnGetRNNWorkspaceSize(
+      //    |    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, &workspaceSize_$counter));
+      //    |void* workspace_$counter = myGpuMalloc(workspaceSize_$counter);
+      //    """.stripMargin): _*
+      // )
+
+      // If training, create reserve space and call `ForwardTraining` function.
+      // if (training) {
+      //   val reserveSpace = var_new(unchecked[Array[Float]]("(float*)NULL"))
+      //   val reserveSpaceSize = var_new(unchecked[Int]("0"))
+      //   unchecked[Unit](
+      //     Seq(s"""
+      //       |{// Reserve space used by `ForwardTraining` function.
+      //       |size_t reserveSize;
+      //       |CUDNN_CALL(cudnnGetRNNTrainingReserveSize(
+      //       |    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, &reserveSize));
+      //       |void* reserveSpace = myGpuMalloc(reserveSize);
+      //       |""".stripMargin,
+      //       reserveSpace, " = (float*)reserveSpace;\n",
+      //       reserveSpaceSize, " = (int)reserveSize;\n") ++
+      //     Seq(
+      //       "CUDNN_CALL(cudnnRNNForwardTraining(\n" +
+      //       s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", x.data, ",\n" +
+      //       s"    hx_desc_$counter,", hxData, s", hx_desc_$counter,", cxData, s", w_desc_$counter, ", w.data, s", y_descs_$counter, ", res.data, ",\n" +
+      //       s"    hx_desc_$counter, ", hyData, s", hx_desc_$counter, NULL, workspace_$counter, workspaceSize_$counter, reserveSpace, reserveSize));\n") ++
+      //     Seq(s"}"): _*)
+      //   (res, hy, Some((reserveSpace, reserveSpaceSize)), counter)
+      // } else { // If inference, call `ForwardInference` function.
+      //   unchecked[Unit](
+      //     Seq(
+      //        "CUDNN_CALL(cudnnRNNForwardInference(\n" +
+      //       s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", x.data, ",\n" +
+      //       s"    hx_desc_$counter,", hxData, s", hx_desc_$counter,", cxData, s", w_desc_$counter, ", w.data, s", y_descs_$counter, ", res.data, ",\n" +
+      //       s"    hx_desc_$counter,", hyData, s", hx_desc_$counter, NULL, workspace_$counter, workspaceSize_$counter));\n"
+      //     ) ++
+      //     Seq(s"myGpuFree(workspaceSize_$counter);\n"): _*)
+      //   (res, hy, None, counter)
+      // }
     }
 
     def cudnnRNNForwardInference(mode: RnnMode,
@@ -1771,6 +1745,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnRNNBackwardData
+    @virtualize
     def cudnnRNNBackwardData(mode: RnnMode,
                              input: TensorR, hx: Option[Tensor], cx: Option[Tensor], w: TensorR, output: TensorR,
                              numLayers: Int, hiddenSize: Int,
@@ -1802,16 +1777,58 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val inputSize = input.x.shape(2)
       val numDirections = if (bidirectional) 2 else 1
 
-      unchecked[Unit](
-         s"CUDNN_CALL(cudnnRNNBackwardData(\n" +
-         s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, y_descs_$counter, ", output.x.data, s", y_descs_$counter, ", output.d.data, ",\n" +
-         s"    hx_desc_$counter, NULL, hx_desc_$counter, NULL, w_desc_$counter, ", w.x.data, s", hx_desc_$counter, ", hxData, ",\n" +
-         s"    hx_desc_$counter, ", cxData, s", x_descs_$counter, ", input.d.data, s", hx_desc_$counter, NULL, hx_desc_$counter, NULL,\n" +
-         s"    workspace_$counter, workspaceSize_$counter, ", reserve, ", ", reserveSize, "));\n"
-      )
+      val (dropoutState, dropoutStateSize): (Rep[Array[Float]], Rep[SizeT]) = if (dropout == 0f) { (NULLptr[Float], unit(SizeT(0))) } else {
+        var dropoutStateSize = SizeT(0)
+        cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, dropoutStateSize))
+        (gpuArenaMalloc[Float](dropoutStateSize), dropoutStateSize)
+      }
+      val dropoutDesc = cudnnGetDropoutDescriptor(cudnnHandle, dropout, dropoutState, dropoutStateSize, krandTime)
+      val rnnDesc = cudnnGetRNNDescriptor(cudnnHandle, hiddenSize, numLayers, dropoutDesc, klinearInput,
+        (if (bidirectional) kbidirection else kunidirection), mode match {
+          case RnnReluMode => krnnRelu
+          case RnnTanhMode => krnnTanh
+          case LstmMode => klstm
+          case GruMode => kgru
+        }, krnnAlgoStandard, kfloat)
+      cudnnCall(cudnnSetRNNMatrixMathType(rnnDesc, ktensor_op))
+      val xDescs = NewStackArray[CudnnTensorDescriptorT](seqLength)
+      val xDesc = cudnnGetTensor3dDescriptor(kfloat, batchSize, inputSize, 1, inputSize, 1, 1)
+      for (i <- (0 until seqLength): Rep[Range])
+        xDescs(i) = xDesc
+      val hxDesc = cudnnGetTensor3dDescriptor(kfloat, numLayers * numDirections, batchSize, hiddenSize,
+        batchSize * hiddenSize, hiddenSize, 1)
+      var paramsSize = SizeT(0)
+      cudnnCall(cudnnGetRNNParamsSize(cudnnHandle, rnnDesc, xDesc, paramsSize, kfloat))
+      val filterDesc = cudnnGetFilter3dDescriptor(knchw, kfloat, paramsSize.toInt / sizeOfFloat, 1, 1)
+
+      val yDescs = NewStackArray[CudnnTensorDescriptorT](seqLength)
+      val yDesc = cudnnGetTensor3dDescriptor(kfloat, batchSize, hiddenSize * numDirections, 1,
+        hiddenSize * numDirections, 1, 1)
+      for (i <- (0 until seqLength): Rep[Range])
+        yDescs(i) = yDesc
+      var wsSize = SizeT(0)
+      cudnnCall(cudnnGetRNNWorkspaceSize(cudnnHandle, rnnDesc, seqLength, xDescs, wsSize))
+      val wsData = gpuArenaMalloc[Float](wsSize)
+
+      var rsSize = SizeT(0)
+      cudnnCall(cudnnGetRNNTrainingReserveSize(cudnnHandle, rnnDesc, seqLength, xDescs, rsSize))
+
+      cudnnCall(cudnnRNNBackwardData_(cudnnHandle, rnnDesc, seqLength, yDescs, output.x.data, yDescs, output.d.data,
+        hxDesc, NULLptr[Float], hxDesc, NULLptr[Float], filterDesc, w.x.data, hxDesc, hxData,
+        hxDesc, cxData, xDescs, input.d.data, hxDesc, NULLptr[Float], hxDesc, NULLptr[Float],
+        wsData, wsSize, reserve, rsSize))
+      gpuArenaFree(wsSize)
+      // unchecked[Unit](
+      //    s"CUDNN_CALL(cudnnRNNBackwardData(\n" +
+      //    s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, y_descs_$counter, ", output.x.data, s", y_descs_$counter, ", output.d.data, ",\n" +
+      //    s"    hx_desc_$counter, NULL, hx_desc_$counter, NULL, w_desc_$counter, ", w.x.data, s", hx_desc_$counter, ", hxData, ",\n" +
+      //    s"    hx_desc_$counter, ", cxData, s", x_descs_$counter, ", input.d.data, s", hx_desc_$counter, NULL, hx_desc_$counter, NULL,\n" +
+      //    s"    workspace_$counter, workspaceSize_$counter, ", reserve, ", ", reserveSize, "));\n"
+      // )
     }
 
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnRNNBackwardWeights
+    @virtualize
     def cudnnRNNBackwardWeights(mode: RnnMode,
                                 input: TensorR, hx: Option[Tensor], w: TensorR, output: TensorR,
                                 numLayers: Int, hiddenSize: Int,
@@ -1835,12 +1852,49 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val inputSize = input.x.shape(2)
       val numDirections = if (bidirectional) 2 else 1
 
-      unchecked[Unit](
-          s"CUDNN_CALL(cudnnRNNBackwardWeights(\n" +
-          s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", input.x.data, s", hx_desc_$counter, ", hxData, ",\n" +
-          s"    y_descs_$counter, ", output.x.data, s", workspace_$counter, workspaceSize_$counter,\n" +
-          s"    w_desc_$counter, ", w.d.data, ", ", reserve, ", ", reserveSize, "));\n"
-      )
+      val (dropoutState, dropoutStateSize): (Rep[Array[Float]], Rep[SizeT]) = if (dropout == 0f) { (NULLptr[Float], unit(SizeT(0))) } else {
+        var dropoutStateSize = SizeT(0)
+        cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, dropoutStateSize))
+        (gpuArenaMalloc[Float](dropoutStateSize), dropoutStateSize)
+      }
+      val dropoutDesc = cudnnGetDropoutDescriptor(cudnnHandle, dropout, dropoutState, dropoutStateSize, krandTime)
+      val rnnDesc = cudnnGetRNNDescriptor(cudnnHandle, hiddenSize, numLayers, dropoutDesc, klinearInput,
+        (if (bidirectional) kbidirection else kunidirection), mode match {
+          case RnnReluMode => krnnRelu
+          case RnnTanhMode => krnnTanh
+          case LstmMode => klstm
+          case GruMode => kgru
+        }, krnnAlgoStandard, kfloat)
+      cudnnCall(cudnnSetRNNMatrixMathType(rnnDesc, ktensor_op))
+      val xDescs = NewStackArray[CudnnTensorDescriptorT](seqLength)
+      val xDesc = cudnnGetTensor3dDescriptor(kfloat, batchSize, inputSize, 1, inputSize, 1, 1)
+      for (i <- (0 until seqLength): Rep[Range])
+        xDescs(i) = xDesc
+      val hxDesc = cudnnGetTensor3dDescriptor(kfloat, numLayers * numDirections, batchSize, hiddenSize,
+        batchSize * hiddenSize, hiddenSize, 1)
+      var paramsSize = SizeT(0)
+      cudnnCall(cudnnGetRNNParamsSize(cudnnHandle, rnnDesc, xDesc, paramsSize, kfloat))
+      val filterDesc = cudnnGetFilter3dDescriptor(knchw, kfloat, paramsSize.toInt / sizeOfFloat, 1, 1)
+
+      val yDescs = NewStackArray[CudnnTensorDescriptorT](seqLength)
+      val yDesc = cudnnGetTensor3dDescriptor(kfloat, batchSize, hiddenSize * numDirections, 1,
+        hiddenSize * numDirections, 1, 1)
+      for (i <- (0 until seqLength): Rep[Range])
+        yDescs(i) = yDesc
+      var wsSize = SizeT(0)
+      cudnnCall(cudnnGetRNNWorkspaceSize(cudnnHandle, rnnDesc, seqLength, xDescs, wsSize))
+      val wsData = gpuArenaMalloc[Float](wsSize)
+      var rsSize = SizeT(0)
+      cudnnCall(cudnnGetRNNTrainingReserveSize(cudnnHandle, rnnDesc, seqLength, xDescs, rsSize))
+      cudnnCall(cudnnRNNBackwardWeights_(cudnnHandle, rnnDesc, seqLength, xDescs, input.x.data, hxDesc, hxData,
+        yDescs, output.x.data, wsData, wsSize, filterDesc, w.d.data, reserve, rsSize))
+      gpuArenaFree(wsSize)
+      // unchecked[Unit](
+      //     s"CUDNN_CALL(cudnnRNNBackwardWeights(\n" +
+      //     s"    cudnnHandle, rnn_desc_$counter, seqLength_$counter, x_descs_$counter, ", input.x.data, s", hx_desc_$counter, ", hxData, ",\n" +
+      //     s"    y_descs_$counter, ", output.x.data, s", workspace_$counter, workspaceSize_$counter,\n" +
+      //     s"    w_desc_$counter, ", w.d.data, ", ", reserve, ", ", reserveSize, "));\n"
+      // )
     }
 
     def cudnnRNNBackward(mode: RnnMode,
