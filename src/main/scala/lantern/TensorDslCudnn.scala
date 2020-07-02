@@ -202,11 +202,11 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionForward
     @virtualize
     def cudnnConvolutionForward(input: Tensor, filter: Tensor, res: Tensor, bias: Option[Tensor] = None,
-                                padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)): Int = {
-      val counter = nextKernel
-      convOpIndexSet += counter
-      nextKernel += 1
-      attributesMap(counter) = "// Attributes;"
+                                padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)) = {
+      // val counter = nextKernel
+      // convOpIndexSet += counter
+      // nextKernel += 1
+      // attributesMap(counter) = "// Attributes;"
 
       val in_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.shape)
       val filt_desc = cudnnGetFilter4dDescriptor(knchw, kfloat, filter.shape)
@@ -225,6 +225,7 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       cudnnCall(cudnnConvolutionForward_(cudnnHandle, one, in_desc, input.data, filt_desc, filter.data,
         conv_desc, algo, wsArray, wsSize, zero, out_desc, res.data))
       gpuArenaFree(wsSize)
+      (in_desc, filt_desc, out_desc, conv_desc)
 
       // unchecked[Unit](
       //   Seq(s"""
@@ -320,7 +321,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         //   "    ", zero, s", out_desc_$counter, ", res.data, "));\n") ++
         // Seq(s"myGpuFree(ws_size_$counter);\n"): _*)
 
-      counter
     }
 
     override def plusBias(main: Tensor, bias: Tensor): Tensor = {
@@ -386,15 +386,19 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardData
     @virtualize
     def cudnnConvolutionBackwardData(inputGrad: Tensor, filter: Tensor, resGrad: Tensor,
-                                     padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit = {
-      assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, but got ${resGrad.rank}")
-      assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
+                                     padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int),
+                                     inputDesc: Rep[CudnnTensorDescriptorT],
+                                     filterDesc: Rep[CudnnFilterDescriptorT],
+                                     outDesc: Rep[CudnnTensorDescriptorT],
+                                     convDesc: Rep[CudnnConvolutionDescriptorT]): Unit = {
+      // assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, but got ${resGrad.rank}")
+      // assert(inputGrad.rank == 4, s"Convolution input gradient must have rank 4, but got ${inputGrad.rank}")
 
       // descripters that should be optimized away
-      val filterDesc = cudnnGetFilter4dDescriptor(knchw, kfloat, filter.shape)
-      val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, resGrad.shape)
-      val inputDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, inputGrad.shape)
-      val convDesc = cudnnGetConvolution2dDescriptor(padding, strides, dilations, kcross_correlation, kfloat, Some(ktensor_op))
+      // val filterDesc = cudnnGetFilter4dDescriptor(knchw, kfloat, filter.shape)
+      // val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, resGrad.shape)
+      // val inputDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, inputGrad.shape)
+      // val convDesc = cudnnGetConvolution2dDescriptor(padding, strides, dilations, kcross_correlation, kfloat, Some(ktensor_op))
 
       var returned_algo_count_bwd = 0
       val perfResultsBwd = NewStackArray[CudnnConvolutionBwdDataAlgoPerfT](6)
@@ -484,14 +488,18 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     // Reference: https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardFilter
     @virtualize
     def cudnnConvolutionBackwardFilter(filterGrad: Tensor, input: Tensor, resGrad: Tensor,
-                                       padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit = {
-      assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
+                                       padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int),
+                                       inputDesc: Rep[CudnnTensorDescriptorT],
+                                       filterDesc: Rep[CudnnFilterDescriptorT],
+                                       outDesc: Rep[CudnnTensorDescriptorT],
+                                       convDesc: Rep[CudnnConvolutionDescriptorT]): Unit = {
+      // assert(resGrad.rank == 4, s"Convolution result gradient must have rank 4, got ${resGrad.rank}")
 
-      // descripters that should be optimized away
-      val filterDesc = cudnnGetFilter4dDescriptor(knchw, kfloat, filterGrad.shape)
-      val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, resGrad.shape)
-      val inputDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.shape)
-      val convDesc = cudnnGetConvolution2dDescriptor(padding, strides, dilations, kcross_correlation, kfloat, Some(ktensor_op))
+      // // descripters that should be optimized away
+      // val filterDesc = cudnnGetFilter4dDescriptor(knchw, kfloat, filterGrad.shape)
+      // val outDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, resGrad.shape)
+      // val inputDesc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.shape)
+      // val convDesc = cudnnGetConvolution2dDescriptor(padding, strides, dilations, kcross_correlation, kfloat, Some(ktensor_op))
 
       var returned_algo_count_bwf = 0
       val perfResultsBwf = NewStackArray[CudnnConvolutionBwdFilterAlgoPerfT](6)
@@ -579,37 +587,29 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
     @virtualize
     override def conv2DTraining(input: TensorR, kernel: TensorR, bias: Option[TensorR], resShape: Seq[Rep[Int]], strides: Seq[Int], pads: Seq[Int]) = shift { k: (TensorR => Unit) =>
+      // forward
       val resData = mallocArray[Float](resShape.product1)
       val res = Tensor(resData, resShape: _*)
+      val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else ???}}
+      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
+      val (inDesc, filterDesc, outDesc, convDesc) = cudnnConvolutionForward(input.x, kernel.x, res,
+        padding = (padH, padW), strides = (strideRow, strideCol), dilations = (1, 1))
+      bias.map(b => cudnnAddBiasTensor(b.x, res))
 
-      val in_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.x.shape)
-      val filt_desc = cudnnGetFilter4dDescriptor(knchw, kfloat, kernel.x.shape)
-      val out_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, res.shape)
-      val conv_desc = cudnnGetConvolution2dDescriptor((pads(0), pads(1)), (strides(0), strides(1)), (1,1), kcross_correlation, kfloat, Some(ktensor_op))
-
-      // Forward pass
-      var returned_algo_count = 0
-      val perfResults = NewStackArray[CudnnConvolutionFwdAlgoPerfT](8)
-      cudnnCall(cudnnGetConvolutionForwardAlgorithm_v7(cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, 8,
-        returned_algo_count, perfResults))
-      val algo = perfResults(0).algo
-
-      var wsSize = SizeT(0)
-      cudnnCall(cudnnGetConvolutionForwardWorkspaceSize(cudnnHandle, in_desc, filt_desc, conv_desc, out_desc, algo, wsSize))
-      val wsArray = gpuArenaMalloc[Float](wsSize)
-      cudnnCall(cudnnConvolutionForward_(cudnnHandle, one, in_desc, input.x.data, filt_desc, kernel.x.data,
-        conv_desc, algo, wsArray, wsSize, zero, out_desc, res.data))
-      gpuArenaFree(wsSize)
-
-      bias match {
-        case None => ()
-        case Some(bias) => cudnnAddBiasTensor(bias.x, res)
-      }
-
+      // continuation
       val y = TensorR(res); k(y)
 
-      // Backward pass
-      ??? // To be finished!
+      // Backward
+      val paddings = if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else {if (pads.size == 1) (pads(0), pads(0)) else ???}}
+      val stridess = if (strides.size == 2) (strides(0), strides(1)) else ???
+
+      if (!input.isInput){
+        cudnnConvolutionBackwardData(input.d, kernel.x, y.d, paddings, stridess, (1,1), inDesc, filterDesc, outDesc, convDesc)
+      }
+
+      cudnnConvolutionBackwardFilter(kernel.d, input.x, y.d, paddings, stridess, (1,1), inDesc, filterDesc, outDesc, convDesc)
+
+      bias.map(b=>cudnnConvolutionBackwardBias(b.d, y.d))
     }
 
     override def conv2D_batch(input: Tensor, kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int) = {
@@ -638,27 +638,25 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val resShape = Seq(input.shape(0), kernel.shape(0), resWidth, resHeight)
       val resData = mallocArray[Float](resShape.product1)
       val res = Tensor(resData, resShape: _*)
-      val counterId = cudnnConvolutionForward(input, kernel, res, padding = (padH, padW), strides = (strideRow, strideCol), dilations = (1, 1))
+      cudnnConvolutionForward(input, kernel, res, padding = (padH, padW), strides = (strideRow, strideCol), dilations = (1, 1))
 
       // If bias is defined, execute `cudnnAddBiasTensor`.
-      bias match {
-        case None =>
-        case Some(bias) => cudnnAddBiasTensor(bias, res)
-      }
-      (res, None, counterId)
+      bias map (b => cudnnAddBiasTensor(b, res))
+      (res, None, 0)
     }
 
     override def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                                    padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counterId: Int): Unit = {
-      assert(input.x.rank == 4, s"convolution input values should be 4D, but got ${input.x.rank}")
-      assert(input.isInput || input.d.rank == 4, s"convolution input gradients is either ignored (for training data) or should be 4D, but got ${input.d.rank}")
-      if (!input.isInput) cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations, counterId)
-      cudnnConvolutionBackwardFilter(filter.d, input.x, res.d, padding, strides, dilations, counterId)
-      bias match {
-        case None =>
-        case Some(bias) =>
-          cudnnConvolutionBackwardBias(bias.d, res.d)
-      }
+                                     ???
+      // assert(input.x.rank == 4, s"convolution input values should be 4D, but got ${input.x.rank}")
+      // assert(input.isInput || input.d.rank == 4, s"convolution input gradients is either ignored (for training data) or should be 4D, but got ${input.d.rank}")
+      // if (!input.isInput) cudnnConvolutionBackwardData(input.d, filter.x, res.d, padding, strides, dilations, counterId)
+      // cudnnConvolutionBackwardFilter(filter.d, input.x, res.d, padding, strides, dilations, counterId)
+      // bias match {
+      //   case None =>
+      //   case Some(bias) =>
+      //     cudnnConvolutionBackwardBias(bias.d, res.d)
+      // }
     }
 
     @virtualize

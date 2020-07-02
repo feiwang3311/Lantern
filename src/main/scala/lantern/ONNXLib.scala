@@ -623,7 +623,7 @@ trait ONNXLib extends TensorDslCudnn with ScannerOps {
             val pads = atts("pads")                  // pads may be zero
             val kernel_shape = atts("kernel_shape")  // this attribute is actually not used
 
-            val (out, finputOption, _) = input1.conv2D_batch(input2, input3, strides, pads)
+            val (out, _ , _) = input1.conv2D_batch(input2, input3, strides, pads)
             intermediate_map_tensor += (output -> out)
           }
 

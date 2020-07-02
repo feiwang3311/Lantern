@@ -313,6 +313,7 @@ trait TensorDsl extends DslCPP with Diff {
     def conv2D_batch_grad(input: TensorR, finput: Option[TensorR], filter: TensorR, res: TensorR, bias: Option[TensorR] = None,
                           padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int), counter: Int): Unit
 
+    // new API to reuse forward states in backward
     def conv2DTraining(input: TensorR, kernel: TensorR, bias: Option[TensorR], resShape: Seq[Rep[Int]], strides: Seq[Int], pads: Seq[Int]): TensorR@diff
 
     def maxPool2D_batch(input: Tensor, kernel: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]]): (Tensor, Option[Rep[Array[Int]]])
@@ -849,7 +850,7 @@ trait TensorDsl extends DslCPP with Diff {
     }
 
     @virtualize
-    def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]): (Tensor, Option[Tensor], Int) = {
+    def conv2D_batch(kernel: Tensor, bias: Option[Tensor], strides: Seq[Int], pads: Seq[Int]) = {
       backend.conv2D_batch(this, kernel, bias, strides, pads)
     }
 
@@ -1431,51 +1432,51 @@ trait TensorDsl extends DslCPP with Diff {
       backend.averagePool2D_batch_grad(this, y, kernels, strides, pads match {case None => Seq(0,0,0,0); case Some(pads) => pads})
     }
 
-    // @virtualize  // conv with batch, bias, and pads
-    def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
-      assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
-      assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
-      val (output, finputOption, counterId) = bias match {
-        case Some(bias) => backend.conv2D_batch(x, kernel.x, Some(bias.x), strides, pads)
-        case None =>       backend.conv2D_batch(x, kernel.x, None, strides, pads)
-      }
-      val y = TensorR(output); k(y)
-
-      generate_comment("conv2D back-propagate")
-      val paddings = if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else {if (pads.size == 1) (pads(0), pads(0)) else ???}}
-      val stridess = if (strides.size == 2) (strides(0), strides(1)) else ???
-      finputOption match {
-        case None => backend.conv2D_batch_grad(this, None, kernel, y, bias, paddings, stridess, dilations = (1, 1), counterId)
-        case Some(finput) => backend.conv2D_batch_grad(this, Some(TensorR(finput)), kernel, y, bias, paddings, stridess, dilations = (1, 1), counterId)
-      }
-    }
-
-    // def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = {
-    //   // verification
+    // // @virtualize  // conv with batch, bias, and pads
+    // def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = shift { (k: TensorR => Unit) =>
     //   assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
     //   assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
-    //   assert(kernel.x.rank == 4, s"Kernel must be 4-D, but got ${kernel.x.rank}")
-    //   assert(kernel.x.shape(1) == input.x.shape(1), s"In-channel count mismatch: input.shape[1] ${input.x.shape(1)} should match kernel.shape[1] ${kernel.x.shape(1)}")
-
-    //   val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else ???}}
-    //   assertC(input.x.shape(2) + 2 * padH >= kernel.x.shape(2) && input.x.shape(3) + 2 * padW >= kernel.x.shape(3), "Error")
-    //   bias match {
-    //     case Some(bias) =>
-    //       assert(bias.x.rank == 1, s"Bias should be 1-D, got ${bias.x.shape}")
-    //       assert(bias.x.shape(0) == kernel.x.shape(0), "Bias length must equal number of out-channels")
-    //     case None => ()
+    //   val (output, finputOption, counterId) = bias match {
+    //     case Some(bias) => backend.conv2D_batch(x, kernel.x, Some(bias.x), strides, pads)
+    //     case None =>       backend.conv2D_batch(x, kernel.x, None, strides, pads)
     //   }
-    //   assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
-    //   val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
-    //   assert(strideRow >= 1, "Row stride must be at least 1")
-    //   assert(strideCol >= 1, "Column stride must be at least 1")
+    //   val y = TensorR(output); k(y)
 
-    //   // compute result shape
-    //   val resWidth = convSize(input.x.shape(2) + padH * 2, kernel.x.shape(2), strideRow)
-    //   val resHeight = convSize(input.x.shape(3) + padW * 2, kernel.x.shape(3), strideCol)
-    //   val resShape = Seq(input.x.shape(0), kernel.x.shape(0), resWidth, resHeight)
-    //   backend.conv2DTraining(this, kernel, bias, resShape, strides, Seq(padH, padW))
+    //   generate_comment("conv2D back-propagate")
+    //   val paddings = if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else {if (pads.size == 1) (pads(0), pads(0)) else ???}}
+    //   val stridess = if (strides.size == 2) (strides(0), strides(1)) else ???
+    //   finputOption match {
+    //     case None => backend.conv2D_batch_grad(this, None, kernel, y, bias, paddings, stridess, dilations = (1, 1), counterId)
+    //     case Some(finput) => backend.conv2D_batch_grad(this, Some(TensorR(finput)), kernel, y, bias, paddings, stridess, dilations = (1, 1), counterId)
+    //   }
     // }
+
+    def convBBP(kernel: TensorR, bias: Option[TensorR], strides: Seq[Int], pads: Seq[Int]): TensorR@diff = {
+      // verification
+      assert(this.isInput || this.d.scalarCount == this.x.scalarCount, "For convBBP, THIS is either input or intermediate stage")
+      assert(this.x.rank == 4, "For convBBP, THIS is dim 4: batch, channel, row, col")
+      assert(kernel.x.rank == 4, s"Kernel must be 4-D, but got ${kernel.x.rank}")
+      assert(kernel.x.shape(1) == this.x.shape(1), s"In-channel count mismatch: input.shape[1] ${this.x.shape(1)} should match kernel.shape[1] ${kernel.x.shape(1)}")
+
+      val (padH, padW) = if (pads.size == 1) (pads(0), pads(0)) else {if (pads.size == 2) (pads(0), pads(1)) else {if (pads.size == 4) (pads(0), pads(2)) else ???}}
+      assertC(this.x.shape(2) + 2 * padH >= kernel.x.shape(2) && this.x.shape(3) + 2 * padW >= kernel.x.shape(3), "Error")
+      bias match {
+        case Some(bias) =>
+          assert(bias.x.rank == 1, s"Bias should be 1-D, got ${bias.x.shape}")
+          assert(bias.x.shape(0) == kernel.x.shape(0), "Bias length must equal number of out-channels")
+        case None => ()
+      }
+      assert(strides.size == 2, "Strides should have length 2: [strideRow, strideColumn]")
+      val ((strideRow:Int) :: (strideCol:Int) :: Nil) = strides.take(2).toList
+      assert(strideRow >= 1, "Row stride must be at least 1")
+      assert(strideCol >= 1, "Column stride must be at least 1")
+
+      // compute result shape
+      val resWidth = convSize(this.x.shape(2) + padH * 2, kernel.x.shape(2), strideRow)
+      val resHeight = convSize(this.x.shape(3) + padW * 2, kernel.x.shape(3), strideCol)
+      val resShape = Seq(this.x.shape(0), kernel.x.shape(0), resWidth, resHeight)
+      backend.conv2DTraining(this, kernel, bias, resShape, strides, Seq(padH, padW))
+    }
 
     @virtualize  // maxpool with kernel size potentially different from strides, and works with batch dimension! can have optional paddings
     def maxPoolBK(kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
