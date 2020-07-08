@@ -168,6 +168,11 @@ trait TensorDslCPU extends TensorDsl {
       Tensor(res, dim1, dim3)
     }
 
+    // TODO - implement bmm in CPU
+    override def bmm(x: Tensor, y: Tensor): Tensor = ???
+
+    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR): Unit = ???
+
     override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
       (x.x.rank, y.x.rank) match {
         case (1, 1) =>

@@ -222,6 +222,10 @@ trait TensorDsl extends DslCPP with Diff {
         case _ => throw new IllegalArgumentException(s"Incompatible shapes: ${x.shape}, ${y.shape}")
       }
 
+    def bmm(x: Tensor, y: Tensor): Tensor
+
+    def bmm_grad(x: TensorR, y: TensorR, output: TensorR): Unit
+
     def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit
 
     // `x` is matrix, `y` is dims(1)-sized vector, `output` is dims(0)-sized vector
@@ -499,6 +503,15 @@ trait TensorDsl extends DslCPP with Diff {
           s"Only vector-vector, matrix-vector, and matrix-matrix multiplication are allowed (actual shapes: ${this.shape}, ${that.shape})")
       }
       backend.dot(this, that)
+    }
+
+    // batch matrix multiplication (multiplying two collection of batches of matrices)
+    def bmm(that: Tensor) = {
+      (this.rank, that.rank) match {
+        case (3, 3) => assertC(this.shape(2) == that.shape(1), s"Incompatible shapes for bmm: ${this.shape}, ${that.shape}")
+        case _ => throw new IllegalArgumentException(s"bmm needs both tensors to have rank 3 (got: ${this.rank}, ${that.rank}")
+      }
+      backend.bmm(this, that)
     }
 
     // `this` is 2-D matrix, `that` is dims(1)-sized vector, `y` is dims(0)-sized vector
@@ -1259,6 +1272,13 @@ trait TensorDsl extends DslCPP with Diff {
 
       // back-propagate
       backend.dot_grad(this, that, y)
+    }
+
+    def bmm(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val res = backend.bmm(x, that.x)
+      val y = TensorR(res); k(y)
+
+      backend.bmm_grad(this, that, y)
     }
 
     def gemm(that: TensorR, transX: Boolean, transY: Boolean, alpha: Float): TensorR @diff = shift { (k: TensorR => Unit) =>

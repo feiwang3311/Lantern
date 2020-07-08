@@ -272,6 +272,68 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       Tensor(res, m, n)
     }
 
+    private def stride(t: Tensor) = t.shape(1) * t.shape(2)
+
+    private def add_dotTrans2Batched(res: Tensor, a: Tensor, b: Tensor) = {
+      // handle column-major (passed in are row-major)
+      val m = a.shape(1) // dim1
+      val k = a.shape(2) // dim3
+      val n = b.shape(1) // dim2
+      val batchCount = a.shape(0)
+      cublasCall(cublasSgemmStridedBatched_(cublasHandle, cublasOpT, cublasOpN, n, m, k, one, b.data, k, stride(b), a.data, k,
+        stride(a), one, res.data, n, stride(res), batchCount))
+    }
+    private def add_dotTrans1Batched(res: Tensor, a: Tensor, b: Tensor) = {
+      val m = a.shape(2) // dim2
+      val k = a.shape(1) // dim1
+      val n = b.shape(2) // dim3
+      val batchCount = res.shape(0)
+      cublasCall(cublasSgemmStridedBatched_(cublasHandle, cublasOpN, cublasOpT, n, m, k, one, b.data, n, stride(b),
+        a.data, m, stride(a), one, res.data, n, stride(res), batchCount))
+    }
+
+    private def bmm_sgemmbatched(x: Tensor, y: Tensor): Tensor = {
+      val m = x.shape(1)
+      val k = x.shape(2)
+      val n = y.shape(2)
+      val batchCount = x.shape(0)
+
+      val res = mallocArray[Float](batchCount * m * n)
+      cublasCall(cublasSgemmStridedBatched_(cublasHandle, cublasOpN, cublasOpN, n, m, k, one, y.data, n, stride(y), x.data,
+        k, stride(x), zero, res, n, m * n, batchCount))
+      Tensor(res, batchCount, m, n)
+    }
+
+    private def bmm_grad_sgemmbatched(x: TensorR, y: TensorR, output: TensorR) = {
+      generate_comment("backprop of batched matrix multiplication")
+      if (!x.isInput) add_dotTrans2Batched(x.d, output.d, y.x)
+      if (!y.isInput) add_dotTrans1Batched(y.d, x.x, output.d)
+    }
+
+    override def bmm(x: Tensor, y: Tensor): Tensor = {
+      bmm_sgemmbatched(x, y)
+//      val batchSize = x.shape(0)
+//      val m = x.shape(1)
+//      val k = x.shape(2)
+//      val n = y.shape(2)
+//      val res = mallocArray[Float](batchSize * m * n)
+//
+//      for(i <- 0 until batchSize) {
+//        sgemm(m, n, k, x(i).data, y(i).data, res.slice(i * m * n, (i + 1) * m * n))
+//      }
+//
+//      Tensor(res, batchSize, m, n)
+    }
+
+    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR) = {
+      bmm_grad_sgemmbatched(x, y, output)
+//      val batchSize = x.x.shape(0)
+//      for(i <- 0 until batchSize) {
+//        if (!x.isInput) add_dotTrans2(x.d(i), output.d(i), y.x(i))
+//        if (!y.isInput) add_dotTrans1(y.d(i), x.x(i), output.d(i))
+//      }
+    }
+
     @virtualize
     override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
       (x.x.rank, y.x.rank) match {

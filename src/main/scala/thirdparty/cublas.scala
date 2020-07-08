@@ -123,6 +123,29 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
       Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m), Unwrap(n), Unwrap(k), UnwrapV(alpha),
       Unwrap(A), Unwrap(lda), Unwrap(B), Unwrap(ldb), UnwrapV(beta), Unwrap(C), Unwrap(ldc))(Seq(0,7,9,12), Seq(12), Set(6, 11))
 
+  /*
+  cublasStatus_t cublasSgemmStridedBatched(cublasHandle_t handle,
+                                        cublasOperation_t transa,
+                                        cublasOperation_t transb,
+                                        int m, int n, int k,
+                                        const float *alpha,
+                                        const float *A, int lda,
+                                        long long int strideA,
+                                        const float *B, int ldb,
+                                        long long int strideB,
+                                        const float *beta,
+                                        float *C, int ldc,
+                                        long long int strideC,
+                                        int batchCount)
+   */
+  def cublasSgemmStridedBatched_(handle: Rep[CublasHandleT], transa: Rep[CublasOperationT], transb: Rep[CublasOperationT],
+                                 m: Rep[Int], n: Rep[Int], k: Rep[Int], alpha: Var[Float], A: Rep[Array[Float]], lda: Rep[Int],
+                                 strideA: Rep[Long], B: Rep[Array[Float]], ldb: Rep[Int], strideB: Rep[Long], beta: Var[Float],
+                                 C: Rep[Array[Float]], ldc: Rep[Int], strideC: Rep[Long], batchCount: Rep[Int]) =
+    libFunction[CublasStatusT]("cublasSgemmStridedBatched", Unwrap(cublasHandle), Unwrap(transa), Unwrap(transb), Unwrap(m),
+      Unwrap(n), Unwrap(k), UnwrapV(alpha), Unwrap(A), Unwrap(lda), Unwrap(strideA), Unwrap(B), Unwrap(ldb), Unwrap(strideB),
+      UnwrapV(beta), Unwrap(C), Unwrap(ldc), Unwrap(strideC), Unwrap(batchCount))((0 to 13) ++ (15 to 17), Seq(14), Set(6, 13))
+
   // other gpu kernel function bindings
   def cudaArrayFill_(res: Rep[Array[Float]], value: Rep[Float], size: Rep[Int]): Rep[Unit] =
     libFunction[Unit]("arrayFill<<<28,512>>>", Unwrap(res), Unwrap(value), Unwrap(size))(Seq[Int](), Seq(0), Set[Int]())
