@@ -160,6 +160,31 @@ class TestCublas extends LanternFunSuite {
     runTest(gemm)
   }
 
+  testGPU("bmm") {
+    val bmm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-bmm"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6)
+        val m2 = Tensor.fromData(Seq(2, 3, 2), 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4)
+        val result = m1.bmm(m2)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1 bmm mm2)(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 2, 2), 19, 19, 46, 46, 19, 19, 46, 46)
+        val expected1 = Tensor.fromData(Seq(2, 2, 3), 5, 6, 7, 5, 6, 7, 5, 6, 7, 5, 6, 7)
+        val expected2 = Tensor.fromData(Seq(2, 3, 2), 5, 5, 7, 7, 9, 9, 5, 5, 7, 7, 9, 9)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
+      }
+    }
+    runTest(bmm)
+  }
+
   testGPU("elementwiseOpNoBroadCastSqrt") {
     val sqrt = new LanternDriverCublas[String, Unit] {
       override val fileName = "lantern-cublas-sqrt"
