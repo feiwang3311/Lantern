@@ -272,6 +272,29 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       Tensor(res, m, n)
     }
 
+    // TODO - implement using sgemmbatched as well
+    override def bmm(x: Tensor, y: Tensor): Tensor = {
+      val batchSize = x.shape(0)
+      val m = x.shape(1)
+      val k = x.shape(2)
+      val n = y.shape(2)
+      val res = mallocArray[Float](batchSize * m * n)
+
+      for(i <- 0 until batchSize) {
+        sgemm(m, n, k, x(i).data, y(i).data, res.slice(i * m * n, (i + 1) * m * n))
+      }
+
+      Tensor(res, batchSize, m, n)
+    }
+
+    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR) = {
+      val batchSize = x.x.shape(0)
+      for(i <- 0 until batchSize) {
+        if (!x.isInput) add_dotTrans2(x.d(i), output.d(i), y.x(i))
+        if (!y.isInput) add_dotTrans1(y.d(i), x.x(i), output.d(i))
+      }
+    }
+
     @virtualize
     override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
       (x.x.rank, y.x.rank) match {
