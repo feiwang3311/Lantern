@@ -645,6 +645,33 @@ __global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int x
   }
 }
 
+// this assumes in is contiguous
+__global__ void maskedFill3D(float *in, float* out, int *mask, float value, int mask_size, int input_size) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+
+    for(; tid < input_size; tid += stride) {
+        if (mask[tid % mask_size] != 0) {
+            out[tid] = value;
+        } else {
+            out[tid] = in[tid];
+        }
+    }
+}
+
+// update the gradients of x based on y (y is coming from backward pass)
+__global__ void maskedFill3DGrad(float *y_d, float *x_d, int *mask, int mask_size, int input_size) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+
+    // if masked, then gradient is zero (hence, no action)
+    for(; tid < input_size; tid += stride) {
+        if (mask[tid % mask_size] == 0) {
+            x_d[tid] += y_d[tid];
+        }
+    }
+}
+
 __global__ void mul_sub(float* in1, float* in2, float* out, int in1ScalarCount, int in2ScalarCount) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int stride = gridDim.x * blockDim.x;

@@ -927,6 +927,21 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       input
     }
 
+    override def maskedFill3D(input: Tensor, mask: Rep[Array[Int]], value: Rep[Float]): Tensor = {
+      // Note - assumes mask is already in GPU
+      assert(input.rank == 3, s"maskedFill3D only accepts 3D tensors, got ${input.rank}")
+      assertC((input.shape.strides(0) > input.shape.strides(1)) && (input.shape.strides(1) > input.shape.strides(2)),
+        s"maskedFill3D only accepts contiguous tensors")
+      val res = mallocArray[Float](input.scalarCount)
+      maskedFill3D_(input.data, res, mask, value, input.shape(0) * input.shape(1), input.scalarCount)
+      Tensor(res, input.shape :_*)
+    }
+
+    override def maskedFill3D_grad(output: TensorR, x: TensorR, mask: Rep[Array[Int]], value: Rep[Float]): Unit = {
+      maskedFill3DGrad_(output.d.data, x.d.data, mask, output.x.shape(0) * output.x.shape(1), output.x.scalarCount)
+    }
+
+
     override def relu(x: Tensor, inPlace: Boolean = false): Tensor = ???
     override def tanh(x: Tensor): Tensor = ???
     override def sigmoid(x: Tensor): Tensor = ???

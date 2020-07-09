@@ -352,6 +352,13 @@ trait TensorDsl extends DslCPP with Diff {
     // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
     def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor
 
+    // fill the tensor with value if corresponding mask entry is 1
+    // assumes the input is contiguous!
+    def maskedFill3D(input: Tensor, mask: Rep[Array[Int]], value: Rep[Float]): Tensor
+
+    // gradient of filled values are set to zero (same in PyTorch)
+    def maskedFill3D_grad(output: TensorR, x: TensorR, mask: Rep[Array[Int]], value: Rep[Float]): Unit
+
     // Activation functions.
     def relu(x: Tensor, inPlace: Boolean = false): Tensor
     def tanh(x: Tensor): Tensor
@@ -541,6 +548,8 @@ trait TensorDsl extends DslCPP with Diff {
     def square() = backend.square(this)
 
     def mask4D(lengths: Rep[Array[Int]]): Tensor = backend.mask4D(this, lengths)
+
+    def maskedFill3D(mask: Rep[Array[Int]], value: Rep[Float]) = backend.maskedFill3D(this, mask, value)
 
     def relu(inPlace: Boolean = false) = backend.relu(this, inPlace)
     def tanh() = backend.tanh(this)
@@ -1327,6 +1336,13 @@ trait TensorDsl extends DslCPP with Diff {
     def mask4D(lengths: Rep[Array[Int]]): TensorR @diff = shift { (k: TensorR => Unit) =>
       x.mask4D(lengths); k(this)
       generate_comment("backprop for mask4D, not sure if gradient should be masked as well?")
+    }
+
+    def maskedFill3D(mask: Rep[Array[Int]], value: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.maskedFill3D(mask, value)); k(y)
+
+      generate_comment("backprop for maskedFill3D")
+      backend.maskedFill3D_grad(y, this, mask, value)
     }
 
     def relu(inPlace: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>

@@ -58,6 +58,7 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   abstract class CublasOperationT
   def cublasOpN = cmacro[CublasOperationT]("CUBLAS_OP_N")
   def cublasOpT = cmacro[CublasOperationT]("CUBLAS_OP_T")
+  def INFINITY = cmacro[Float]("INFINITY")
 
   /*
     cublasStatus_t cublasSdot (cublasHandle_t handle, int n,
@@ -234,6 +235,17 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
       in_strides2: Rep[Int], in_strides3: Rep[Int], total: Rep[Int]) =
     libFunction[Unit]("mask4D<<<28, 512>>>", Unwrap(input), Unwrap(lengths), Unwrap(in_strides0), Unwrap(in_strides1),
     Unwrap(in_strides2), Unwrap(in_strides3), Unwrap(total))(Seq(0, 1), Seq(0), Set[Int]())
+
+  def maskedFill3D_(input: Rep[Array[Float]], output: Rep[Array[Float]], mask: Rep[Array[Int]], value: Rep[Float],
+                   maskSize: Rep[Int], inputSize: Rep[Int]) =
+    libFunction[Unit]("maskedFill3D<<<28, 512>>>", Unwrap(input), Unwrap(output), Unwrap(mask), Unwrap(value),
+      Unwrap(maskSize), Unwrap(inputSize))(Seq(0, 2), Seq(1), Set())
+
+  // update x gradients based on y values (y comes from backprop)
+  def maskedFill3DGrad_(y: Rep[Array[Float]], x: Rep[Array[Float]], mask: Rep[Array[Int]], maskSize: Rep[Int],
+                        inputSize: Rep[Int]) =
+    libFunction[Unit]("maskedFill3DGrad<<<28, 512>>>", Unwrap(y), Unwrap(x), Unwrap(mask), Unwrap(maskSize),
+      Unwrap(inputSize))(Seq(0, 1, 2), Seq(1), Set())
 
   def hardTanh_(input: Rep[Array[Float]], res: Rep[Array[Float]], min_val: Rep[Float], max_val: Rep[Float], total: Rep[Int]) =
     libFunction[Unit]("hardTanh<<<28, 512>>>", Unwrap(input), Unwrap(res), Unwrap(min_val), Unwrap(max_val),

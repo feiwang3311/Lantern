@@ -745,6 +745,12 @@ trait TensorDslCPU extends TensorDsl {
       input
     }
 
+    // TODO - implement in CPU
+    override def maskedFill3D(input: Tensor, mask: Rep[Array[Int]], value: Rep[Float]) = ???
+
+    // TODO - implement in CPU
+    override def maskedFill3D_grad(output: TensorR, x: TensorR, mask: Rep[Array[Int]], value: Rep[Float]): Unit = ???
+
     @virtualize
     override def relu(x: Tensor, inPlace: Boolean = false): Tensor = {
       val res = if (inPlace) x.data else mallocArray[Float](x.scalarCount)

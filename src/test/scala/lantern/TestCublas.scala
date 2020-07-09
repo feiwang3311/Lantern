@@ -463,4 +463,29 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(exp)
   }
+
+  testGPU("masked_fill_3d-test") {
+    val mmdot = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-masked_fill_3d"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6)
+        val tr = TensorR(t)
+        val mask = Array(0, 1, 0, 1, 0, 1).toGPU(6)
+
+        val res = t.maskedFill3D(mask, -1)
+
+        gradR(dummy => tr.maskedFill3D(mask, -Float.NegativeInfinity))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(2, 2, 3), 1, -1, 3, -1, 5, -1, 1, -1, 3, -1, 5, -1)
+        val expectedGrad = Tensor.fromData(Seq(2, 2, 3), 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+        Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(mmdot)
+  }
 }
