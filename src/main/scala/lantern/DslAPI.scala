@@ -80,7 +80,11 @@ trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
       }
       // s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyHostToDevice))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("d2hCopy[") =>
-      val ty = op.substring(8, op.length - 1).toLowerCase // op.drop(8).dropRight(1).toLowerCase
+      val ty = op.substring(8, op.length - 1).toLowerCase match {
+        case "boolean" => "bool"
+        case x => x
+      } // op.drop(8).dropRight(1).toLowerCase
+
       emit(s"CUDA_CALL(cudaMemcpy("); shallow(y); emit(", "); shallow(x); emit(", "); shallow(size); emit(s" * sizeof($ty), cudaMemcpyDeviceToHost))")
       // s"CUDA_CALL(cudaMemcpy(${shallow(y)}, ${shallow(x)}, ${shallow(size)}*sizeof(${ty}), cudaMemcpyDeviceToHost))"
     case n @ Node(s, op, List(x,y,size),_) if op.startsWith("d2dCopy[") =>
@@ -91,7 +95,7 @@ trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
   }
 
   override def emitAll(ng: Graph, name: String)(m1: Manifest[_], m2: Manifest[_]): Unit = {
-    registerHeader("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>")
+    registerHeader("<cuda.h>", "<cuda_runtime.h>", "<cublas_v2.h>", "<curand.h>", "<curand_kernel.h>")
 
     // -I /opt/OpenBLAS/include -L /opt/OpenBLAS/lib -lopenblas -lstdc++ -lcublas
     registerLibrary("-lstdc++", "-lcublas")

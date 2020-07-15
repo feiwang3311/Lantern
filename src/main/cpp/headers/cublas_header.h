@@ -645,6 +645,33 @@ __global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int x
   }
 }
 
+// Note - p is keep-probability (not the drop probability)
+__global__ void dropout(float* input, float *result, float p, bool *mask, int inputSize, long seed, long offset) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+
+    curandStatePhilox4_32_10_t state;
+    curand_init(seed, idx, offset, &state);
+
+    float pinv = 1 / p; // can make this a kernel arg (then can be computed at staging time)
+
+    for(int i = idx; i < inputSize; i += stride) {
+        mask[i] = curand_uniform(&state) < p;
+        result[i] = input[i] * mask[i] * pinv;
+    }
+}
+
+__global__ void dropoutGrad(float *y_d, float *x_d, bool *mask, int inputSize, float pinv) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+
+    for(int i = idx; i < inputSize; i += stride) {
+        if (mask[i]) {
+            x_d[i] += y_d[i] * pinv;
+        }
+    }
+}
+
 // this assumes in is contiguous
 __global__ void maskedFill3D(float *in, float* out, int *mask, float value, int mask_size, int input_size) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;

@@ -914,6 +914,24 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 
+    override def dropout_v2(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Boolean]]) = {
+      val res = mallocArray[Float](input.scalarCount)
+      val mask = mallocArray[Boolean](input.scalarCount)
+      dropout_(input.data, res, 1 - prob, mask, input.scalarCount, seed, offset)
+
+      // update the offset based on how many random numbers are used by a thread
+      // grid and block sizes are hardcoded in cublas.scala (<<<28, 512>>>)
+      val gridSize = 28
+      val blockSize = 512
+      offset += (input.scalarCount / (blockSize * gridSize)) + 1
+
+      (Tensor(res, input.shape :_*), mask)
+    }
+
+    override def dropout_v2_grad(input: TensorR, output: TensorR, prob: Float, mask: Rep[Array[Boolean]]): Unit = {
+      dropoutGrad_(output.d.data, input.d.data, mask, input.d.scalarCount, 1/(1 - prob))
+    }
+
     override def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor = {
       // inplace mask (input is of size Batch * c * d * Time, lengths are the actual length of each sequence in batch)
       // Note: We assume that lengths is passed to GPU already, at the beginning of each epoch

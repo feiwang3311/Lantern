@@ -337,7 +337,9 @@ trait TensorDsl extends DslCPP with Diff {
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
-
+    // dropout using a custom kernel (not using the CuDNN kernel
+    def dropout_v2(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Boolean]])
+    def dropout_v2_grad(input: TensorR, output: TensorR, prob: Float, mask: Rep[Array[Boolean]]): Unit
 
     def multiheadAttentionInit(embedDim: Int, numHeads: Int, kDim: Int, vDim: Int, bias: Boolean = false, dropOut: Float,
                                residualConnection: Boolean, maxSeqLenQ: Rep[Int], maxSeqLenK: Rep[Int], maxBatchSize: Rep[Int],
@@ -924,6 +926,9 @@ trait TensorDsl extends DslCPP with Diff {
 
     def dropout(prob: Float = 0.5f) =
       backend.dropout(this, prob)
+
+    def dropout_v2(prob: Float = 0.5f): (Tensor, Rep[Array[Boolean]]) =
+      backend.dropout_v2(this, prob)
 
     @virtualize
     def concat(dim: Int, others: Tensor*) = {
@@ -1589,6 +1594,13 @@ trait TensorDsl extends DslCPP with Diff {
       val ty = TensorR(y); k(ty)
       // back prop
       backend.dropout_grad(this, ty, prob, helper, size)
+    }
+
+    def dropout_v2(prob: Float): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val (y, mask) = backend.dropout_v2(this.x, prob)
+      val ty = TensorR(y); k(ty)
+      generate_comment("backprop for dropout_v2")
+      backend.dropout_v2_grad(this, ty, prob, mask)
     }
 
     @virtualize

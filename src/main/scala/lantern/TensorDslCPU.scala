@@ -1131,6 +1131,11 @@ trait TensorDslCPU extends TensorDsl {
       input.d += Tensor(helper, input.x.shape: _*) * output.d  // TODO (Fei Wang): should optimized by fusing loops
     }
 
+    override def dropout_v2(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Boolean]]) =
+      throw new NotImplementedError("Dropout_v2 is not implemented for CPU, use dropout instead")
+    override def dropout_v2_grad(input: TensorR, output: TensorR, prob: Float, mask: Rep[Array[Boolean]]): Unit =
+      throw new NotImplementedError("Dropout_v2 is not implemented for CPU, use dropout instead")
+
     override def multiheadAttentionInit(embedDim: Int, numHeads: Int, kDim: Int, vDim: Int, bias: Boolean = false, dropOut: Float,
                                         residualConnection: Boolean, maxSeqLenQ: Rep[Int], maxSeqLenK: Rep[Int], maxBatchSize: Rep[Int],
                                         maxBeamSize: Rep[Int]): MultiheadAttnConfig = ???

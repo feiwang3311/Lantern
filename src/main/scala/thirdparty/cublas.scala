@@ -47,6 +47,16 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   lazy val one = var_new(1.0f)
   lazy val minus_one = var_new(-1.0f)
 
+  // cuRAND - random generator global seed
+  var seed = 0L
+  // global per thread (GPU) offset for random num generator
+  lazy val offset = var_new[Long](0L)
+
+  def resetSeed(value: Long = 0L) = {
+    seed = value
+    offset -= offset
+  }
+
   abstract class CublasStatusT
   def cublasCreate(handle: Rep[CublasHandleT]) =
     libFunction[CublasStatusT]("cublasCreate", Unwrap(handle))(Seq[Int](), Seq(0), Set(0))
@@ -412,5 +422,16 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   def shift_(in: Rep[Array[Float]], out: Rep[Array[Float]], inDim0: Rep[Int], inStride0: Rep[Int], inStride1: Rep[Int], inScalarCount: Rep[Int]) =
     libFunction[Unit]("shift0<<<28, 512>>>", Unwrap(in), Unwrap(out), Unwrap(inDim0), Unwrap(inStride0), Unwrap(inStride1),
       Unwrap(inScalarCount))(Seq(0), Seq(1), Set[Int]())
+
+  // void dropout(float* input, float *result, float p, bool *mask, int inputSize, long seed, long offset)
+  def dropout_(input: Rep[Array[Float]], result: Rep[Array[Float]], p: Float, mask: Rep[Array[Boolean]], inputSize: Rep[Int],
+               seed: Rep[Long], offset: Rep[Long]) =
+    libFunction[Unit]("dropout<<<28, 512>>>", Unwrap(input), Unwrap(result), Unwrap(p), Unwrap(mask), Unwrap(inputSize),
+      Unwrap(seed), Unwrap(offset))(Seq(0), Seq(1, 3), Set())
+
+  // void dropoutGrad(float *y_d, float *x_d, bool *mask, float pinv)
+  def dropoutGrad_(output: Rep[Array[Float]], input: Rep[Array[Float]], mask: Rep[Array[Boolean]], inputSize: Rep[Int], pInv: Rep[Float]) =
+    libFunction[Unit]("dropoutGrad<<<28, 512>>>", Unwrap(output), Unwrap(input), Unwrap(mask), Unwrap(inputSize), Unwrap(pInv))(Seq(0, 1, 2),
+      Seq(1), Set())
 }
 
