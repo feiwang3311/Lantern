@@ -433,5 +433,14 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   def dropoutGrad_(output: Rep[Array[Float]], input: Rep[Array[Float]], mask: Rep[Array[Boolean]], inputSize: Rep[Int], pInv: Rep[Float]) =
     libFunction[Unit]("dropoutGrad<<<28, 512>>>", Unwrap(output), Unwrap(input), Unwrap(mask), Unwrap(inputSize), Unwrap(pInv))(Seq(0, 1, 2),
       Seq(1), Set())
+
+  // eg. outerSize for a 4d tensor scalaCount / lastDimSize (or shape(0) * shape(1) * shape(2)
+  def softmax_(input: Rep[Array[Float]], output: Rep[Array[Float]], size: Rep[Int], outerSize: Rep[Int]) =
+    libFunction[Unit](s"softmax<<<${Unwrap(outerSize)},128>>>", Unwrap(input), Unwrap(output), Unwrap(size))(Seq(0), Seq(1), Set())
+
+  def softmaxGrad_(inputGrad: Rep[Array[Float]], outputGrad: Rep[Array[Float]], output: Rep[Array[Float]], size: Rep[Int],
+                   outerSize: Rep[Int]) =
+    libFunction[Unit](s"softmaxGrad<<<${Unwrap(outerSize)},128>>>", Unwrap(inputGrad), Unwrap(outputGrad), Unwrap(output),
+      Unwrap(size))(Seq(1, 2), Seq(0), Set())
 }
 

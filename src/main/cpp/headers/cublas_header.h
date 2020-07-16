@@ -1,3 +1,5 @@
+#define WARP_SIZE 32 // this is typically 32 (for incl. 1080ti s)
+
 #define CUDA_CALL(f) { \
   cudaError_t err = (f); \
   if (err != cudaSuccess) { \
@@ -643,6 +645,155 @@ __global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int x
     int xindex3 = linearIndex - xstrides2 * xindex2;
     if (xindex3 >= mask[xindex0]) in[tid] = 0;
   }
+}
+
+// size is the size of the last dim
+#define SOFTMAX_BLOCK_SIZE
+// note - the size of the block should be SOFTMAX_BLOCK_SIZE
+__global__ void softmax(float* input, float* output, int size) {
+    // assume gridDim.x equals outerSize
+    // assume computing softmax in last dim
+    __shared__ float buffer[128];
+
+    // not vectorized and not unrolled implementation - has room for performance improvement
+    float *input_t = input + size * blockIdx.x;
+    float *output_t = output + size * blockIdx.x;
+
+    int start = threadIdx.x;
+    int end = size;
+    int stride = blockDim.x;
+
+    float threadVal = -INFINITY;
+    // find the max
+    for(int i = start; i < end; i += stride) {
+        if (threadVal < input_t[i])
+            threadVal = input_t[i];
+    }
+
+    buffer[threadIdx.x] = threadVal;
+    // printf("%f\n", input_t[threadIdx.x]);
+    __syncthreads();
+
+    float warpVal = -INFINITY;
+    // reduce
+    // first thread reduce the first WARP, second reduces the second WARP etc.
+    if (threadIdx.x < WARP_SIZE) {
+        int lane = threadIdx.x % WARP_SIZE; // TODO - can we remove % WARP_SIZE since it's smaller anyway
+        if (lane < blockDim.x / WARP_SIZE) { // Assumes blockDim.x is divisible by warp size
+            #pragma unroll
+            for(int i = 0; i < WARP_SIZE; i ++) {
+                if (warpVal < buffer[lane * WARP_SIZE + i]) {
+                    warpVal = buffer[lane * WARP_SIZE + i];
+                }
+            }
+            buffer[lane] = warpVal;
+        }
+    }
+
+    __syncthreads();
+
+    // final reduce in the first thread
+    if (threadIdx.x == 0) {
+        float max = -INFINITY;
+
+        for (int i = 0; i < blockDim.x / WARP_SIZE; i ++) {
+            if (max < buffer[i]) {
+                max = buffer[i];
+            }
+        }
+        buffer[0] = max;
+    }
+
+    __syncthreads();
+
+    // compute the sum
+    threadVal = 0;
+    for(int i = start; i < end; i += stride) {
+        float expVal = expf(input_t[i] - buffer[0]);
+        threadVal += expVal;
+        output_t[i] = expVal;
+    }
+
+    buffer[threadIdx.x] = threadVal;
+
+    __syncthreads();
+
+    warpVal = 0;
+    // reduce
+    if (threadIdx.x < blockDim.x / WARP_SIZE) {
+        int lane = threadIdx.x;
+        for(int i = 0; i < WARP_SIZE; i++) {
+            warpVal += buffer[lane * WARP_SIZE + i];
+        }
+        buffer[lane] = warpVal;
+    }
+
+    __syncthreads();
+
+    // final reduce
+    if (threadIdx.x == 0) {
+        float sum = 0;
+
+        for(int i = 0; i < blockDim.x / WARP_SIZE; i ++) {
+            sum += buffer[i];
+        }
+        buffer[0] = sum;
+    }
+
+    __syncthreads();
+
+    // do the softmax
+    for(int i = threadIdx.x; i < size; i += stride) {
+        output_t[i] = output_t[i] / buffer[0];
+    }
+}
+
+__global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, int size) {
+    float *gradInput_t = gradInput + size * blockIdx.x;
+    float *gradOutput_t = gradOutput + size * blockIdx.x;
+    float *output_t = output + size * blockIdx.x;
+
+    int start = threadIdx.x;
+    int end = size;
+    int stride = blockDim.x;
+
+    __shared__ float buffer[128];
+
+    // compute the sum (gradOutput * output sum)
+    for(int i=start; i < end; i += stride) {
+        buffer[threadIdx.x] = gradOutput_t[i] * output_t[i];
+    }
+
+    __syncthreads();
+
+    float warpVal = 0;
+    // let's reduce using the first warp
+    if (threadIdx.x < blockDim.x / WARP_SIZE) {
+        int lane = threadIdx.x;
+        #pragma unroll
+        for(int i = 0; i < WARP_SIZE; i++) {
+            warpVal += buffer[lane * WARP_SIZE + i];
+        }
+        buffer[lane] = warpVal;
+    }
+
+    __syncthreads();
+
+    // final reduce
+    if (threadIdx.x == 0) {
+        float sum = 0;
+        for(int i = 0; i < blockDim.x / WARP_SIZE; i ++) {
+            sum += buffer[i];
+        }
+        buffer[0] = sum;
+    }
+
+    __syncthreads();
+
+    // update the gradient
+    for(int i = start; i < end; i += stride) {
+        gradInput_t[i] = output_t[i] * (gradOutput_t[i] - buffer[0]);
+    }
 }
 
 // Note - p is keep-probability (not the drop probability)

@@ -972,6 +972,24 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
     override def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
 
+    override def softmax_v2(x: Tensor, dim: Int = -1): Tensor = {
+      assert(dim != -1 || dim != x.rank - 1, s"softmax_v2 is only implemented for last dim. Use softmax() instead.")
+      val res = mallocArray[Float](x.scalarCount)
+      val lastDimSize = x.shape.last
+      val outerSize = x.scalarCount / lastDimSize
+
+      softmax_(x.data, res, lastDimSize, outerSize)
+      Tensor(res, x.shape :_*)
+    }
+
+    def softmax_v2_grad(input: TensorR, res: TensorR, dim: Int = -1): Unit = {
+      val lastDimSize = input.x.shape.last
+      val outerSize = input.x.scalarCount / lastDimSize
+
+      softmaxGrad_(input.d.data, res.d.data, res.x.data, lastDimSize, outerSize)
+    }
+
+
     override def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor = {
       val size = x.scalarCount
       val res = if (inPlace) x.data else mallocArray[Float](size)

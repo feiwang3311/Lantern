@@ -889,6 +889,11 @@ trait TensorDslCPU extends TensorDsl {
       }
     }
 
+    override def softmax_v2(x: Tensor, dim: Int = -1): Tensor = throw new NotImplementedError("softmax_v2() is only" +
+      " implemented for GPU. For CPU, use the normal softmax() instead")
+    override def softmax_v2_grad(input: TensorR, res: TensorR, dim: Int = -1): Unit = throw new NotImplementedError("softmax_v2() " +
+      "is only implemented for GPU. For CPU, use the normal softmax() instead")
+
     override def maxPool2D_batch(input: Tensor, kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): (Tensor, Option[Rep[Array[Int]]]) = {
       assert(input.rank == 4, "the input for maxPool (with batch) should have 4 dimensions")
       assert(kernels.size == 2 && strides.size == 2, "kernels and strides should be size 2")

@@ -387,6 +387,10 @@ trait TensorDsl extends DslCPP with Diff {
     def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit
     def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit
 
+    // custom cuda kernel (only supports last dim at the moment)
+    def softmax_v2(x: Tensor, dim: Int = -1): Tensor
+    def softmax_v2_grad(input: TensorR, res: TensorR, dim: Int = -1): Unit
+
     // Loss functions.
     def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
     def nllLoss_grad(input: TensorR, res: TensorR, target: Rep[Array[Int]]): Unit
@@ -661,6 +665,10 @@ trait TensorDsl extends DslCPP with Diff {
       val normalized = this.map(x => x - m)
       val nor_exp = normalized.exp()
       nor_exp / nor_exp.sum()
+    }
+
+    def softmax_v2(dim: Int = -1) = {
+      backend.softmax_v2(this, dim)
     }
 
     @virtualize  // batched log softmax
@@ -1439,6 +1447,11 @@ trait TensorDsl extends DslCPP with Diff {
       val adjust_dim = if (dim < 0) this.x.rank + dim else dim
       val y = TensorR(x.logSoftmaxB(adjust_dim)); k(y)
       backend.logSoftmax_grad(this, y, adjust_dim)
+    }
+
+    def softmax_v2(dim: Int = -1): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.softmax_v2(dim)); k(y)
+      backend.softmax_v2_grad(this, y, dim)
     }
 
     def resize(dims: Rep[Int]*) = {
