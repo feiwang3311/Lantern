@@ -667,6 +667,7 @@ trait TensorDsl extends DslCPP with Diff {
       nor_exp / nor_exp.sum()
     }
 
+    @virtualize
     def softmax_v2(dim: Int = -1) = {
       backend.softmax_v2(this, dim)
     }

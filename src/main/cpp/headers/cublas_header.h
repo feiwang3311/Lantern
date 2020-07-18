@@ -1,4 +1,4 @@
-#define WARP_SIZE 32 // this is typically 32 (for incl. 1080ti s)
+#define NVIDIA_WARP_SIZE 32 // this is typically 32 (for incl. 1080ti s)
 
 #define CUDA_CALL(f) { \
   cudaError_t err = (f); \
@@ -647,13 +647,10 @@ __global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int x
   }
 }
 
-// size is the size of the last dim
-#define SOFTMAX_BLOCK_SIZE
-// note - the size of the block should be SOFTMAX_BLOCK_SIZE
 __global__ void softmax(float* input, float* output, int size) {
     // assume gridDim.x equals outerSize
     // assume computing softmax in last dim
-    __shared__ float buffer[128];
+    __shared__ float buffer[64];
 
     // not vectorized and not unrolled implementation - has room for performance improvement
     float *input_t = input + size * blockIdx.x;
@@ -677,17 +674,13 @@ __global__ void softmax(float* input, float* output, int size) {
     float warpVal = -INFINITY;
     // reduce
     // first thread reduce the first WARP, second reduces the second WARP etc.
-    if (threadIdx.x < WARP_SIZE) {
-        int lane = threadIdx.x % WARP_SIZE; // TODO - can we remove % WARP_SIZE since it's smaller anyway
-        if (lane < blockDim.x / WARP_SIZE) { // Assumes blockDim.x is divisible by warp size
-            #pragma unroll
-            for(int i = 0; i < WARP_SIZE; i ++) {
-                if (warpVal < buffer[lane * WARP_SIZE + i]) {
-                    warpVal = buffer[lane * WARP_SIZE + i];
-                }
-            }
-            buffer[lane] = warpVal;
+    if (threadIdx.x < blockDim.x / NVIDIA_WARP_SIZE) {
+        int lane = threadIdx.x;
+        #pragma unroll
+        for(int i = 0; i < NVIDIA_WARP_SIZE; i ++) {
+            if (warpVal < buffer[lane * NVIDIA_WARP_SIZE + i]) warpVal = buffer[lane * NVIDIA_WARP_SIZE + i];
         }
+        buffer[lane] = warpVal;
     }
 
     __syncthreads();
@@ -696,7 +689,7 @@ __global__ void softmax(float* input, float* output, int size) {
     if (threadIdx.x == 0) {
         float max = -INFINITY;
 
-        for (int i = 0; i < blockDim.x / WARP_SIZE; i ++) {
+        for (int i = 0; i < blockDim.x / NVIDIA_WARP_SIZE; i ++) {
             if (max < buffer[i]) {
                 max = buffer[i];
             }
@@ -720,10 +713,11 @@ __global__ void softmax(float* input, float* output, int size) {
 
     warpVal = 0;
     // reduce
-    if (threadIdx.x < blockDim.x / WARP_SIZE) {
+    if (threadIdx.x < blockDim.x / NVIDIA_WARP_SIZE) {
         int lane = threadIdx.x;
-        for(int i = 0; i < WARP_SIZE; i++) {
-            warpVal += buffer[lane * WARP_SIZE + i];
+        #pragma unroll
+        for(int i = 0; i < NVIDIA_WARP_SIZE; i++) {
+            warpVal += buffer[lane * NVIDIA_WARP_SIZE + i];
         }
         buffer[lane] = warpVal;
     }
@@ -734,7 +728,7 @@ __global__ void softmax(float* input, float* output, int size) {
     if (threadIdx.x == 0) {
         float sum = 0;
 
-        for(int i = 0; i < blockDim.x / WARP_SIZE; i ++) {
+        for(int i = 0; i < blockDim.x / NVIDIA_WARP_SIZE; i ++) {
             sum += buffer[i];
         }
         buffer[0] = sum;
@@ -757,7 +751,7 @@ __global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, 
     int end = size;
     int stride = blockDim.x;
 
-    __shared__ float buffer[128];
+    __shared__ float buffer[64];
 
     // compute the sum (gradOutput * output sum)
     for(int i=start; i < end; i += stride) {
@@ -768,11 +762,11 @@ __global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, 
 
     float warpVal = 0;
     // let's reduce using the first warp
-    if (threadIdx.x < blockDim.x / WARP_SIZE) {
+    if (threadIdx.x < blockDim.x / NVIDIA_WARP_SIZE) {
         int lane = threadIdx.x;
         #pragma unroll
-        for(int i = 0; i < WARP_SIZE; i++) {
-            warpVal += buffer[lane * WARP_SIZE + i];
+        for(int i = 0; i < NVIDIA_WARP_SIZE; i++) {
+            warpVal += buffer[lane * NVIDIA_WARP_SIZE + i];
         }
         buffer[lane] = warpVal;
     }
@@ -782,7 +776,7 @@ __global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, 
     // final reduce
     if (threadIdx.x == 0) {
         float sum = 0;
-        for(int i = 0; i < blockDim.x / WARP_SIZE; i ++) {
+        for(int i = 0; i < blockDim.x / NVIDIA_WARP_SIZE; i ++) {
             sum += buffer[i];
         }
         buffer[0] = sum;
@@ -793,6 +787,355 @@ __global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, 
     // update the gradient
     for(int i = start; i < end; i += stride) {
         gradInput_t[i] = output_t[i] * (gradOutput_t[i] - buffer[0]);
+    }
+}
+
+template <int WARP_BATCH, int WARP_SIZE>
+__device__ __forceinline__ void warp_reduce_max(float* sum) {
+    #pragma unroll
+    for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
+        #pragma unroll
+        for (int i = 0;  i < WARP_BATCH;  ++i) {
+            float b = __shfl_xor_sync(0xffffffff, sum[i], offset, WARP_SIZE);
+            if (sum[i] < b) sum[i] = b;
+        }
+    }
+}
+
+template <int WARP_BATCH, int WARP_SIZE>
+__device__ __forceinline__ void warp_reduce_add(float* sum) {
+    #pragma unroll
+    for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
+        #pragma unroll
+        for (int i = 0;  i < WARP_BATCH;  ++i) {
+            float b = __shfl_xor_sync(0xffffffff, sum[i], offset, WARP_SIZE);
+            sum[i] += b;
+        }
+    }
+}
+
+// This kernel is for softmax (and logsoftmax) for dimSize (lastdim, also the softmax dim) < 1024
+// This is copied from the PyTorch implementation with slight modifications to fit to existing impl.
+// aten/src/ATen/native/cuda/PersistentSoftmax.cuh
+template <int log2_elements, bool is_log_softmax>
+__global__ void softmax_warp_forward(float *dst, float *src, int batch_size, int stride, int element_count)
+{
+    // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and warp_size of method warp_softmax_forward_kernel.
+    constexpr int next_power_of_two = 1 << log2_elements;
+    constexpr int WARP_SIZE = (next_power_of_two < NVIDIA_WARP_SIZE) ? next_power_of_two : NVIDIA_WARP_SIZE;
+    constexpr int WARP_ITERATIONS = next_power_of_two / WARP_SIZE;
+    constexpr int WARP_BATCH = (next_power_of_two <= 128) ? 2 : 1;
+
+    int first_batch = (blockDim.y * blockIdx.x + threadIdx.y) * WARP_BATCH;
+
+    // batch_size might not be a multiple of WARP_BATCH. Check how
+    // many batches have to computed within this WARP.
+    int local_batches = batch_size - first_batch;
+    if (local_batches > WARP_BATCH)
+        local_batches = WARP_BATCH;
+
+    // there might be multiple batches per warp. compute the index within the batch
+    int local_idx = threadIdx.x;
+
+    src += first_batch * stride + local_idx;
+    dst += first_batch * stride + local_idx;
+
+    // The nested loops over WARP_BATCH and then WARP_ITERATIONS can be simplified to one loop,
+    // but I think doing so would obfuscate the logic of the algorithm, thus I chose to keep
+    // the nested loops.
+    // This should have no impact on performance because the loops are unrolled anyway.
+
+    // load data from global memory
+    float elements[WARP_BATCH][WARP_ITERATIONS];
+    for (int i = 0;  i < WARP_BATCH;  ++i) {
+        int batch_element_count = (i >= local_batches) ? 0 : element_count;
+        for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
+            int element_index = local_idx + it * WARP_SIZE;
+            if (element_index < batch_element_count) {
+                elements[i][it] = src[i*element_count+it*WARP_SIZE];
+            } else {
+                elements[i][it] = -INFINITY;
+            }
+        }
+    }
+
+    // compute max_value
+    float max_value[WARP_BATCH];
+    #pragma unroll
+    for (int i = 0;  i < WARP_BATCH;  ++i) {
+        max_value[i] = elements[i][0];
+        #pragma unroll
+        for (int it = 1;  it < WARP_ITERATIONS;  ++it) {
+            max_value[i] = (max_value[i] > elements[i][it]) ? max_value[i] : elements[i][it];
+        }
+    }
+    warp_reduce_max<WARP_BATCH, WARP_SIZE>(max_value);
+
+    float sum[WARP_BATCH] { 0.0f };
+    #pragma unroll
+    for (int i = 0;  i < WARP_BATCH;  ++i) {
+        #pragma unroll
+        for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
+            if (is_log_softmax) {
+              sum[i] += expf(elements[i][it] - max_value[i]);
+            } else {
+              elements[i][it] = expf(elements[i][it] - max_value[i]);
+              sum[i] += elements[i][it];
+            }
+        }
+    }
+    warp_reduce_add<WARP_BATCH, WARP_SIZE>(sum);
+
+    // store result
+    #pragma unroll
+    for (int i = 0;  i < WARP_BATCH;  ++i) {
+        if (i >= local_batches)
+            break;
+        if (is_log_softmax) sum[i] = std::log(sum[i]);
+        #pragma unroll
+        for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
+            int element_index = local_idx + it * WARP_SIZE;
+            if (element_index < element_count) {
+                if (is_log_softmax) {
+                    dst[i*element_count+it*WARP_SIZE] = elements[i][it] - max_value[i] - sum[i];
+                } else {
+                    dst[i*element_count+it*WARP_SIZE] = elements[i][it] / sum[i];
+                }
+            } else {
+                break;
+            }
+        }
+    }
+}
+
+// Taken from PyTorch with slight modification (to fit to existing impl) - similar to softmax_warp_forward
+// aten/src/ATen/native/cuda/PersistentSoftmax.cuh
+template <int log2_elements, bool is_log_softmax>
+__global__ void softmax_warp_backward(float *gradInput, const float *grad, const float *output, int batch_size, int stride, int element_count)
+{
+    // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and warp_size of method warp_softmax_backward_kernel.
+    constexpr int next_power_of_two = 1 << log2_elements;
+    constexpr int WARP_SIZE = (next_power_of_two < NVIDIA_WARP_SIZE) ? next_power_of_two : NVIDIA_WARP_SIZE;
+    constexpr int WARP_ITERATIONS = next_power_of_two / WARP_SIZE;
+    constexpr int WARP_BATCH = (next_power_of_two <= 128) ? 2 : 1;
+
+    int first_batch = (blockDim.y * blockIdx.x + threadIdx.y) * WARP_BATCH;
+
+    // batch_size might not be a multiple of WARP_BATCH. Check how
+    // many batches have to computed within this WARP.
+    int local_batches = batch_size - first_batch;
+    if (local_batches > WARP_BATCH)
+        local_batches = WARP_BATCH;
+
+    // there might be multiple batches per warp. compute the index within the batch
+    int local_idx = threadIdx.x % WARP_SIZE;
+
+    // the first element to process by the current thread
+    int thread_offset = first_batch * stride + local_idx;
+    grad += thread_offset;
+    output += thread_offset;
+    gradInput += thread_offset;
+
+    // The nested loops over WARP_BATCH and then WARP_ITERATIONS can be simplified to one loop,
+    // but I think doing so would obfuscate the logic of the algorithm, thus I chose to keep
+    // the nested loops.
+    // This should have no impact on performance because the loops are unrolled anyway.
+
+    // load data from global memory
+    float grad_reg[WARP_BATCH][WARP_ITERATIONS];
+    float output_reg[WARP_BATCH][WARP_ITERATIONS];
+    for (int i = 0;  i < WARP_BATCH;  ++i) {
+        int batch_element_count = (i >= local_batches) ? 0 : element_count;
+        for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
+            int element_index = local_idx + it * WARP_SIZE;
+            if (element_index < batch_element_count) {
+                grad_reg[i][it] = grad[i*element_count+it*WARP_SIZE];
+                output_reg[i][it] = output[i*element_count+it*WARP_SIZE];
+            } else {
+                grad_reg[i][it] = float(0);
+                output_reg[i][it] = float(0);
+            }
+        }
+    }
+
+    float sum[WARP_BATCH];
+    #pragma unroll
+    for (int i = 0;  i < WARP_BATCH;  ++i) {
+        sum[i] = grad_reg[i][0];
+        #pragma unroll
+        for (int it = 1;  it < WARP_ITERATIONS;  ++it) {
+            sum[i] += grad_reg[i][it];
+        }
+    }
+    warp_reduce_add<WARP_BATCH, WARP_SIZE>(sum);
+
+    // store result
+    #pragma unroll
+    for (int i = 0;  i < WARP_BATCH;  ++i) {
+        if (i >= local_batches)
+            break;
+        #pragma unroll
+        for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
+            int element_index = local_idx + it * WARP_SIZE;
+            if (element_index < element_count) {
+                // compute gradients
+                if (is_log_softmax) {
+                    gradInput[i*element_count+it*WARP_SIZE] = (grad_reg[i][it] - expf(output_reg[i][it]) * sum[i]);
+                } else {
+                    gradInput[i*element_count+it*WARP_SIZE] = (grad_reg[i][it] - output_reg[i][it] * sum[i]);
+                }
+            }
+        }
+    }
+}
+
+
+// Taken from PyTorch with slight modification (to fit to existing impl)
+// aten/src/ATen/native/cuda/PersistentSoftmax.cuh
+template<bool is_log_softmax>
+void dispatch_softmax_forward(float *dst, float *src, int softmax_elements, int softmax_elements_stride, int batch_count)
+{
+    // constexpr int log2_elements = log2_ceil(softmax_elements);
+    int log2_elements = (int) ceil(log2(softmax_elements));
+    const int next_power_of_two = 1 << log2_elements;
+
+    // This value must match the WARP_SIZE constexpr value computed inside softmax_warp_forward.
+    int warp_size = (next_power_of_two < NVIDIA_WARP_SIZE) ? next_power_of_two : NVIDIA_WARP_SIZE;
+
+    // This value must match the WARP_BATCH constexpr value computed inside softmax_warp_forward.
+    int batches_per_warp = (next_power_of_two <= 128) ? 2 : 1;
+
+    // use 128 threads per block to maximimize gpu utilization
+    constexpr int threads_per_block = 128;
+
+    int warps_per_block = (threads_per_block / warp_size);
+    int batches_per_block = warps_per_block * batches_per_warp;
+    int blocks = (batch_count + batches_per_block - 1) / batches_per_block;
+    dim3 threads(warp_size, warps_per_block, 1);
+    // softmax_warp_forward<log2_elements, is_log_softmax>
+                // <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+
+    switch (log2_elements) {
+        case 0: // 1
+            softmax_warp_forward<0, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 1: // 2
+            softmax_warp_forward<1, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 2: // 4
+            softmax_warp_forward<2, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 3: // 8
+            softmax_warp_forward<3, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 4: // 16
+            softmax_warp_forward<4, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 5: // 32
+            softmax_warp_forward<5, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 6: // 64
+            softmax_warp_forward<6, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 7: // 128
+            softmax_warp_forward<7, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 8: // 256
+            softmax_warp_forward<8, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 9: // 512
+            softmax_warp_forward<9, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 10: // 1024
+            softmax_warp_forward<10, is_log_softmax>
+                <<<blocks, threads>>>(dst, src, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        default:
+            break;
+    }
+}
+
+// Taken from PyTorch with slight modification (to fit to existing impl)
+// aten/src/ATen/native/cuda/PersistentSoftmax.cuh
+template<bool is_log_softmax>
+void dispatch_softmax_backward(float *grad_input, const float *grad, const float *output, int softmax_elements, int softmax_elements_stride, int batch_count)
+{
+    // int log2_elements = log2_ceil(softmax_elements);
+    int log2_elements = (int) ceil(log2(softmax_elements));
+
+    const int next_power_of_two = 1 << log2_elements;
+
+    // This value must match the WARP_SIZE constexpr value computed inside softmax_warp_backward.
+    int warp_size = (next_power_of_two < NVIDIA_WARP_SIZE) ? next_power_of_two : NVIDIA_WARP_SIZE;
+
+    // This value must match the WARP_BATCH constexpr value computed inside softmax_warp_backward.
+    int batches_per_warp = (next_power_of_two <= 128) ? 2 : 1;
+
+    // use 128 threads per block to maximimize gpu utilization
+    constexpr int threads_per_block = 128;
+
+    int warps_per_block = (threads_per_block / warp_size);
+    int batches_per_block = warps_per_block * batches_per_warp;
+    int blocks = (batch_count + batches_per_block - 1) / batches_per_block;
+    dim3 threads(warp_size, warps_per_block, 1);
+    // Launch code would be more elegant if C++ supported FOR CONSTEXPR
+    switch (log2_elements) {
+        case 0: // 1
+            softmax_warp_backward<0, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 1: // 2
+            softmax_warp_backward<1, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 2: // 4
+            softmax_warp_backward<2, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 3: // 8
+            softmax_warp_backward<3, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 4: // 16
+            softmax_warp_backward<4, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 5: // 32
+            softmax_warp_backward<5, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 6: // 64
+            softmax_warp_backward<6, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 7: // 128
+            softmax_warp_backward<7, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 8: // 256
+            softmax_warp_backward<8, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 9: // 512
+            softmax_warp_backward<9, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        case 10: // 1024
+            softmax_warp_backward<10, is_log_softmax>
+                <<<blocks, threads>>>(grad_input, grad, output, batch_count, softmax_elements_stride, softmax_elements);
+            break;
+        default:
+            break;
     }
 }
 

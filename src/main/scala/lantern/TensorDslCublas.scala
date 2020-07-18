@@ -972,21 +972,34 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
     override def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
 
+    @virtualize
     override def softmax_v2(x: Tensor, dim: Int = -1): Tensor = {
       assert(dim != -1 || dim != x.rank - 1, s"softmax_v2 is only implemented for last dim. Use softmax() instead.")
       val res = mallocArray[Float](x.scalarCount)
       val lastDimSize = x.shape.last
       val outerSize = x.scalarCount / lastDimSize
 
-      softmax_(x.data, res, lastDimSize, outerSize)
+      if (lastDimSize <= 1024) {
+        // launch the optimized kernel for <= 1024
+        dispatch_softmax_forward_(res, x.data, lastDimSize, lastDimSize, outerSize)
+      } else {
+        softmax_(x.data, res, lastDimSize, outerSize)
+      }
+
       Tensor(res, x.shape :_*)
     }
 
+    @virtualize
     def softmax_v2_grad(input: TensorR, res: TensorR, dim: Int = -1): Unit = {
       val lastDimSize = input.x.shape.last
       val outerSize = input.x.scalarCount / lastDimSize
 
-      softmaxGrad_(input.d.data, res.d.data, res.x.data, lastDimSize, outerSize)
+      if (lastDimSize <= 1024) {
+        // launch the optimized kernel for <= 1024
+        dispatch_softmax_backward(input.d.data, res.d.data, res.x.data, lastDimSize, lastDimSize, outerSize)
+      } else {
+        softmaxGrad_(input.d.data, res.d.data, res.x.data, lastDimSize, outerSize)
+      }
     }
 
 

@@ -436,11 +436,23 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
 
   // eg. outerSize for a 4d tensor scalaCount / lastDimSize (or shape(0) * shape(1) * shape(2)
   def softmax_(input: Rep[Array[Float]], output: Rep[Array[Float]], size: Rep[Int], outerSize: Rep[Int]) =
-    libFunction[Unit](s"softmax<<<${Unwrap(outerSize)},128>>>", Unwrap(input), Unwrap(output), Unwrap(size))(Seq(0), Seq(1), Set())
+    libFunction[Unit](s"softmax<<<${Unwrap(outerSize)},64>>>", Unwrap(input), Unwrap(output), Unwrap(size))(Seq(0), Seq(1), Set())
 
   def softmaxGrad_(inputGrad: Rep[Array[Float]], outputGrad: Rep[Array[Float]], output: Rep[Array[Float]], size: Rep[Int],
                    outerSize: Rep[Int]) =
-    libFunction[Unit](s"softmaxGrad<<<${Unwrap(outerSize)},128>>>", Unwrap(inputGrad), Unwrap(outputGrad), Unwrap(output),
+    libFunction[Unit](s"softmaxGrad<<<${Unwrap(outerSize)},64>>>", Unwrap(inputGrad), Unwrap(outputGrad), Unwrap(output),
       Unwrap(size))(Seq(1, 2), Seq(0), Set())
+
+  // This is to compute softmax in the last dim. Last dim should have a stride of 1. This only works if dimSize <= 1024
+  // softmaxElementsStride is the stride from one batch to another (usually, equals to softmaxElements)
+  def dispatch_softmax_forward_(output: Rep[Array[Float]], input: Rep[Array[Float]], softmaxElements: Rep[Int],
+                                softmaxElementsStride: Rep[Int], batchCount: Rep[Int]) =
+    libFunction[Unit]("dispatch_softmax_forward<false>", Unwrap(output), Unwrap(input), Unwrap(softmaxElements),
+      Unwrap(softmaxElementsStride), Unwrap(batchCount))(Seq(1), Seq(0), Set())
+
+  def dispatch_softmax_backward(gradInput: Rep[Array[Float]], grad: Rep[Array[Float]], output: Rep[Array[Float]],
+                                softmaxElements: Rep[Int], softmaxElementsStride: Rep[Int], batchCount: Rep[Int]) =
+    libFunction[Unit]("dispatch_softmax_backward<false>", Unwrap(gradInput), Unwrap(grad), Unwrap(output), Unwrap(softmaxElements),
+      Unwrap(softmaxElementsStride), Unwrap(batchCount))(Seq(1, 2), Seq(0), Set())
 }
 
