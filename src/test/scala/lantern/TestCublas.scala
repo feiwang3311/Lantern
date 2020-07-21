@@ -534,7 +534,7 @@ class TestCublas extends LanternFunSuite {
     runTest(dropoutv2)
   }
 
-  testGPU("dropout_v2-softmax") {
+  testGPU("softmax_v2") {
     val softmaxV2 = new LanternDriverCublas[String, Unit] {
       override val fileName = "lantern-cublas-softmax_v2"
 
@@ -542,13 +542,19 @@ class TestCublas extends LanternFunSuite {
       def snippet(x: Rep[String]): Rep[Unit] = {
         val t = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 6, 8, 1, 5, 9, 1, 9, 12)
         val tr = TensorR(t)
+        val w = Tensor.fromData(Seq(3, 2), 1, 2, 3, 4, 5, 6)
+        val wr = TensorR(w)
+
         val res = t.softmax_v2()
 
-        gradR(dummy => tr.softmax_v2())(Tensor.zeros(1))
+        gradR{dummy =>
+          val y = tr.softmax_v2().resizeNoCheck(4, 3)
+          y.dot(wr)
+        }(Tensor.zeros(1))
 
         backend = BackendCPU()
         val expectedRes = Tensor.fromData(Seq(2, 2, 3), 0.09, 0.2447, 0.6652, 0.0158, 0.1173, 0.8668, 0.0003, 0.01798, 0.9817, 0.000015, 0.0474, 0.9525)
-        val expectedGrad = Tensor.fromData(Seq(2, 2, 3), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) // This is because grad is 1 for all the elements. TODO - test grad with non trivial example
+        val expectedGrad = Tensor.fromData(Seq(2, 2, 3), -0.5672, -0.56308, 1.1303, -0.11754, -0.3993, 0.51684, -0.00261, -0.070581, 0.073191, -0.00012425, -0.1807, 0.18082)
 
         Tensor.assertEqual(res.toCPU(), expectedRes)
         Tensor.assertEqual(tr.d.toCPU(), expectedGrad)

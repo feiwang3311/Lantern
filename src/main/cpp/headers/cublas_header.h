@@ -790,6 +790,12 @@ __global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, 
     }
 }
 
+int log2_ceil(int value) {
+    int log2_value = 0;
+    while ((1 << log2_value) < value) ++log2_value;
+    return log2_value;
+}
+
 template <int WARP_BATCH, int WARP_SIZE>
 __device__ __forceinline__ void warp_reduce_max(float* sum) {
     #pragma unroll
@@ -952,8 +958,8 @@ __global__ void softmax_warp_backward(float *gradInput, const float *grad, const
                 grad_reg[i][it] = grad[i*element_count+it*WARP_SIZE];
                 output_reg[i][it] = output[i*element_count+it*WARP_SIZE];
             } else {
-                grad_reg[i][it] = float(0);
-                output_reg[i][it] = float(0);
+                grad_reg[i][it] = 0.0f;
+                output_reg[i][it] = 0.0f;
             }
         }
     }
@@ -961,10 +967,10 @@ __global__ void softmax_warp_backward(float *gradInput, const float *grad, const
     float sum[WARP_BATCH];
     #pragma unroll
     for (int i = 0;  i < WARP_BATCH;  ++i) {
-        sum[i] = grad_reg[i][0];
+        sum[i] = grad_reg[i][0] * output_reg[i][0]; // had to change this - (was only grad_reg[i][0])
         #pragma unroll
         for (int it = 1;  it < WARP_ITERATIONS;  ++it) {
-            sum[i] += grad_reg[i][it];
+            sum[i] += grad_reg[i][it] * output_reg[i][it] ; // had to change this - (was only grad_reg[i][it])
         }
     }
     warp_reduce_add<WARP_BATCH, WARP_SIZE>(sum);
@@ -980,9 +986,9 @@ __global__ void softmax_warp_backward(float *gradInput, const float *grad, const
             if (element_index < element_count) {
                 // compute gradients
                 if (is_log_softmax) {
-                    gradInput[i*element_count+it*WARP_SIZE] = (grad_reg[i][it] - expf(output_reg[i][it]) * sum[i]);
+                    gradInput[i*element_count+it*WARP_SIZE] = expf(output_reg[i][it]) * (grad_reg[i][it] - sum[i]); // TODO - check
                 } else {
-                    gradInput[i*element_count+it*WARP_SIZE] = (grad_reg[i][it] - output_reg[i][it] * sum[i]);
+                    gradInput[i*element_count+it*WARP_SIZE] = output_reg[i][it] * (grad_reg[i][it] - sum[i]); // Had to change this from PT impl
                 }
             }
         }
@@ -995,8 +1001,7 @@ __global__ void softmax_warp_backward(float *gradInput, const float *grad, const
 template<bool is_log_softmax>
 void dispatch_softmax_forward(float *dst, float *src, int softmax_elements, int softmax_elements_stride, int batch_count)
 {
-    // constexpr int log2_elements = log2_ceil(softmax_elements);
-    int log2_elements = (int) ceil(log2(softmax_elements));
+    int log2_elements = log2_ceil(softmax_elements);
     const int next_power_of_two = 1 << log2_elements;
 
     // This value must match the WARP_SIZE constexpr value computed inside softmax_warp_forward.
@@ -1070,8 +1075,7 @@ void dispatch_softmax_forward(float *dst, float *src, int softmax_elements, int 
 template<bool is_log_softmax>
 void dispatch_softmax_backward(float *grad_input, const float *grad, const float *output, int softmax_elements, int softmax_elements_stride, int batch_count)
 {
-    // int log2_elements = log2_ceil(softmax_elements);
-    int log2_elements = (int) ceil(log2(softmax_elements));
+    int log2_elements = log2_ceil(softmax_elements);
 
     const int next_power_of_two = 1 << log2_elements;
 
