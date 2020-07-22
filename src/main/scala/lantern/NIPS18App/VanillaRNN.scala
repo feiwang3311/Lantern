@@ -2,6 +2,7 @@ package lantern
 package NIPS18App
 
 import lms.core.stub._
+import lms.thirdparty.{ScannerOps}
 import lms.macros.SourceContext
 import lms.core.virtualize
 
@@ -175,18 +176,18 @@ object VanillaRNN {
       val prepareTime = loopStartTime - startTime
       val loopTime    = loopEndTime - loopStartTime
 
-      val fp = openf(a, "w")
+      val fp = fopen(a, "w")
       fprintf(fp, "unit: %s\\n", "100 iteration")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp, "%lf\\n", loss_save(i))
       }
       fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
-      closef(fp)
+      fclose(fp)
 
     }
   }
 
-  val min_char_rnn_module = new LanternDriverC[String, Unit] with NNModule with ScannerOpsExp {
+  val min_char_rnn_module = new LanternDriverC[String, Unit] with NNModule with ScannerOps {
 
     object Encoding {
       val ix_a = 96  // index starts from 1
@@ -287,13 +288,13 @@ object VanillaRNN {
       val prepareTime = loopStartTime - startTime
       val loopTime    = loopEndTime - loopStartTime
 
-      val fp = openf(a, "w")
+      val fp = fopen(a, "w")
       fprintf(fp, "unit: %s\\n", "100 iteration")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp, "%lf\\n", loss_save(i))
       }
       fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
-      closef(fp)
+      fclose(fp)
 
     }
   }

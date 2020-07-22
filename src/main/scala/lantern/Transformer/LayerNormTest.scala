@@ -2,6 +2,7 @@ package lantern
 package Transformer
 
 import lms.core.stub._
+import lms.thirdparty.{ScannerOps}
 import lms.macros.SourceContext
 import lms.core.virtualize
 
@@ -10,7 +11,7 @@ import java.io.PrintWriter
 import java.io.File
 
 object LayerNormTest {
-  val driver = new LanternDriverCudnn[String, Unit] with ScannerOpsExp with TimerOpsExp {
+  val driver = new LanternDriverCudnn[String, Unit] with ScannerOps with TimerOpsExp {
     override def snippet(x: Rep[String]): Rep[Unit] = {
       val model = LayerNorm(10)
 

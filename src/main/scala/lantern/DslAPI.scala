@@ -13,10 +13,11 @@ import java.io.File
 import java.io.PrintWriter
 
 import lms.thirdparty._
+import lms.thirdparty.{ScannerOps}
 import lantern.thirdparty._
 import lantern.collection.mutable._
 
-trait LanternGenC extends DslGenCPP with CCodeGenLibs {
+trait LanternGenC extends DslGenCPP with CCodeGenLibs with CCodeGenScannerOps {
 
   class Unknown
   def isInt(d: Backend.Def): Boolean = d match {
@@ -43,10 +44,10 @@ trait LanternGenC extends DslGenCPP with CCodeGenLibs {
     registerLibrary("-lopenblas")
 
     // add cpu_header.h
-    val curPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
-    val tailPath = "src/main/cpp/headers/"
-    val headerFile = "\"cpu_header.h\""
-    registerHeader(s"$curPath/$tailPath", headerFile)
+    val lanternPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
+    val headerPath = "src/main/cpp/headers/"
+    val headerFile = "<cpu_header.h>"
+    registerHeader(s"$lanternPath/$headerPath", headerFile)
 
     super.emitAll(ng, name)(m1, m2)
   }
@@ -101,10 +102,10 @@ trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
     registerLibrary("-lstdc++", "-lcublas")
 
     // add cublas_header.h
-    val curPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
-    val tailPath = "src/main/cpp/headers/"
-    val headerFile = "\"cublas_header.h\""
-    registerHeader(s"$curPath/$tailPath", headerFile)
+    val lanternPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
+    val headerPath = "src/main/cpp/headers/"
+    val headerFile = "<cublas_header.h>"
+    registerHeader(s"$lanternPath/$headerPath", headerFile)
 
     super.emitAll(ng, name)(m1, m2)
   }
@@ -141,10 +142,10 @@ trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenS
     registerLibrary("--expt-extended-lambda", "-Wno-deprecated-gpu-targets", "-lcudnn")
 
     // add cublas_header.h
-    val curPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
-    val tailPath = "src/main/cpp/headers/"
-    val headerFile = "\"cudnn_header.h\""
-    registerHeader(s"$curPath/$tailPath", headerFile)
+    val lanternPath = System.getProperty("user.dir") // /u/ml00_s/wang603/lms-umbrella/lantern
+    val headerPath = "src/main/cpp/headers/"
+    val headerFile = "<cudnn_header.h>"
+    registerHeader(s"$lanternPath/$headerPath", headerFile)
 
     super.emitAll(ng, name)(m1, m2)
   }
@@ -152,11 +153,12 @@ trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenS
 
 // TODO: bad design!! NNModule should not depend on backend!
 abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverCPP[A, B]
-  with TensorDsl with NNModule with Dataset with ONNXLib with ScannerOpsExp with TimerOpsExp {
+  with TensorDsl with NNModule with Dataset with ONNXLib  with TimerOpsExp {
 
   // For saving the generated code somewhere
-  val dir = "/tmp/"
-  val fileName = s"lantern-snippet-${scala.util.Random.alphanumeric.take(4).mkString}"
+  val lanternPath = System.getProperty("user.dir")
+  val dir = s"$lanternPath/src/out/test/"
+  val fileName = s"lantern-snippet-${scala.util.Random.alphanumeric.take(4).mkString}" // if not overriden, use a random name
   val filetype = ".cpp"
   def codeToFile(name: Option[String] = None) = {
     val outFileName = name match {
@@ -168,7 +170,6 @@ abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverCPP[
     outFile.println(this.code)
     outFile.flush()
   }
-
 }
 
 abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCPU { q =>
@@ -177,6 +178,8 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBas
   }
   backend = BackendCPU()
   compilerCommand = "g++ -std=c++11 -O3"
+  override val sourceFile = s"$lanternPath/snippet.c"
+  override val executable = s"$lanternPath/snippet"
 }
 
 abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriverBase[A, B] with TensorDslCublas { q =>
@@ -188,7 +191,8 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriv
   override val filetype = ".cu"
 
   compilerCommand = "nvcc -std=c++11 -O3"
-  override val fileForRun = "/tmp/snippet.cu"
+  override val sourceFile = s"$lanternPath/snippet.cu"
+  override val executable = s"$lanternPath/snippet"
 
   override def wrapper(x: Rep[A]): Rep[B] = {
     generate_comment("Backend setup.")

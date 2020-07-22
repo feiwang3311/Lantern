@@ -2,6 +2,7 @@ package lantern
 package Transformer
 
 import lms.core.stub._
+import lms.thirdparty.{ScannerOps}
 import lms.macros.SourceContext
 import lms.core.virtualize
 
@@ -12,7 +13,7 @@ import java.io.File;
 
 object TransformerTest {
 
-  val driver = new LanternDriverCudnn[String, Unit] with ScannerOpsExp with TimerOpsExp {
+  val driver = new LanternDriverCudnn[String, Unit] with ScannerOps with TimerOpsExp {
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
       val embedDim = 500

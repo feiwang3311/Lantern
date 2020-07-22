@@ -203,10 +203,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
     @virtualize
     def cudnnConvolutionForward(input: Tensor, filter: Tensor, res: Tensor, bias: Option[Tensor] = None,
                                 padding: (Int, Int), strides: (Int, Int), dilations: (Int, Int)) = {
-      // val counter = nextKernel
-      // convOpIndexSet += counter
-      // nextKernel += 1
-      // attributesMap(counter) = "// Attributes;"
 
       val in_desc = cudnnGetTensor4dDescriptor(knchw, kfloat, input.shape)
       val filt_desc = cudnnGetFilter4dDescriptor(knchw, kfloat, filter.shape)
@@ -226,6 +222,11 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         conv_desc, algo, wsArray, wsSize, zero, out_desc, res.data))
       gpuArenaFree(wsSize)
       (in_desc, filt_desc, out_desc, conv_desc)
+
+      // val counter = nextKernel
+      // convOpIndexSet += counter
+      // nextKernel += 1
+      // attributesMap(counter) = "// Attributes;"
 
       // unchecked[Unit](
       //   Seq(s"""

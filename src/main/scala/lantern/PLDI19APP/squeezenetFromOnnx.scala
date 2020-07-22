@@ -244,13 +244,13 @@ object SqueezeNetOnnx {
       unchecked[Unit]("sort(", time_save, ", ", time_save, " + ", nbEpoch, ")")
       val median_time =  time_save(nbEpoch / 2)
 
-      val fp2 = openf(a, "w")
+      val fp2 = fopen(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp2, "%lf\\n", loss_save(i))
       }
       fprintf(fp2, "run time: %lf %lf\\n", prepareTime, median_time)
-      closef(fp2)
+      fclose(fp2)
     }
   }
 

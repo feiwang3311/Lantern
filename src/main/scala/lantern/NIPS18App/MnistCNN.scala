@@ -2,6 +2,7 @@ package lantern
 package NIPS18App
 
 import lms.core.stub._
+import lms.thirdparty.{ScannerOps}
 import lms.macros.SourceContext
 import lms.core.virtualize
 
@@ -18,7 +19,7 @@ object MnistCNN {
   val cpu_file_dir = "evaluationCNN/Lantern/Lantern.cpp"
   val gpu_file_dir = "evaluationCNN/Lantern/Lantern.cu"
 
-  val mnistCPU = new LanternDriverC[String, Unit] with ScannerOpsExp with TimerOpsExp {
+  val mnistCPU = new LanternDriverC[String, Unit] with ScannerOps with TimerOpsExp {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -102,17 +103,17 @@ object MnistCNN {
       val loopTime = totalTime - prepareTime
       val timePerEpoc = loopTime / nbEpoch
 
-      val fp2 = openf(a, "w")
+      val fp2 = fopen(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp2, "%lf\\n", loss_save(i))
       }
       fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
-      closef(fp2)
+      fclose(fp2)
     }
   }
 
-  val mnistGPU = new LanternDriverCudnn[String, Unit] with ScannerOpsExp with TimerOpsExp {
+  val mnistGPU = new LanternDriverCudnn[String, Unit] with ScannerOps with TimerOpsExp {
 
     @virtualize
     def snippet(a: Rep[String]): Rep[Unit] = {
@@ -199,13 +200,13 @@ object MnistCNN {
       val loopTime = totalTime - prepareTime
       val timePerEpoc = loopTime / nbEpoch
 
-      val fp2 = openf(a, "w")
+      val fp2 = fopen(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp2, "%lf\\n", loss_save(i))
       }
       fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
-      closef(fp2)
+      fclose(fp2)
     }
   }
 

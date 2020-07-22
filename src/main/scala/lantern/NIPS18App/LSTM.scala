@@ -51,7 +51,7 @@ object LSTM {
       val startTime = get_time()
       val scanner = new Scanner("graham.txt")
       val training_data = scanner.data
-      val data_size = scanner.fl   
+      val data_size = scanner.fl
       // val chars = training_data.distinct  /** this can be done in second stage **/
       // val vocab_size = chars.length
       printf("data has %d chars\\n", data_size)
@@ -219,14 +219,14 @@ object LSTM {
       val prepareTime = loopStart - startTime
       val loopTime    = loopEndTime - loopStart
 
-      val fp = openf(a, "w")
+      val fp = fopen(a, "w")
       fprintf(fp, "unit: %s\\n", "100 iteration")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         //printf("loss_saver is %lf \\n", loss_save(i))
         fprintf(fp, "%lf\\n", loss_save(i))
       }
       fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
-      closef(fp)
+      fclose(fp)
 
     }
   }
@@ -333,13 +333,13 @@ object LSTM {
       val prepareTime = loopStart - startTime
       val loopTime    = loopEndTime - loopStart
 
-      val fp = openf(a, "w")
+      val fp = fopen(a, "w")
       fprintf(fp, "unit: %s\\n", "100 iteration")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         fprintf(fp, "%lf\\n", loss_save(i))
       }
       fprintf(fp, "run time: %lf %lf\\n", prepareTime, loopTime)
-      closef(fp)
+      fclose(fp)
     }
   }
 

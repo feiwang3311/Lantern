@@ -10,7 +10,9 @@ import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
 
-trait TensorDslCPU extends TensorDsl {
+import lantern.thirdparty.{CBLASOps}
+
+trait TensorDslCPU extends TensorDsl with CBLASOps {
 
   class BackendCPU protected() extends Backend {
     override def setup() {}

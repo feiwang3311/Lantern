@@ -29,7 +29,7 @@ object SentimentTreeLSTM {
       val word_embedding_size   = 300
 
       val readingSlot1 = NewArray[Int](1) // this is a slot of memory used for reading from file
-      val fp = openf("small_glove.txt", "r")
+      val fp = fopen("small_glove.txt", "r")
       getInt(fp, readingSlot1, 0) // read the first number in the file, which is "How many rows"
       val word_embedding_length = readingSlot1(0)
 
@@ -39,11 +39,11 @@ object SentimentTreeLSTM {
         word_embedding_data(i) = NewArray[Float](word_embedding_size)
         for (j <- (0 until word_embedding_size): Rep[Range]) getFloat(fp, word_embedding_data(i), j)
       }
-      closef(fp)
+      fclose(fp)
 
       // read in the data for trees
       val readingSlot2 = NewArray[Int](1) // need a new readingSlot, other wise have error
-      val fp1 = openf("array_tree.txt", "r")
+      val fp1 = fopen("array_tree.txt", "r")
       getInt(fp1, readingSlot2, 0)
       val tree_number = readingSlot2(0)
       val tree_data = NewArray[Array[Int]](tree_number * 4) // each tree data has 4 lines (score, word, lch, rch)
@@ -56,7 +56,7 @@ object SentimentTreeLSTM {
           for (k <- (0 until readingSlot3(0)): Rep[Range]) getInt(fp1, tree_data(i * 4 + j), k)
         }
       }
-      closef(fp1)
+      fclose(fp1)
 
       // set up hyperparameters and parameters
       val hidden_size = 150
@@ -250,14 +250,14 @@ object SentimentTreeLSTM {
       val loopTime = loopEnd - loopStart
       val timePerEpoc = loopTime / epocN
 
-      val fp2 = openf(a, "w")
+      val fp2 = fopen(a, "w")
       fprintf(fp2, "unit: %s\\n", "1 epoch")
       for (i <- (0 until loss_save.length): Rep[Range]) {
         //printf("loss_saver is %lf \\n", loss_save(i))
         fprintf(fp2, "%lf\\n", loss_save(i))
       }
       fprintf(fp2, "run time: %lf %lf\\n", prepareTime, timePerEpoc)
-      closef(fp2)
+      fclose(fp2)
 
     }
   }

@@ -11,7 +11,7 @@ import lms.thirdparty.{CLibs, CudaFunction}
 
 import lantern.collection.mutable.{StackArrayOps}
 
-trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
+trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps { b: Base  =>
   /* LMS support for CuDNN library */
 
   // GPU Memory Management FIXME(feiw) put this in the library??
@@ -22,13 +22,13 @@ trait CuBLASOps extends CLibs with CudaFunction with StackArrayOps { b: Base  =>
   }
 
   // alloc and free memory
-  case class SizeT(x: Int) { override def toString() = x.toString }
-  implicit def sizeTRepToOps(x: Rep[SizeT])(implicit __pos: SourceContext): SizeTOps = new SizeTOps(x)(__pos)
-  implicit def sizeTVarToOps(x: Var[SizeT])(implicit __pos: SourceContext): SizeTOps = new SizeTOps(readVar(x))(__pos)
-  class SizeTOps(x: Rep[SizeT])(implicit __pos: SourceContext) {
-    def toInt: Rep[Int] = Wrap[Int](Unwrap(x))
-  }
-  implicit def sizeTFromInt(x: Int) = SizeT(x)
+  // case class SizeT(x: Int) { override def toString() = x.toString }
+  // implicit def sizeTRepToOps(x: Rep[SizeT])(implicit __pos: SourceContext): SizeTOps = new SizeTOps(x)(__pos)
+  // implicit def sizeTVarToOps(x: Var[SizeT])(implicit __pos: SourceContext): SizeTOps = new SizeTOps(readVar(x))(__pos)
+  // class SizeTOps(x: Rep[SizeT])(implicit __pos: SourceContext) {
+  //   def toInt: Rep[Int] = Wrap[Int](Unwrap(x))
+  // }
+  // implicit def sizeTFromInt(x: Int) = SizeT(x)
 
   def gpuArenaMalloc[T:Manifest](size: Rep[SizeT]): Rep[Array[T]] = {
     // libFunction[Array[T]]("myGpuMalloc", Unwrap(size))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)

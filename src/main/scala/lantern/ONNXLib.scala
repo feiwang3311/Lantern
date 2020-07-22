@@ -19,11 +19,11 @@ import org.bytedeco.javacpp._;
 import org.bytedeco.javacpp.onnx._;
 
 import lms.core.stub._
+import lms.thirdparty.{ScannerOps}
 import lms.macros.SourceContext
 import lms.core.virtualize
 import lms.core.Backend
 
-//trait ONNXLib extends TensorDsl with ScannerOps {
 trait ONNXLib extends TensorDslCudnn with ScannerOps {
 
   object ParseHelper {

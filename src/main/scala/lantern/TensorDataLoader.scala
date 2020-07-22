@@ -7,6 +7,7 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
 
 import lms.core.stub._
+import lms.thirdparty.{ScannerOps}
 import lms.macros.SourceContext
 import lms.core.virtualize
 

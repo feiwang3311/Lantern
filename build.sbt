@@ -29,6 +29,7 @@ parallelExecution in Test := false
 lazy val lantern = (project in file(".")).dependsOn(lms % "test->test; compile->compile")
 
 lazy val lms = ProjectRef(file("../lms-clean"), "lms-clean")
+val lms_path = sys.props.getOrElseUpdate("LMS_PATH", System.getProperty("user.dir") + "/../lms-clean")
 
 //cps
 
