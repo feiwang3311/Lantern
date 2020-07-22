@@ -292,26 +292,314 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
         a.data, m, stride(a), one, res.data, n, stride(res), batchCount))
     }
 
-    private def bmm_sgemmbatched(x: Tensor, y: Tensor): Tensor = {
-      val m = x.shape(1)
-      val k = x.shape(2)
-      val n = y.shape(2)
-      val batchCount = x.shape(0)
+//    private def bmm_sgemmbatched(x: Tensor, y: Tensor, batchDim: Int, transX: Boolean = false, transY: Boolean = false): Tensor = {
+//      // assert tensor needs to be 3D
+//      // assert batchDim == 2 is not supported (use permute() before and then use bmm)
+//      // assert check for matrix dim mismatches (take transX and transY in to account)
+//
+//      def updatedStrideAndShape(t: Tensor, trans: Boolean): (Seq[Rep[Int]], Seq[Rep[Int]]) = {
+//        def swap(list: Seq[Rep[Int]], i: Int, j: Int) = list.updated(i, list(j)).updated(j, list(i))
+//
+//        val stride = if (batchDim==1) swap(t.shape.strides, 1, 0) else t.shape.strides
+//        val shape = if (batchDim==1) swap(t.shape.toSeq, 1, 0) else t.shape.toSeq
+//
+//        if (trans) {
+//          (swap(stride, 1, 2), swap(shape, 1, 2))
+//        } else {
+//          (stride, shape)
+//        }
+//      }
+//
+//      // compute shape and stride after transX and transY and moving batchDim to 0
+//      val (xStride, xShape) = updatedStrideAndShape(x, transX)
+//      val (yStride, yShape) = updatedStrideAndShape(y, transY)
+//
+//      // these m, n, k are for the original (not the m, n, k in the cublas kernel) (m x k) * (k x n) = (m x n)
+//      val m = xShape(1) // maps to n
+//      val k = xShape(2) // maps to k
+//      val n = yShape(2) // maps to m
+//      val batchCount = x.shape(0)
+//
+//      val res = mallocArray[Float](batchCount * m * n)
+//      cublasCall(cublasSgemmStridedBatched_(cublasHandle, if (transY) cublasOpT else cublasOpN,
+//        if (transX) cublasOpT else cublasOpN, n, m, k, one, y.data, if (transY) yStride(2) else yStride(1), yStride(0),
+//        x.data, if (transX) xStride(2) else xStride(1), xStride(0), zero, res, n, m * n, batchCount))
+//      Tensor(res, batchCount, m, n)
+//
+//    }
 
-      val res = mallocArray[Float](batchCount * m * n)
-      cublasCall(cublasSgemmStridedBatched_(cublasHandle, cublasOpN, cublasOpN, n, m, k, one, y.data, n, stride(y), x.data,
-        k, stride(x), zero, res, n, m * n, batchCount))
-      Tensor(res, batchCount, m, n)
+//    private def addbmm(res: Tensor, x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = true, transY: Boolean = false,
+//                       transRes: Boolean = false, alpha: Var[Float] = one, beta: Var[Float] = zero) = {
+//      // assert tensor needs to be 3D
+//      // assert batchDim == 2 is not supported (use permute() before and then use bmm)
+//      // assert check for matrix dim mismatches (take transX and transY in to account)
+//
+//      def updatedStrideAndShape(t: Tensor, trans: Boolean): (Seq[Rep[Int]], Seq[Rep[Int]]) = {
+//        def swap(list: Seq[Rep[Int]], i: Int, j: Int) = list.updated(i, list(j)).updated(j, list(i))
+//
+//        val stride = if (batchDim==1) swap(t.shape.strides, 1, 0) else t.shape.strides
+//        val shape = if (batchDim==1) swap(t.shape.toSeq, 1, 0) else t.shape.toSeq
+//
+//        if (trans) {
+//          (swap(stride, 1, 2), swap(shape, 1, 2))
+//        } else {
+//          (stride, shape)
+//        }
+//      }
+//
+//      // compute shape and stride after transX and transY and moving batchDim to 0
+//      val (xStride, xShape) = updatedStrideAndShape(x, transX)
+//      val (yStride, yShape) = updatedStrideAndShape(y, transY)
+//
+//      // these m, n, k are for the original (not the m, n, k in the cublas kernel) (m x k) * (k x n) = (m x n)
+//      val m = xShape(1) // maps to n
+//      val k = xShape(2) // maps to k
+//      val n = yShape(2) // maps to m
+//      val batchCount = x.shape(0)
+//
+//      cublasCall(cublasSgemmStridedBatched_(cublasHandle, if (transY) cublasOpT else cublasOpN,
+//        if (transX) cublasOpT else cublasOpN, n, m, k, alpha, y.data, if (transY) yStride(2) else yStride(1), yStride(0),
+//        x.data, if (transX) xStride(2) else xStride(1), xStride(0), beta, res.data, n, m * n, batchCount))
+//
+//      res
+//    }
+
+    // TODO - this was the one that was working significantly better
+//    private def addbmm(res: Tensor, x: Tensor, y: Tensor, batchDim: Int = 0, transRes: Boolean = false, transX: Boolean = false,
+//                       transY: Boolean = false, alpha: Var[Float] = one, beta: Var[Float] = zero) = {
+//      // assumes all tensors are contiguous
+//
+//      def updatedStrideAndShape(t: Tensor, trans: Boolean): (Seq[Rep[Int]], Seq[Rep[Int]]) = {
+//        def swap(list: Seq[Rep[Int]], i: Int, j: Int) = list.updated(i, list(j)).updated(j, list(i))
+//
+//        val stride = if (batchDim==1) swap(t.shape.strides, 1, 0) else t.shape.strides
+//        val shape = if (batchDim==1) swap(t.shape.toSeq, 1, 0) else t.shape.toSeq
+//
+//        if (trans) {
+//          (swap(stride, 1, 2), swap(shape, 1, 2))
+//        } else {
+//          (stride, shape)
+//        }
+//      }
+//
+//      val (resStride, resShape) = updatedStrideAndShape(res, transRes)
+//
+//      // change x and y based on transRes
+//      // because row-major, we always need to compute resT so that we can pass res directly
+//      // we can decide to transpose x or y using cublasOpN/T based on the computation
+//      // (e.g. res = x * y === resT = yT * xT or resT = x * y
+//      // (in this case x is the first mat in the first case, but y is the first mat in the second case)
+//      val (xStride, xShape) = if (transRes) updatedStrideAndShape(x, transX) else updatedStrideAndShape(y, transY)
+////      printf("\nxStrides %d, %d, %d\n", xStride :_*)
+//      val (yStride, yShape) = if (transRes) updatedStrideAndShape(y, transY) else updatedStrideAndShape(x, transX)
+//      val xData = if (transRes) x.data else y.data
+//      val yData = if (transRes) y.data else x.data
+//
+//      val m = resShape(2)
+//      val n = resShape(1)
+////      val k = if (if (transRes) transX else transY) xShape(2) else xShape(1)
+//      val k = xShape(1)
+////      printf("\n\nxShape : %d %d %d\n\n", xShape :_*)
+////      val k = if (transX) xShape(2) else xShape(1)
+//      val batchCount = resShape(0)
+//
+//      val transAFlag = if (if (transRes) !transX else transY) cublasOpT else cublasOpN
+//      val transBFlag = if (if (transRes) !transY else transX) cublasOpT else cublasOpN
+//
+////      val lda = if (transRes) {if (transAFlag == cublasOpT) xStride(2) else xStride(1)} else xStride(1)
+//      val lda = if (if (transRes) !transX else transY) xStride(2) else xStride(1)
+////      printf("xStride(2) = %d; xStride(1) = %d; lda = %d\n", xStride(2), xStride(1), lda)
+////      val ldb = if (transRes) yStride(2) else yStride(1)
+//      val ldb = if (if (transRes) !transY else transX) yStride(2) else yStride(1)
+//      val ldc = resStride(1)
+//
+//      cublasCall(cublasSgemmStridedBatched_(cublasHandle, transAFlag, transBFlag, m, n, k, alpha, xData, lda, xStride(0),
+//        yData, ldb, yStride(0), beta, res.data, ldc, resStride(0), batchCount))
+//      res
+//    }
+
+    private def addbmm(res: Tensor, x: Tensor, y: Tensor, batchDim: Int = 0, transRes: Boolean = false, transX: Boolean = false,
+                               transY: Boolean = false, alpha: Var[Float] = one, beta: Var[Float] = zero) = {
+      // assumes all the arrays are contiguous
+
+      // update the batchDim
+      def swapBatchDim(t: Tensor, bdim: Int) = {
+        def swap(list: Seq[Rep[Int]], i: Int, j: Int) = list.updated(i, list(j)).updated(j, list(i))
+
+        if (bdim == 1)
+          (swap(t.shape.strides, 0, 1), swap(t.shape, 0, 1).toSeq)
+        else
+          (t.shape.strides, t.shape.toSeq)
+      }
+
+      val (resStride, resShape) = swapBatchDim(res, batchDim)
+      val (xStride, xShape) = swapBatchDim(x, batchDim)
+      val (yStride, yShape) = swapBatchDim(y, batchDim)
+
+      if (!transRes) {
+        // we are computing resT (so that it's row-major rep. will be transpose of that, that is res)
+        // c = x * y ==> cT = yT * xT
+        val m = resShape(2)
+        val n = resShape(1)
+        val k = if (!transY) yShape(1) else yShape(2)
+        val batchCount = resShape(0)
+
+        val transA = if (transY) cublasOpT else cublasOpN
+        val lda = yStride(1)
+
+        val transB = if (transX) cublasOpT else cublasOpN
+        val ldb = xStride(1)
+
+        val ldc = resStride(1)
+
+        cublasCall(cublasSgemmStridedBatched_(cublasHandle, transA, transB, m, n, k, alpha, y.data, lda, yStride(0),
+          x.data, ldb, xStride(0), beta, res.data, ldc, resStride(0), batchCount))
+        res
+      } else {
+        val m = resShape(2)
+        val n = resShape(1)
+        val k = if (transX) xShape(1) else xShape(2)
+        assert(k== (if (transY) yShape(2) else yShape(1)), "ERROR!!! K ERROR!!")
+        val batchCount = resShape(0)
+
+        val transA = if (transX) cublasOpN else cublasOpT
+        val lda = xStride(1)
+
+        val transB = if (transY) cublasOpN else cublasOpT
+        val ldb = yStride(1)
+
+        val ldc = resStride(1)
+
+        cublasCall(cublasSgemmStridedBatched_(cublasHandle, transA, transB, m, n, k, alpha, x.data, lda, xStride(0),
+          y.data, ldb, yStride(0), beta, res.data, ldc, resStride(0), batchCount))
+      }
+      res
     }
+//    @virtualize
+//    private def addbmm(res: Tensor, x: Tensor, y: Tensor, batchDim: Int = 0, transRes: Boolean = false, transX: Boolean = false,
+//                           transY: Boolean = false, alpha: Var[Float] = one, beta: Var[Float] = zero) = {
+//      // assumes all tensors are contiguous
+//
+//      def updatedStrideAndShape(t: Tensor, trans: Boolean): (Seq[Rep[Int]], Seq[Rep[Int]]) = {
+//        def swap(list: Seq[Rep[Int]], i: Int, j: Int) = list.updated(i, list(j)).updated(j, list(i))
+//
+//        val stride = if (batchDim==1) swap(t.shape.strides, 1, 0) else t.shape.strides
+//        val shape = if (batchDim==1) swap(t.shape.toSeq, 1, 0) else t.shape.toSeq
+//
+//        if (trans) {
+//          (swap(stride, 1, 2), swap(shape, 1, 2))
+//        } else {
+//          (stride, shape)
+//        }
+//      }
+//
+//
+//
+//      val (resStride, resShape) = updatedStrideAndShape(res, transRes)
+//      val batchCount = resShape(0)
+//
+//      val t = var_new[Int](0)
+//      println(resStride(t))
+//
+//      resStride.head match {
+//        case Const(x) => println(x)
+//        case _ => println("No match")
+//      }
+//      x
+//      // change x and y based on transRes
+//      // because row-major, we always need to compute resT so that we can pass res directly
+//      // we can decide to transpose x or y using cublasOpN/T based on the computation
+//      // (e.g. res = x * y === resT = yT * xT or resT = x * y
+//      // (in this case x is the first mat in the first case, but y is the first mat in the second case)
+//      val (xStride, xShape) = if (transRes) updatedStrideAndShape(x, transX) else updatedStrideAndShape(y, transY)
+//      printf("\nxStrides %d, %d, %d\n", xStride :_*)
+//      val (yStride, yShape) = if (transRes) updatedStrideAndShape(y, transY) else updatedStrideAndShape(x, transX)
+//      val xData = if (transRes) x.data else y.data
+//      val yData = if (transRes) y.data else x.data
+//
+//      val transpose_result = if (resStride(1) == 1) false else true;
+//      var transpose_first = cublasOpN;
+//      var transpose_second = cublasOpN;
+//      var lda = 0
+//      var ldb = 0
+////      var ldc = 0
+//      val ldc = if (resStride(1) == 1) resStride(2) else resStride(1)
+//
+//      val oneTwo = if(transpose_result) 1 else 2
+//      val twoOne = if(transpose_result) 2 else 1
+//
+////      if (resStride(1) == 1) {
+////        transpose_result = false
+////        ldc = resStride(2)
+////      } else if (resStride(2) == 1) {
+////        transpose_result = true
+////        ldc = resStride(1)
+////      } else {
+////        ???
+////        // use permute and then bmm
+////      }
+//
+////      if (xStride(if (transpose_result) 2 else 1) == 1) {
+////        transpose_first = cublasOpN
+////        lda = xStride(if (transpose_result) 1 else 2)
+////      } else if (xStride(if (transpose_result) 1 else 2)) {
+////        transpose_first = cublasOpT
+////        lda = xStride(if (transpose_result) 2 else 1)
+////      } else {
+////        ???
+////        // use permute and then bmm (memory copy unavoidable)
+////      }
+//
+//      if (xStride(twoOne) == 1) {
+//        transpose_first = cublasOpN
+//        lda = xStride(oneTwo)
+//      } else if (xStride(oneTwo)) {
+//        transpose_first = cublasOpT
+//        lda = xStride(twoOne)
+//      } else {
+//        ???
+//        // use permute and then bmm (memory copy unavoidable)
+//      }
+//
+//      if (yStride(if (transpose_result) 2 else 1)) {
+//        transpose_second = cublasOpN
+//        ldb = yStride(if (transpose_result) 1 else 1)
+//      } else if (yStride(if (transpose_result) 1 else 2)) {
+//        transpose_second = cublasOpT
+//        ldb = yStride(if (transpose_result) 2 else 1)
+//      } else {
+//        ???
+//        // mem copy unavoidable. Hence, permute() then apply bmm
+//      }
+//
+//      cublasCall(cublasSgemmStridedBatched_(cublasHandle, transpose_first, transpose_second,
+//        resStride(if (transpose_result) 2 else 1), resStride(if (transpose_result) 1 else 2),
+//        xStride(if (transpose_result) 1 else 2), alpha, xData, lda, xStride(0), yData, ldb, yStride(0),
+//          beta, res.data, ldc, resStride(0), batchCount))
 
-    private def bmm_grad_sgemmbatched(x: TensorR, y: TensorR, output: TensorR) = {
+
+//      cublasCall(cublasSgemmStridedBatched_(cublasHandle, transAFlag, transBFlag, m, n, k, alpha, xData, lda, xStride(0),
+//        yData, ldb, yStride(0), beta, res.data, ldc, resStride(0), batchCount))
+//      res
+//    }
+
+
+    private def bmm_grad_sgemmbatched(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false) = {
       generate_comment("backprop of batched matrix multiplication")
-      if (!x.isInput) add_dotTrans2Batched(x.d, output.d, y.x)
-      if (!y.isInput) add_dotTrans1Batched(y.d, x.x, output.d)
+//      if (!x.isInput) add_dotTrans2Batched(x.d, output.d, y.x)
+//      if (!y.isInput) add_dotTrans1Batched(y.d, x.x, output.d)
+      if (!x.isInput) addbmm(x.d, output.d, y.x, batchDim, transRes = transX, transX = false, transY = !transY)
+      if (!y.isInput) addbmm(y.d, x.x, output.d, batchDim, transRes = transY, transX = !transX, transY = false)
     }
 
-    override def bmm(x: Tensor, y: Tensor): Tensor = {
-      bmm_sgemmbatched(x, y)
+    override def bmm(x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): Tensor = {
+      val batchSize = x.shape(batchDim) // must be 0 or 1
+      val m = if (!transX) x.shape((batchDim + 1) % 2) else x.shape(2)
+      val n = if (!transY) y.shape(2) else y.shape((batchDim + 1) % 2)
+      val resData = mallocArray[Float](batchSize * m * n)
+      val res = Tensor(resData, batchSize, m, n)
+      addbmm(res, x, y, batchDim, transRes = false, transX, transY, one, zero)
+
 //      val batchSize = x.shape(0)
 //      val m = x.shape(1)
 //      val k = x.shape(2)
@@ -325,8 +613,8 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
 //      Tensor(res, batchSize, m, n)
     }
 
-    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR) = {
-      bmm_grad_sgemmbatched(x, y, output)
+    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false) = {
+      bmm_grad_sgemmbatched(x, y, output, batchDim, transX, transY)
 //      val batchSize = x.x.shape(0)
 //      for(i <- 0 until batchSize) {
 //        if (!x.isInput) add_dotTrans2(x.d(i), output.d(i), y.x(i))

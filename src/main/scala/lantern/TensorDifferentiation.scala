@@ -222,9 +222,9 @@ trait TensorDsl extends DslCPP with Diff {
         case _ => throw new IllegalArgumentException(s"Incompatible shapes: ${x.shape}, ${y.shape}")
       }
 
-    def bmm(x: Tensor, y: Tensor): Tensor
+    def bmm(x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): Tensor
 
-    def bmm_grad(x: TensorR, y: TensorR, output: TensorR): Unit
+    def bmm_grad(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): Unit
 
     def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit
 
@@ -519,12 +519,13 @@ trait TensorDsl extends DslCPP with Diff {
     }
 
     // batch matrix multiplication (multiplying two collection of batches of matrices)
-    def bmm(that: Tensor) = {
+    def bmm(that: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false) = {
       (this.rank, that.rank) match {
-        case (3, 3) => assertC(this.shape(2) == that.shape(1), s"Incompatible shapes for bmm: ${this.shape}, ${that.shape}")
+        case (3, 3) => assertC(this.shape(if (transX) ((batchDim + 1) % 2) else 2) == that.shape(if (!transY) ((batchDim + 1) % 2) else 2),
+          s"Incompatible shapes for bmm (double check the transX and transY params): ${this.shape}, ${that.shape}")
         case _ => throw new IllegalArgumentException(s"bmm needs both tensors to have rank 3 (got: ${this.rank}, ${that.rank}")
       }
-      backend.bmm(this, that)
+      backend.bmm(this, that, batchDim, transX, transY)
     }
 
     // `this` is 2-D matrix, `that` is dims(1)-sized vector, `y` is dims(0)-sized vector
@@ -1297,11 +1298,11 @@ trait TensorDsl extends DslCPP with Diff {
       backend.dot_grad(this, that, y)
     }
 
-    def bmm(that: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val res = backend.bmm(x, that.x)
+    def bmm(that: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val res = backend.bmm(x, that.x, batchDim, transX, transY)
       val y = TensorR(res); k(y)
 
-      backend.bmm_grad(this, that, y)
+      backend.bmm_grad(this, that, y, batchDim, transX, transY)
     }
 
     def gemm(that: TensorR, transX: Boolean, transY: Boolean, alpha: Float): TensorR @diff = shift { (k: TensorR => Unit) =>

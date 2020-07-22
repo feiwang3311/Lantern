@@ -160,23 +160,24 @@ class TestCublas extends LanternFunSuite {
     runTest(gemm)
   }
 
-  testGPU("bmm") {
+
+  testGPU("bmm-1") {
     val bmm = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-cublas-bmm"
+      override val fileName = "lantern-cublas-bmm-1"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
-        val m1 = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6)
-        val m2 = Tensor.fromData(Seq(2, 3, 2), 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4)
-        val result = m1.bmm(m2)
+        val m1 = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        val m2 = Tensor.fromData(Seq(2, 3, 4), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+        val result = m1.bmm(m2, 0, false, false)
         val mm1 = TensorR(m1)
         val mm2 = TensorR(m2)
-        gradR(dummy => mm1 bmm mm2)(Tensor.zeros(1))
+        gradR(dummy => mm1.bmm(mm2, 0, false, false))(Tensor.zeros(1))
 
         backend = BackendCPU()
-        val expected = Tensor.fromData(Seq(2, 2, 2), 19, 19, 46, 46, 19, 19, 46, 46)
-        val expected1 = Tensor.fromData(Seq(2, 2, 3), 5, 6, 7, 5, 6, 7, 5, 6, 7, 5, 6, 7)
-        val expected2 = Tensor.fromData(Seq(2, 3, 2), 5, 5, 7, 7, 9, 9, 5, 5, 7, 7, 9, 9)
+        val expected = Tensor.fromData(Seq(2, 2, 4), 38, 44, 50, 56, 83, 98, 113, 128, 416, 440, 464, 488, 569, 602, 635, 668)
+        val expected1 = Tensor.fromData(Seq(2, 2, 3), 10, 26, 42, 10, 26, 42, 58, 74, 90, 58, 74, 90)
+        val expected2 = Tensor.fromData(Seq(2, 3, 4), 5, 5, 5, 5, 7, 7, 7, 7, 9, 9, 9, 9, 17, 17, 17, 17, 19, 19, 19, 19, 21, 21, 21, 21)
         Tensor.assertEqual(result.toCPU(), expected)
         Tensor.assertEqual(mm1.d.toCPU(), expected1)
         Tensor.assertEqual(mm2.d.toCPU(), expected2)
@@ -185,7 +186,182 @@ class TestCublas extends LanternFunSuite {
     runTest(bmm)
   }
 
-  testGPU("elementwiseOpNoBroadCastSqrt") {
+  testGPU("bmm-2") {
+    val bmm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-bmm-2"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        val m2 = Tensor.fromData(Seq(2, 4, 3), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+        val result = m1.bmm(m2, 0, false, true)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1.bmm(mm2, 0, false, true))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 2, 4), 14, 32, 50, 68, 32, 77, 122, 167, 338, 410, 482, 554, 464, 563, 662, 761)
+        val expected1 = Tensor.fromData(Seq(2, 2, 3), 22, 26, 30, 22, 26, 30, 70, 74, 78, 70, 74, 78)
+        val expected2 = Tensor.fromData(Seq(2, 4, 3), 5, 7, 9, 5, 7, 9, 5, 7, 9, 5, 7, 9, 17, 19, 21, 17, 19, 21, 17, 19, 21, 17, 19, 21)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
+      }
+    }
+    runTest(bmm)
+  }
+
+  testGPU("bmm-3") {
+    val bmm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-bmm-3"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(2, 3, 2), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        val m2 = Tensor.fromData(Seq(2, 3, 4), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+        val result = m1.bmm(m2, 0, true, false)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1.bmm(mm2, 0, true, false))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 2, 4), 61, 70, 79, 88, 76, 88, 100, 112, 475, 502, 529, 556, 526, 556, 586, 616)
+        val expected1 = Tensor.fromData(Seq(2, 3, 2), 10, 10, 26, 26, 42, 42, 58, 58, 74, 74, 90, 90)
+        val expected2 = Tensor.fromData(Seq(2, 3, 4), 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15, 19, 19, 19, 19, 23, 23, 23, 23)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
+      }
+    }
+    runTest(bmm)
+  }
+
+  testGPU("bmm-4") {
+    val bmm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-bmm-4"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(2, 3, 2), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        val m2 = Tensor.fromData(Seq(2, 4, 3), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+        val result = m1.bmm(m2, 0, true, true)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1.bmm(mm2, 0, true, true))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 2, 4), 22, 49, 76, 103, 28, 64, 100, 136, 382, 463, 544, 625, 424, 514, 604, 694)
+        val expected1 = Tensor.fromData(Seq(2, 3, 2), 22, 22, 26, 26, 30, 30, 70, 70, 74, 74, 78, 78)
+        val expected2 = Tensor.fromData(Seq(2, 4, 3), 3, 7, 11, 3, 7, 11, 3, 7, 11, 3, 7, 11, 15, 19, 23, 15, 19, 23, 15, 19, 23, 15, 19, 23)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
+      }
+    }
+    runTest(bmm)
+  }
+
+  testGPU("bmm-5") {
+    val bmm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-bmm-5"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        val m2 = Tensor.fromData(Seq(3, 2, 4), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+        val result = m1.bmm(m2, 1, false, false)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1.bmm(mm2, 1, false, false))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 2, 4), 70, 76, 82, 88, 211, 226, 241, 256, 232, 256, 280, 304, 445, 478, 511, 544)
+        val expected1 = Tensor.fromData(Seq(2, 2, 3), 10, 42, 74, 26, 58, 90, 10, 42, 74, 26, 58, 90)
+        val expected2 = Tensor.fromData(Seq(3, 2, 4), 8, 8, 8, 8, 14, 14, 14, 14, 10, 10, 10, 10, 16, 16, 16, 16, 12, 12, 12, 12, 18, 18, 18, 18)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
+      }
+    }
+    runTest(bmm)
+  }
+
+  testGPU("bmm-6") {
+    val bmm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-bmm-6"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        val m2 = Tensor.fromData(Seq(4, 2, 3), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+        val result = m1.bmm(m2, 1, false, true)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1.bmm(mm2, 1, false, true))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 2, 4), 14, 50, 86, 122, 77, 167, 257, 347, 50, 194, 338, 482, 167, 365, 563, 761)
+        val expected1 = Tensor.fromData(Seq(2, 2, 3), 40, 44, 48, 52, 56, 60, 40, 44, 48, 52, 56, 60)
+        val expected2 = Tensor.fromData(Seq(4, 2, 3), 8, 10, 12, 14, 16, 18, 8, 10, 12, 14, 16, 18, 8, 10, 12, 14, 16, 18, 8, 10, 12, 14, 16, 18)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
+      }
+    }
+    runTest(bmm)
+  }
+
+  testGPU("bmm-7") {
+    val bmm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-bmm-7"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(3, 2, 2), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        val m2 = Tensor.fromData(Seq(3, 2, 4), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+        val result = m1.bmm(m2, 1, true, false)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1.bmm(mm2, 1, true, false))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 2, 4), 199, 214, 229, 244, 337, 358, 379, 400, 226, 244, 262, 280, 376, 400, 424, 448)
+        val expected1 = Tensor.fromData(Seq(3, 2, 2), 10, 10, 26, 26, 42, 42, 58, 58, 74, 74, 90, 90)
+        val expected2 = Tensor.fromData(Seq(3, 2, 4), 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15, 19, 19, 19, 19, 23, 23, 23, 23)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
+      }
+    }
+    runTest(bmm)
+  }
+
+  testGPU("bmm-8") {
+    val bmm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-bmm-8"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val m1 = Tensor.fromData(Seq(3, 2, 2), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+        val m2 = Tensor.fromData(Seq(4, 2, 3), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
+        val result = m1.bmm(m2, 1, true, true)
+        val mm1 = TensorR(m1)
+        val mm2 = TensorR(m2)
+        gradR(dummy => mm1.bmm(mm2, 1, true, true))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expected = Tensor.fromData(Seq(2, 2, 4), 38, 128, 218, 308, 113, 239, 365, 491, 44, 152, 260, 368, 128, 272, 416, 560)
+        val expected1 = Tensor.fromData(Seq(3, 2, 2), 40, 40, 52, 52, 44, 44, 56, 56, 48, 48, 60, 60)
+        val expected2 = Tensor.fromData(Seq(4, 2, 3), 3, 11, 19, 7, 15, 23, 3, 11, 19, 7, 15, 23, 3, 11, 19, 7, 15, 23, 3, 11, 19, 7, 15, 23)
+        Tensor.assertEqual(result.toCPU(), expected)
+        Tensor.assertEqual(mm1.d.toCPU(), expected1)
+        Tensor.assertEqual(mm2.d.toCPU(), expected2)
+      }
+    }
+    runTest(bmm)
+  }
+
+    testGPU("elementwiseOpNoBroadCastSqrt") {
     val sqrt = new LanternDriverCublas[String, Unit] {
       override val fileName = "lantern-cublas-sqrt"
       @virtualize
