@@ -150,10 +150,11 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
       val dim1 = x.shape(0)
       val dim2 = x.shape(1)
       val res = mallocArray[Float](dim1)
-      unchecked[Unit] (
-        "cblas_sgemv(CblasRowMajor, CblasNoTrans, ",
-        dim1, ",", dim2, ",", 1, ",",
-        x.data, ",", dim2, ",", y.data, ",", 1, ",", 0, ",", res, ",", 1, ")")
+      cblas_sgemv(rowMajor, noTrans, dim1, dim2, 1, x.data, dim2, y.data, 1, 0, res, 1)
+      // unchecked[Unit] (
+      //   "cblas_sgemv(CblasRowMajor, CblasNoTrans, ",
+      //   dim1, ",", dim2, ",", 1, ",",
+      //   x.data, ",", dim2, ",", y.data, ",", 1, ",", 0, ",", res, ",", 1, ")")
       Tensor(res, dim1)
     }
 
@@ -163,10 +164,11 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
       val dim2 = x.shape(1)
       val dim3 = y.shape(1)
       val res = mallocArray[Float](dim1 * dim3)
-      unchecked[Unit](
-        "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
-        dim1, ",", dim3, ",", dim2, ",", 1, ",",
-        x.data, ",", dim2, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
+      cblas_sgemm(rowMajor, noTrans, noTrans, dim1, dim3, dim2, 1, x.data, dim2, y.data, dim3, 0, res, dim3)
+      // unchecked[Unit](
+      //   "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+      //   dim1, ",", dim3, ",", dim2, ",", 1, ",",
+      //   x.data, ",", dim2, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
       Tensor(res, dim1, dim3)
     }
 
@@ -208,28 +210,31 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
       generate_comment("bankend add_composition")
       assert(y.rank == 2 && x.shape == Dimensions(Seq(y.shape(1))) && output.shape == Dimensions(Seq(y.shape(0))))
       val dim1 = y.shape(0); val dim2 = y.shape(1)
-      unchecked[Unit](
-        "cblas_sgemv(CblasRowMajor, CblasTrans, ",
-         dim1, ",", dim2, ",", 1, ",",
-         y.data, ",", dim2, ",", output.data, ",", 1, ",", 1, ",", x.data, ",", 1, ")")
+      cblas_sgemv(rowMajor, yesTrans, dim1, dim2, 1, y.data, dim2, output.data, 1, 1, x.data, 1)
+      // unchecked[Unit](
+      //   "cblas_sgemv(CblasRowMajor, CblasTrans, ",
+      //    dim1, ",", dim2, ",", 1, ",",
+      //    y.data, ",", dim2, ",", output.data, ",", 1, ",", 1, ",", x.data, ",", 1, ")")
     }
 
     override def add_dotTrans1(x: Tensor, y: Tensor, output: Tensor): Unit = {
       generate_comment("backend add_dotTrans1")
       val dim1 = y.shape(0); val dim2 = y.shape(1); val dim3 = output.shape(1)
-      unchecked[Unit](
-        "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
-        dim2, ",", dim3, ",", dim1, ",", 1, ",",
-        y.data, ",", dim2, ",", output.data, ",", dim3, ",", 1, ",", x.data, ",", dim3, ")")
+      cblas_sgemm(rowMajor, yesTrans, noTrans, dim2, dim3, dim1, 1, y.data, dim2, output.data, dim3, 1, x.data, dim3)
+      // unchecked[Unit](
+      //   "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+      //   dim2, ",", dim3, ",", dim1, ",", 1, ",",
+      //   y.data, ",", dim2, ",", output.data, ",", dim3, ",", 1, ",", x.data, ",", dim3, ")")
     }
 
     override def add_dotTrans2(x: Tensor, y: Tensor, output: Tensor): Unit = {
       generate_comment("backend add_dotTrans2")
       val dim1 = x.shape(0); val dim2 = x.shape(1); val dim3 = output.shape(1)
-      unchecked[Unit](
-        "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
-        dim1, ",", dim2, ",", dim3, ",", 1, ",",
-        y.data, ",", dim3, ",", output.data, ",", dim3, ",", 1, ",", x.data, ",", dim2, ")")
+      cblas_sgemm(rowMajor, noTrans, yesTrans, dim1, dim2, dim3, 1, y.data, dim3, output.data, dim3, 1, x.data, dim2)
+      // unchecked[Unit](
+      //   "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+      //   dim1, ",", dim2, ",", dim3, ",", 1, ",",
+      //   y.data, ",", dim3, ",", output.data, ",", dim3, ",", 1, ",", x.data, ",", dim2, ")")
 
     }
 
@@ -393,10 +398,11 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
           val dim2 = x.shape(1)
           val dim3 = y.shape(1)
           val res = mallocArray[Float](dim1 * dim3)
-          unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
-            dim1, ",", dim3, ",", dim2, ",", alpha, ",",
-            x.data, ",", dim2, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
+          cblas_sgemm(rowMajor, noTrans, noTrans, dim1, dim3, dim2, alpha, x.data, dim2, y.data, dim3, 0, res, dim3)
+          // unchecked[Unit](
+          //   "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+          //   dim1, ",", dim3, ",", dim2, ",", alpha, ",",
+          //   x.data, ",", dim2, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
           Tensor(res, dim1, dim3)
         case (false, true) =>
           assert(x.shape(1) == y.shape(1))
@@ -404,10 +410,11 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
           val dim2 = x.shape(1)
           val dim3 = y.shape(0)
           val res = mallocArray[Float](dim1 * dim3)
-          unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
-            dim1, ",", dim3, ",", dim2, ",", alpha, ",",
-            x.data, ",", dim2, ",", y.data, ",", dim2, ",", 0, ",", res, ",", dim3, ")")
+          cblas_sgemm(rowMajor, noTrans, yesTrans, dim1, dim3, dim2, alpha, x.data, dim2, y.data, dim2, 0, res, dim3)
+          // unchecked[Unit](
+          //   "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+          //   dim1, ",", dim3, ",", dim2, ",", alpha, ",",
+          //   x.data, ",", dim2, ",", y.data, ",", dim2, ",", 0, ",", res, ",", dim3, ")")
           Tensor(res, dim1, dim3)
         case (true, false) =>
           assert(x.shape(0) == y.shape(0), s"gemm dims don't match, got ${x.shape.seq}, ${y.shape.seq}")
@@ -415,10 +422,11 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
           val dim2 = x.shape(0)
           val dim3 = y.shape(1)
           val res = mallocArray[Float](dim1 * dim3)
-          unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
-            dim1, ",", dim3, ",", dim2, ",", alpha, ",",
-            x.data, ",", dim1, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
+          cblas_sgemm(rowMajor, yesTrans, noTrans, dim1, dim3, dim2, alpha, x.data, dim1, y.data, dim3, 0, res, dim3)
+          // unchecked[Unit](
+          //   "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+          //   dim1, ",", dim3, ",", dim2, ",", alpha, ",",
+          //   x.data, ",", dim1, ",", y.data, ",", dim3, ",", 0, ",", res, ",", dim3, ")")
           Tensor(res, dim1, dim3)
         case (true, true) =>
           assert(x.shape(0) == y.shape(1))
@@ -426,10 +434,11 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
           val dim2 = x.shape(0)
           val dim3 = y.shape(0)
           val res = mallocArray[Float](dim1 * dim3)
-          unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
-            dim1, ",", dim3, ",", dim2, ",", alpha, ",",
-            x.data, ",", dim1, ",", y.data, ",", dim2, ",", 0, ",", res, ",", dim3, ")")
+          cblas_sgemm(rowMajor, yesTrans, yesTrans, dim1, dim3, dim2, alpha, x.data, dim1, y.data, dim2, 0, res, dim3)
+          // unchecked[Unit](
+          //   "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
+          //   dim1, ",", dim3, ",", dim2, ",", alpha, ",",
+          //   x.data, ",", dim1, ",", y.data, ",", dim2, ",", 0, ",", res, ",", dim3, ")")
           Tensor(res, dim1, dim3)
       }
     }
@@ -439,44 +448,60 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
       (transX, transY) match {
         case (false, false) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(1)
-          if (!x.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
-            dim1, ",", dim2, ",", dim3, ",", alpha, ",",
-            output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim2, ")")
-          if (!y.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
-            dim2, ",", dim3, ",", dim1, ",", alpha, ",",
-            x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
+          if (!x.isInput) cblas_sgemm(rowMajor, noTrans, yesTrans, dim1, dim2, dim3, alpha, output.d.data,
+            dim3, y.x.data, dim3, 1, x.d.data, dim2)
+            // unchecked[Unit](
+            // "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+            // dim1, ",", dim2, ",", dim3, ",", alpha, ",",
+            // output.d.data, ",", dim3, ",", y.x.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim2, ")")
+          if (!y.isInput) cblas_sgemm(rowMajor, yesTrans, noTrans, dim2, dim3, dim1, alpha, x.x.data,
+            dim2, output.d.data, dim3, 1, y.d.data, dim3)
+            // unchecked[Unit](
+            // "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+            // dim2, ",", dim3, ",", dim1, ",", alpha, ",",
+            // x.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
         case (false, true) =>
           val dim1 = x.x.shape(0); val dim2 = x.x.shape(1); val dim3 = y.x.shape(0)
-          if (!x.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
-            dim1, ",", dim2, ",", dim3, ",", alpha, ",",
-            output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", 1, ",", x.d.data, ",", dim2, ")")
-          if (!y.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
-            dim3, ",", dim2, ",", dim1, ",", alpha, ",",
-            output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", 1, ",", y.d.data, ",", dim2, ")")
+          if (!x.isInput) cblas_sgemm(rowMajor, noTrans, noTrans, dim1, dim2, dim3, alpha, output.d.data,
+            dim3, y.x.data, dim2, 1, x.d.data, dim2)
+            // unchecked[Unit](
+            // "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+            // dim1, ",", dim2, ",", dim3, ",", alpha, ",",
+            // output.d.data, ",", dim3, ",", y.x.data, ",", dim2, ",", 1, ",", x.d.data, ",", dim2, ")")
+          if (!y.isInput) cblas_sgemm(rowMajor, yesTrans, noTrans, dim3, dim2, dim1, alpha, output.d.data,
+            dim3, x.x.data, dim2, 1, y.d.data, dim2)
+            // unchecked[Unit](
+            // "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
+            // dim3, ",", dim2, ",", dim1, ",", alpha, ",",
+            // output.d.data, ",", dim3, ",", x.x.data, ",", dim2, ",", 1, ",", y.d.data, ",", dim2, ")")
         case (true, false) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(1)
-          if (!x.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
-            dim2, ",", dim1, ",", dim3, ",", alpha, ",",
-            y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim1, ")")
-          if (!y.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
-            dim2, ",", dim3, ",", dim1, ",", alpha, ",",
-            x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
+          if (!x.isInput) cblas_sgemm(rowMajor, noTrans, yesTrans, dim2, dim1, dim3, alpha, y.x.data,
+            dim3, output.d.data, dim3, 1, x.d.data, dim1)
+            // unchecked[Unit](
+            // "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
+            // dim2, ",", dim1, ",", dim3, ",", alpha, ",",
+            // y.x.data, ",", dim3, ",", output.d.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim1, ")")
+          if (!y.isInput) cblas_sgemm(rowMajor, noTrans, noTrans, dim2, dim3, dim1, alpha, x.x.data,
+            dim1, output.d.data, dim3, 1, y.d.data, dim3)
+            // unchecked[Unit](
+            // "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
+            // dim2, ",", dim3, ",", dim1, ",", alpha, ",",
+            // x.x.data, ",", dim1, ",", output.d.data, ",", dim3, ",", 1, ",", y.d.data, ",", dim3, ")")
         case (true, true) =>
           val dim1 = x.x.shape(1); val dim2 = x.x.shape(0); val dim3 = y.x.shape(0)
-          if (!x.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
-            dim2, ",", dim1, ",", dim3, ",", alpha, ",",
-            y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim1, ")")
-          if (!y.isInput) unchecked[Unit](
-            "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
-            dim3, ",", dim2, ",", dim1, ",", alpha, ",",
-            output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", 1, ",", y.d.data, ",", dim2, ")")
+          if (!x.isInput) cblas_sgemm(rowMajor, yesTrans, yesTrans, dim2, dim1, dim3, alpha, y.x.data,
+            dim2, output.d.data, dim3, 1, x.d.data, dim1)
+            // unchecked[Unit](
+            // "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
+            // dim2, ",", dim1, ",", dim3, ",", alpha, ",",
+            // y.x.data, ",", dim2, ",", output.d.data, ",", dim3, ",", 1, ",", x.d.data, ",", dim1, ")")
+          if (!y.isInput) cblas_sgemm(rowMajor, yesTrans, yesTrans, dim3, dim2, dim1, alpha, output.d.data,
+            dim3, x.x.data, dim1, 1, y.d.data, dim2)
+            // unchecked[Unit](
+            // "cblas_sgemm(CblasRowMajor, CblasTrans, CblasTrans, ",
+            // dim3, ",", dim2, ",", dim1, ",", alpha, ",",
+            // output.d.data, ",", dim3, ",", x.x.data, ",", dim1, ",", 1, ",", y.d.data, ",", dim2, ")")
       }
     }
 
@@ -484,6 +509,7 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
     // https://github.com/pytorch/pytorch/blob/0a8c8c1dbead2f845e524ae32c19167d80363148/aten/src/THNN/generic/SpatialConvolutionMM.c
     type RAF = Rep[Array[Float]]
     def memsetFloatZero(where: RAF, howmany: Rep[Int]) = {
+      // memset[Float](where, 0, SizeT(4 * howmany)) // FIXME(this is quite challenging since sizeT is not taking const Int)
       uncheckedEffect[Unit]("memset(", where, ", 0, 4 * ", howmany, ")")()(where)
     }
     def memcpyFloat(dst: RAF, src: RAF, howmany: Rep[Int]) = {
@@ -592,6 +618,9 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
       val dim1 = nOutputPlane
       val dim2 = kW * kH *nInputPlane
       val dim3 = outputHeight * outputWidth
+      // FIXME(feiw) cannot change to cblas_sgemm yet because in Conv we are handling slices of array
+      //             the effect system is not supporting it well enough.
+      // cblas_sgemm(rowMajor, noTrans, noTrans, dim1, dim3, dim2, 1, weight, dim2, finput, dim3, 1, output, dim3)
       unchecked[Unit](
         "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, ",
         dim1, ",", dim3, ",", dim2, ",", 1, ",",
