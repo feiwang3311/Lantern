@@ -658,6 +658,8 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
         val dim2 = outputWidth * outputHeight
         val dim3 = kW * kH * nInputPlane
         generate_comment("conv bwd for param")
+        // FIXME(feiw) cannot yet use cblas_sgemm due to limitations of effect system.
+        // cblas_sgemm(rowMajor, noTrans, yesTrans, dim1, dim3, dim2, scale, gradOutput_t, dim2, finput_t, dim2, 1, gradWeight.data, dim3)
         unchecked[Unit](
           "cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, ",
           dim1, ",", dim3, ",", dim2, ",", scale, ",",
@@ -695,6 +697,8 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
         val dim2 = nOutputPlane
         val dim3 = outputHeight * outputWidth
         generate_comment("conv bwd for input")
+        // FIMXE(feiw) cannot use cblas_sgemm yet due to the limitation in effect system
+        // cblas_sgemm(rowMajor, yesTrans, noTrans, dim1, dim3, dim2, 1, weight.data, dim1, gradOutput_t, dim3, 0, fgradInput_t, dim3)
         unchecked[Unit](
           "cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, ",
           dim1, ",", dim3, ",", dim2, ",", 1, ",",
