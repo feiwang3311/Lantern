@@ -1,3 +1,6 @@
+#include <curand_kernel.h>
+#include <curand.h>
+
 #define NVIDIA_WARP_SIZE 32 // this is typically 32 (for incl. 1080ti s)
 
 #define CUDA_CALL(f) { \
@@ -1170,32 +1173,79 @@ __global__ void dropoutGrad(float *y_d, float *x_d, bool *mask, int inputSize, f
     }
 }
 
-// this assumes in is contiguous
-__global__ void maskedFill3D(float *in, float* out, int *mask, float value, int mask_size, int input_size) {
+// TODO - this would be an interesting kernel to implement in LMS (can avoid template based optimizations)
+// ijSwapped is the case when dim0>dim1 (in this case dim0 is taken as dim1 and dim1 is taken as dim0 and ijSwapped = true)
+template
+<bool ijSwapped>
+__global__ void maskedFill(float *in, float* out, int *mask, float value, int dim0_shape, int dim0_stride, int dim1_shape, int dim1_stride, int offset_size, int input_size) {
+    // assumes mask is contiguous and has shape dim0 x dim1 (or dim1 x dim0 if ijSwapped)
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
 
-    for(; tid < input_size; tid += stride) {
-        if (mask[tid % mask_size] != 0) {
-            out[tid] = value;
+    // we are collapsing dims (logically)
+    // e.g. []...[][i][]...[][j][]..[] ==> [i][j][inner]
+    int i = tid / dim0_stride;
+    int j = (tid - i*dim0_stride) / dim1_stride;
+    int inner_idx = tid - i*dim0_stride - j*dim1_stride;
+    int idx = i * dim0_stride + j * dim1_stride + inner_idx;
+
+    while(idx < input_size){
+//        printf("tid = %d; i = %d; j = %d; inner_idx=%d; index = %d\n", tid, i, j, inner_idx, idx );
+//        printf("mask[%d] = %d\n", (i % dim0_shape) * dim1_shape + (j % dim1_shape), mask[(i % dim0_shape) * dim1_shape + (j % dim1_shape)]);
+
+        // TODO - this mod operations (when computing mask_id) are expensive; can eliminate them for some simple cases (e.g. when we know j < dim1_shape; can eliminate % dim1_shape)
+        // Can achieve this using templates
+        int mask_id;
+        if (ijSwapped)
+            mask_id = (j % dim1_shape) * dim0_shape + (i % dim0_shape);
+        else
+            mask_id = (i % dim0_shape) * dim1_shape + (j % dim1_shape);
+
+        if (mask[mask_id] != 0) {
+            out[idx] = value;
         } else {
-            out[tid] = in[tid];
+            out[idx] = in[idx];
         }
+
+        tid += stride;
+        i = tid / dim0_stride;
+        j = (tid - i*dim0_stride) / dim1_stride;
+        inner_idx = tid - i*dim0_stride - j*dim1_stride;
+        idx = i * dim0_stride + j * dim1_stride + inner_idx;
     }
 }
 
-// update the gradients of x based on y (y is coming from backward pass)
-__global__ void maskedFill3DGrad(float *y_d, float *x_d, int *mask, int mask_size, int input_size) {
+template
+<bool ijSwapped>
+__global__ void maskedFillGrad(float *y_d, float *x_d, int *mask, int dim0_shape, int dim0_stride, int dim1_shape, int dim1_stride, int offset_size, int input_size) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
+
+    int i = tid / dim0_stride;
+    int j = (tid - i*dim0_stride) / dim1_stride;
+    int inner_idx = tid - i*dim0_stride - j*dim1_stride;
+    int idx = i * dim0_stride + j * dim1_stride + inner_idx;
 
     // if masked, then gradient is zero (hence, no action)
-    for(; tid < input_size; tid += stride) {
-        if (mask[tid % mask_size] == 0) {
-            x_d[tid] += y_d[tid];
+    while (idx < input_size) {
+        int mask_id;
+        if (ijSwapped)
+            mask_id = (j % dim1_shape) * dim0_shape + (i % dim0_shape);
+        else
+            mask_id = (i % dim0_shape) * dim1_shape + (j % dim1_shape);
+        if (mask[mask_id] == 0) {
+            x_d[idx] += y_d[idx];
         }
+
+        tid += stride;
+        i = tid / dim0_stride;
+        j = (tid - i*dim0_stride) / dim1_stride;
+        inner_idx = tid - i*dim0_stride - j*dim1_stride;
+        idx = i * dim0_stride + j * dim1_stride + inner_idx;
     }
 }
+
+
 
 __global__ void mul_sub(float* in1, float* in2, float* out, int in1ScalarCount, int in2ScalarCount) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;

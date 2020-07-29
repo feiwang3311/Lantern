@@ -308,12 +308,11 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
 
         cublasCall(cublasSgemmStridedBatched_(cublasHandle, transA, transB, m, n, k, alpha, y.data, lda, yStride(0),
           x.data, ldb, xStride(0), beta, res.data, ldc, resStride(0), batchCount))
-        res
       } else {
         val m = resShape(2)
         val n = resShape(1)
         val k = if (transX) xShape(1) else xShape(2)
-        assert(k== (if (transY) yShape(2) else yShape(1)), "ERROR!!! K ERROR!!")
+        assert(k == (if (transY) yShape(2) else yShape(1)), s"bmm k does not match if two matrices ${k} != ${if (transY) yShape(2) else yShape(1)}")
         val batchCount = resShape(0)
 
         val transA = if (transX) cublasOpN else cublasOpT
@@ -335,7 +334,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       val m = if (!transX) x.shape((batchDim + 1) % 2) else x.shape(2)
       val n = if (!transY) y.shape(2) else y.shape((batchDim + 1) % 2)
       val resData = mallocArray[Float](batchSize * m * n)
-      val res = Tensor(resData, batchSize, m, n)
+      val res = if (batchDim == 0) Tensor(resData, batchSize, m, n) else Tensor(resData, m, batchSize, n)
       addbmm(res, x, y, batchDim, transRes = false, transX, transY, one, zero)
     }
 
@@ -956,18 +955,23 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       input
     }
 
-    override def maskedFill3D(input: Tensor, mask: Rep[Array[Int]], value: Rep[Float]): Tensor = {
+    override def maskedFill(input: Tensor, mask: Rep[Array[Int]], value: Rep[Float], dim0: Int, dim1: Int): Tensor = {
       // Note - assumes mask is already in GPU
-      assert(input.rank == 3, s"maskedFill3D only accepts 3D tensors, got ${input.rank}")
-      assertC((input.shape.strides(0) > input.shape.strides(1)) && (input.shape.strides(1) > input.shape.strides(2)),
-        s"maskedFill3D only accepts contiguous tensors")
       val res = mallocArray[Float](input.scalarCount)
-      maskedFill3D_(input.data, res, mask, value, input.shape(0) * input.shape(1), input.scalarCount)
+
+      val (dim0_, dim1_, ijSwapped) = if (dim1 > dim0) (dim0, dim1, false) else (dim1, dim0, true)
+
+      maskedFill_(input.data, res, mask, value, input.shape(dim0_), input.shape.strides(dim0_), input.shape(dim1_),
+        input.shape.strides(dim1_), input.scalarCount / (input.shape(dim0_) * input.shape(dim1_)), input.scalarCount, ijSwapped)
+
       Tensor(res, input.shape :_*)
     }
 
-    override def maskedFill3D_grad(output: TensorR, x: TensorR, mask: Rep[Array[Int]], value: Rep[Float]): Unit = {
-      maskedFill3DGrad_(output.d.data, x.d.data, mask, output.x.shape(0) * output.x.shape(1), output.x.scalarCount)
+    override def maskedFill_grad(output: TensorR, x: TensorR, mask: Rep[Array[Int]], dim0: Int, dim1: Int): Unit = {
+      val (dim0_, dim1_, ijSwapped) = if (dim1 > dim0) (dim0, dim1, false) else (dim1, dim0, true)
+
+      maskedFillGrad_(output.d.data, x.d.data, mask, x.d.shape(dim0_), x.d.shape.strides(dim0_), x.d.shape(dim1_),
+        x.d.shape.strides(dim1_), x.d.scalarCount / (x.d.shape(dim0_) * x.d.shape(dim1_)), x.d.scalarCount, ijSwapped)
     }
 
 

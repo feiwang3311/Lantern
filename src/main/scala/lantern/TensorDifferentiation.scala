@@ -355,11 +355,13 @@ trait TensorDsl extends DslCPP with Diff {
     def mask4D(input: Tensor, lengths: Rep[Array[Int]]): Tensor
 
     // fill the tensor with value if corresponding mask entry is 1
-    // assumes the input is contiguous!
-    def maskedFill3D(input: Tensor, mask: Rep[Array[Int]], value: Rep[Float]): Tensor
+    // mask size should be shape(dim0) x shape(dim1)
+    // This is equivalent to do a permute(_, .., dim0, dim1) and then apply mask and then permute back to the original shape
+    // However, this avoids data copying which is trigerred by permute()
+    def maskedFill(input: Tensor, mask: Rep[Array[Int]], value: Rep[Float], dim0: Int, dim1: Int): Tensor
 
     // gradient of filled values are set to zero (same in PyTorch)
-    def maskedFill3D_grad(output: TensorR, x: TensorR, mask: Rep[Array[Int]], value: Rep[Float]): Unit
+    def maskedFill_grad(output: TensorR, x: TensorR, mask: Rep[Array[Int]], dim0: Int, dim1: Int): Unit
 
     // Activation functions.
     def relu(x: Tensor, inPlace: Boolean = false): Tensor
@@ -556,7 +558,13 @@ trait TensorDsl extends DslCPP with Diff {
 
     def mask4D(lengths: Rep[Array[Int]]): Tensor = backend.mask4D(this, lengths)
 
-    def maskedFill3D(mask: Rep[Array[Int]], value: Rep[Float]) = backend.maskedFill3D(this, mask, value)
+    def maskedFill(mask: Rep[Array[Int]], value: Rep[Float], dim0: Int = -2, dim1: Int = -1) = {
+      val dim0Adjusted = if (dim0 < 0) this.rank + dim0 else dim0
+      val dim1Adjusted = if (dim1 < 0) this.rank + dim1 else dim1
+
+      assert(dim0Adjusted < this.rank && dim1Adjusted < this.rank, s"Got indirect dims ${dim0} and ${dim1} for rank = ${this.rank}")
+      backend.maskedFill(this, mask, value, dim0Adjusted, dim1Adjusted)
+    }
 
     def relu(inPlace: Boolean = false) = backend.relu(this, inPlace)
     def tanh() = backend.tanh(this)
@@ -1353,11 +1361,14 @@ trait TensorDsl extends DslCPP with Diff {
       generate_comment("backprop for mask4D, not sure if gradient should be masked as well?")
     }
 
-    def maskedFill3D(mask: Rep[Array[Int]], value: Rep[Float]): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val y = TensorR(x.maskedFill3D(mask, value)); k(y)
+    def maskedFill(mask: Rep[Array[Int]], value: Rep[Float], dim0: Int = -2, dim1: Int = -1): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val dim0Adjusted = if (dim0 < 0) this.x.rank + dim0 else dim0
+      val dim1Adjusted = if (dim1 < 0) this.x.rank + dim1 else dim1
 
-      generate_comment("backprop for maskedFill3D")
-      backend.maskedFill3D_grad(y, this, mask, value)
+      val y = TensorR(x.maskedFill(mask, value, dim0Adjusted, dim1Adjusted)); k(y)
+
+      generate_comment("backprop for maskedFill")
+      backend.maskedFill_grad(y, this, mask, dim0Adjusted, dim1Adjusted)
     }
 
     def relu(inPlace: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>
