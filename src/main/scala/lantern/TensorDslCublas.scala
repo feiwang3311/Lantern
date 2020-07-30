@@ -921,6 +921,30 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int) = ???
     override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit = ???
 
+    override def layerNorm(x: Tensor, eps: Float, gamma: Tensor, beta: Tensor): (Tensor, Tensor, Tensor) = {
+      // layer norm for the last dim
+      val outerSize = x.scalarCount / x.shape.last
+
+      // to store mean, and rstd (resiprocal of stddev (with +eps)) to be used in backward pass
+      val mean = mallocArray[Float](outerSize)
+      val rstd = mallocArray[Float](outerSize)
+      val res = mallocArray[Float](x.scalarCount)
+
+      layer_norm_forward(x.data, mean, rstd, gamma.data, beta.data, res, eps, x.shape.last, outerSize)
+      (Tensor(res, x.shape :_*), Tensor(mean, x.shape.dropRight(1) :_*), Tensor(rstd, x.shape.dropRight(1) :_*))
+
+    }
+
+    override def layerNorm_grad(x: TensorR, y: TensorR, gamma: TensorR, beta: TensorR, mean: Tensor, rstd: Tensor) = {
+      val outerSize = x.x.scalarCount / x.x.shape.last
+      val scaleData = mallocArray[Float](outerSize)
+      val biasData = mallocArray[Float](outerSize)
+      val scale = TensorR(Tensor(scaleData, outerSize))
+      val bias = TensorR(Tensor(biasData, outerSize))
+
+      layer_norm_grad(y.d.data, x.x.data, mean.data, rstd.data, gamma.x.data, outerSize, x.x.shape.last, x.d.data, gamma.d.data, beta.d.data, scale.x.data, bias.x.data, scale.d.data, bias.d.data)
+    }
+
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 

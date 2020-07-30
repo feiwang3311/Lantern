@@ -334,6 +334,10 @@ trait TensorDsl extends DslCPP with Diff {
     def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int)
     def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit
 
+    // layer norm
+    def layerNorm(x: Tensor, eps: Float, gamma: Tensor, beta: Tensor): (Tensor, Tensor, Tensor)
+    def layerNorm_grad(x: TensorR, y: TensorR, gamma: TensorR, beta: TensorR, mean: Tensor, rstd: Tensor)
+
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
@@ -607,6 +611,10 @@ trait TensorDsl extends DslCPP with Diff {
         }
       }
       res / base
+    }
+
+    def layerNorm(eps: Float, gamma: Tensor, beta: Tensor) = {
+      backend.layerNorm(this, eps, gamma, beta)
     }
 
     // mark: (Fei Wang) HERE: more gardening below
@@ -1612,6 +1620,14 @@ trait TensorDsl extends DslCPP with Diff {
           res_offset += 1
         }
       }
+    }
+
+    def layerNorm(eps: Float, gamma: TensorR, beta: TensorR) = shift { k: (TensorR => Unit) =>
+      val (y, mean, rstd) = this.x.layerNorm(eps, gamma.x, beta.x)
+      val ty = TensorR(y)
+      k(ty)
+      generate_comment("layer norm backprop")
+      backend.layerNorm_grad(this, ty, gamma, beta, mean, rstd)
     }
 
     @virtualize

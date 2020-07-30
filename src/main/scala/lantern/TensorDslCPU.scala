@@ -1147,6 +1147,9 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
     override def batchNorm1DTraining(x: Tensor, scale: Tensor, bias: Tensor, runningMean: Tensor, runningVar: Tensor): (Tensor, Option[Tensor], Option[Tensor], Int) = ???
     override def batchNorm1D_grad(input: TensorR, res: TensorR, scale: TensorR, bias: TensorR, saveMean: Option[Tensor], saveInvVariance: Option[Tensor], counterId: Int): Unit = ???
 
+    override def layerNorm(x: Tensor, eps: Float, gamma: Tensor, beta: Tensor): (Tensor, Tensor, Tensor) = ???
+    override def layerNorm_grad(x: TensorR, y: TensorR, gamma: TensorR, beta: TensorR, mean: Tensor, rstd: Tensor) = ???
+
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")

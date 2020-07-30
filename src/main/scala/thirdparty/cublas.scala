@@ -457,5 +457,23 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
                                 softmaxElements: Rep[Int], softmaxElementsStride: Rep[Int], batchCount: Rep[Int]) =
     libFunction[Unit]("dispatch_softmax_backward<false>", Unwrap(gradInput), Unwrap(grad), Unwrap(output), Unwrap(softmaxElements),
       Unwrap(softmaxElementsStride), Unwrap(batchCount))(Seq(1, 2), Seq(0), Set())
+
+  def layer_norm_forward(x: Rep[Array[Float]], mean: Rep[Array[Float]], rstd: Rep[Array[Float]], gamma: Rep[Array[Float]],
+                         beta: Rep[Array[Float]], res: Rep[Array[Float]], eps: Rep[Float], vectSize: Rep[Int],
+                         outerSize: Rep[Int]) =
+    libFunction[Unit](s"layer_norm_forward<<<${Unwrap(outerSize)}, 512>>>", Unwrap(x), Unwrap(mean), Unwrap(rstd),
+      Unwrap(gamma), Unwrap(beta), Unwrap(res), Unwrap(eps), Unwrap(vectSize))(Seq(0, 3, 4), Seq(1, 2, 5), Set())
+
+//  void layer_norm_grad(float* y_grad, float* x, float* mean, float* rstd, float* gamma, int outerSize, int vect_size,
+//    float* x_grad, float* gamma_grad, float* beta_grad, float* scale, float* bias, float* s_grad, float* b_grad)
+  // TODO - layer_norm_grad is not a cuda kernel, it launches multiple kernels. Write the logic in Scala and just do the kernel launches using this
+  def layer_norm_grad(y_grad: Rep[Array[Float]], x: Rep[Array[Float]], mean: Rep[Array[Float]], rstd: Rep[Array[Float]],
+                      gamma: Rep[Array[Float]], outerSize: Rep[Int], vectSize: Rep[Int], x_grad: Rep[Array[Float]],
+                      gamma_grad: Rep[Array[Float]], beta_grad: Rep[Array[Float]], scale: Rep[Array[Float]],
+                      bias: Rep[Array[Float]], s_grad: Rep[Array[Float]], b_grad: Rep[Array[Float]]) =
+  libFunction[Unit]("layer_norm_grad", Unwrap(y_grad), Unwrap(x), Unwrap(mean), Unwrap(rstd), Unwrap(gamma), Unwrap(outerSize),
+    Unwrap(vectSize), Unwrap(x_grad), Unwrap(gamma_grad), Unwrap(beta_grad), Unwrap(scale), Unwrap(bias), Unwrap(s_grad),
+    Unwrap(b_grad))(Seq(1, 2, 3, 4), Seq(0, 7, 8, 9, 10, 11, 12, 13), Set())
+
 }
 

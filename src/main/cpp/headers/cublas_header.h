@@ -806,7 +806,7 @@ __device__ __forceinline__ void warp_reduce_max(float* sum) {
         #pragma unroll
         for (int i = 0;  i < WARP_BATCH;  ++i) {
             float b = __shfl_xor_sync(0xffffffff, sum[i], offset, WARP_SIZE);
-            if (sum[i] < b) sum[i] = b;
+            sum[i] = fmaxf(sum[i], b);
         }
     }
 }
@@ -1461,5 +1461,217 @@ __global__ void permuteSim4DSim210(float* odata, const float* idata,
   for (int i = threadIdx.x; i < istr2; i += blockDim.x)
     odata[ooffset + i] += idata[ioffset + i];
 }
+
+// The reduced sum will only be on first thread of the warp (as opposed to xor shuffle - see warm_reduce_add above)
+__inline__ __device__ float warp_reduce_sum(float val) {
+   #pragma unroll
+  for (int offset = (NVIDIA_WARP_SIZE >> 1); offset > 0; offset >>= 1) {
+    val += __shfl_down_sync(0xffffffff, val, offset, NVIDIA_WARP_SIZE);
+  }
+  return val;
+}
+
+__inline__ __device__ float block_reduce_sum(float val, float* shared) {
+  const int lid = threadIdx.x % NVIDIA_WARP_SIZE;
+  const int wid = threadIdx.x / NVIDIA_WARP_SIZE;
+  val = warp_reduce_sum(val);
+  __syncthreads();
+  if (lid == 0) {
+    shared[wid] = val;
+  }
+  __syncthreads();
+  val = (threadIdx.x < blockDim.x / NVIDIA_WARP_SIZE) ? shared[lid] : 0;
+  if (wid == 0) {
+    val = warp_reduce_sum(val);
+  }
+  return val;
+}
+
+// Taken with slight modifications from PyTorch - aten/src/ATen/native/cuda/layer_norm_kernel.cu
+__global__ void layer_norm_forward(float* x, float* mean, float* rstd, float* gamma, float* beta, float* y, float eps, int vect_size) {
+  __shared__ float m_shared[NVIDIA_WARP_SIZE];
+  __shared__ float v_shared[NVIDIA_WARP_SIZE];
+  const int i = blockIdx.x;
+  float sum1 = 0;
+  float sum2 = 0;
+  for (int j = threadIdx.x; j < vect_size; j += blockDim.x) {
+    const int index = i * vect_size + j;
+    sum1 += x[index];
+    sum2 += x[index] * x[index];
+  }
+
+  sum1 = block_reduce_sum(sum1, m_shared);
+  sum2 = block_reduce_sum(sum2, v_shared);
+
+  if (threadIdx.x == 0) {
+    const float scale = 1.0f / vect_size;
+    sum1 = sum1 * scale;
+    sum2 = fmaxf(sum2 * scale - sum1 * sum1, 0);
+    sum2 = rsqrtf(sum2 + eps);
+    // now sum1 and sum2 has mean and rstd (for the blocK) respectively
+    // store block mean and rsqrt to be used in backward pass
+    mean[i] = sum1;
+    rstd[i] = sum2;
+//    printf("rstd[%d] = %.3f\n", i, rstd[i]);
+  }
+  // TODO - should I do a xor shuffle and access sum1, sum2 directly instead of mean[i], rstd[i]. Not that slow due to broadcast? (only one access per WARP)
+
+  __syncthreads();
+
+  for (int j = threadIdx.x; j < vect_size; j += blockDim.x) {
+    const int idx = i * vect_size + j;
+    y[idx] = (x[idx] - mean[i]) * rstd[i] * gamma[j] + beta[j];
+//    printf("y[%d] = %.3f\n", idx, y[idx]);
+  }
+}
+
+// taken from PyTorch with slight modifications - aten/src/ATen/native/cuda/layer_norm_kernel.cu
+__global__ void ComputeInternalGradientsCUDAKernel(int vect_size, float* y_grad, float* x, float* gamma, float* s_grad, float* b_grad) {
+  __shared__ float s_grad_shared[NVIDIA_WARP_SIZE];
+  __shared__ float b_grad_shared[NVIDIA_WARP_SIZE];
+
+  const int i = blockIdx.x;
+  float sum1 = 0;
+  float sum2 = 0;
+  for (int j = threadIdx.x; j < vect_size; j += blockDim.x) {
+    const int index = i * vect_size + j;
+    sum1 += y_grad[index] * x[index] * gamma[j];
+    sum2 += y_grad[index] * gamma[j];
+  }
+
+  sum1 = block_reduce_sum(sum1, s_grad_shared);
+  sum2 = block_reduce_sum(sum2, b_grad_shared);
+  if (threadIdx.x == 0) {
+    s_grad[i] = sum1;
+    b_grad[i] = sum2;
+  }
+}
+
+// taken from PyTorch with slight modifications - aten/src/ATen/native/cuda/layer_norm_kernel.cu
+__global__ void ComputeGradientFusedParamsCUDAKernel(int outerSize, int vect_size, float* mean, float* rstd, float* ds, float* db, float* c1, float* c2) {
+  const int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < outerSize) {
+    float s = 1.0f / vect_size;
+    float a = (db[index] * mean[index] - ds[index]) * rstd[index] * rstd[index] * rstd[index] * s;
+
+    c1[index] = a;
+    c2[index] = -(a * mean[index] + db[index] * rstd[index] * s);
+  }
+}
+
+// taken from PyTorch with slight modifications - aten/src/ATen/native/cuda/layer_norm_kernel.cu
+__global__ void LayerNormBackwardCUDAKernel(int vect_size, float* y_grad, float* x, float* gamma, float* a, float* b, float* c, float* x_grad) {
+  const int i = blockIdx.x;
+  for (int j = threadIdx.x; j < vect_size; j += blockDim.x) {
+    const int64_t index = i * vect_size + j;
+    x_grad[index] = a[i] * y_grad[index] * gamma[j] + b[i] * x[index] + c[i];
+  }
+}
+
+// taken from PyTorch with slight modifications - aten/src/ATen/native/cuda/layer_norm_kernel.cu
+__global__ void GammaBetaBackwardSimpleCUDAKernel(int outerSize, int vect_size, float* y_grad, float* x, float* mean, float* rstd, float* gamma_grad, float* beta_grad) {
+  const int j = blockIdx.x * blockDim.x + threadIdx.x;
+  if (j < vect_size) {
+    float sum1 = 0;
+    float sum2 = 0;
+    for (int i = 0; i < outerSize; ++i) {
+      const int index = i * vect_size + j;
+      sum1 += y_grad[index] * (x[index] - mean[i]) * rstd[i];
+      sum2 += y_grad[index];
+    }
+    gamma_grad[j] = sum1;
+    beta_grad[j] = sum2;
+  }
+}
+
+// taken from PyTorch with slight modifications - aten/src/ATen/native/cuda/layer_norm_kernel.cu
+__global__ void GammaBetaBackwardCUDAKernel(int outerSize, int vect_size, float* y_grad, float* x, float* mean, float* rstd, float* dg, float* db) {
+  __shared__ float g_shared[32][32 + 1]; // +1 to  avoid shared memory bank conflicts
+  __shared__ float b_shared[32][32 + 1];
+
+  const int j = blockIdx.x * blockDim.x + threadIdx.x;
+
+  float dg_sum1 = 0;
+  float dg_sum2 = 0;
+  float db_sum1 = 0;
+  float db_sum2 = 0;
+
+  if (j < vect_size) {
+    for (int i = threadIdx.y; i < outerSize; i += blockDim.y * 2) {
+      const int i1 = i;
+      const int i2 = i + blockDim.y;
+      const int index1 = i1 * vect_size + j;
+      const int index2 = i2 * vect_size + j;
+
+      dg_sum1 += y_grad[index1] * (x[index1] - mean[i1]) * rstd[i1];
+      db_sum1 += y_grad[index1];
+
+      if (i2 < outerSize) {
+        dg_sum2 += y_grad[index2] * (x[index2] - mean[i2]) * rstd[i2];
+        db_sum2 += y_grad[index2];
+      }
+    }
+  }
+
+  g_shared[threadIdx.y][threadIdx.x] = dg_sum1;
+  g_shared[threadIdx.y + blockDim.y][threadIdx.x] = dg_sum2;
+  b_shared[threadIdx.y][threadIdx.x] = db_sum1;
+  b_shared[threadIdx.y + blockDim.y][threadIdx.x] = db_sum2;
+  __syncthreads();
+
+  float sum1 = g_shared[threadIdx.x][threadIdx.y];
+  float sum2 = b_shared[threadIdx.x][threadIdx.y];
+
+  sum1 = warp_reduce_sum(sum1);
+  sum2 = warp_reduce_sum(sum2);
+
+  if (threadIdx.x == 0) {
+    const int j = blockIdx.x * blockDim.x + threadIdx.y;
+    if (j < vect_size) {
+      dg[j] = sum1;
+      db[j] = sum2;
+    }
+  }
+
+  sum1 = g_shared[threadIdx.x][threadIdx.y + blockDim.y];
+  sum2 = b_shared[threadIdx.x][threadIdx.y + blockDim.y];
+  sum1 = warp_reduce_sum(sum1);
+  sum2 = warp_reduce_sum(sum2);
+
+  if (threadIdx.x == 0) {
+    const int j = blockIdx.x * blockDim.x + threadIdx.y + blockDim.y;
+    if (j < vect_size) {
+      dg[j] = sum1;
+      db[j] = sum2;
+    }
+  }
+}
+
+// TODO - move this to Scala
+// taken from PyTorch with slight modifications - aten/src/ATen/native/cuda/layer_norm_kernel.cu
+void layer_norm_grad(float* y_grad, float* x, float* mean, float* rstd, float* gamma, int outerSize, int vect_size,
+ float* x_grad, float* gamma_grad, float* beta_grad, float* scale, float* bias, float* s_grad, float* b_grad) {
+  ComputeInternalGradientsCUDAKernel<<<outerSize, 512>>>(vect_size, y_grad, x, gamma, s_grad, b_grad);
+
+  // compute number of grids (each having 256 threads) required for outerSize number of computations
+  const int B = (outerSize + 256 - 1) / 256;
+
+  ComputeGradientFusedParamsCUDAKernel<<<B, 256>>>(outerSize, vect_size, mean, rstd, s_grad, b_grad, scale, bias);
+
+  LayerNormBackwardCUDAKernel<<<outerSize, 256>>>(vect_size, y_grad, x, gamma, rstd, scale, bias, x_grad);
+
+  if (outerSize < 512) {
+    // For small batch size, do colwise reduce directly.
+    const int B = (vect_size + 256 - 1) / 256;
+    GammaBetaBackwardSimpleCUDAKernel<<<B, 256>>>(outerSize, vect_size, y_grad, x, mean, rstd, gamma_grad, beta_grad);
+  } else {
+    const int B = (N + 32 - 1) / 32;
+    constexpr int kThreadX = 32;
+    constexpr int kThreadY = 32 / 2;
+    GammaBetaBackwardCUDAKernel<<<B, dim3(kThreadX, kThreadY)>>>(outerSize, vect_size, y_grad, x, mean, rstd, gamma_grad, beta_grad);
+  }
+}
+
+
 
 
