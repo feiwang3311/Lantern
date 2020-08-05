@@ -499,6 +499,23 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def plusBias(main: Tensor, bias: Tensor): Tensor = ???
     override def plusBias_grad(main: TensorR, bias: TensorR): Unit = ???
 
+    override def plusBias_v2(main: Tensor, bias: Tensor): Tensor = {
+      val gridSize = (main.shape.scalarCount + 256 - 1) / 256
+      plus_bias_kernel(main.data, bias.data, main.data, main.shape.scalarCount, bias.shape.scalarCount, gridSize)
+      main
+    }
+
+    @virtualize
+    override def plusBias_grad_v2(main: TensorR, bias: TensorR): Unit = {
+      val outerSize = main.x.shape.scalarCount / main.x.shape.last
+      val biasSize = bias.x.shape.last
+
+      val closest32 = (outerSize + 31 / 32) * 32
+      val blockSize = if (closest32 > 1024) 1024 else closest32
+
+      plus_bias_grad(main.d.data, bias.d.data, outerSize, biasSize, blockSize)
+    }
+
     override def plusEqual(base: Tensor, adder: Tensor): Tensor = ???
     override def plusEqual_grad(base: TensorR, adder: TensorR): Unit = ???
 

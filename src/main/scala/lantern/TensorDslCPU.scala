@@ -301,6 +301,9 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
       if (!bias.isInput) this.inplaceElementWiseOpWithBroadCastOrReduce(bias.d, main.d, (_ + _))
     }
 
+    override def plusBias_v2(main: Tensor, bias: Tensor): Tensor = ???
+    override def plusBias_grad_v2(main: TensorR, bias: TensorR): Unit = ???
+
     override def plusEqual(base: Tensor, adder: Tensor): Tensor = {
       this.inplaceElementWiseOpWithBroadCastOrReduce(base, adder, (_ + _))
       base

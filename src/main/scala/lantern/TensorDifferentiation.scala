@@ -288,6 +288,10 @@ trait TensorDsl extends DslCPP with Diff {
     def plusBias(main: Tensor, bias: Tensor): Tensor
     def plusBias_grad(main: TensorR, bias: TensorR): Unit
 
+    // overhead with the above plusBias (which uses cudnn) is high. v2 is a custom cuda kernel
+    def plusBias_v2(main: Tensor, bias: Tensor): Tensor
+    def plusBias_grad_v2(main: TensorR, bias: TensorR): Unit
+
     // plusEqual assumes that adder is of the same shape as base, and addition can be done inPlace
     def plusEqual(base: Tensor, adder: Tensor): Tensor
     def plusEqual_grad(base: TensorR, adder: TensorR): Unit
@@ -464,6 +468,13 @@ trait TensorDsl extends DslCPP with Diff {
 
     // bias may need to be broadcasted; plus is inPlace
     def plusBias(that: Tensor): Tensor = backend.plusBias(this, that)
+
+    def plusBias_v2(that: Tensor): Tensor = {
+      assert(that.rank == 1, s"Bias tensor should be rank 1 (gor ${that.rank})")
+      assert(this.shape.last == that.shape.last, s"Bias dim should match last dim of the input tensor (${this.shape.last} != ${that.shape.last})")
+      backend.plusBias_v2(this, that)
+    }
+
     // that is the same size as this; plus is inPlace
     def plusEqual(that: Tensor): Tensor = backend.plusEqual(this, that)
 
@@ -1245,6 +1256,11 @@ trait TensorDsl extends DslCPP with Diff {
     def plusBias(bias: TensorR): TensorR @diff = shift { (k: TensorR => Unit) =>
       backend.plusBias(this.x, bias.x); k(this)  // note: plusBias is in-place
       backend.plusBias_grad(this, bias)
+    }
+
+    def plusBias_v2(bias: TensorR): TensorR @diff = shift{ (k: TensorR => Unit) =>
+      backend.plusBias_v2(this.x, bias.x); k(this) // plusBias is in-place
+      backend.plusBias_grad_v2(this, bias)
     }
 
     // plusEqual assumes that "that" is of the same dimension as "this", and addition can be done in place

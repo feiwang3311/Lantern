@@ -24,7 +24,7 @@
 void *gpuMallocBase;
 void *gpuMallocAddr;
 
-long HEAP_SIZE = 1073741824; // 4294967296; // 8589934592; // 10737418240;
+long HEAP_SIZE = 573741824; //1073741824; // 4294967296; // 8589934592; // 10737418240;
 // Alignment boundary size, in bytes.
 constexpr int N = 4; // 16
 void *myGpuMalloc(size_t bytes) {
@@ -703,6 +703,7 @@ __global__ void softmax(float* input, float* output, int size) {
     __syncthreads();
 
     // compute the sum
+    // TODO - check whether sequential addressing is better here (To avoid shared memory blank conflicts)?
     threadVal = 0;
     for(int i = start; i < end; i += stride) {
         float expVal = expf(input_t[i] - buffer[0]);
@@ -1471,6 +1472,7 @@ __inline__ __device__ float warp_reduce_sum(float val) {
   return val;
 }
 
+// blockDim should be a multiple of 32
 __inline__ __device__ float block_reduce_sum(float val, float* shared) {
   const int lid = threadIdx.x % NVIDIA_WARP_SIZE;
   const int wid = threadIdx.x / NVIDIA_WARP_SIZE;
@@ -1672,6 +1674,36 @@ void layer_norm_grad(float* y_grad, float* x, float* mean, float* rstd, float* g
   }
 }
 
+// assumes contiguous
+// in-place operation (hence, no backward pass)
+// number of threads = 64
+// each threads handles 4 elems (therefore, block work size = 4 * 64 = 256)
+// number of blocks = scalarCount / block work size (round up)
+__global__ void plus_bias_kernel(float *input, float *bias, float *output, int input_size, int bias_size) {
+    int tid = threadIdx.x;
 
+    #pragma unroll
+    for(int i = 0; i < 4; i ++) {
+        int idx = blockDim.x * blockIdx.x + i * NVIDIA_WARP_SIZE + tid;
+        if (idx < input_size)
+            output[idx] = input[idx] + bias[idx % bias_size];
+    }
+}
+
+// ideally this should be handled using sum(dim=?) kernel
+__global__ void plus_bias_grad(float *y_grad, float *bias_grad, int outer_size, int bias_size) {
+    __shared__ float smm[NVIDIA_WARP_SIZE];
+
+    int tid = threadIdx.x;
+    float local_sum = 0;
+    for(;tid < outer_size; tid += blockDim.x) {
+        local_sum += y_grad[bias_size * tid + blockIdx.x];
+    }
+    local_sum = block_reduce_sum(local_sum, smm);
+
+    if (threadIdx.x == 0) {
+        bias_grad[blockIdx.x] += local_sum;
+    }
+}
 
 
