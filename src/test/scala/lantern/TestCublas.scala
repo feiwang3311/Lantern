@@ -160,7 +160,8 @@ class TestCublas extends LanternFunSuite {
     runTest(gemm)
   }
 
-
+  // bmm test cases are generated using a Python script
+  // https://gist.github.com/supunab/ed0e918c0860e7686849fd2c6d261cb4
   testGPU("bmm-1") {
     val bmm = new LanternDriverCublas[String, Unit] {
       override val fileName = "lantern-cublas-bmm-1"
@@ -640,29 +641,156 @@ class TestCublas extends LanternFunSuite {
     runTest(exp)
   }
 
-  testGPU("masked_fill_3d-test") {
-    val mmdot = new LanternDriverCublas[String, Unit] {
-      override val fileName = "lantern-cublas-masked_fill_3d"
+  // masked_fill tests were generated using a Python script (validated via PyTorch)
+  // https://gist.github.com/supunab/9410802ac818eb0ed5f6e8922fb7a5ed
+  testGPU("masked_fill-test-1") {
+    val masked_fill = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-masked_fill_1"
 
       @virtualize
       def snippet(x: Rep[String]): Rep[Unit] = {
-        val t = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6)
+        val t = Tensor.fromData(Seq(2, 3, 4), 7, 0, 1, 8, 9, 8, 8, 8, 8, 8, 5, 2, 9, 7, 8, 8, 3, 6, 7, 2, 6, 2, 7, 2)
         val tr = TensorR(t)
-        val mask = Array(0, 1, 0, 1, 0, 1).toGPU(6)
+        val mask = Array(1, 0, 1, 0, 1, 1).toGPU(6)
 
-        val res = t.maskedFill3D(mask, -1)
+        val res = t.maskedFill(mask, -1, dim0 = 0, dim1 = 1)
 
-        gradR(dummy => tr.maskedFill3D(mask, -Float.NegativeInfinity))(Tensor.zeros(1))
+        gradR(dummy => tr.maskedFill(mask, -1, dim0 = 0, dim1 = 1))(Tensor.zeros(1))
 
         backend = BackendCPU()
-        val expectedRes = Tensor.fromData(Seq(2, 2, 3), 1, -1, 3, -1, 5, -1, 1, -1, 3, -1, 5, -1)
-        val expectedGrad = Tensor.fromData(Seq(2, 2, 3), 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0)
+        val expectedRes = Tensor.fromData(Seq(2, 3, 4), -1.0, -1.0, -1.0, -1.0, 9.0, 8.0, 8.0, 8.0, -1.0, -1.0, -1.0, -1.0, 9.0, 7.0, 8.0, 8.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+        val expectedGrad = Tensor.fromData(Seq(2, 3, 4), 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         Tensor.assertEqual(res.toCPU(), expectedRes)
         Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
       }
     }
-    runTest(mmdot)
+    runTest(masked_fill)
+  }
+
+  testGPU("masked_fill-test-2") {
+    val masked_fill = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-masked_fill_2"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(2, 3, 4), 6, 8, 6, 4, 3, 7, 3, 9, 5, 8, 1, 8, 3, 6, 6, 2, 5, 3, 0, 6, 9, 0, 5, 4)
+        val tr = TensorR(t)
+        val mask = Array(1, 0, 1, 0, 0, 1, 0, 0).toGPU(8)
+
+        val res = t.maskedFill(mask, -1, dim0 = 0, dim1 = 2)
+
+        gradR(dummy => tr.maskedFill(mask, -1, dim0 = 0, dim1 = 2))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(2, 3, 4), -1.0, 8.0, -1.0, 4.0, -1.0, 7.0, -1.0, 9.0, -1.0, 8.0, -1.0, 8.0, 3.0, -1.0, 6.0, 2.0, 5.0, -1.0, 0.0, 6.0, 9.0, -1.0, 5.0, 4.0)
+        val expectedGrad = Tensor.fromData(Seq(2, 3, 4), 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+        Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(masked_fill)
+  }
+
+  testGPU("masked_fill-test-3") {
+    val masked_fill = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-masked_fill_3"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(2, 3, 4), 6, 1, 5, 9, 5, 0, 1, 8, 7, 1, 9, 9, 9, 1, 4, 4, 7, 1, 2, 4, 1, 2, 5, 9)
+        val tr = TensorR(t)
+        val mask = Array(0, 1, 1, 1, 1, 0).toGPU(6)
+
+        val res = t.maskedFill(mask, -1, dim0 = 1, dim1 = 0)
+
+        gradR(dummy => tr.maskedFill(mask, -1, dim0 = 1, dim1 = 0))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(2, 3, 4), 6.0, 1.0, 5.0, 9.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, 2.0, 5.0, 9.0)
+        val expectedGrad = Tensor.fromData(Seq(2, 3, 4), 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+        Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(masked_fill)
+  }
+
+  testGPU("masked_fill-test-4") {
+    val masked_fill = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-masked_fill_4"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(2, 3, 4), 0, 1, 1, 1, 4, 9, 5, 9, 0, 0, 9, 2, 7, 1, 8, 2, 3, 0, 2, 7, 6, 6, 4, 3)
+        val tr = TensorR(t)
+        val mask = Array(1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0).toGPU(12)
+
+        val res = t.maskedFill(mask, -1, dim0 = 1, dim1 = 2)
+
+        gradR(dummy => tr.maskedFill(mask, -1, dim0 = 1, dim1 = 2))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(2, 3, 4), -1.0, -1.0, -1.0, -1.0, 4.0, 9.0, 5.0, -1.0, -1.0, 0.0, 9.0, 2.0, -1.0, -1.0, -1.0, -1.0, 3.0, 0.0, 2.0, -1.0, -1.0, 6.0, 4.0, 3.0)
+        val expectedGrad = Tensor.fromData(Seq(2, 3, 4), 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+        Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(masked_fill)
+  }
+
+  testGPU("masked_fill-test-5") {
+    val masked_fill = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-masked_fill_5"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(2, 3, 4), 2, 9, 4, 6, 9, 3, 9, 2, 5, 9, 5, 1, 3, 1, 0, 2, 9, 1, 0, 4, 4, 4, 3, 0)
+        val tr = TensorR(t)
+        val mask = Array(1, 0, 0, 1, 0, 1, 1, 1).toGPU(8)
+
+        val res = t.maskedFill(mask, -1, dim0 = 2, dim1 = 0)
+
+        gradR(dummy => tr.maskedFill(mask, -1, dim0 = 2, dim1 = 0))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(2, 3, 4), -1.0, 9.0, 4.0, -1.0, -1.0, 3.0, 9.0, -1.0, -1.0, 9.0, 5.0, -1.0, 3.0, -1.0, -1.0, -1.0, 9.0, -1.0, -1.0, -1.0, 4.0, -1.0, -1.0, -1.0)
+        val expectedGrad = Tensor.fromData(Seq(2, 3, 4), 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+        Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(masked_fill)
+  }
+
+  testGPU("masked_fill-test-6") {
+    val masked_fill = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-masked_fill_6"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(2, 3, 4), 4, 5, 8, 0, 1, 7, 7, 8, 7, 2, 5, 8, 8, 7, 9, 5, 0, 2, 4, 8, 7, 0, 1, 1)
+        val tr = TensorR(t)
+        val mask = Array(1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0).toGPU(12)
+
+        val res = t.maskedFill(mask, -1, dim0 = 2, dim1 = 1)
+
+        gradR(dummy => tr.maskedFill(mask, -1, dim0 = 2, dim1 = 1))(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(2, 3, 4), -1.0, 5.0, -1.0, 0.0, -1.0, -1.0, -1.0, 8.0, 7.0, -1.0, -1.0, 8.0, -1.0, 7.0, -1.0, 5.0, -1.0, -1.0, -1.0, 8.0, 7.0, -1.0, -1.0, 1.0)
+        val expectedGrad = Tensor.fromData(Seq(2, 3, 4), 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+        Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(masked_fill)
   }
 
   testGPU("dropout_v2-test") {
@@ -737,5 +865,131 @@ class TestCublas extends LanternFunSuite {
       }
     }
     runTest(softmaxV2)
+  }
+
+  testGPU("layer-norm-forward") {
+    val layer_norm = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-layer_norm_forward"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+
+        val t = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 6, 8, 1, 5, 9, 1, 9, 12)
+        val eps = 0.00001
+        val gamma = Tensor.fromData(Seq(3), 1, 1, 1)
+        val beta = Tensor.fromData(Seq(3), 1, 1, 1)
+
+        val (res, mean, rstd) = t.layerNorm(eps, gamma, beta)
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(2, 2, 3), -0.2247, 1.0, 2.2247, -0.2247, 1.0, 2.2247, -0.2247, 1.0, 2.2247, -0.3641, 1.35898, 2.00514)
+        val expectedMean = Tensor.fromData(Seq(2, 2), 2.0, 6.0, 5.0, 7.3333)
+        val expectedRStd = Tensor.fromData(Seq(2,2), 1.2247, 0.61237, 0.30619, 0.21539)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+        Tensor.assertEqual(mean.toCPU(), expectedMean)
+        Tensor.assertEqual(rstd.toCPU(), expectedRStd)
+      }
+    }
+    runTest(layer_norm)
+  }
+
+  testGPU("layer-norm-grad") {
+    val layer_norm_grad = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-layer_norm_grad"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(2, 2, 3), 1, 2, 3, 4, 6, 8, 1, 5, 9, 1, 9, 12)
+        val tr = TensorR(t)
+
+        val eps = 0.00001
+
+        val gamma = TensorR(Tensor.fromData(Seq(3), 1, 1, 1))
+        val beta = TensorR(Tensor.fromData(Seq(3), 0, 0, 0))
+
+        gradR{dummy => tr.layerNorm(eps, gamma, beta)}(Tensor.zeros(1))
+
+        backend = BackendCPU()
+
+        val expectedGrad = Tensor.fromData(Seq(2, 2, 3), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        val expectedGradGamma = Tensor.fromData(Seq(3), -5.0383, 0.3590, 4.6794)
+        val expectedGradBeta = Tensor.fromData(Seq(3), 4, 4, 4)
+
+        Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
+        Tensor.assertEqual(gamma.d.toCPU(), expectedGradGamma)
+        Tensor.assertEqual(beta.d.toCPU(), expectedGradBeta)
+      }
+    }
+    runTest(layer_norm_grad)
+  }
+
+  testGPU("plus-bias") {
+    val plus_bias = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-plus-bias"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(4, 3), 1, 2, 3, 4, 6, 8, 1, 5, 9, 1, 9, 12)
+        val bias = Tensor.fromData(Seq(3), 1, 2, 3)
+        val res = t.plusBias_v2(bias)
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(4,3), 2, 4, 6, 5, 8, 11, 2, 7, 12, 2, 11, 15)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+      }
+    }
+    runTest(plus_bias)
+  }
+
+  testGPU("plus-bias-grad") {
+    val plus_bias_grad = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-plus-bias-grad"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(4, 3), 1, 2, 3, 4, 6, 8, 1, 5, 9, 1, 9, 12)
+        val bias = Tensor.fromData(Seq(3), 1, 2, 3)
+        val tr = TensorR(t)
+        val biasr = TensorR(bias)
+
+        gradR{dummy => tr.plusBias_v2(biasr)}(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(4,3), 2, 4, 6, 5, 8, 11, 2, 7, 12, 2, 11, 15)
+        val expectedGrad = Tensor.fromData(Seq(3), 4, 4, 4, 4)
+
+        // note - plus bias is an in-place operation
+        Tensor.assertEqual(t.toCPU(), expectedRes)
+        Tensor.assertEqual(biasr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(plus_bias_grad)
+  }
+
+  testGPU("relu-v2") {
+    val relu_v2 = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-rel-v2"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val t = Tensor.fromData(Seq(4, 3), 1, -2, 3, 4, -6, -8, 1, -5, 9, -1, 9, -12)
+        val tr = TensorR(t)
+
+        val res = t.relu_v2(false)
+
+        gradR{dummy => tr.relu_v2(false)}(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(4, 3), 1, 0, 3, 4, 0, 0, 1, 0, 9, 0, 9, 0)
+        val expectedGrad = Tensor.fromData(Seq(4, 3), 1, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0)
+
+        // note - plus bias is an in-place operation
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+        Tensor.assertEqual(tr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(relu_v2)
   }
 }

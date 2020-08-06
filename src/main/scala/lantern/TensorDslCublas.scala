@@ -1023,6 +1023,22 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def tanh_grad(input: TensorR, res: TensorR): Unit = ???
     override def sigmoid_grad(input: TensorR, res: TensorR): Unit = ???
 
+    override def relu_v2(x: Tensor, inPlace: Boolean = false): Tensor = {
+      if (inPlace) {
+        relu_kernel(x.data, x.data, x.shape.scalarCount)
+        x
+      } else {
+        val res = mallocArray[Float](x.shape.scalarCount)
+        relu_kernel(x.data, res, x.shape.scalarCount)
+        Tensor(res, x.shape :_*)
+      }
+    }
+
+    override def relu_grad_v2(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit = {
+      // if inPlace input == res, so no need to handle separately
+      relu_grad_kernel(res.d.data, input.d.data, input.x.data, input.x.shape.scalarCount)
+    }
+
     override def softmax(x: Tensor, dim: Int = 1): Tensor = ???
     override def logSoftmax(x: Tensor, dim: Int = 1): Tensor = ???
     override def softmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???

@@ -373,6 +373,7 @@ trait TensorDsl extends DslCPP with Diff {
 
     // Activation functions.
     def relu(x: Tensor, inPlace: Boolean = false): Tensor
+    def relu_v2(x: Tensor, inPlace: Boolean = false): Tensor // ReLU custom kernel (not using CuDNN api)
     def tanh(x: Tensor): Tensor
     def sigmoid(x: Tensor): Tensor
     def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor
@@ -382,6 +383,7 @@ trait TensorDsl extends DslCPP with Diff {
     def square(x: Tensor): Tensor
 
     def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit
+    def relu_grad_v2(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit
     def tanh_grad(input: TensorR, res: TensorR): Unit
     def sigmoid_grad(input: TensorR, res: TensorR): Unit
     def hardTanh_grad(input: TensorR, res: TensorR, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Unit
@@ -582,6 +584,7 @@ trait TensorDsl extends DslCPP with Diff {
     }
 
     def relu(inPlace: Boolean = false) = backend.relu(this, inPlace)
+    def relu_v2(inPlace: Boolean = false) = backend.relu_v2(this, inPlace)
     def tanh() = backend.tanh(this)
     def sigmoid() = backend.sigmoid(this)
     def hardTanh(min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace : Boolean = false) = backend.hardTanh(this, min_val, max_val, inPlace)
@@ -1402,6 +1405,16 @@ trait TensorDsl extends DslCPP with Diff {
       } else {
         val y = TensorR(this.x.relu(inPlace)); k(y)
         backend.relu_grad(this, y, inPlace)
+      }
+    }
+
+    def relu_v2(inPlace: Boolean = false): TensorR @diff = shift{ (k: TensorR => Unit) =>
+      if (inPlace) {
+        this.x.relu_v2(true); k(this)
+        backend.relu_grad_v2(this, this, true)
+      } else {
+        val y = TensorR(this.x.relu_v2(false)); k(y)
+        backend.relu_grad_v2(this, y, false)
       }
     }
 

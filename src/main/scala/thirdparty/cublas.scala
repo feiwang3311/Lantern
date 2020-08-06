@@ -475,5 +475,20 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
     Unwrap(vectSize), Unwrap(x_grad), Unwrap(gamma_grad), Unwrap(beta_grad), Unwrap(scale), Unwrap(bias), Unwrap(s_grad),
     Unwrap(b_grad))(Seq(1, 2, 3, 4), Seq(0, 7, 8, 9, 10, 11, 12, 13), Set())
 
+  def plus_bias_kernel(input: Rep[Array[Float]], bias: Rep[Array[Float]], output: Rep[Array[Float]], inputSize: Rep[Int],
+                       biasSize: Rep[Int], gridSize: Rep[Int]) =
+    libFunction[Unit](s"plus_bias_kernel<<<${Unwrap(gridSize)}, 64>>>", Unwrap(input), Unwrap(bias), Unwrap(output),
+      Unwrap(inputSize), Unwrap(biasSize))(Seq(0, 1), Seq(2), Set())
+
+  def plus_bias_grad(y_grad: Rep[Array[Float]], bias_grad: Rep[Array[Float]], outer_size: Rep[Int],
+                     bias_size: Rep[Int], blockSize: Rep[Int]) =
+    libFunction[Unit](s"plus_bias_grad<<<${Unwrap(bias_size)}, ${Unwrap(blockSize)}>>>", Unwrap(y_grad),
+      Unwrap(bias_grad), Unwrap(outer_size), Unwrap(bias_size))(Seq(0, 1), Seq(1), Set())
+
+  def relu_kernel(input: Rep[Array[Float]], output: Rep[Array[Float]], inputSize: Rep[Int]) =
+    libFunction[Unit]("relu_kernel<<<28, 512>>>", Unwrap(input), Unwrap(output), Unwrap(inputSize))(Seq(0, 1), Seq(0, 1), Set())
+
+  def relu_grad_kernel(y_grad: Rep[Array[Float]], x_grad: Rep[Array[Float]], x: Rep[Array[Float]], inputSize: Rep[Int]) =
+    libFunction[Unit]("relu_grad<<<28, 512>>>", Unwrap(y_grad), Unwrap(x_grad), Unwrap(x), Unwrap(inputSize))(Seq(0, 2), Seq(1), Set())
 }
 

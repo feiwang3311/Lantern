@@ -801,6 +801,8 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
       Tensor(res, x.shape.seq : _*)
     }
 
+    override def relu_v2(x: Tensor, inPlace: Boolean = false): Tensor = ???
+
     @virtualize
     override def relu_grad(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit = {
       for (i <- 0 until input.x.scalarCount: Rep[Range]) {
@@ -811,6 +813,8 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
         }
       }
     }
+
+    override def relu_grad_v2(input: TensorR, res: TensorR, inPlace: Boolean = false): Unit = ???
 
     @virtualize
     override def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor = {

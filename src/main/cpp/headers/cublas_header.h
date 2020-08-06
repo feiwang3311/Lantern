@@ -1706,4 +1706,22 @@ __global__ void plus_bias_grad(float *y_grad, float *bias_grad, int outer_size, 
     }
 }
 
+// a typical grid strided loop
+__global__ void relu_kernel(float *input, float *output, int input_size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
 
+    for(; idx < input_size; idx += stride) {
+        if (input[idx] > 0) output[idx] = input[idx];
+    }
+}
+
+// a typical grid strided loop
+__global__ void relu_grad(float *y_grad, float *x_grad, float *x, int input_size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+
+    for(; idx < input_size; idx += stride) {
+        if (x[idx] > 0) x_grad[idx] += y_grad[idx];
+    }
+}
