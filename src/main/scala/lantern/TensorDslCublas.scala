@@ -962,6 +962,30 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       layer_norm_grad(y.d.data, x.x.data, mean.data, rstd.data, gamma.x.data, outerSize, x.x.shape.last, x.d.data, gamma.d.data, beta.d.data, scale.x.data, bias.x.data, scale.d.data, bias.d.data)
     }
 
+    // indices should be of shape seq_len x batch_size (flatten)
+    // we can use a Tensor for indices, but we don't support int tensors. A possible workaround is convert float to int
+    @virtualize
+    override def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]): Tensor = {
+      // indices array must be in GPU
+      assert(indices_shape.length == 2, s"shape of indices should be 2 dimensional with seq_len x batch_size (got" +
+        s" length ${indices_shape.length})")
+      val embedSize = weights.shape.last
+      val outerSize = indices_shape.head * indices_shape.last
+      val blockSize = if (embedSize < 1024) embedSize else 1024 // TODO - is this the best grid size?
+
+      val res = mallocArray[Float](outerSize * embedSize)
+
+      embedding_forward(weights.data, indices, res, embedSize, outerSize, blockSize)
+      Tensor(res, (indices_shape ++ Seq(embedSize)) :_*)
+    }
+
+    override def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = {
+      val embedSize = weights.x.shape.last
+      val gridSize = embedSize + 31 / 32
+      // TODO - padding index
+      embedding_backward(indices, output.d.data, weights.d.data, indices_shape.head * indices_shape.last, embedSize, -1, gridSize)
+    }
+
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
     override def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit = ???
 

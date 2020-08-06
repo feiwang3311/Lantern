@@ -490,5 +490,16 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
 
   def relu_grad_kernel(y_grad: Rep[Array[Float]], x_grad: Rep[Array[Float]], x: Rep[Array[Float]], inputSize: Rep[Int]) =
     libFunction[Unit]("relu_grad<<<28, 512>>>", Unwrap(y_grad), Unwrap(x_grad), Unwrap(x), Unwrap(inputSize))(Seq(0, 2), Seq(1), Set())
+
+  def embedding_forward(weights: Rep[Array[Float]], indices: Rep[Array[Int]], output: Rep[Array[Float]],
+                        embedSize: Rep[Int], outerSize: Rep[Int], blockSize: Rep[Int]) =
+    libFunction[Unit](s"embedding_forward<<<${Unwrap(outerSize)}, ${Unwrap(blockSize)}>>>", Unwrap(weights),
+      Unwrap(indices), Unwrap(output), Unwrap(embedSize))(Seq(0, 1), Seq(2), Set())
+
+  def embedding_backward(indices: Rep[Array[Int]], y_grad: Rep[Array[Float]], weight_grad: Rep[Array[Float]],
+                         indices_length: Rep[Int], embedSize: Rep[Int], paddingIdx: Rep[Int], gridSize: Rep[Int]) =
+    libFunction[Unit](s"embedding_backward_feature_kernel<<<${Unwrap(gridSize)}, (32, 32), 32*32*sizeof(int) + 32*32*sizeof(float)>>>",
+      Unwrap(indices), Unwrap(y_grad), Unwrap(weight_grad), Unwrap(indices_length), Unwrap(embedSize),
+      Unwrap(paddingIdx))(Seq(0, 1, 2), Seq(2), Set())
 }
 

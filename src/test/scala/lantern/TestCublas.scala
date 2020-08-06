@@ -992,4 +992,59 @@ class TestCublas extends LanternFunSuite {
     }
     runTest(relu_v2)
   }
+
+  testGPU("embedding-forward") {
+    val embedding_forward = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-embedding-fwd"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val weights = Tensor.fromData(Seq(4, 3), 1, 11, 111, 2, 22, 222, 3, 33, 333, 4, 44, 444)
+        val indices = NewArray[Int](4)
+        indices(0) = 1
+        indices(1) = 2
+        indices(2) = 0
+        indices(3) = 1
+
+        val indices_gpu = indices.toGPU(4)
+        val indices_shape = Seq(2, 2)
+        val res = weights.embedding(indices_gpu, indices_shape)
+
+        backend = BackendCPU()
+        val expectedRes = Tensor.fromData(Seq(2, 2, 3), 2, 22, 222, 3, 33, 333, 1, 11, 111, 2, 22, 222)
+
+        Tensor.assertEqual(res.toCPU(), expectedRes)
+      }
+    }
+    runTest(embedding_forward)
+  }
+
+  testGPU("embedding-grad") {
+    val embedding_grad = new LanternDriverCublas[String, Unit] {
+      override val fileName = "lantern-cublas-embedding-grad"
+
+      @virtualize
+      def snippet(x: Rep[String]): Rep[Unit] = {
+        val weights = Tensor.fromData(Seq(4, 3), 1, 11, 111, 2, 22, 222, 3, 33, 333, 4, 44, 444)
+        val indices = NewArray[Int](4)
+        indices(0) = 1
+        indices(1) = 2
+        indices(2) = 0
+        indices(3) = 1
+
+        val indices_gpu = indices.toGPU(4)
+        val indices_shape = Seq(2, 2)
+
+        val weightsr = TensorR(weights)
+
+        gradR{dummy => weightsr.embedding(indices_gpu, Seq(2, 2))}(Tensor.zeros(1))
+
+        backend = BackendCPU()
+        val expectedGrad = Tensor.fromData(Seq(4, 3), 1, 1, 1, 2, 2, 2, 1, 1, 1, 0, 0, 0)
+
+        Tensor.assertEqual(weightsr.d.toCPU(), expectedGrad)
+      }
+    }
+    runTest(embedding_grad)
+  }
 }

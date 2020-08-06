@@ -1157,6 +1157,9 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
     override def layerNorm(x: Tensor, eps: Float, gamma: Tensor, beta: Tensor): (Tensor, Tensor, Tensor) = ???
     override def layerNorm_grad(x: TensorR, y: TensorR, gamma: TensorR, beta: TensorR, mean: Tensor, rstd: Tensor) = ???
 
+    override def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]): Tensor = ???
+    override def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = ???
+
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {
       assert(0.0f <= prob && prob < 1.0f, s"dropout rate should be [0.0, 1), got $prob")

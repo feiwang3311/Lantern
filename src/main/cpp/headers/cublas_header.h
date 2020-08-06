@@ -24,7 +24,7 @@
 void *gpuMallocBase;
 void *gpuMallocAddr;
 
-long HEAP_SIZE = 573741824; //1073741824; // 4294967296; // 8589934592; // 10737418240;
+long HEAP_SIZE = 1073741824; // 4294967296; // 8589934592; // 10737418240;
 // Alignment boundary size, in bytes.
 constexpr int N = 4; // 16
 void *myGpuMalloc(size_t bytes) {
@@ -1724,4 +1724,89 @@ __global__ void relu_grad(float *y_grad, float *x_grad, float *x, int input_size
     for(; idx < input_size; idx += stride) {
         if (x[idx] > 0) x_grad[idx] += y_grad[idx];
     }
+}
+
+// assumes contiguous
+__global__ void embedding_forward(float *embeddings, int *indices, float *output, int embed_size) {
+    int posIdx = indices[blockIdx.x];
+    int tid = threadIdx.x;
+    int stride = blockDim.x;
+
+    for(;tid < embed_size; tid += stride) {
+        output[blockIdx.x * embed_size + tid] = embeddings[posIdx*embed_size + tid];
+    }
+}
+
+// from PyTorch - aten/src/ATen/native/cuda/Embedding.cu
+// n = indices_size, stride = embedSize, gradients won't be updated for padding_idx
+__global__ void embedding_backward_feature_kernel(int* indices, const float* __restrict__ grad, float* __restrict__ grad_weight, int n, int stride, int padding_idx)
+{
+  extern __shared__ char buf[];
+  float* smem = (float*)buf;
+  float* my_s = smem + NVIDIA_WARP_SIZE*threadIdx.y;
+  int* indices_batch = (int*)(buf + sizeof(float)*NVIDIA_WARP_SIZE*blockDim.y);
+
+  const int s = (int)stride; // OK to make int, we don't expect 2 billion+ embedding row size
+
+  const int f = threadIdx.x + blockIdx.x*blockDim.x; // feature_dim
+
+  for(int batch_start = 0; batch_start < n; batch_start += blockDim.x*blockDim.y)
+  {
+    // Entire block cooperates to load a batch of 1024 indices to process
+    int tid = threadIdx.x + threadIdx.y*blockDim.x;
+    if(batch_start + tid < n)
+      indices_batch[tid] = (int)indices[batch_start + tid];
+
+    int batch_end = batch_start + blockDim.x*blockDim.y < n ?
+                    batch_start + blockDim.x*blockDim.y : n;
+
+    // Loop over the batch of <= 1024 loaded indices in chunks of blockDim.y = 32
+    for(int chunk_start = batch_start; chunk_start < batch_end; chunk_start += blockDim.y)
+    {
+      // This does double duty:  it makes sure indices_batch is ready, and it makes sure match-group
+      // leaders are done with their accumulates before other warps start loading again.
+      __syncthreads();
+
+      int n_this_chunk = (batch_end - chunk_start) < blockDim.y ?
+                         (batch_end - chunk_start) : blockDim.y;
+
+      int src_row = chunk_start + threadIdx.y;
+      int dst_row = indices_batch[src_row - batch_start]; // This warp's target row in grad_weight
+
+      // All warps load their smem segments with incoming grad data
+      if(src_row < n && f < s && dst_row != padding_idx)
+        my_s[threadIdx.x] = grad[src_row*stride + f]; // my_s (part of smmem) is of size 32
+
+      __syncthreads();
+
+      // To ensure determinism, we can't just have each warp add its grad data to its dst_row.
+      // We need to check if any other warps pulled grad data targeting dst_row.
+      // If so, we elect the first warp in each matching group as the leader.
+      // Each leader warp serializes the accumulates targeting dst_row in shared memory,
+      // then finishes by adding the accumulated buffer to dst_row in grad_weight.
+      if(dst_row != padding_idx && src_row < n) // Per-warp exit condition, safe with ballot_sync
+      {
+        int match_found_this_thread =
+          (dst_row == indices_batch[chunk_start - batch_start + threadIdx.x]);
+        if(threadIdx.x >= n_this_chunk)
+          match_found_this_thread = 0;
+
+        unsigned int matchmask = __ballot_sync(0xffffffff, match_found_this_thread);
+        int first_remaining_peer = __ffs(matchmask) - 1;
+
+        if(threadIdx.y == first_remaining_peer) // Nominate lowest-indexed warp as the leader
+        {
+          matchmask ^= (1 << first_remaining_peer);
+          while(matchmask)
+          {
+            first_remaining_peer = __ffs(matchmask) - 1;
+            my_s[threadIdx.x] += smem[threadIdx.x + NVIDIA_WARP_SIZE*first_remaining_peer];
+            matchmask ^= (1 << first_remaining_peer);
+          }
+          if(f < s)
+            grad_weight[dst_row*stride + f] += my_s[threadIdx.x];
+        }
+      }
+    }
+  }
 }

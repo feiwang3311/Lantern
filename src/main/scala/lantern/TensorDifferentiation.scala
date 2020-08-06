@@ -342,6 +342,10 @@ trait TensorDsl extends DslCPP with Diff {
     def layerNorm(x: Tensor, eps: Float, gamma: Tensor, beta: Tensor): (Tensor, Tensor, Tensor)
     def layerNorm_grad(x: TensorR, y: TensorR, gamma: TensorR, beta: TensorR, mean: Tensor, rstd: Tensor)
 
+    // embedding layer
+    def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]): Tensor
+    def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]])
+
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
 
@@ -629,6 +633,11 @@ trait TensorDsl extends DslCPP with Diff {
 
     def layerNorm(eps: Float, gamma: Tensor, beta: Tensor) = {
       backend.layerNorm(this, eps, gamma, beta)
+    }
+
+    // this should be called from the (embedding) weights tensor
+    def embedding(indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = {
+      backend.embedding(this, indices, indices_shape)
     }
 
     // mark: (Fei Wang) HERE: more gardening below
@@ -1657,6 +1666,13 @@ trait TensorDsl extends DslCPP with Diff {
       k(ty)
       generate_comment("layer norm backprop")
       backend.layerNorm_grad(this, ty, gamma, beta, mean, rstd)
+    }
+
+    def embedding(indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = shift {k: (TensorR => Unit) =>
+      val y = this.x.embedding(indices, indices_shape)
+      val ty = TensorR(y); k(ty)
+      generate_comment("embedding layer backprop")
+      backend.embedding_grad(this, ty, indices, indices_shape)
     }
 
     @virtualize
