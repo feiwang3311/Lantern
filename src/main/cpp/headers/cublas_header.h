@@ -1,6 +1,14 @@
 #include <curand_kernel.h>
 #include <curand.h>
 
+// thrust is used in embedding backward pass
+#include <thrust/device_vector.h>
+#include <thrust/scan.h>
+#include <thrust/sort.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/copy.h>
+#include <thrust/functional.h>
+
 #define NVIDIA_WARP_SIZE 32 // this is typically 32 (for incl. 1080ti s)
 
 #define CUDA_CALL(f) { \
@@ -24,7 +32,7 @@
 void *gpuMallocBase;
 void *gpuMallocAddr;
 
-long HEAP_SIZE = 1073741824; // 4294967296; // 8589934592; // 10737418240;
+long HEAP_SIZE = 10737418240; // 1073741824; // 4294967296; // 8589934592; // 10737418240;
 // Alignment boundary size, in bytes.
 constexpr int N = 4; // 16
 void *myGpuMalloc(size_t bytes) {
@@ -1737,6 +1745,7 @@ __global__ void embedding_forward(float *embeddings, int *indices, float *output
     }
 }
 
+// TODO - this is used for cases where indices count < 768 (leader based gradient accumulation)
 // from PyTorch - aten/src/ATen/native/cuda/Embedding.cu
 // n = indices_size, stride = embedSize, gradients won't be updated for padding_idx
 __global__ void embedding_backward_feature_kernel(int* indices, const float* __restrict__ grad, float* __restrict__ grad_weight, int n, int stride, int padding_idx)
@@ -1809,4 +1818,223 @@ __global__ void embedding_backward_feature_kernel(int* indices, const float* __r
       }
     }
   }
+}
+
+// backward pass for embedding layer
+// taken from - aten/src/ATen/native/cuda/EmbeddingBackwardKernel.cu
+constexpr int MAX_BLOCK_SIZE = 1024;
+constexpr int NROWS_PER_THREAD = 10;
+
+__host__ __device__ __forceinline__
+int ceil_div(int x, int y) {
+    return (x + y - 1) / y;
+}
+
+__global__
+void krn_partials_per_segment(int *ret, const int *segment_offsets, int num_of_segments, int numel) {
+  const int id = blockIdx.x * blockDim.x + threadIdx.x;
+  if(id < num_of_segments) {
+    const int idx_start = segment_offsets[id];
+    const int idx_end = (id == num_of_segments-1)?numel:segment_offsets[id+1];
+    const int size = idx_end - idx_start;
+    ret[id] = ceil_div(size, NROWS_PER_THREAD);
+  }
+}
+
+__global__
+void krn_partial_segment_offset(int *ret, const int *partials_per_segment, const int *partials_per_segment_offset, const int *segment_offsets,
+        int num_of_segments) {
+  const int id = blockIdx.x * blockDim.x + threadIdx.x;
+  if(id < num_of_segments) {
+    int idx = partials_per_segment_offset[id];
+    const int num_partials = partials_per_segment[id];
+    const int segment_offset = segment_offsets[id];
+    for (int i=0; i<num_partials; ++i) {
+      ret[idx++] = segment_offset + i * NROWS_PER_THREAD;
+    }
+  }
+}
+
+__global__ void compute_grad_weight(
+    int *indices,
+    float *gradOutput,
+    ptrdiff_t numel,
+    int stride,
+    int* segment_offsets,
+    int num_of_segments,
+    float *grad_weight_per_segment,
+    const int stride_warped) {
+
+  const int gid = blockIdx.x * blockDim.x + threadIdx.x;
+  const int id = gid / stride_warped;
+  const int startFeature = gid % stride_warped;
+  if (startFeature >= stride) {
+    return;
+  }
+  if (id >= num_of_segments) {
+    return;
+  }
+  const int idx_begin = segment_offsets[id];
+  const int idx_end = (id == num_of_segments-1)?numel:segment_offsets[id+1];
+
+  float weight = 0;
+  for (int idx=idx_begin; idx < idx_end; ++idx) {
+    const int target_row = indices[idx];
+    weight += gradOutput[target_row * stride + startFeature];
+  }
+  grad_weight_per_segment[id * stride + startFeature] = weight;
+}
+
+__global__ void sum_and_scatter(
+    int *input, float *gradWeight, int stride,
+    int* segment_offsets, int num_of_segments,
+    const float *grad_weight_per_segment,
+    const int *segment_sizes_offsets, int num_of_partial_segments,
+    const int padding_idx,
+    const int stride_warped) {
+
+  const int gid = blockIdx.x * blockDim.x + threadIdx.x;
+  const int id = gid / stride_warped;
+  const int startFeature = gid % stride_warped;
+  if (startFeature >= stride) {
+    return;
+  }
+  if (id >= num_of_segments) {
+    return;
+  }
+
+  const int idx_begin = segment_sizes_offsets[id];
+  const int idx_end = (id == num_of_segments-1)?num_of_partial_segments:segment_sizes_offsets[id+1];
+  float weight = 0;
+  for (int idx=idx_begin; idx < idx_end; ++idx) {
+    weight += grad_weight_per_segment[idx*stride + startFeature];
+  }
+  int target_row = input[segment_offsets[id]];
+  if (target_row != padding_idx) {
+    gradWeight[target_row * stride + startFeature] += weight;
+  }
+}
+
+
+void embedding_backward_cuda_kernel(float *grad, float *grad_weight, int embed_size, int *orig_indices, int *sorted_indices, int num_indices, int padding_idx) {
+    const ptrdiff_t numel = num_indices;
+    const int stride = embed_size;
+
+    // Compute the number of segments and their start position so that we do not have to
+    // spawn a warp per index. In this context, a segment is a number of rows that should
+    // be summarized.
+    // Unit: index in `sorted_indices` and `orig_indices
+    int *segment_offsets = (int *) myGpuMalloc(num_indices * sizeof(int));
+    int num_of_segments;
+
+    {
+        auto sorted_indices_dev = thrust::device_ptr<int>(sorted_indices);
+        int *dummy = (int *) myGpuMalloc(num_indices * sizeof(int));
+        auto dummy_dev = thrust::device_ptr<int>(dummy);
+
+        auto ends = thrust::unique_by_key_copy(sorted_indices_dev, sorted_indices_dev + numel, thrust::make_counting_iterator(0),
+                dummy_dev, thrust::device_ptr<int>(segment_offsets));
+        num_of_segments = thrust::get<0>(ends) - dummy_dev;
+    }
+
+    // num segments will be number of unique keys
+    // and the counts will be the value of first key appearance
+
+    // We split the segments up into sizes of `NROWS_PER_THREAD`
+    // Compute the number partial-segments per segment (some partial-segments
+    // may not be the full `NROWS_PER_THREAD` number of rows)
+    // auto partials_per_segment = at::empty({num_of_segments}, orig_indices.options());
+    int *partials_per_segment = (int *) myGpuMalloc(num_of_segments * sizeof(int));
+
+    {
+        krn_partials_per_segment<<<ceil_div(num_of_segments, 32), 32>>> (partials_per_segment, segment_offsets, num_of_segments, numel);
+    }
+
+    // In order to compute `partial_segment_offset`, which is the start index
+    // of each partial-segment in `sorted_indices`, we need to compute the
+    // start position of each _segment_ in `partial_segment_offset`.
+    // Unit: index in `partial_segment_offset`
+    // auto partials_per_segment_offset = at::empty({num_of_segments}, orig_indices.options());
+    int *partials_per_segment_offset = (int *) myGpuMalloc(num_of_segments * sizeof(int));
+
+    thrust::exclusive_scan(
+        thrust::device_ptr<int>(partials_per_segment),
+        thrust::device_ptr<int>(partials_per_segment + num_of_segments),
+        thrust::device_ptr<int>(partials_per_segment_offset));
+
+    // The total number of partial-segments is the sum of `partials_per_segment_offset`
+    int partials_per_segment_last;
+    int partials_per_segment_offset_last;
+
+    cudaMemcpy((void **) &partials_per_segment_last, &partials_per_segment[num_of_segments-1], sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy((void **) &partials_per_segment_offset_last, &partials_per_segment_offset[num_of_segments-1], sizeof(int), cudaMemcpyDeviceToHost);
+
+    const int num_of_partial_segments = partials_per_segment_last + partials_per_segment_offset_last;
+//    const int num_of_partial_segments = partials_per_segment[num_of_segments-1] + partials_per_segment_offset[num_of_segments-1];
+
+    // Now we can compute the start position of each partial-segment
+    // Unit: index in `sorted_indices` and `orig_indices`
+    // auto partial_segment_offset = at::empty({num_of_partial_segments}, orig_indices.options());
+    int *partial_segment_offset = (int *) myGpuMalloc(num_of_partial_segments * sizeof(int));
+    {
+        krn_partial_segment_offset<<<ceil_div(num_of_segments, 32), 32>>> (partial_segment_offset, partials_per_segment,
+                partials_per_segment_offset, segment_offsets, num_of_segments);
+    }
+
+    const int stride_warped = ceil_div(stride, NVIDIA_WARP_SIZE)*NVIDIA_WARP_SIZE;
+    const int block = std::min(stride_warped, MAX_BLOCK_SIZE);
+    const int grid = ceil_div(num_of_partial_segments*stride_warped, block);
+
+    {
+        float *grad_weight_per_segment = (float *) myGpuMalloc(num_of_partial_segments * stride * sizeof(float));
+        // TODO - can free this memory after the two kernel invocations
+        // Compute the sum of each partial-segment and handle bags
+        compute_grad_weight<<<grid, block>>>(
+            orig_indices,
+            grad,
+            numel, stride,
+            partial_segment_offset,
+            num_of_partial_segments,
+            grad_weight_per_segment,
+            stride_warped);
+
+        // Finally, we sum all the partial-sums and scatter them
+        // into `grad_weight`.
+        const int grid2 = ceil_div(num_of_segments*stride_warped, block);
+            sum_and_scatter<<<grid2, block>>>(
+            sorted_indices,
+            grad_weight,
+            stride,
+            segment_offsets,
+            num_of_segments, grad_weight_per_segment,
+            partials_per_segment_offset,
+            num_of_partial_segments,
+            padding_idx,
+            stride_warped);
+    }
+}
+
+void embedding_dense_backward_cuda(float *grad, float *grad_weight, int embed_size, int *indices, int num_indices, int padding_idx) {
+    int *orig_indices = (int *) myGpuMalloc(num_indices * sizeof(int));
+
+    using device_ptr = thrust::device_ptr<int>;
+    // Sort the inputs into sorted with the corresponding indices; we
+    // don't need a stable or multidimensional sort, so just use Thrust
+    // directly
+    {
+        // auto allocator = THCThrustAllocator(globalContext().lazyInitCUDA());
+        // auto policy = thrust::cuda::par().on(stream);
+
+        // Fill sortedOrigIndices with sequential indices
+        auto count_iter = thrust::counting_iterator<int>(0);
+        // device_ptr says the pointer is a pointer in the device (it is NOT moving the data from host to device)
+        auto orig_data = device_ptr(orig_indices);
+        thrust::copy(count_iter, count_iter + num_indices, orig_data);
+
+        // Sort; a stable sort is not required
+        auto sorted_data = device_ptr(indices);
+        thrust::sort_by_key(sorted_data, sorted_data + num_indices, orig_data, thrust::less<int>());
+    }
+
+    return embedding_backward_cuda_kernel(grad, grad_weight, embed_size, orig_indices, indices, num_indices, padding_idx);
 }

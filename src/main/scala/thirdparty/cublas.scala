@@ -449,14 +449,14 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
   // This is to compute softmax in the last dim. Last dim should have a stride of 1. This only works if dimSize <= 1024
   // softmaxElementsStride is the stride from one batch to another (usually, equals to softmaxElements)
   def dispatch_softmax_forward_(output: Rep[Array[Float]], input: Rep[Array[Float]], softmaxElements: Rep[Int],
-                                softmaxElementsStride: Rep[Int], batchCount: Rep[Int]) =
-    libFunction[Unit]("dispatch_softmax_forward<false>", Unwrap(output), Unwrap(input), Unwrap(softmaxElements),
-      Unwrap(softmaxElementsStride), Unwrap(batchCount))(Seq(1), Seq(0), Set())
+                                softmaxElementsStride: Rep[Int], batchCount: Rep[Int], log: Boolean) =
+    libFunction[Unit](s"dispatch_softmax_forward<${if (log) "true" else "false"}>", Unwrap(output), Unwrap(input),
+      Unwrap(softmaxElements), Unwrap(softmaxElementsStride), Unwrap(batchCount))(Seq(1), Seq(0), Set())
 
   def dispatch_softmax_backward(gradInput: Rep[Array[Float]], grad: Rep[Array[Float]], output: Rep[Array[Float]],
-                                softmaxElements: Rep[Int], softmaxElementsStride: Rep[Int], batchCount: Rep[Int]) =
-    libFunction[Unit]("dispatch_softmax_backward<false>", Unwrap(gradInput), Unwrap(grad), Unwrap(output), Unwrap(softmaxElements),
-      Unwrap(softmaxElementsStride), Unwrap(batchCount))(Seq(1, 2), Seq(0), Set())
+                                softmaxElements: Rep[Int], softmaxElementsStride: Rep[Int], batchCount: Rep[Int], log: Boolean) =
+    libFunction[Unit](s"dispatch_softmax_backward<${if (log) "true" else "false"}>", Unwrap(gradInput), Unwrap(grad),
+      Unwrap(output), Unwrap(softmaxElements), Unwrap(softmaxElementsStride), Unwrap(batchCount))(Seq(1, 2), Seq(0), Set())
 
   def layer_norm_forward(x: Rep[Array[Float]], mean: Rep[Array[Float]], rstd: Rep[Array[Float]], gamma: Rep[Array[Float]],
                          beta: Rep[Array[Float]], res: Rep[Array[Float]], eps: Rep[Float], vectSize: Rep[Int],
@@ -498,8 +498,13 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
 
   def embedding_backward(indices: Rep[Array[Int]], y_grad: Rep[Array[Float]], weight_grad: Rep[Array[Float]],
                          indices_length: Rep[Int], embedSize: Rep[Int], paddingIdx: Rep[Int], gridSize: Rep[Int]) =
-    libFunction[Unit](s"embedding_backward_feature_kernel<<<${Unwrap(gridSize)}, (32, 32), 32*32*sizeof(int) + 32*32*sizeof(float)>>>",
-      Unwrap(indices), Unwrap(y_grad), Unwrap(weight_grad), Unwrap(indices_length), Unwrap(embedSize),
-      Unwrap(paddingIdx))(Seq(0, 1, 2), Seq(2), Set())
+      cudaFunction[Unit]("embedding_backward_feature_kernel", Seq(Unwrap(dim3(gridSize, 1)), Unwrap(dim3(32, 32)), Unwrap(32*32*4+32*32*4)),
+        Unwrap(indices), Unwrap(y_grad), Unwrap(weight_grad), Unwrap(indices_length), Unwrap(embedSize),
+        Unwrap(paddingIdx))(Seq(0, 1, 2), Seq(2), Set())
+
+  def embedding_backward_large(grad: Rep[Array[Float]], weight_grad: Rep[Array[Float]], embed_size: Rep[Int],
+                               indices: Rep[Array[Int]], num_indices: Rep[Int], padding_idx: Rep[Int]) =
+    libFunction[Unit]("embedding_dense_backward_cuda", Unwrap(grad), Unwrap(weight_grad), Unwrap(embed_size),
+      Unwrap(indices), Unwrap(num_indices), Unwrap(padding_idx))(Seq(0, 1, 3), Seq(1), Set())
 }
 

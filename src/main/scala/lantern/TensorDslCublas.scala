@@ -979,11 +979,17 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       Tensor(res, (indices_shape ++ Seq(embedSize)) :_*)
     }
 
+    @virtualize
     override def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = {
       val embedSize = weights.x.shape.last
       val gridSize = embedSize + 31 / 32
       // TODO - padding index
-      embedding_backward(indices, output.d.data, weights.d.data, indices_shape.head * indices_shape.last, embedSize, -1, gridSize)
+
+      // based on PyTorch
+      if (indices_shape.head * indices_shape.last <= 768)
+        embedding_backward(indices, output.d.data, weights.d.data, indices_shape.head * indices_shape.last, embedSize, -1, gridSize)
+      else
+        embedding_backward_large(output.d.data, weights.d.data, embedSize, indices, indices_shape.head * indices_shape.last, -1)
     }
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
@@ -1069,7 +1075,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit = ???
 
     @virtualize
-    override def softmax_v2(x: Tensor, dim: Int = -1): Tensor = {
+    override def softmax_v2(x: Tensor, log: Boolean, dim: Int = -1): Tensor = {
       assert(dim != -1 || dim != x.rank - 1, s"softmax_v2 is only implemented for last dim. Use softmax() instead.")
       val res = mallocArray[Float](x.scalarCount)
       val lastDimSize = x.shape.last
@@ -1077,7 +1083,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
 
       if (lastDimSize <= 1024) {
         // launch the optimized kernel for <= 1024
-        dispatch_softmax_forward_(res, x.data, lastDimSize, lastDimSize, outerSize)
+        dispatch_softmax_forward_(res, x.data, lastDimSize, lastDimSize, outerSize, log)
       } else {
         softmax_(x.data, res, lastDimSize, outerSize)
       }
@@ -1086,18 +1092,17 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     }
 
     @virtualize
-    def softmax_v2_grad(input: TensorR, res: TensorR, dim: Int = -1): Unit = {
+    override def softmax_v2_grad(input: TensorR, res: TensorR, log: Boolean, dim: Int = -1): Unit = {
       val lastDimSize = input.x.shape.last
       val outerSize = input.x.scalarCount / lastDimSize
 
       if (lastDimSize <= 1024) {
         // launch the optimized kernel for <= 1024
-        dispatch_softmax_backward(input.d.data, res.d.data, res.x.data, lastDimSize, lastDimSize, outerSize)
+        dispatch_softmax_backward(input.d.data, res.d.data, res.x.data, lastDimSize, lastDimSize, outerSize, log)
       } else {
         softmaxGrad_(input.d.data, res.d.data, res.x.data, lastDimSize, outerSize)
       }
     }
-
 
     override def hardTanh(x: Tensor, min_val: Float = -1.0f, max_val: Float = 1.0f, inPlace: Boolean = false): Tensor = {
       val size = x.scalarCount
