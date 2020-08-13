@@ -439,11 +439,11 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
 
   // eg. outerSize for a 4d tensor scalaCount / lastDimSize (or shape(0) * shape(1) * shape(2)
   def softmax_(input: Rep[Array[Float]], output: Rep[Array[Float]], size: Rep[Int], outerSize: Rep[Int]) =
-    libFunction[Unit](s"softmax<<<${Unwrap(outerSize)},64>>>", Unwrap(input), Unwrap(output), Unwrap(size))(Seq(0), Seq(1), Set())
+    cudaFunction[Unit]("softmax", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(64, 1, 1)), Unwrap(input), Unwrap(output), Unwrap(size))(Seq(0), Seq(1), Set())
 
   def softmaxGrad_(inputGrad: Rep[Array[Float]], outputGrad: Rep[Array[Float]], output: Rep[Array[Float]], size: Rep[Int],
                    outerSize: Rep[Int]) =
-    libFunction[Unit](s"softmaxGrad<<<${Unwrap(outerSize)},64>>>", Unwrap(inputGrad), Unwrap(outputGrad), Unwrap(output),
+    cudaFunction[Unit]("softmaxGrad", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(64, 1, 1)), Unwrap(inputGrad), Unwrap(outputGrad), Unwrap(output),
       Unwrap(size))(Seq(1, 2), Seq(0), Set())
 
   // This is to compute softmax in the last dim. Last dim should have a stride of 1. This only works if dimSize <= 1024
@@ -461,11 +461,9 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
   def layer_norm_forward(x: Rep[Array[Float]], mean: Rep[Array[Float]], rstd: Rep[Array[Float]], gamma: Rep[Array[Float]],
                          beta: Rep[Array[Float]], res: Rep[Array[Float]], eps: Rep[Float], vectSize: Rep[Int],
                          outerSize: Rep[Int]) =
-    libFunction[Unit](s"layer_norm_forward<<<${Unwrap(outerSize)}, 512>>>", Unwrap(x), Unwrap(mean), Unwrap(rstd),
+    cudaFunction[Unit]("layer_norm_forward", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(dim3(512, 1, 1))), Unwrap(x), Unwrap(mean), Unwrap(rstd),
       Unwrap(gamma), Unwrap(beta), Unwrap(res), Unwrap(eps), Unwrap(vectSize))(Seq(0, 3, 4), Seq(1, 2, 5), Set())
 
-//  void layer_norm_grad(float* y_grad, float* x, float* mean, float* rstd, float* gamma, int outerSize, int vect_size,
-//    float* x_grad, float* gamma_grad, float* beta_grad, float* scale, float* bias, float* s_grad, float* b_grad)
   // TODO - layer_norm_grad is not a cuda kernel, it launches multiple kernels. Write the logic in Scala and just do the kernel launches using this
   def layer_norm_grad(y_grad: Rep[Array[Float]], x: Rep[Array[Float]], mean: Rep[Array[Float]], rstd: Rep[Array[Float]],
                       gamma: Rep[Array[Float]], outerSize: Rep[Int], vectSize: Rep[Int], x_grad: Rep[Array[Float]],
@@ -477,12 +475,12 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
 
   def plus_bias_kernel(input: Rep[Array[Float]], bias: Rep[Array[Float]], output: Rep[Array[Float]], inputSize: Rep[Int],
                        biasSize: Rep[Int], gridSize: Rep[Int]) =
-    libFunction[Unit](s"plus_bias_kernel<<<${Unwrap(gridSize)}, 64>>>", Unwrap(input), Unwrap(bias), Unwrap(output),
+    cudaFunction[Unit]("plus_bias_kernel", Seq(Unwrap(dim3(gridSize, 1, 1)), Unwrap(64)), Unwrap(input), Unwrap(bias), Unwrap(output),
       Unwrap(inputSize), Unwrap(biasSize))(Seq(0, 1), Seq(2), Set())
 
   def plus_bias_grad(y_grad: Rep[Array[Float]], bias_grad: Rep[Array[Float]], outer_size: Rep[Int],
                      bias_size: Rep[Int], blockSize: Rep[Int]) =
-    libFunction[Unit](s"plus_bias_grad<<<${Unwrap(bias_size)}, ${Unwrap(blockSize)}>>>", Unwrap(y_grad),
+    cudaFunction[Unit]("plus_bias_grad", Seq(Unwrap(dim3(bias_size, 1, 1)), Unwrap(dim3(blockSize, 1, 1))), Unwrap(y_grad),
       Unwrap(bias_grad), Unwrap(outer_size), Unwrap(bias_size))(Seq(0, 1), Seq(1), Set())
 
   def relu_kernel(input: Rep[Array[Float]], output: Rep[Array[Float]], inputSize: Rep[Int]) =
@@ -493,8 +491,10 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
 
   def embedding_forward(weights: Rep[Array[Float]], indices: Rep[Array[Int]], output: Rep[Array[Float]],
                         embedSize: Rep[Int], outerSize: Rep[Int], blockSize: Rep[Int]) =
-    libFunction[Unit](s"embedding_forward<<<${Unwrap(outerSize)}, ${Unwrap(blockSize)}>>>", Unwrap(weights),
-      Unwrap(indices), Unwrap(output), Unwrap(embedSize))(Seq(0, 1), Seq(2), Set())
+//    libFunction[Unit](s"embedding_forward<<<${Unwrap(outerSize)}, ${Unwrap(blockSize)}>>>", Unwrap(weights),
+//      Unwrap(indices), Unwrap(output), Unwrap(embedSize))(Seq(0, 1), Seq(2), Set())
+      cudaFunction[Unit]("embedding_forward", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(dim3(blockSize, 1, 1))), Unwrap(weights),
+        Unwrap(indices), Unwrap(output), Unwrap(embedSize))(Seq(0, 1), Seq(2), Set())
 
   def embedding_backward(indices: Rep[Array[Int]], y_grad: Rep[Array[Float]], weight_grad: Rep[Array[Float]],
                          indices_length: Rep[Int], embedSize: Rep[Int], paddingIdx: Rep[Int], gridSize: Rep[Int]) =
