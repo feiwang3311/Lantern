@@ -439,11 +439,11 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
 
   // eg. outerSize for a 4d tensor scalaCount / lastDimSize (or shape(0) * shape(1) * shape(2)
   def softmax_(input: Rep[Array[Float]], output: Rep[Array[Float]], size: Rep[Int], outerSize: Rep[Int]) =
-    cudaFunction[Unit]("softmax", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(64, 1, 1)), Unwrap(input), Unwrap(output), Unwrap(size))(Seq(0), Seq(1), Set())
+    cudaFunction[Unit]("softmax", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(1024), Unwrap(1024 * 4)), Unwrap(input), Unwrap(output), Unwrap(size))(Seq(0), Seq(1), Set())
 
   def softmaxGrad_(inputGrad: Rep[Array[Float]], outputGrad: Rep[Array[Float]], output: Rep[Array[Float]], size: Rep[Int],
                    outerSize: Rep[Int]) =
-    cudaFunction[Unit]("softmaxGrad", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(64, 1, 1)), Unwrap(inputGrad), Unwrap(outputGrad), Unwrap(output),
+    cudaFunction[Unit]("softmaxGrad", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(1024), Unwrap(1024 * 4)), Unwrap(inputGrad), Unwrap(outputGrad), Unwrap(output),
       Unwrap(size))(Seq(1, 2), Seq(0), Set())
 
   // This is to compute softmax in the last dim. Last dim should have a stride of 1. This only works if dimSize <= 1024
@@ -461,7 +461,7 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
   def layer_norm_forward(x: Rep[Array[Float]], mean: Rep[Array[Float]], rstd: Rep[Array[Float]], gamma: Rep[Array[Float]],
                          beta: Rep[Array[Float]], res: Rep[Array[Float]], eps: Rep[Float], vectSize: Rep[Int],
                          outerSize: Rep[Int]) =
-    cudaFunction[Unit]("layer_norm_forward", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(dim3(512, 1, 1))), Unwrap(x), Unwrap(mean), Unwrap(rstd),
+    cudaFunction[Unit]("layer_norm_forward", Seq(Unwrap(dim3(outerSize, 1, 1)), Unwrap(512)), Unwrap(x), Unwrap(mean), Unwrap(rstd),
       Unwrap(gamma), Unwrap(beta), Unwrap(res), Unwrap(eps), Unwrap(vectSize))(Seq(0, 3, 4), Seq(1, 2, 5), Set())
 
   // TODO - layer_norm_grad is not a cuda kernel, it launches multiple kernels. Write the logic in Scala and just do the kernel launches using this
@@ -506,5 +506,10 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
                                indices: Rep[Array[Int]], num_indices: Rep[Int], padding_idx: Rep[Int]) =
     libFunction[Unit]("embedding_dense_backward_cuda", Unwrap(grad), Unwrap(weight_grad), Unwrap(embed_size),
       Unwrap(indices), Unwrap(num_indices), Unwrap(padding_idx))(Seq(0, 1, 3), Seq(1), Set())
+
+  def create_attention_mask(mask: Rep[Array[Int]], blockSize: Rep[Int], dim1Size: Rep[Int], dim2Size: Rep[Int]) =
+    // TODO - assert here block size is sufficient to cover the seq lengths
+    cudaFunction[Unit]("create_attention_mask", Seq(Unwrap(blockSize), Unwrap(dim3(32, 32, 1))), Unwrap(mask),
+      Unwrap(dim1Size), Unwrap(dim2Size))(Seq(), Seq(0), Set())
 }
 

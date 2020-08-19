@@ -222,9 +222,11 @@ trait TensorDsl extends DslCPP with Diff {
         case _ => throw new IllegalArgumentException(s"Incompatible shapes: ${x.shape}, ${y.shape}")
       }
 
-    def bmm(x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): Tensor
+    def bmm(x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false, stridesX: Option[Seq[Rep[Int]]] = None,
+            stridesY: Option[Seq[Rep[Int]]] = None): Tensor
 
-    def bmm_grad(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): Unit
+    def bmm_grad(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false,
+                 stridesX: Option[Seq[Rep[Int]]] = None, stridesY: Option[Seq[Rep[Int]]]): Unit
 
     def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit
 
@@ -343,8 +345,8 @@ trait TensorDsl extends DslCPP with Diff {
     def layerNorm_grad(x: TensorR, y: TensorR, gamma: TensorR, beta: TensorR, mean: Tensor, rstd: Tensor)
 
     // embedding layer
-    def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]): Tensor
-    def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]])
+    def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1): Tensor
+    def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1)
 
     def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int])
     def dropout_grad(input: TensorR, output: TensorR, prob: Float, helper: Rep[Array[Float]], size: Rep[Int]): Unit
@@ -404,8 +406,8 @@ trait TensorDsl extends DslCPP with Diff {
     def logSoftmax_grad(input: TensorR, res: TensorR, dim: Int = 1): Unit
 
     // custom cuda kernel (only supports last dim at the moment)
-    def softmax_v2(x: Tensor, dim: Int = -1): Tensor
-    def softmax_v2_grad(input: TensorR, res: TensorR, dim: Int = -1): Unit
+    def softmax_v2(x: Tensor, log: Boolean, dim: Int = -1): Tensor
+    def softmax_v2_grad(input: TensorR, res: TensorR, log: Boolean, dim: Int = -1): Unit
 
     // Loss functions.
     def nllLoss(x: Tensor, target: Rep[Array[Int]]): Tensor
@@ -542,13 +544,14 @@ trait TensorDsl extends DslCPP with Diff {
     }
 
     // batch matrix multiplication (multiplying two collection of batches of matrices)
-    def bmm(that: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false) = {
+    def bmm(that: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false, stridesX: Option[Seq[Rep[Int]]] = None,
+            stridesY: Option[Seq[Rep[Int]]] = None) = {
       (this.rank, that.rank) match {
         case (3, 3) => assertC(this.shape(if (transX) ((batchDim + 1) % 2) else 2) == that.shape(if (!transY) ((batchDim + 1) % 2) else 2),
           s"Incompatible shapes for bmm (double check the transX and transY params): ${this.shape}, ${that.shape}")
         case _ => throw new IllegalArgumentException(s"bmm needs both tensors to have rank 3 (got: ${this.rank}, ${that.rank}")
       }
-      backend.bmm(this, that, batchDim, transX, transY)
+      backend.bmm(this, that, batchDim, transX, transY, stridesX, stridesY)
     }
 
     // `this` is 2-D matrix, `that` is dims(1)-sized vector, `y` is dims(0)-sized vector
@@ -636,8 +639,8 @@ trait TensorDsl extends DslCPP with Diff {
     }
 
     // this should be called from the (embedding) weights tensor
-    def embedding(indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = {
-      backend.embedding(this, indices, indices_shape)
+    def embedding(indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1) = {
+      backend.embedding(this, indices, indices_shape, paddingIdx)
     }
 
     // mark: (Fei Wang) HERE: more gardening below
@@ -709,7 +712,11 @@ trait TensorDsl extends DslCPP with Diff {
 
     @virtualize
     def softmax_v2(dim: Int = -1) = {
-      backend.softmax_v2(this, dim)
+      backend.softmax_v2(this, log = false, dim)
+    }
+
+    def logSoftmax_v2(dim: Int = -1) = {
+      backend.softmax_v2(this, log = true, dim)
     }
 
     @virtualize  // batched log softmax
@@ -1342,11 +1349,12 @@ trait TensorDsl extends DslCPP with Diff {
       backend.dot_grad(this, that, y)
     }
 
-    def bmm(that: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): TensorR @diff = shift { (k: TensorR => Unit) =>
-      val res = backend.bmm(x, that.x, batchDim, transX, transY)
+    def bmm(that: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false, stridesX: Option[Seq[Rep[Int]]] = None,
+            stridesY: Option[Seq[Rep[Int]]] = None): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val res = backend.bmm(x, that.x, batchDim, transX, transY, stridesX, stridesY)
       val y = TensorR(res); k(y)
 
-      backend.bmm_grad(this, that, y, batchDim, transX, transY)
+      backend.bmm_grad(this, that, y, batchDim, transX, transY, stridesX, stridesY)
     }
 
     def gemm(that: TensorR, transX: Boolean, transY: Boolean, alpha: Float): TensorR @diff = shift { (k: TensorR => Unit) =>
@@ -1510,7 +1518,12 @@ trait TensorDsl extends DslCPP with Diff {
 
     def softmax_v2(dim: Int = -1): TensorR @diff = shift { (k: TensorR => Unit) =>
       val y = TensorR(x.softmax_v2(dim)); k(y)
-      backend.softmax_v2_grad(this, y, dim)
+      backend.softmax_v2_grad(this, y, log = false, dim)
+    }
+
+    def logSoftmax_v2(dim: Int = -1): TensorR @diff = shift { (k: TensorR => Unit) =>
+      val y = TensorR(x.logSoftmax_v2(dim)); k(y)
+      backend.softmax_v2_grad(this, y, log = true, dim)
     }
 
     def resize(dims: Rep[Int]*) = {
@@ -1668,11 +1681,11 @@ trait TensorDsl extends DslCPP with Diff {
       backend.layerNorm_grad(this, ty, gamma, beta, mean, rstd)
     }
 
-    def embedding(indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = shift {k: (TensorR => Unit) =>
-      val y = this.x.embedding(indices, indices_shape)
+    def embedding(indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1) = shift {k: (TensorR => Unit) =>
+      val y = this.x.embedding(indices, indices_shape, paddingIdx)
       val ty = TensorR(y); k(ty)
       generate_comment("embedding layer backprop")
-      backend.embedding_grad(this, ty, indices, indices_shape)
+      backend.embedding_grad(this, ty, indices, indices_shape, paddingIdx)
     }
 
     @virtualize

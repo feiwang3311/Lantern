@@ -173,9 +173,12 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
     }
 
     // TODO - implement bmm in CPU
-    override def bmm(x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): Tensor = ???
+    override def bmm(x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false,
+                     stridesX: Option[Seq[Rep[Int]]] = None, stridesY: Option[Seq[Rep[Int]]] = None): Tensor = ???
 
-    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): Unit = ???
+    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false,
+                          transY: Boolean = false, stridesX: Option[Seq[Rep[Int]]] = None,
+                          stridesY: Option[Seq[Rep[Int]]] = None): Unit = ???
 
     override def dot_grad(x: TensorR, y: TensorR, output: TensorR): Unit = {
       (x.x.rank, y.x.rank) match {
@@ -931,9 +934,9 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
       }
     }
 
-    override def softmax_v2(x: Tensor, dim: Int = -1): Tensor = throw new NotImplementedError("softmax_v2() is only" +
+    override def softmax_v2(x: Tensor, log: Boolean, dim: Int = -1): Tensor = throw new NotImplementedError("softmax_v2() is only" +
       " implemented for GPU. For CPU, use the normal softmax() instead")
-    override def softmax_v2_grad(input: TensorR, res: TensorR, dim: Int = -1): Unit = throw new NotImplementedError("softmax_v2() " +
+    override def softmax_v2_grad(input: TensorR, res: TensorR, log: Boolean, dim: Int = -1): Unit = throw new NotImplementedError("softmax_v2() " +
       "is only implemented for GPU. For CPU, use the normal softmax() instead")
 
     override def maxPool2D_batch(input: Tensor, kernels: Seq[Int], strides: Seq[Int], pads: Option[Seq[Int]] = None): (Tensor, Option[Rep[Array[Int]]]) = {
@@ -1157,8 +1160,8 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
     override def layerNorm(x: Tensor, eps: Float, gamma: Tensor, beta: Tensor): (Tensor, Tensor, Tensor) = ???
     override def layerNorm_grad(x: TensorR, y: TensorR, gamma: TensorR, beta: TensorR, mean: Tensor, rstd: Tensor) = ???
 
-    override def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]): Tensor = ???
-    override def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = ???
+    override def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1): Tensor = ???
+    override def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1) = ???
 
     @virtualize
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = {

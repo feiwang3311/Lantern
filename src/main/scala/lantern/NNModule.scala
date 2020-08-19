@@ -261,30 +261,36 @@ trait NNModule extends TensorDsl {
    * @param kDim (initial) Vector Embedding size of Key (defaults to embedDim)
    * @param vDim (initial) Vector Embedding size of Value (defaults to embedDim)
    */
-  case class MultiheadAttention_v2(embedDim: Int, numHeads: Int, dropout: Float, bias: Boolean = true, qDim: Option[Int] = None,
-                                   kDim: Option[Int] = None, vDim: Option[Int] = None, name: String = "mha-v2") extends Module {
+  case class MultiheadAttention_v2(embedDim: Int, numHeads: Int, dropout: Float, bias: Boolean = true, attnType: Int = 0,
+                                   qDim: Option[Int] = None, kDim: Option[Int] = None, vDim: Option[Int] = None,
+                                   name: String = "mha-v2") extends Module {
     val headDim: Int = embedDim / numHeads
 
-    // input projection weights
-    // TODO - make bias = bias (just set false for testing)
-    val qProjLayer = Linear1D(inSize = qDim.getOrElse(embedDim), outSize = embedDim, bias)
-    val kProjLayer = Linear1D(inSize = kDim.getOrElse(embedDim), outSize = embedDim, bias)
-    val vProjLayer = Linear1D(inSize = vDim.getOrElse(embedDim), outSize = embedDim, bias)
+    // regular attention (attnType = 0)
+    val qProjWeights: Option[TensorR] = if (attnType != 2) Some(TensorR(Tensor.rand(Seq(qDim.getOrElse(embedDim), embedDim):_*))) else None
+    val kProjWeights: Option[TensorR] = if (attnType == 0) Some(TensorR(Tensor.rand(Seq(kDim.getOrElse(embedDim), embedDim):_*))) else None
+    val vProjWeights: Option[TensorR] = if (attnType == 0) Some(TensorR(Tensor.rand(Seq(vDim.getOrElse(embedDim), embedDim):_*))) else None
 
+    // encoder decoder attention (attnType = 1) (should be kDim = vDim)
+    val kvProjWeights: Option[TensorR] = if (attnType == 1) Some(TensorR(Tensor.rand(Seq(kDim.getOrElse(embedDim), 2 * embedDim) :_*))) else None
+
+    // self attention (attnType = 2)
+    val qkvProjWeights: Option[TensorR] = if (attnType == 2) Some(TensorR(Tensor.rand(Seq(embedDim, 3 * embedDim) :_*))) else None
 
     val finalLinear = Linear1D(embedDim, embedDim, bias)
 
     def apply(query: TensorR, key: TensorR, value: TensorR, attnMask: Option[Rep[Array[Int]]] = None) = {
+      assert(attnType == 0, "Wrong attention type")
+
       // attnMask should be in the correct device (i.e. GPU Array if GPU, o.w. CPU)
       // expected shape L (seqlen) x N (batchsize) x V (embedding size)
       val batchSize = query.x.shape(1)
       val srcLen = key.x.shape(0)
       val tgtLen = query.x.shape(0)
-
-      // TODO - can optimize when kProj = vProj etc. by combining weights and doing a single matmul (but need a tensor chunk op next)
-      val qProj = qProjLayer(query.resizeNoCheck(tgtLen * batchSize, query.x.shape(2))).resizeNoCheck(tgtLen, batchSize * numHeads, headDim)
-      val kProj = kProjLayer(key.resizeNoCheck(srcLen * batchSize, key.x.shape(2))).resizeNoCheck(srcLen, batchSize * numHeads, headDim)
-      val vProj = vProjLayer(value.resizeNoCheck(srcLen * batchSize, value.x.shape(2))).resizeNoCheck(srcLen, batchSize * numHeads, headDim)
+      
+      val qProj = query.resizeNoCheck(tgtLen * batchSize, query.x.shape(2)).dot(qProjWeights.get).resizeNoCheck(tgtLen, batchSize * numHeads, headDim)
+      val kProj = key.resizeNoCheck(srcLen * batchSize, key.x.shape(2)).dot(kProjWeights.get).resizeNoCheck(srcLen, batchSize * numHeads, headDim)
+      val vProj = value.resizeNoCheck(srcLen * batchSize, value.x.shape(2)).dot(vProjWeights.get).resizeNoCheck(srcLen, batchSize * numHeads, headDim)
 
       // scaling Q
       val scaling: Rep[Float] = 1 / Math.sqrt(headDim).toFloat
@@ -309,9 +315,79 @@ trait NNModule extends TensorDsl {
       finalLinear(attnOut).resizeNoCheck(tgtLen, batchSize, embedDim)
     }
 
-//    def apply(qkv: TensorR, attnMask: Boolean) = ??? // self attention
+    def apply(qkv: TensorR, attnMask: Option[Rep[Array[Int]]]) = {
+      // self attention
+      assert(attnType == 2, "wrong attention type")
+      val batchSize = qkv.x.shape(1)
+      val seqLen = qkv.x.shape(0)
 
-//    def apply(q: TensorR, kv: TensorR, attnMask: Boolean) = ??? // encoder-decoder attention
+      val qkvProj = qkv.resizeNoCheck(seqLen * batchSize, qkv.x.shape(2)).dot(qkvProjWeights.get) // lastDim = embedDim * 3
+
+      // since we don't have a chunk operation, do the chunk manually
+      val q = new TensorR(Tensor(qkvProj.x.data, seqLen, batchSize, embedDim), Tensor(qkvProj.d.data, seqLen, batchSize, embedDim))
+      val qStrides = qkvProj.x.shape.strides
+
+      val k = new TensorR(Tensor(slice(qkvProj.x.data, embedDim), seqLen, batchSize, embedDim), Tensor(slice(qkvProj.d.data, embedDim), seqLen, batchSize, embedDim))
+      val kStrides = qkvProj.x.shape.strides
+
+      val v = new TensorR(Tensor(slice(qkvProj.x.data, 2*embedDim), seqLen, batchSize, embedDim), Tensor(slice(qkvProj.d.data, 2*embedDim), seqLen, batchSize, embedDim))
+      val vStrides = qkvProj.x.shape.strides
+
+      val scaling: Rep[Float] = 1 / Math.sqrt(headDim).toFloat
+
+      val attnWeightsRawBeforeScaling = q.bmm(k, batchDim = 1, transX = false, transY = true, Some(qStrides), Some(kStrides))
+      val attnWeightsRaw = attnWeightsRawBeforeScaling * scaling
+
+      val attnWeightsMasked = attnMask match {
+        case Some(mask) => attnWeightsRaw.maskedFill(mask, Float.MinValue, dim0=0, dim1=2)
+        case _ => attnWeightsRaw
+      }
+      val attnWeights = attnWeightsMasked.softmax_v2()
+      val attnWeightsAfterDropout = if (dropout == 0) attnWeights else attnWeights.dropout_v2(dropout)
+
+      // output after below bmm - tgtLen, batchSize * numHeads, headDim
+      val attnOut = attnWeightsAfterDropout.bmm(v, batchDim = 1, transX = false, transY = false, None, Some(vStrides)).resizeNoCheck(seqLen * batchSize, embedDim)
+      finalLinear(attnOut).resizeNoCheck(seqLen, batchSize, embedDim)
+
+    }
+
+
+    // TODO - this seems slow compared to running regular attention (benefits of combining dot overruled by loosing contiguous mem bmm?)
+    def apply(q: TensorR, kv: TensorR, attnMask: Option[Rep[Array[Int]]]) = {
+      // encoder-decoder attention
+      assert(attnType == 1, "wrong attention type")
+
+      val batchSize = q.x.shape(1)
+      val srcLen = kv.x.shape(0)
+      val tgtLen = q.x.shape(0)
+
+      val qProj = q.resizeNoCheck(tgtLen * batchSize, q.x.shape(2)).dot(qProjWeights.get).resizeNoCheck(tgtLen, batchSize * numHeads, headDim)
+      val kvProj = kv.resizeNoCheck(srcLen * batchSize, kv.x.shape(2)).dot(kvProjWeights.get) // lastDim = embedDim * 2
+
+      // scaling Q
+      val scaling: Rep[Float] = 1 / Math.sqrt(headDim).toFloat
+      val q1 = qProj * scaling
+
+      // since we don't have a chunk operation, do the chunk manually
+      val k = new TensorR(Tensor(kvProj.x.data, srcLen, batchSize, embedDim), Tensor(kvProj.d.data, srcLen, batchSize, embedDim))
+      val kStrides = kvProj.x.shape.strides
+
+      val v = new TensorR(Tensor(slice(kvProj.x.data, embedDim), srcLen, batchSize, embedDim), Tensor(slice(kvProj.d.data, embedDim), srcLen, batchSize, embedDim))
+      val vStrides = kvProj.x.shape.strides
+
+      val attnWeightsRaw = q1.bmm(k, batchDim = 1, transX = false, transY = true, None, Some(kStrides))
+      val attnWeightsMasked = attnMask match {
+        case Some(mask) => attnWeightsRaw.maskedFill(mask, Float.MinValue, dim0=0, dim1=2)
+        case _ => attnWeightsRaw
+      }
+
+      val attnWeights = attnWeightsMasked.softmax_v2()
+      val attnWeightsAfterDropout = if (dropout == 0) attnWeights else attnWeights.dropout_v2(dropout)
+
+      // output after below bmm - tgtLen, batchSize * numHeads, headDim
+      val attnOut = attnWeightsAfterDropout.bmm(v, batchDim = 1, transX = false, transY = false, None, Some(vStrides)).resizeNoCheck(tgtLen * batchSize, embedDim)
+      finalLinear(attnOut).resizeNoCheck(tgtLen, batchSize, embedDim)
+    }
   }
 
   /** MultiheadAttention
@@ -399,14 +475,14 @@ trait NNModule extends TensorDsl {
                                      name: String = "transformer-encoder-layer") extends Module {
 //    val enMHA = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residualConnection = true,
 //      maxSeqLen, maxSeqLen, maxBatchSize, maxBeamSize)
-    val enMHA = MultiheadAttention_v2(embedDim, nheads, dropOut, bias = true)
+    val enMHA = MultiheadAttention_v2(embedDim, nheads, dropOut, bias = true, attnType = 2) // self attention
     val enLinear1 = Linear1D(inSize = embedDim, outSize = dimFeedForward)
     val enLinear2 = Linear1D(inSize = dimFeedForward, outSize = embedDim)
     val enLayerNorm1 = LayerNorm(embedDim)
     val enLayerNorm2 = LayerNorm(embedDim)
 
     def apply(src: TensorR, attnMask: Option[Rep[Array[Int]]] = None) = {
-      val step1 = enMHA(src, src, src, attnMask)
+      val step1 = enMHA(src, attnMask)
       val step2 = src + step1.dropout_v2(dropOut)
       val step3 = enLayerNorm1(step2)
       val step4 = enLinear1(step3.resizeNoCheck(src.x.shape(0)*src.x.shape(1), embedDim))
@@ -423,8 +499,8 @@ trait NNModule extends TensorDsl {
 //      maxSeqLen, maxSeqLen, maxBatchSize, maxBeamSize)
 //    val deMHA2 = MultiheadAttention(embedDim, nheads, embedDim, embedDim, bias = true, dropOut, residualConnection = true,
 //      maxSeqLen, maxSeqLen, maxBatchSize, maxBeamSize)
-    val deMHA1 = MultiheadAttention_v2(embedDim, nheads, dropOut, bias = true)
-    val deMHA2 = MultiheadAttention_v2(embedDim, nheads, dropOut, bias = true)
+    val deMHA1 = MultiheadAttention_v2(embedDim, nheads, dropOut, bias = true, attnType = 2)
+    val deMHA2 = MultiheadAttention_v2(embedDim, nheads, dropOut, bias = true, attnType = 0)
     val deLinear1 = Linear1D(inSize = embedDim, outSize = dimFeedForward)
     val deLinear2 = Linear1D(inSize = dimFeedForward, outSize = embedDim)
     val deLayerNorm1 = LayerNorm(embedDim)
@@ -432,10 +508,10 @@ trait NNModule extends TensorDsl {
     val deLayerNorm3 = LayerNorm(embedDim)
 
     def apply(tgt: TensorR, memory: TensorR, attnMask: Option[Rep[Array[Int]]] = None) = {
-      val step1 = deMHA1(tgt, tgt, tgt, attnMask)
+      val step1 = deMHA1(tgt, attnMask)
       val step2 = tgt + step1.dropout_v2(dropOut)
       val step3 = deLayerNorm1(step2)
-      val step4 = deMHA2(step3, memory, memory, attnMask)
+      val step4 = deMHA2(step3, memory, memory, attnMask) // TODO - Becomes slow if I use encoder decoder attn??
       val step5 = step4.dropout_v2(dropOut) + step3
       val step6 = deLayerNorm2(step5)
       val step7 = deLinear1(step6.resizeNoCheck(tgt.x.shape(0)*tgt.x.shape(1), embedDim))

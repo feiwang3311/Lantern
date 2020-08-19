@@ -273,22 +273,24 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     }
 
     private def addbmm(res: Tensor, x: Tensor, y: Tensor, batchDim: Int = 0, transRes: Boolean = false, transX: Boolean = false,
-                               transY: Boolean = false, alpha: Var[Float] = one, beta: Var[Float] = zero) = {
+                       transY: Boolean = false, alpha: Var[Float] = one, beta: Var[Float] = zero,
+                       stridesX: Option[Seq[Rep[Int]]] = None, stridesY: Option[Seq[Rep[Int]]] = None) = {
       // assumes all the arrays are contiguous
+      // stridesX and stridesY are without taking transX, transY, or batchDim into account
 
       // update the batchDim
-      def swapBatchDim(t: Tensor, bdim: Int) = {
+      def swapBatchDim(t: Tensor, bdim: Int, strides: Option[Seq[Rep[Int]]] = None) = {
         def swap(list: Seq[Rep[Int]], i: Int, j: Int) = list.updated(i, list(j)).updated(j, list(i))
 
         if (bdim == 1)
-          (swap(t.shape.strides, 0, 1), swap(t.shape, 0, 1).toSeq)
+          (swap(strides.getOrElse(t.shape.strides), 0, 1), swap(t.shape, 0, 1).toSeq)
         else
-          (t.shape.strides, t.shape.toSeq)
+          (strides.getOrElse(t.shape.strides), t.shape.toSeq)
       }
 
       val (resStride, resShape) = swapBatchDim(res, batchDim)
-      val (xStride, xShape) = swapBatchDim(x, batchDim)
-      val (yStride, yShape) = swapBatchDim(y, batchDim)
+      val (xStride, xShape) = swapBatchDim(x, batchDim, stridesX)
+      val (yStride, yShape) = swapBatchDim(y, batchDim, stridesY)
 
       if (!transRes) {
         // we are computing resT (so that it's row-major rep. will be transpose of that, that is res)
@@ -329,7 +331,8 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       res
     }
 
-    override def bmm(x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false): Tensor = {
+    override def bmm(x: Tensor, y: Tensor, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false, stridesX: Option[Seq[Rep[Int]]] = None,
+                     stridesY: Option[Seq[Rep[Int]]] = None): Tensor = {
       val batchSize = x.shape(batchDim) // must be 0 or 1
       val m = if (!transX) x.shape((batchDim + 1) % 2) else x.shape(2)
       val n = if (!transY) y.shape(2) else y.shape((batchDim + 1) % 2)
@@ -338,7 +341,8 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
       addbmm(res, x, y, batchDim, transRes = false, transX, transY, one, zero)
     }
 
-    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false) = {
+    override def bmm_grad(x: TensorR, y: TensorR, output: TensorR, batchDim: Int = 0, transX: Boolean = false, transY: Boolean = false,
+                          stridesX: Option[Seq[Rep[Int]]] = None, stridesY: Option[Seq[Rep[Int]]] = None) = {
       generate_comment("backprop of batched matrix multiplication")
       if (!x.isInput) addbmm(x.d, output.d, y.x, batchDim, transRes = transX, transX = false, transY = !transY)
       if (!y.isInput) addbmm(y.d, x.x, output.d, batchDim, transRes = transY, transX = !transX, transY = false)
@@ -965,7 +969,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     // indices should be of shape seq_len x batch_size (flatten)
     // we can use a Tensor for indices, but we don't support int tensors. A possible workaround is convert float to int
     @virtualize
-    override def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]): Tensor = {
+    override def embedding(weights: Tensor, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1): Tensor = {
       // indices array must be in GPU
       assert(indices_shape.length == 2, s"shape of indices should be 2 dimensional with seq_len x batch_size (got" +
         s" length ${indices_shape.length})")
@@ -980,16 +984,15 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     }
 
     @virtualize
-    override def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = {
+    override def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1) = {
       val embedSize = weights.x.shape.last
       val gridSize = embedSize + 31 / 32
-      // TODO - padding index
 
       // based on PyTorch
       if (indices_shape.head * indices_shape.last <= 768)
-        embedding_backward(indices, output.d.data, weights.d.data, indices_shape.head * indices_shape.last, embedSize, -1, gridSize)
+        embedding_backward(indices, output.d.data, weights.d.data, indices_shape.head * indices_shape.last, embedSize, paddingIdx, gridSize)
       else
-        embedding_backward_large(output.d.data, weights.d.data, embedSize, indices, indices_shape.head * indices_shape.last, -1)
+        embedding_backward_large(output.d.data, weights.d.data, embedSize, indices, indices_shape.head * indices_shape.last, paddingIdx)
     }
 
     override def dropout(input: Tensor, prob: Float = 0.5f): (Tensor, Rep[Array[Float]], Rep[Int]) = ???
