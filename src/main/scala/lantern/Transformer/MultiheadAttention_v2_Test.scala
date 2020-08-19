@@ -2,7 +2,6 @@ package lantern
 package Transformer
 
 import lms.core.stub._
-import lms.thirdparty.{ScannerOps}
 import lms.macros.SourceContext
 import lms.core.virtualize
 
@@ -10,46 +9,33 @@ import scala.sys.process._
 import java.io.PrintWriter
 import java.io.File
 
-object MultiheadAttentionTest {
+object MultiheadAttention_v2_Test {
   val driver = new LanternDriverCudnn[String, Unit] with TimerOpsExp {
     override def snippet(x: Rep[String]): Rep[Unit] = {
       // model
       // requirements: qsize = ksize and vsize * numHeads = embedDim
-      val qsize = 512
-      val ksize = 512
-      val vsize = 515
-      val embedDim = 512
+      val qsize = 256
+      val ksize = 256
+      val vsize = 256
+      val embedDim = 256
       val numHeads = 8
-      val batchSize = 2048
-      val beamSize = 1
-      val seqLen = 50 // both klen and qlen
+      val batchSize = 256
+      val seqLen = 32 // both klen and qlen
       val dropOut = 0.1f
 
-      case class Model(val name: String = "test_model") extends Module {
-        val mha = MultiheadAttention(embedDim, numHeads, ksize, vsize, bias = true, dropOut, residualConnection = true,
-          seqLen, seqLen, batchSize, beamSize)
+      val attnMask = Array(((0 until seqLen * seqLen :Range) map (_ => 1)) :_*).toGPU(seqLen * seqLen)
+      val model = MultiheadAttention_v2(embedDim, numHeads, dropOut, bias = false, 0, Some(qsize), Some(ksize), Some(vsize))
 
-        def apply(q: TensorR, k: TensorR, v: TensorR) = {
-          val step1 = mha(q, k, v)
-          step1
-        }
+      val q = TensorR(Tensor.rand(Seq(seqLen, batchSize, qsize): _*))
+      val k = TensorR(Tensor.rand(Seq(seqLen, batchSize, ksize): _*))
+      val v = TensorR(Tensor.rand(Seq(seqLen, batchSize, vsize): _*))
+
+      val opt = SGD(model, learning_rate = 0.0005f) // SGD grad clip doesn't work
+//      val opt = Adagrad(model, learning_rate = 0.0005f, gradClip = 1.0f)
+
+      def lossFun(query: TensorR, key: TensorR, value: TensorR) = { (dummy: TensorR) =>
+        model(query, key, value, None).sum()
       }
-
-      val model = Model()
-
-      val q = TensorR(Tensor.rand(Seq(seqLen, batchSize, beamSize, qsize): _*)).toGPU()
-      val k = TensorR(Tensor.rand(Seq(seqLen, batchSize, beamSize, ksize): _*)).toGPU()
-      val v = TensorR(Tensor.rand(Seq(seqLen, batchSize, beamSize, vsize): _*)).toGPU()
-
-      val opt = SGD(model, learning_rate = 0.0005f, gradClip = 1000.0f)
-
-
-      def lossFun(query: TensorR, key: TensorR, value: TensorR) = { (batchIndex: TensorR) =>
-        //     trainTimer.startTimer
-        val res = model(query, key, value)
-        res.sum()
-      }
-
 
       // let's mimic mini batches
       val num_iter = 2
@@ -63,7 +49,9 @@ object MultiheadAttentionTest {
         trainTimer.startTimer
         for (j <- 0 until mini_batch_count: Rep[Range]) {
           val loss = gradR_loss(lossFun(q, k, v))(Tensor.zeros(4))
+//          val temp  = loss.toCPU().data(0)
           lossTotal += loss.toCPU().data(0)
+//          printf("mini batch loss = %f\n", temp)
           opt.step()
           resetMallocAddr(addr)
           resetCudaMallocAddr(addrCuda)
@@ -77,10 +65,10 @@ object MultiheadAttentionTest {
   }
 
   def main(args: Array[String]): Unit = {
-    val code_file = new PrintWriter(new File("src/out/Transformers/Lantern/mha_test.cu"))
+    val code_file = new PrintWriter(new File("src/out/Transformers/Lantern/mha_test2.cu"))
     code_file.println(driver.code)
     code_file.flush()
 
-    "nvcc src/out/Transformers/Lantern/mha_test.cu -o  src/out/Transformers/Lantern/mha_test -lcuda -lcublas -lcudnn" !;
+    "nvcc src/out/Transformers/Lantern/mha_test2.cu -o src/out/Transformers/Lantern/mha_test2 -Isrc/main/cpp/headers/ -I../lms-clean/src/main/scala/lms/thirdparty/thirdpartyAdaptor/ -lcuda -lcublas -lcudnn" !;
   }
 }

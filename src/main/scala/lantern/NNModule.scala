@@ -252,6 +252,13 @@ trait NNModule extends TensorDsl {
     }
   }
 
+  private def _linear(t: TensorR, w: TensorR, b: Option[TensorR] = None) = {
+    if (b.isEmpty)
+      t dot w
+    else
+      t.dot(w) plusBias_v2 b.get
+  }
+
   /** MultiheadAttention_v2
    * @param embedDim Vector Embedding size of Query. All Q, K, V are projected to embedDim. Also, the final output size.
    * @param numHeads Number of attention heads
@@ -270,12 +277,17 @@ trait NNModule extends TensorDsl {
     val qProjWeights: Option[TensorR] = if (attnType != 2) Some(TensorR(Tensor.rand(Seq(qDim.getOrElse(embedDim), embedDim):_*))) else None
     val kProjWeights: Option[TensorR] = if (attnType == 0) Some(TensorR(Tensor.rand(Seq(kDim.getOrElse(embedDim), embedDim):_*))) else None
     val vProjWeights: Option[TensorR] = if (attnType == 0) Some(TensorR(Tensor.rand(Seq(vDim.getOrElse(embedDim), embedDim):_*))) else None
+    val qBias: Option[TensorR] = if (bias && attnType != 2) Some(TensorR(Tensor.zeros(embedDim))) else None
+    val kBias: Option[TensorR] = if (bias && attnType != 2) Some(TensorR(Tensor.zeros(embedDim))) else None
+    val vBias: Option[TensorR] = if (bias && attnType != 2) Some(TensorR(Tensor.zeros(embedDim))) else None
 
     // encoder decoder attention (attnType = 1) (should be kDim = vDim)
     val kvProjWeights: Option[TensorR] = if (attnType == 1) Some(TensorR(Tensor.rand(Seq(kDim.getOrElse(embedDim), 2 * embedDim) :_*))) else None
+    val kvBias: Option[TensorR] = if (bias && attnType == 1) Some(TensorR(Tensor.zeros(2*embedDim))) else None
 
     // self attention (attnType = 2)
     val qkvProjWeights: Option[TensorR] = if (attnType == 2) Some(TensorR(Tensor.rand(Seq(embedDim, 3 * embedDim) :_*))) else None
+    val qkvBias: Option[TensorR] = if (bias && attnType == 2) Some(TensorR(Tensor.zeros(3*embedDim))) else None
 
     val finalLinear = Linear1D(embedDim, embedDim, bias)
 
@@ -287,10 +299,10 @@ trait NNModule extends TensorDsl {
       val batchSize = query.x.shape(1)
       val srcLen = key.x.shape(0)
       val tgtLen = query.x.shape(0)
-      
-      val qProj = query.resizeNoCheck(tgtLen * batchSize, query.x.shape(2)).dot(qProjWeights.get).resizeNoCheck(tgtLen, batchSize * numHeads, headDim)
-      val kProj = key.resizeNoCheck(srcLen * batchSize, key.x.shape(2)).dot(kProjWeights.get).resizeNoCheck(srcLen, batchSize * numHeads, headDim)
-      val vProj = value.resizeNoCheck(srcLen * batchSize, value.x.shape(2)).dot(vProjWeights.get).resizeNoCheck(srcLen, batchSize * numHeads, headDim)
+
+      val qProj = _linear(query.resizeNoCheck(tgtLen * batchSize, query.x.shape(2)), qProjWeights.get, qBias).resizeNoCheck(tgtLen, batchSize * numHeads, headDim)
+      val kProj = _linear(key.resizeNoCheck(srcLen * batchSize, key.x.shape(2)), kProjWeights.get, kBias).resizeNoCheck(srcLen, batchSize * numHeads, headDim)
+      val vProj = _linear(value.resizeNoCheck(srcLen * batchSize, value.x.shape(2)), vProjWeights.get, vBias).resizeNoCheck(srcLen, batchSize * numHeads, headDim)
 
       // scaling Q
       val scaling: Rep[Float] = 1 / Math.sqrt(headDim).toFloat
@@ -321,7 +333,7 @@ trait NNModule extends TensorDsl {
       val batchSize = qkv.x.shape(1)
       val seqLen = qkv.x.shape(0)
 
-      val qkvProj = qkv.resizeNoCheck(seqLen * batchSize, qkv.x.shape(2)).dot(qkvProjWeights.get) // lastDim = embedDim * 3
+      val qkvProj = _linear(qkv.resizeNoCheck(seqLen * batchSize, qkv.x.shape(2)), qkvProjWeights.get, qkvBias) // lastDim = embedDim * 3
 
       // since we don't have a chunk operation, do the chunk manually
       val q = new TensorR(Tensor(qkvProj.x.data, seqLen, batchSize, embedDim), Tensor(qkvProj.d.data, seqLen, batchSize, embedDim))
@@ -361,8 +373,8 @@ trait NNModule extends TensorDsl {
       val srcLen = kv.x.shape(0)
       val tgtLen = q.x.shape(0)
 
-      val qProj = q.resizeNoCheck(tgtLen * batchSize, q.x.shape(2)).dot(qProjWeights.get).resizeNoCheck(tgtLen, batchSize * numHeads, headDim)
-      val kvProj = kv.resizeNoCheck(srcLen * batchSize, kv.x.shape(2)).dot(kvProjWeights.get) // lastDim = embedDim * 2
+      val qProj = _linear(q.resizeNoCheck(tgtLen * batchSize, q.x.shape(2)), qProjWeights.get, qBias).resizeNoCheck(tgtLen, batchSize * numHeads, headDim)
+      val kvProj = _linear(kv.resizeNoCheck(srcLen * batchSize, kv.x.shape(2)), kvProjWeights.get, kvBias) // lastDim = embedDim * 2
 
       // scaling Q
       val scaling: Rep[Float] = 1 / Math.sqrt(headDim).toFloat
@@ -578,11 +590,10 @@ trait NNModule extends TensorDsl {
   }
 
   case class Embedding(numEmbeddings: Int, embeddingDim: Int, paddingIdx: Int = -1, name: String = "embedding") extends Module {
-    val weights = TensorR(Tensor.rand(numEmbeddings, embeddingDim))
-    // TODO - padding idx is not supported yet (padding embedding should be all zeros)
+    val weights = TensorR(backend.embeddingWeights(numEmbeddings, embeddingDim, paddingIdx, 1.0f))
 
     def apply(indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]]) = {
-      // TODO - indices array must be on the correct device
+      // TODO - indices array must be on the correct device (Can we do an assert of this?)
       weights.embedding(indices, indices_shape)
     }
   }

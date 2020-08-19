@@ -222,6 +222,9 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor =
       BackendCPU().randinit(dims, scale, seed).toGPU()
 
+    override def embeddingWeights(vocabSize: Rep[Int], embeddingDim: Rep[Int], paddingIdx: Rep[Int], scale: Float = 1.0f): Tensor =
+      BackendCPU().embeddingWeights(vocabSize, embeddingDim, paddingIdx, scale).toGPU()
+
     override def clipAt(x: Tensor, bound: Float) = cudaArrayClipAt_(x.data, bound, x.scalarCount)
 
     // Cannot implement (Need kernel functions!)

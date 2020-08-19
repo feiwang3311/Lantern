@@ -28,7 +28,7 @@ trait LanternGenC extends DslGenCPP with CCodeGenLibs with CCodeGenScannerOps {
   override def shallow(n: Node): Unit = n match {
     case n @ Node(s, "NewArray", List(x), _) if isInt(x) =>
       val ctype = remap(typeMap.get(s).map(_.typeArguments.head).getOrElse(manifest[Unknown]))
-      emit(s"($ctype*)myMalloc("); shallow(x); emit(s" * sizeof($ctype))")
+      emit(s"($ctype*)myMalloc("); shallowP(x, precedence("*")); emit(s" * sizeof($ctype))")
     case _ => super.shallow(n)
   }
 
@@ -157,7 +157,7 @@ abstract class LanternDriverBase[A: Manifest, B: Manifest] extends DslDriverCPP[
 
   // For saving the generated code somewhere
   val lanternPath = System.getProperty("user.dir")
-  val dir = s"$lanternPath/src/out/test/"
+  val dir = s"src/out/test/"
   val fileName = s"lantern-snippet-${scala.util.Random.alphanumeric.take(4).mkString}" // if not overriden, use a random name
   val filetype = ".cpp"
   def codeToFile(name: Option[String] = None) = {

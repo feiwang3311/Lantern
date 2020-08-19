@@ -2082,7 +2082,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
         case _ => throw new Exception("Should create a MultiheadAttnConfigCuDNN when running in GPU")
       }
 
-      // TODO - can we store this and reuse?
       val output = Tensor.zeros(query.x.shape(0), query.x.shape(1), query.x.shape(2), config.embedDim)
 
       // TODO - handle the non default case
@@ -2103,8 +2102,6 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
 
       // attention descriptor
       val attnDesc = gpuConfig.attnDesc
-
-      // TODO - Is it ok to reuse the same devWkSpace, devReserve allocation across iterations (do we need to do memset(0)?)
 
       // Sequence data descriptors
       val dimA = NewStackArray[Int](seqDataDimCount)

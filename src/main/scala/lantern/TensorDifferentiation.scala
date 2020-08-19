@@ -195,6 +195,9 @@ trait TensorDsl extends DslCPP with Diff {
     // By default, the uniform distribution is over [-0.5, 0.5].
     def randinit(dims: Seq[Int], scale: Float = 1.0f, seed: Option[Int] = None): Tensor
 
+    // Initialize embedding layer weights and set padding idx weights to all zeros
+    def embeddingWeights(vocabSize: Rep[Int], embeddingDim: Rep[Int], paddingIdx: Rep[Int], scale: Float = 1.0f): Tensor
+
     def clipAt(x: Tensor, bound: Float): Unit
     def mutate(x: Tensor, delta: Rep[Int] => Rep[Float]): Unit
     def mapInPlace(x: Tensor, op: Rep[Float] => Rep[Float]): Unit

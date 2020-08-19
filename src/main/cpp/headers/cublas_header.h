@@ -661,7 +661,7 @@ __global__ void mask4D(float* in, int* mask, int xstrides0, int xstrides1, int x
 __global__ void softmax(float* input, float* output, int size) {
     // assume gridDim.x equals outerSize
     // assume computing softmax in last dim
-    __shared__ float buffer[64];
+    extern __shared__ float buffer[];
 
     // not vectorized and not unrolled implementation - has room for performance improvement
     float *input_t = input + size * blockIdx.x;
@@ -755,6 +755,8 @@ __global__ void softmax(float* input, float* output, int size) {
 }
 
 __global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, int size) {
+    extern __shared__ float buffer[];
+
     float *gradInput_t = gradInput + size * blockIdx.x;
     float *gradOutput_t = gradOutput + size * blockIdx.x;
     float *output_t = output + size * blockIdx.x;
@@ -762,8 +764,6 @@ __global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, 
     int start = threadIdx.x;
     int end = size;
     int stride = blockDim.x;
-
-    __shared__ float buffer[64];
 
     // compute the sum (gradOutput * output sum)
     for(int i=start; i < end; i += stride) {
@@ -2022,6 +2022,7 @@ void embedding_dense_backward_cuda(float *grad, float *grad_weight, int embed_si
     // don't need a stable or multidimensional sort, so just use Thrust
     // directly
     {
+        // TODO - can create a custom allocator which uses myGpuMalloc
         // auto allocator = THCThrustAllocator(globalContext().lazyInitCUDA());
         // auto policy = thrust::cuda::par().on(stream);
 
@@ -2037,4 +2038,12 @@ void embedding_dense_backward_cuda(float *grad, float *grad_weight, int embed_si
     }
 
     return embedding_backward_cuda_kernel(grad, grad_weight, embed_size, orig_indices, indices, num_indices, padding_idx);
+}
+
+// mask of shape i_len x j_len
+__global__ void create_attention_mask(int *mask, int i_size, int j_size) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i < i_size && j < j_size && i <= j) mask[i*j_size + j] = 1;
 }

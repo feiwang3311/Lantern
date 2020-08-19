@@ -112,6 +112,20 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
     }
 
     @virtualize
+    override def embeddingWeights(vocabSize: Rep[Int], embeddingDim: Rep[Int], paddingIdx: Rep[Int], scale: Float = 1.0f): Tensor = {
+      val scale = 1.0f // used for scaling the random value
+      val weights = mallocArray[Float](vocabSize * embeddingDim)
+      for(i <- 0 until vocabSize * embeddingDim: Rep[Range])
+        weights(i) = (Random.rand() - 0.5f) * scale
+      // set paddingIdx weights to zero
+      if (paddingIdx != -1)
+        for(i <- (paddingIdx * embeddingDim) until ((paddingIdx + 1) * embeddingDim): Rep[Range])
+          weights(i) = 0
+      new Tensor(weights, Seq(vocabSize, embeddingDim))
+    }
+
+
+    @virtualize
     override def clipAt(x: Tensor, bound: Float) = {
       for (i <- DataLoop(x.scalarCount)) {
         val temp = x.data(i)
