@@ -57,6 +57,7 @@ trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
 
   override def remap(m: Manifest[_]) = m.runtimeClass.getName match {
     case s: String if s.endsWith("CublasHandleT") => "cublasHandle_t"
+    case s: String if s.endsWith("CublasStatusT") => "cublasStatus_t"
     case _ => super.remap(m)
   }
 

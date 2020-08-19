@@ -10,7 +10,7 @@ import scala.sys.process._
 import java.io.PrintWriter;
 import java.io.File;
 
-object TransformerTest2 {
+object Transformer {
 
   val driver = new LanternDriverCudnn[String, Unit] with TimerOpsExp {
 
@@ -244,6 +244,6 @@ object TransformerTest2 {
       (e: String) => println("err " + e))
 
     "nvcc src/out/Transformers/Lantern/transformer2.cu -o  src/out/Transformers/Lantern/transformer2 -Isrc/main/cpp/headers/ -I../lms-clean/src/main/scala/lms/thirdparty/thirdpartyAdaptor/ -lcuda -lcublas -lcudnn" ! logger;
-    "./src/out/Transformers/Lantern/transformer2 q" ! logger;
+      "./src/out/Transformers/Lantern/transformer2 q" ! logger;
   }
 }
