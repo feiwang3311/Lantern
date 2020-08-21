@@ -9,8 +9,7 @@ import scala.math._
 import lms.core.stub._
 import lms.macros.SourceContext
 import lms.core.virtualize
-
-import lantern.thirdparty.{CBLASOps}
+import lms.thirdparty.{CBLASOps}
 
 trait TensorDslCPU extends TensorDsl with CBLASOps {
 
@@ -528,13 +527,12 @@ trait TensorDslCPU extends TensorDsl with CBLASOps {
     // implementation of Conv2D following Pytorch's idea (transform conv2d into matrix-matrix-dot, and use OpenBLAS)
     // https://github.com/pytorch/pytorch/blob/0a8c8c1dbead2f845e524ae32c19167d80363148/aten/src/THNN/generic/SpatialConvolutionMM.c
     type RAF = Rep[Array[Float]]
-    def memsetFloatZero(where: RAF, howmany: Rep[Int]) = {
-      // memset[Float](where, 0, SizeT(4 * howmany)) // FIXME(this is quite challenging since sizeT is not taking const Int)
-      uncheckedEffect[Unit]("memset(", where, ", 0, 4 * ", howmany, ")")()(where)
-    }
-    def memcpyFloat(dst: RAF, src: RAF, howmany: Rep[Int]) = {
+    def memsetFloatZero(where: RAF, howmany: Rep[Int]) =
+      memset[Float](where, 0, SizeT(4 * howmany))
+      // uncheckedEffect[Unit]("memset(", where, ", 0, 4 * ", howmany, ")")()(where)
+    def memcpyFloat(dst: RAF, src: RAF, howmany: Rep[Int]) =
+      // memcpy[Float](dst, src, SizeT(4 * howmany)) FIXME(feiw) slice-effect problem
       uncheckedEffect[Unit]("memcpy(", dst, ", ", src, ", 4 * ", howmany, ")")(src)(dst)
-    }
     def memAccumFloat(dst: RAF, src: RAF, howmany: Rep[Int]) = {
       unchecked[Unit]("for(int count = 0; count < ", howmany, "; ++count, ++", dst, ", ++", src, ") {\n  *", dst, " += *", src, ";\n}")
     }

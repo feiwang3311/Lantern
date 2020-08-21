@@ -206,7 +206,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def fill(dims: Seq[Rep[Int]], value: Rep[Float]): Tensor = {
       val size: Rep[Int] = dims.foldLeft(unit(1)){case (a, b) => a * b}
       val resArray = mallocArray[Float](size)
-      cudaArrayFill_(resArray, value, size)
+      cudaArrayFill(resArray, value, size)
       Tensor(resArray, dims: _*)
     }
 
@@ -215,7 +215,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
 
     override def fillInPlace(x: Tensor, value: Rep[Float]): Unit = {
       val size = x.scalarCount
-      cudaArrayFill_(x.data, value, size)
+      cudaArrayFill(x.data, value, size)
     }
 
     // TODO: Implement random initialization using cuRAND API.
@@ -225,7 +225,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     override def embeddingWeights(vocabSize: Rep[Int], embeddingDim: Rep[Int], paddingIdx: Rep[Int], scale: Float = 1.0f): Tensor =
       BackendCPU().embeddingWeights(vocabSize, embeddingDim, paddingIdx, scale).toGPU()
 
-    override def clipAt(x: Tensor, bound: Float) = cudaArrayClipAt_(x.data, bound, x.scalarCount)
+    override def clipAt(x: Tensor, bound: Float) = cudaArrayClipAt(x.data, bound, x.scalarCount)
 
     // Cannot implement (Need kernel functions!)
     override def mutate(x: Tensor, delta: Rep[Int] => Rep[Float]): Unit = ???

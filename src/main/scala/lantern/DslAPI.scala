@@ -15,7 +15,6 @@ import java.io.PrintWriter
 import lms.thirdparty._
 import lms.thirdparty.{ScannerOps}
 import lantern.thirdparty._
-import lantern.collection.mutable._
 
 trait LanternGenC extends DslGenCPP with CCodeGenLibs with CCodeGenScannerOps {
 
@@ -32,6 +31,7 @@ trait LanternGenC extends DslGenCPP with CCodeGenLibs with CCodeGenScannerOps {
     case _ => super.shallow(n)
   }
 
+  // FIXME(feiw) clean this up (used in Flarn)
   def templateRawCode: String = ""
 
   override def emitAll(ng: Graph, name: String)(m1:Manifest[_],m2:Manifest[_]): Unit = {
@@ -112,7 +112,7 @@ trait LanternGenCublas extends LanternGenC with CCodeGenCuBLAS {
   }
 }
 
-trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenStackArray with CCodeGenLibs {
+trait LanternGenCudnn extends LanternGenCublas with CCodeGenCuDNN with CCodeGenLibs {
 
   override def remap(m: Manifest[_]) = m.runtimeClass.getName match {
     case s: String if s.endsWith("CudnnHandleT") => "cudnnHandle_t"

@@ -9,7 +9,7 @@ import lms.core.utils.time
 import lms.macros.SourceContext
 import lms.thirdparty._
 
-import lantern.collection.mutable.{StackArrayOps}
+import lms.collection.mutable.{StackArrayOps}
 
 trait CCodeGenCuBLAS extends ExtendedCCodeGen with CudaCodeGenLibFunction {
 
@@ -24,7 +24,6 @@ trait CCodeGenCuBLAS extends ExtendedCCodeGen with CudaCodeGenLibFunction {
       emit(s"(${remap(typeMap.getOrElse(s, manifest[Unknown]))})myGpuMalloc("); shallow(size); emit(")")
     case Node(s, "myGpuFree-f", List(size), _) =>
       emit("myGpuFree("); shallow(size); emit(")")
-
 
     case Node(s, "cudnn-finalize", _, _) =>
       emit("CUDNN_FINALIZE()")

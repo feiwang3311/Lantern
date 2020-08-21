@@ -7,11 +7,11 @@ import lms.core.Backend._
 import lms.core.virtualize
 import lms.core.utils.time
 import lms.macros.{SourceContext, RefinedManifest}
-import lms.thirdparty.{CLibs, CudaFunction}
+import lms.thirdparty.{CLibs, CudaFunction, SizeTOps, CBLASOps}
 
-import lantern.collection.mutable.{StackArrayOps}
+import lms.collection.mutable.{StackArrayOps}
 
-trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps { b: Base  =>
+trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps with SizeTOps { b: Base  =>
   /* LMS support for CuDNN library */
 
   // GPU Memory Management FIXME(feiw) put this in the library??
@@ -20,15 +20,6 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
       unchecked[Unit]("CUDA_CALL(cudaMemset(gpuMallocBase, 0, HEAP_SIZE))")
       unchecked[Unit]("gpuMallocAddr = gpuMallocBase")
   }
-
-  // alloc and free memory
-  // case class SizeT(x: Int) { override def toString() = x.toString }
-  // implicit def sizeTRepToOps(x: Rep[SizeT])(implicit __pos: SourceContext): SizeTOps = new SizeTOps(x)(__pos)
-  // implicit def sizeTVarToOps(x: Var[SizeT])(implicit __pos: SourceContext): SizeTOps = new SizeTOps(readVar(x))(__pos)
-  // class SizeTOps(x: Rep[SizeT])(implicit __pos: SourceContext) {
-  //   def toInt: Rep[Int] = Wrap[Int](Unwrap(x))
-  // }
-  // implicit def sizeTFromInt(x: Int) = SizeT(x)
 
   def gpuArenaMalloc[T:Manifest](size: Rep[SizeT]): Rep[Array[T]] = {
     // libFunction[Array[T]]("myGpuMalloc", Unwrap(size))(Seq[Int](), Seq[Int](), Set[Int](), Adapter.CTRL)
@@ -158,11 +149,13 @@ trait CuBLASOps extends CBLASOps with CLibs with CudaFunction with StackArrayOps
       UnwrapV(beta), Unwrap(C), Unwrap(ldc), Unwrap(strideC), Unwrap(batchCount))((0 to 13) ++ (15 to 17), Seq(14), Set(6, 13))
 
   // other gpu kernel function bindings
-  def cudaArrayFill_(res: Rep[Array[Float]], value: Rep[Float], size: Rep[Int]): Rep[Unit] =
-    libFunction[Unit]("arrayFill<<<28,512>>>", Unwrap(res), Unwrap(value), Unwrap(size))(Seq[Int](), Seq(0), Set[Int]())
+  def cudaArrayFill(res: Rep[Array[Float]], value: Rep[Float], size: Rep[Int]): Rep[Unit] =
+    // libFunction[Unit]("arrayFill<<<28,512>>>", Unwrap(res), Unwrap(value), Unwrap(size))(Seq[Int](), Seq(0), Set[Int]())
+    cudaFunction[Unit]("arrayFill", Seq(Backend.Const(28), Backend.Const(512)), Unwrap(res), Unwrap(value), Unwrap(size))(Seq[Int](), Seq(0), Set[Int]())
 
-  def cudaArrayClipAt_(res: Rep[Array[Float]], bound: Rep[Float], size: Rep[Int]): Rep[Unit] =
-    libFunction[Unit]("clipAt<<<28,512>>>", Unwrap(res), Unwrap(bound), Unwrap(size))(Seq(0), Seq(0), Set[Int]())
+  def cudaArrayClipAt(res: Rep[Array[Float]], bound: Rep[Float], size: Rep[Int]): Rep[Unit] =
+    // libFunction[Unit]("clipAt<<<28,512>>>", Unwrap(res), Unwrap(bound), Unwrap(size))(Seq(0), Seq(0), Set[Int]())
+    cudaFunction[Unit]("clipAt", Seq(Backend.Const(28), Backend.Const(512)), Unwrap(res), Unwrap(bound), Unwrap(size))(Seq(0), Seq(0), Set[Int]())
 
   abstract class Dim3
   def dim3(a: Rep[Int], b: Rep[Int], c: Rep[Int]): Rep[Dim3] =

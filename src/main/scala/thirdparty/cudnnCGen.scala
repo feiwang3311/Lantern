@@ -8,8 +8,6 @@ import lms.core.virtualize
 import lms.core.utils.time
 import lms.macros.SourceContext
 
-import lantern.collection.mutable.{StackArrayOps}
-
 trait CCodeGenCuDNN extends ExtendedCCodeGen {
 
   val typeNameMapCuDNN = Map( // FIXME: tutorial specific

@@ -7,11 +7,11 @@ import lms.core.Backend._
 import lms.core.virtualize
 import lms.core.utils.time
 import lms.macros.{SourceContext, RefinedManifest}
-import lms.thirdparty.{CLibs}
+import lms.thirdparty.{CLibs, SizeTOps}
 
-import lantern.collection.mutable.{StackArrayOps}
+import lms.collection.mutable.{StackArrayOps}
 
-trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps { b: Base  =>
+trait CuDNNOps extends CuBLASOps with CLibs with StackArrayOps with SizeTOps { b: Base  =>
   /* LMS support for CuDNN library */
 
   def nullptr[T:Manifest] = cmacro[Array[T]]("nullptr")

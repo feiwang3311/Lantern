@@ -1650,11 +1650,13 @@ trait TensorDslCudnn extends TensorDslCublas with GPUOps with CuBLASOps with CuD
       val resShape: Seq[Rep[Int]] = Seq(seqLength, batchSize, hiddenSize * numDirections)
       val res = Tensor(mallocArray[Float](resShape.product1), resShape: _*)
 
-      val (dropoutState, dropoutStateSize): (Rep[Array[Float]], Rep[SizeT]) = if (dropout == 0f) { (NULLptr[Float], unit(SizeT(0))) } else {
-        var dropoutStateSize = SizeT(0)
-        cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, dropoutStateSize))
-        (gpuArenaMalloc[Float](dropoutStateSize), dropoutStateSize)
-      }
+      val (dropoutState, dropoutStateSize): (Rep[Array[Float]], Rep[SizeT]) = if (dropout == 0f) {
+          (NULLptr[Float], unit(SizeT(0)))
+        } else {
+          var dropoutStateSize1 = SizeT(0)
+          cudnnCall(cudnnDropoutGetStatesSize(cudnnHandle, dropoutStateSize1))
+          (gpuArenaMalloc[Float](dropoutStateSize1), dropoutStateSize1)
+        }
       val dropoutDesc = cudnnGetDropoutDescriptor(cudnnHandle, dropout, dropoutState, dropoutStateSize, krandTime)
       val rnnDesc = cudnnGetRNNDescriptor(cudnnHandle, hiddenSize, numLayers, dropoutDesc, klinearInput,
         (if (bidirectional) kbidirection else kunidirection), mode match {
