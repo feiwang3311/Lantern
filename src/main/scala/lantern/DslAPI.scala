@@ -178,7 +178,7 @@ abstract class LanternDriverC[A: Manifest, B: Manifest] extends LanternDriverBas
     val IR: q.type = q
   }
   backend = BackendCPU()
-  compilerCommand = "g++ -std=c++11 -O3"
+  override val compilerCommand = "g++ -std=c++11 -O3"
   override val sourceFile = s"$lanternPath/snippet.c"
   override val executable = s"$lanternPath/snippet"
 }
@@ -191,7 +191,7 @@ abstract class LanternDriverCublas[A: Manifest, B: Manifest] extends LanternDriv
   backend = BackendCublas()
   override val filetype = ".cu"
 
-  compilerCommand = "nvcc -std=c++11 -O3"
+  override val compilerCommand = "nvcc -std=c++11 -O3"
   override val sourceFile = s"$lanternPath/snippet.cu"
   override val executable = s"$lanternPath/snippet"
 
