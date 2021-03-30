@@ -766,10 +766,11 @@ __global__ void softmaxGrad(float *gradInput, float *gradOutput, float *output, 
     int stride = blockDim.x;
 
     // compute the sum (gradOutput * output sum)
-    buffer[threadIdx.x] = 0;
+    float threadVal = 0;
     for(int i=start; i < end; i += stride) {
-        buffer[threadIdx.x] += gradOutput_t[i] * output_t[i];
+        threadVal += gradOutput_t[i] * output_t[i];
     }
+    buffer[threadIdx.x] = threadVal;
 
     __syncthreads();
 
