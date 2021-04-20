@@ -989,7 +989,7 @@ trait TensorDslCublas extends TensorDslCPU with GPUOpsExp with CLibs with CuBLAS
     @virtualize
     override def embedding_grad(weights: TensorR, output: TensorR, indices: Rep[Array[Int]], indices_shape: Seq[Rep[Int]], paddingIdx: Rep[Int] = -1) = {
       val embedSize = weights.x.shape.last
-      val gridSize = embedSize + 31 / 32
+      val gridSize = (embedSize + 31) / 32
 
       // based on PyTorch
       if (indices_shape.head * indices_shape.last <= 768)
